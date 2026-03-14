@@ -1,0 +1,54 @@
+{
+  "name": "sync-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for the Sync API — give AI agents the ability to create lipsync videos, manage assets, and more",
+  "keywords": ["mcp", "sync", "lipsync", "ai", "video", "model-context-protocol"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/synchronicity-labs/mcp-server.git"
+  },
+  "homepage": "https://docs.sync.so",
+  "bugs": {
+    "url": "https://github.com/synchronicity-labs/mcp-server/issues"
+  },
+  "type": "module",
+  "bin": {
+    "sync-mcp": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist .cache",
+    "dev": "tsc -b --watch",
+    "lint": "biome check ./src",
+    "lint:fix": "biome check --fix ./src",
+    "format": "biome format --write ./src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.7",
+    "@types/node": "^22.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.12"
+  }
+}
