@@ -1,5 +1,5 @@
 {
-  "name": "sync-mcp-server",
+  "name": "@sync.so/mcp-server",
   "version": "0.1.0",
   "description": "MCP server for the Sync API — give AI agents the ability to create lipsync videos, manage assets, and more",
   "keywords": ["mcp", "sync", "lipsync", "ai", "video", "model-context-protocol"],

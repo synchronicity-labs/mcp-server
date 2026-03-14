@@ -15,7 +15,7 @@ Add to your MCP config (`.mcp.json` or `claude_desktop_config.json`):
   "mcpServers": {
     "sync": {
       "command": "npx",
-      "args": ["-y", "sync-mcp-server"],
+      "args": ["-y", "@sync.so/mcp-server"],
       "env": {
         "SYNC_API_KEY": "your-api-key"
       }
@@ -33,7 +33,7 @@ Add to `.cursor/mcp.json` in your project:
   "mcpServers": {
     "sync": {
       "command": "npx",
-      "args": ["-y", "sync-mcp-server"],
+      "args": ["-y", "@sync.so/mcp-server"],
       "env": {
         "SYNC_API_KEY": "your-api-key"
       }
@@ -51,7 +51,7 @@ Omit `SYNC_API_KEY` and the server will start a device auth flow on first run:
   "mcpServers": {
     "sync": {
       "command": "npx",
-      "args": ["-y", "sync-mcp-server"]
+      "args": ["-y", "@sync.so/mcp-server"]
     }
   }
 }
@@ -127,7 +127,7 @@ This means **new API endpoints are automatically available** — just restart th
 You can also use the server as a library:
 
 ```typescript
-import { createSyncMcpServer, resolveConfig } from 'sync-mcp-server';
+import { createSyncMcpServer, resolveConfig } from '@sync.so/mcp-server';
 
 const config = resolveConfig({ apiKey: 'your-key' });
 const server = await createSyncMcpServer(config);
