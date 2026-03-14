@@ -65,7 +65,7 @@ You'll be prompted to visit a URL and enter a code. After approval, the token is
 2. Go to your dashboard settings
 3. Generate an API key
 
-See the [authentication docs](https://docs.sync.so/api-reference/authentication) for details.
+See the [authentication guide](https://sync.so/docs/api-reference/guides/authentication) for details.
 
 ## Available Tools
 
@@ -80,7 +80,7 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `assets_get` | Get a specific asset by ID |
 | `generations_estimate` | Estimate generation cost before creating |
 
-Plus every other public endpoint in the [Sync API](https://docs.sync.so/api-reference).
+Plus every other public endpoint in the [Sync API](https://sync.so/docs/api-reference).
 
 ## Example Prompts
 
@@ -154,8 +154,8 @@ npm run typecheck
 
 ## Learn More
 
-- [Sync Documentation](https://docs.sync.so) — Full API reference and guides
-- [Sync API Reference](https://docs.sync.so/api-reference) — Endpoint documentation
+- [Sync Documentation](https://sync.so/docs) — Full API reference and guides
+- [Sync API Reference](https://sync.so/docs/api-reference) — Endpoint documentation
 - [MCP Protocol](https://modelcontextprotocol.io) — Learn about the Model Context Protocol
 - [Sync Website](https://sync.so) — Sign up and get started
 
