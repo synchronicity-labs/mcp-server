@@ -6,9 +6,31 @@ Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API e
 
 ## Quick Start
 
-### Claude Code / Claude Desktop
+### Claude Code
 
-Add to your MCP config (`.mcp.json` or `claude_desktop_config.json`):
+```bash
+claude mcp add sync -- npx -y @sync.so/mcp-server --api-key YOUR_API_KEY
+```
+
+Or add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "sync": {
+      "command": "npx",
+      "args": ["-y", "@sync.so/mcp-server"],
+      "env": {
+        "SYNC_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
 
 ```json
 {
