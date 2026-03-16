@@ -1,8 +1,15 @@
 {
   "name": "@sync.so/mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for the Sync API — give AI agents the ability to create lipsync videos, manage assets, and more",
-  "keywords": ["mcp", "sync", "lipsync", "ai", "video", "model-context-protocol"],
+  "keywords": [
+    "mcp",
+    "sync",
+    "lipsync",
+    "ai",
+    "video",
+    "model-context-protocol"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,7 +33,11 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
