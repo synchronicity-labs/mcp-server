@@ -21,7 +21,8 @@
   },
   "type": "module",
   "bin": {
-    "sync-mcp": "./dist/cli.js"
+    "sync-mcp": "./dist/cli.js",
+    "mcp-server": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
