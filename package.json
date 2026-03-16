@@ -21,8 +21,7 @@
   },
   "type": "module",
   "bin": {
-    "sync-mcp": "./dist/cli.js",
-    "mcp-server": "./dist/cli.js"
+    "sync-mcp": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -42,7 +41,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && chmod +x dist/cli.js",
     "clean": "rm -rf dist .cache",
     "dev": "tsc -b --watch",
     "lint": "biome check ./src",
