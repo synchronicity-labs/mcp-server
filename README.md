@@ -1,8 +1,21 @@
 # Sync MCP Server
 
-An open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for the [Sync](https://sync.so) API. Gives AI agents — Claude Code, ChatGPT, Cursor, Codex, and any MCP-compatible client — the ability to create lipsync videos, manage assets, check generation status, and more.
+An open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for the [Sync](https://sync.so) API. Gives AI agents the ability to create lipsync videos, manage assets, check generation status, and more.
 
 Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API endpoints ship, they become available to agents automatically — no server update needed.
+
+## Supported Clients
+
+| Client | Status | Transport |
+|--------|--------|-----------|
+| [Claude Desktop](https://claude.ai/download) | Supported | Local (stdio) |
+| [ChatGPT Desktop](https://openai.com/chatgpt/desktop/) | Supported | Local (stdio) |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Supported | Local (stdio) |
+| [Cursor](https://cursor.com) | Supported | Local (stdio) |
+| [Windsurf](https://codeium.com/windsurf) | Supported | Local (stdio) |
+| [Codex CLI](https://github.com/openai/codex) | Supported | Local (stdio) |
+| Claude Web (claude.ai) | Coming soon | Remote (HTTP + OAuth) |
+| Any MCP-compatible client | Supported | Local (stdio) |
 
 ## Quick Start
 
