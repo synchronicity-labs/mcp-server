@@ -15,6 +15,7 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
   };
 
   const app = express();
+  app.set('trust proxy', 1);
 
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
   const oauthProvider = createOAuthProvider(config.baseUrl);
