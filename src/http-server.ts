@@ -41,10 +41,12 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
   });
 
   // OAuth auth router — handles /.well-known/*, /authorize, /token, /register, /revoke
+  const mcpEndpointUrl = new URL('/mcp', issuerUrl);
   app.use(
     mcpAuthRouter({
       provider: oauthProvider,
       issuerUrl,
+      resourceServerUrl: mcpEndpointUrl,
       serviceDocumentationUrl: new URL('https://sync.so/docs'),
     }),
   );
