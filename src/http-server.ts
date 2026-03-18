@@ -6,8 +6,8 @@ import cors from 'cors';
 import express from 'express';
 import { runWithAuth } from './auth/async-context.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
+import rateLimit from 'express-rate-limit';
 import type { SyncMcpConfig } from './config.js';
-import { rateLimit } from './rate-limit.js';
 
 export async function startHttpServer(server: McpServer, config: SyncMcpConfig): Promise<void> {
   const log = (message: string) => {
@@ -50,7 +50,7 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
 
   // MCP endpoint — requires valid Bearer token, rate limited
   const bearerAuth = requireBearerAuth({ verifier: oauthProvider });
-  const mcpRateLimit = rateLimit({ windowMs: 60_000, max: 120 });
+  const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
