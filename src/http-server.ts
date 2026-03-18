@@ -88,7 +88,6 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
           }
         };
         await server.connect(transport);
-        sessions.set(transport.sessionId!, transport);
       } else {
         // Unknown session ID
         res.status(404).json({ error: 'Session not found' });
@@ -96,6 +95,11 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
       }
 
       await runWithAuth(token, () => transport.handleRequest(req, res, req.body));
+
+      // Store session after first handleRequest (sessionId is set by the transport)
+      if (transport.sessionId && !sessions.has(transport.sessionId)) {
+        sessions.set(transport.sessionId, transport);
+      }
     } catch (error) {
       log(`MCP handler error: ${error instanceof Error ? error.stack : error}\n`);
       if (!res.headersSent) {
