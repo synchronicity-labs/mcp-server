@@ -70,7 +70,14 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
       return;
     }
 
-    await runWithAuth(token, () => transport.handleRequest(req, res, req.body));
+    try {
+      await runWithAuth(token, () => transport.handleRequest(req, res, req.body));
+    } catch (error) {
+      log(`MCP handler error: ${error instanceof Error ? error.stack : error}\n`);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
   });
 
   app.listen(config.port, () => {

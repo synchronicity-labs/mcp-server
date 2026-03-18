@@ -1,4 +1,5 @@
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 
@@ -26,18 +27,21 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        throw new Error('Invalid token');
+        throw new InvalidTokenError('Invalid or expired token');
       }
       const info = (await res.json()) as {
         sub: string;
         client_id: string;
         expires_at?: number;
       };
+      // expiresAt is required by requireBearerAuth middleware.
+      // Default to 1 hour from now if not provided.
+      const expiresAt = info.expires_at ?? Math.floor(Date.now() / 1000) + 3600;
       return {
         token,
         clientId: info.client_id,
         scopes: [],
-        expiresAt: info.expires_at,
+        expiresAt,
       };
     },
 
