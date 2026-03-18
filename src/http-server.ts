@@ -3,6 +3,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import cors from 'cors';
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
@@ -55,10 +56,9 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
   const bearerAuth = requireBearerAuth({ verifier: oauthProvider });
   const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
 
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
-  await server.connect(transport);
+  // Per-session transports: MCP protocol requires stateful sessions since
+  // initialize and tools/list are separate requests on the same session.
+  const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   // JSON body parsing for MCP requests
   app.use('/mcp', express.json());
@@ -71,6 +71,30 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
     }
 
     try {
+      // Check for existing session
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+      let transport: StreamableHTTPServerTransport;
+
+      if (sessionId && sessions.has(sessionId)) {
+        transport = sessions.get(sessionId)!;
+      } else if (!sessionId) {
+        // New session — create a transport and connect the server
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+        });
+        transport.onclose = () => {
+          if (transport.sessionId) {
+            sessions.delete(transport.sessionId);
+          }
+        };
+        await server.connect(transport);
+        sessions.set(transport.sessionId!, transport);
+      } else {
+        // Unknown session ID
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+
       await runWithAuth(token, () => transport.handleRequest(req, res, req.body));
     } catch (error) {
       log(`MCP handler error: ${error instanceof Error ? error.stack : error}\n`);
