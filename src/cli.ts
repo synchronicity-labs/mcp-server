@@ -14,24 +14,9 @@ async function main(): Promise<void> {
     const transport = new StdioServerTransport();
     await server.connect(transport);
   } else {
-    // HTTP transport - import dynamically to avoid bundling when unused
-    const { StreamableHTTPServerTransport } = await import(
-      '@modelcontextprotocol/sdk/server/streamableHttp.js'
-    );
-    const http = await import('node:http');
-
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
-    await server.connect(transport);
-
-    const httpServer = http.createServer(async (req, res) => {
-      await transport.handleRequest(req, res);
-    });
-
-    httpServer.listen(config.port, () => {
-      process.stderr.write(`Sync MCP server listening on http://localhost:${config.port}\n`);
-    });
+    // HTTP transport with OAuth — import dynamically to avoid bundling Express for stdio
+    const { startHttpServer } = await import('./http-server.js');
+    await startHttpServer(server, config);
   }
 }
 

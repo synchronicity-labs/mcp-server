@@ -3,7 +3,7 @@ import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { loadToken } from './auth/token-store.js';
 import type { SyncMcpConfig } from './config.js';
-import { createHttpClient } from './http-client.js';
+import { createHttpClient, type HttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { generateTools } from './tools/generator.js';
@@ -13,8 +13,18 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
     process.stderr.write(message);
   };
 
-  const authHeaders = await resolveAuth(config, log);
-  const httpClient = createHttpClient(config.baseUrl, authHeaders);
+  let httpClient: HttpClient;
+
+  if (config.transport === 'http') {
+    // HTTP transport: auth comes per-request via AsyncLocalStorage (OAuth bearer token).
+    // No static auth headers needed — the httpClient reads from async context.
+    log('HTTP transport: auth will be resolved per-request via OAuth\n');
+    httpClient = createHttpClient(config.baseUrl);
+  } else {
+    // Stdio transport: auth resolved once at startup (API key or device auth)
+    const authHeaders = await resolveAuth(config, log);
+    httpClient = createHttpClient(config.baseUrl, authHeaders);
+  }
 
   log(`Fetching OpenAPI spec from ${config.baseUrl}...\n`);
   const spec = await fetchSpec(config.baseUrl);
