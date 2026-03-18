@@ -96,7 +96,7 @@ describe('parseSpec', () => {
         '/v2/test': {
           get: {
             summary: 'No operation ID',
-            tags: ['Test'],
+            tags: ['Generate'],
           },
         },
       },
@@ -113,7 +113,7 @@ describe('parseSpec', () => {
           post: {
             operationId: 'UploadController_upload',
             summary: 'Upload a file',
-            tags: ['Upload'],
+            tags: ['Assets'],
             parameters: [],
             requestBody: {
               content: {
