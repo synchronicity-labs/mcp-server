@@ -1,6 +1,6 @@
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import cors from 'cors';
 import { randomUUID } from 'node:crypto';
@@ -10,7 +10,10 @@ import { runWithAuth } from './auth/async-context.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 
-export async function startHttpServer(server: McpServer, config: SyncMcpConfig): Promise<void> {
+export async function startHttpServer(
+  serverFactory: { createServer: () => McpServer; toolCount: number },
+  config: SyncMcpConfig,
+): Promise<void> {
   const log = (message: string) => {
     process.stderr.write(message);
   };
@@ -91,7 +94,7 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
       if (sessionId && sessions.has(sessionId)) {
         transport = sessions.get(sessionId)!;
       } else if (!sessionId) {
-        // New session — create a transport and connect the server
+        // New session — create a fresh server + transport pair
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
         });
@@ -100,7 +103,8 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
             sessions.delete(transport.sessionId);
           }
         };
-        await server.connect(transport);
+        const sessionServer = serverFactory.createServer();
+        await sessionServer.connect(transport);
       } else {
         // Unknown session ID
         res.status(404).json({ error: 'Session not found' });

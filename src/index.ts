@@ -22,7 +22,7 @@ export type {
 } from './openapi/index.js';
 
 export { fetchSpec, loadSpecFromFile, parseSpec } from './openapi/index.js';
-export { createSyncMcpServer } from './server.js';
+export { createMcpServerFactory, createSyncMcpServer } from './server.js';
 export type { McpToolDefinition, ToolRegistry } from './tools/index.js';
 export {
   createToolRegistry,
