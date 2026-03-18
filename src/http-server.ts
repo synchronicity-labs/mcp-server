@@ -41,9 +41,17 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
     res.json({ status: 'ok' });
   });
 
-  // Favicon — serve the Sync logo for connector branding
-  app.get('/favicon.ico', (_req, res) => {
-    res.redirect(301, 'https://sync.so/favicon.ico');
+  // Favicon — proxy the Sync logo for connector branding
+  app.get('/favicon.ico', async (_req, res) => {
+    const upstream = await fetch('https://sync.so/favicon.ico');
+    if (!upstream.ok) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/x-icon');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.send(buffer);
   });
 
   // OAuth auth router — handles /.well-known/*, /authorize, /token, /register, /revoke
