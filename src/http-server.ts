@@ -4,9 +4,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import cors from 'cors';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
-import rateLimit from 'express-rate-limit';
 import type { SyncMcpConfig } from './config.js';
 
 export async function startHttpServer(server: McpServer, config: SyncMcpConfig): Promise<void> {
@@ -60,16 +60,17 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
   });
   await server.connect(transport);
 
+  // JSON body parsing for MCP requests
+  app.use('/mcp', express.json());
+
   app.all('/mcp', mcpRateLimit, bearerAuth, async (req, res) => {
-    // Thread the OAuth token into AsyncLocalStorage so the httpClient
-    // uses it for API calls instead of static auth headers
     const token = req.auth?.token;
     if (!token) {
       res.status(401).json({ error: 'Missing auth token' });
       return;
     }
 
-    await runWithAuth(token, () => transport.handleRequest(req, res));
+    await runWithAuth(token, () => transport.handleRequest(req, res, req.body));
   });
 
   app.listen(config.port, () => {
