@@ -36,6 +36,10 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   const server = new McpServer({
     name: 'sync',
     version: '0.1.0',
+    description:
+      'Sync is an AI video platform for lipsync and visual dubbing. ' +
+      'Create lipsync videos by providing a video URL and audio URL — Sync generates a video with perfectly synchronized lip movements. ' +
+      'Typical workflow: generate_create-generation → poll generate_get-generation until COMPLETED → return output URL.',
   });
 
   for (const tool of tools) {

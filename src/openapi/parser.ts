@@ -2,6 +2,14 @@ import type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from '
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
+/** Tags to exclude from MCP tool generation — these are infrastructure endpoints, not user-facing. */
+const EXCLUDED_TAGS = new Set([
+  'internal',
+  'oauth',
+  'device auth',
+  'healthcheck',
+]);
+
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
   const operations: ParsedOperation[] = [];
 
@@ -11,7 +19,7 @@ export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
       if (!operation) continue;
 
       const tags = operation.tags ?? [];
-      if (tags.includes('internal')) continue;
+      if (tags.some((t) => EXCLUDED_TAGS.has(t.toLowerCase()))) continue;
 
       const operationId = operation.operationId;
       if (!operationId) continue;
