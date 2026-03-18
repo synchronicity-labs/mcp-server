@@ -41,6 +41,11 @@ export async function startHttpServer(server: McpServer, config: SyncMcpConfig):
     res.json({ status: 'ok' });
   });
 
+  // Favicon — serve the Sync logo for connector branding
+  app.get('/favicon.ico', (_req, res) => {
+    res.redirect(301, 'https://sync.so/favicon.ico');
+  });
+
   // OAuth auth router — handles /.well-known/*, /authorize, /token, /register, /revoke
   const mcpEndpointUrl = new URL('/mcp', issuerUrl);
   app.use(
