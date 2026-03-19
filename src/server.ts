@@ -14,28 +14,7 @@ const SERVER_DESCRIPTION =
   'Create lipsync videos by providing a video URL and audio URL — Sync generates a video with perfectly synchronized lip movements. ' +
   'Typical workflow: generate_create-generation → poll generate_get-generation until COMPLETED → return output URL.';
 
-function registerTools(server: McpServer, tools: McpToolDefinition[], httpClient: HttpClient): void {
-  // Built-in tool: get current user/org context
-  server.tool(
-    'account_whoami',
-    'Get the current authenticated user and active organization. Use this to check which account and workspace is connected.',
-    {},
-    async () => {
-      try {
-        const result = await httpClient.request('get', '/v2/oauth/userinfo');
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          content: [{ type: 'text' as const, text: `Error: ${message}` }],
-          isError: true,
-        };
-      }
-    },
-  );
-
+function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
     server.tool(tool.name, tool.description, tool.inputSchema, async (args) => {
       try {
@@ -84,8 +63,8 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
 
   const tools = generateTools(operations, httpClient);
   const server = new McpServer({ name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION });
-  registerTools(server, tools, httpClient);
-  log(`Registered ${tools.length + 1} MCP tools\n`);
+  registerTools(server, tools);
+  log(`Registered ${tools.length} MCP tools\n`);
 
   return server;
 }
@@ -115,7 +94,7 @@ export async function createMcpServerFactory(
     toolCount: tools.length,
     createServer: () => {
       const server = new McpServer({ name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION });
-      registerTools(server, tools, httpClient);
+      registerTools(server, tools);
       return server;
     },
   };
