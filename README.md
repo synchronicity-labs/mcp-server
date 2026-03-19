@@ -8,16 +8,28 @@ Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API e
 
 | Client | Status | Transport |
 |--------|--------|-----------|
+| [Claude Web](https://claude.ai) (claude.ai) | Supported | Remote (HTTP + OAuth) |
 | [Claude Desktop](https://claude.ai/download) | Supported | Local (stdio) |
 | [ChatGPT Desktop](https://openai.com/chatgpt/desktop/) | Supported | Local (stdio) |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Supported | Local (stdio) |
 | [Cursor](https://cursor.com) | Supported | Local (stdio) |
 | [Windsurf](https://codeium.com/windsurf) | Supported | Local (stdio) |
 | [Codex CLI](https://github.com/openai/codex) | Supported | Local (stdio) |
-| [Claude Web](https://claude.ai) (claude.ai) | Supported | Remote (HTTP + OAuth) |
 | Any MCP-compatible client | Supported | Local (stdio) |
 
 ## Quick Start
+
+### Claude Web (claude.ai)
+
+No installation required — connect directly from your browser.
+
+1. Go to [claude.ai](https://claude.ai) → **Settings** → **Integrations**
+2. Click **Add custom connector**
+3. Enter **Name:** `Sync` and **URL:** `https://mcp.sync.so/mcp`
+4. Click **Add**, then **Connect**
+5. Log in with your Sync account when prompted
+
+No API key needed — authentication is handled via OAuth.
 
 ### Claude Code
 
@@ -110,12 +122,12 @@ Tools are dynamically generated from the Sync API. Core tools include:
 |------|-------------|
 | `generate_create-generation` | Create a lipsync video from video + audio inputs |
 | `generate_get-generation` | Get generation status — poll until COMPLETED |
-| `models_get-public` | List available lipsync models |
+| `generate_get-generations` | List recent generations |
+| `models_get` | List available lipsync models |
 | `assets_get-all` | List all assets in your organization |
 | `assets_get` | Get a specific asset by ID |
-| `generations_estimate` | Estimate generation cost before creating |
-
-Plus every other public endpoint in the [Sync API](https://sync.so/docs/api-reference).
+| `generations_estimate-cost` | Estimate generation cost before creating |
+| `generations_get-by-id` | Get a generation by ID |
 
 ## Example Prompts
 
@@ -188,28 +200,6 @@ npm run lint
 # Type check
 npm run typecheck
 ```
-
-### Local HTTP Transport Testing
-
-To test the HTTP transport (OAuth flow) locally:
-
-1. Copy `.env.example` to `.env` and fill in the values
-2. Start a tunnel to expose localhost:
-   ```bash
-   ngrok http 3002
-   ```
-3. Update `MCP_ISSUER_URL` in `.env` with the ngrok URL
-4. Start the server:
-   ```bash
-   source .env
-   node dist/cli.js --transport http --base-url $SYNC_BASE_URL --port 3002
-   ```
-5. Verify it works:
-   ```bash
-   curl https://<ngrok-url>/health
-   curl https://<ngrok-url>/.well-known/oauth-authorization-server
-   ```
-6. Add `https://<ngrok-url>/mcp` as a custom connector in [Claude Web](https://claude.ai)
 
 ### Local HTTP Transport Testing
 
