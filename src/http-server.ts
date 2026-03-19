@@ -71,6 +71,15 @@ export async function startHttpServer(
     }),
   );
 
+  // Protected resource metadata for SSE endpoint (ChatGPT discovers OAuth via this)
+  app.get('/.well-known/oauth-protected-resource/sse', (_req, res) => {
+    res.json({
+      resource: new URL('/sse', issuerUrl).href,
+      authorization_servers: [issuerUrl.href],
+      resource_documentation: 'https://sync.so/docs',
+    });
+  });
+
   // MCP endpoint — requires valid Bearer token, rate limited
   const bearerAuth = requireBearerAuth({ verifier: oauthProvider });
   const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
