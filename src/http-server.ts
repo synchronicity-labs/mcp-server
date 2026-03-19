@@ -1,6 +1,7 @@
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import cors from 'cors';
 import { randomUUID } from 'node:crypto';
@@ -32,6 +33,8 @@ export async function startHttpServer(
         /^https:\/\/.*\.claude\.ai$/,
         'https://claude.com',
         /^https:\/\/.*\.claude\.com$/,
+        'https://chatgpt.com',
+        /^https:\/\/.*\.chatgpt\.com$/,
         'http://localhost:3000',
         'http://localhost:5173',
       ],
@@ -123,6 +126,47 @@ export async function startHttpServer(
         res.status(500).json({ error: 'Internal server error' });
       }
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // SSE transport — for ChatGPT Web and other SSE-based MCP clients
+  // GET /sse establishes the SSE stream, POST /messages sends client messages
+  // ---------------------------------------------------------------------------
+  const sseSessions = new Map<string, SSEServerTransport>();
+
+  app.get('/sse', mcpRateLimit, bearerAuth, async (req, res) => {
+    const token = req.auth?.token;
+    if (!token) {
+      res.status(401).json({ error: 'Missing auth token' });
+      return;
+    }
+
+    const transport = new SSEServerTransport('/messages', res);
+    sseSessions.set(transport.sessionId, transport);
+
+    transport.onclose = () => {
+      sseSessions.delete(transport.sessionId);
+    };
+
+    const sessionServer = serverFactory.createServer();
+    await runWithAuth(token, () => sessionServer.connect(transport));
+  });
+
+  app.post('/messages', express.json(), mcpRateLimit, bearerAuth, async (req, res) => {
+    const token = req.auth?.token;
+    if (!token) {
+      res.status(401).json({ error: 'Missing auth token' });
+      return;
+    }
+
+    const sessionId = req.query.sessionId as string;
+    const transport = sseSessions.get(sessionId);
+    if (!transport) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    await runWithAuth(token, () => transport.handlePostMessage(req, res, req.body));
   });
 
   app.listen(config.port, () => {
