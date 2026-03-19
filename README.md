@@ -14,7 +14,7 @@ Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API e
 | [Cursor](https://cursor.com) | Supported | Local (stdio) |
 | [Windsurf](https://codeium.com/windsurf) | Supported | Local (stdio) |
 | [Codex CLI](https://github.com/openai/codex) | Supported | Local (stdio) |
-| Claude Web (claude.ai) | Coming soon | Remote (HTTP + OAuth) |
+| [Claude Web](https://claude.ai) (claude.ai) | Supported | Remote (HTTP + OAuth) |
 | Any MCP-compatible client | Supported | Local (stdio) |
 
 ## Quick Start
@@ -144,8 +144,10 @@ Options:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SYNC_API_KEY` | Your Sync API key | — |
+| `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
 | `SYNC_BASE_URL` | API base URL | `https://api.sync.so` |
+| `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
+| `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
 
 ## How It Works
 
@@ -186,6 +188,50 @@ npm run lint
 # Type check
 npm run typecheck
 ```
+
+### Local HTTP Transport Testing
+
+To test the HTTP transport (OAuth flow) locally:
+
+1. Copy `.env.example` to `.env` and fill in the values
+2. Start a tunnel to expose localhost:
+   ```bash
+   ngrok http 3002
+   ```
+3. Update `MCP_ISSUER_URL` in `.env` with the ngrok URL
+4. Start the server:
+   ```bash
+   source .env
+   node dist/cli.js --transport http --base-url $SYNC_BASE_URL --port 3002
+   ```
+5. Verify it works:
+   ```bash
+   curl https://<ngrok-url>/health
+   curl https://<ngrok-url>/.well-known/oauth-authorization-server
+   ```
+6. Add `https://<ngrok-url>/mcp` as a custom connector in [Claude Web](https://claude.ai)
+
+### Local HTTP Transport Testing
+
+To test the HTTP transport (OAuth flow) locally:
+
+1. Copy `.env.example` to `.env` and fill in the values
+2. Start a tunnel to expose localhost:
+   ```bash
+   ngrok http 3002
+   ```
+3. Update `MCP_ISSUER_URL` in `.env` with the ngrok URL
+4. Start the server:
+   ```bash
+   source .env
+   node dist/cli.js --transport http --base-url $SYNC_BASE_URL --port 3002
+   ```
+5. Verify it works:
+   ```bash
+   curl https://<ngrok-url>/health
+   curl https://<ngrok-url>/.well-known/oauth-authorization-server
+   ```
+6. Add `https://<ngrok-url>/mcp` as a custom connector in [Claude Web](https://claude.ai)
 
 ## Learn More
 
