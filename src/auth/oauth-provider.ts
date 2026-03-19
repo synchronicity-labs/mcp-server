@@ -10,16 +10,17 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
  * can look them up (it calls getClient before proxying the authorize request).
  */
 export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvider {
-  // In-memory cache of registered clients, keyed by client_id.
-  // Populated when registerClient is called by the SDK's registration handler.
   const clientCache = new Map<string, OAuthClientInformationFull>();
+  const registrationSecret = process.env.OAUTH_REGISTRATION_SECRET;
+
+  const registrationUrl = `${apiBaseUrl}/v2/oauth/register`;
 
   const provider = new ProxyOAuthServerProvider({
     endpoints: {
       authorizationUrl: `${apiBaseUrl}/v2/oauth/authorize`,
       tokenUrl: `${apiBaseUrl}/v2/oauth/token`,
       revocationUrl: `${apiBaseUrl}/v2/oauth/revoke`,
-      registrationUrl: `${apiBaseUrl}/v2/oauth/register`,
+      registrationUrl,
     },
 
     verifyAccessToken: async (token: string): Promise<AuthInfo> => {
@@ -34,8 +35,6 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
         client_id: string;
         expires_at?: number;
       };
-      // expiresAt is required by requireBearerAuth middleware.
-      // Default to 1 hour from now if not provided.
       const expiresAt = info.expires_at ?? Math.floor(Date.now() / 1000) + 3600;
       return {
         token,
@@ -47,6 +46,15 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
 
     getClient: async (clientId: string) => {
       return clientCache.get(clientId);
+    },
+
+    // Custom fetch that adds the registration secret header
+    fetch: async (url, init) => {
+      const headers = new Headers(init?.headers);
+      if (typeof url === 'string' && url === registrationUrl && registrationSecret) {
+        headers.set('Authorization', `Bearer ${registrationSecret}`);
+      }
+      return fetch(url, { ...init, headers });
     },
   });
 
