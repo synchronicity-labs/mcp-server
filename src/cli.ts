@@ -2,36 +2,21 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { resolveConfig } from './config.js';
-import { createSyncMcpServer } from './server.js';
+import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const config = resolveConfig(parseArgs(args));
 
-  const server = await createSyncMcpServer(config);
-
   if (config.transport === 'stdio') {
+    const server = await createSyncMcpServer(config);
     const transport = new StdioServerTransport();
     await server.connect(transport);
   } else {
-    // HTTP transport - import dynamically to avoid bundling when unused
-    const { StreamableHTTPServerTransport } = await import(
-      '@modelcontextprotocol/sdk/server/streamableHttp.js'
-    );
-    const http = await import('node:http');
-
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
-    await server.connect(transport);
-
-    const httpServer = http.createServer(async (req, res) => {
-      await transport.handleRequest(req, res);
-    });
-
-    httpServer.listen(config.port, () => {
-      process.stderr.write(`Sync MCP server listening on http://localhost:${config.port}\n`);
-    });
+    // HTTP transport: each session gets its own McpServer instance
+    const factory = await createMcpServerFactory(config);
+    const { startHttpServer } = await import('./http-server.js');
+    await startHttpServer(factory, config);
   }
 }
 

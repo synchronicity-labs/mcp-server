@@ -2,6 +2,9 @@ import type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from '
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
+/** Only these tags produce MCP tools — everything else is filtered out. */
+const ALLOWED_TAGS = new Set(['generate', 'generations', 'models', 'assets']);
+
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
   const operations: ParsedOperation[] = [];
 
@@ -11,7 +14,7 @@ export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
       if (!operation) continue;
 
       const tags = operation.tags ?? [];
-      if (tags.includes('internal')) continue;
+      if (!tags.some((t) => ALLOWED_TAGS.has(t.toLowerCase()))) continue;
 
       const operationId = operation.operationId;
       if (!operationId) continue;

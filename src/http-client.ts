@@ -1,3 +1,5 @@
+import { getAuthToken } from './auth/async-context.js';
+
 const SYNC_SOURCE = 'mcp';
 
 type AuthHeaders = Record<string, string>;
@@ -14,7 +16,14 @@ export type HttpClient = {
   ) => Promise<unknown>;
 };
 
-export function createHttpClient(baseUrl: string, authHeaders: AuthHeaders): HttpClient {
+/**
+ * Creates an HTTP client for the Sync API.
+ *
+ * Auth is resolved in this order:
+ * 1. Per-request token from AsyncLocalStorage (set by OAuth middleware in HTTP transport)
+ * 2. Static auth headers (API key or device auth token, set at startup for stdio transport)
+ */
+export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders = {}): HttpClient {
   return {
     async request(method, path, options = {}) {
       const url = new URL(path, baseUrl);
@@ -25,6 +34,12 @@ export function createHttpClient(baseUrl: string, authHeaders: AuthHeaders): Htt
           }
         }
       }
+
+      // Per-request OAuth token takes priority over static headers
+      const perRequestToken = getAuthToken();
+      const authHeaders: Record<string, string> = perRequestToken
+        ? { Authorization: `Bearer ${perRequestToken}` }
+        : { ...staticAuthHeaders };
 
       const headers: Record<string, string> = {
         ...authHeaders,
