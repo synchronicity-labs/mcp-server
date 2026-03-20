@@ -45,6 +45,14 @@ export async function startHttpServer(
   // Request logging
   app.use((req, res, next) => {
     const start = Date.now();
+    // Log token endpoint requests with body for debugging
+    if (req.url.startsWith('/token') && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        log(`TOKEN REQUEST body: ${body}\n`);
+      });
+    }
     res.on('finish', () => {
       log(`${req.method} ${req.url} → ${res.statusCode} (${Date.now() - start}ms)\n`);
     });
