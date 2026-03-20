@@ -81,7 +81,8 @@ export async function startHttpServer(
   });
 
   // MCP endpoint — requires valid Bearer token, rate limited
-  const bearerAuth = requireBearerAuth({ verifier: oauthProvider });
+  const resourceMetadataUrl = new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href;
+  const bearerAuth = requireBearerAuth({ verifier: oauthProvider, resourceMetadataUrl });
   const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
 
   // Per-session transports: MCP protocol requires stateful sessions since
