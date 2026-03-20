@@ -41,6 +41,14 @@ export async function startHttpServer(
     }),
   );
 
+  // Request logging
+  app.use((req, res, next) => {
+    res.on('finish', () => {
+      log(`${req.method} ${req.url.split('?')[0]} → ${res.statusCode}\n`);
+    });
+    next();
+  });
+
   // Health check (unauthenticated)
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
