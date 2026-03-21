@@ -1,9 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import cors from 'cors';
-import { randomUUID } from 'node:crypto';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
@@ -102,6 +102,7 @@ export async function startHttpServer(
   // Per-session transports: MCP protocol requires stateful sessions since
   // initialize and tools/list are separate requests on the same session.
   const sessions = new Map<string, StreamableHTTPServerTransport>();
+  const sessionClientNames = new Map<string, string>();
 
   // JSON body parsing for MCP requests
   app.use('/mcp', express.json());
@@ -126,16 +127,26 @@ export async function startHttpServer(
         transport.onclose = () => {
           if (transport.sessionId) {
             sessions.delete(transport.sessionId);
+            sessionClientNames.delete(transport.sessionId);
           }
         };
         const sessionServer = serverFactory.createServer();
+        sessionServer.server.oninitialized = () => {
+          const clientVersion = sessionServer.server.getClientVersion();
+          if (clientVersion?.name && transport.sessionId) {
+            sessionClientNames.set(transport.sessionId, clientVersion.name);
+          }
+        };
         await sessionServer.connect(transport);
       } else {
         res.status(404).json({ error: 'Session not found' });
         return;
       }
 
-      await runWithAuth(token, () => transport.handleRequest(req, res, req.body));
+      const clientName = transport.sessionId
+        ? sessionClientNames.get(transport.sessionId)
+        : undefined;
+      await runWithAuth(token, clientName, () => transport.handleRequest(req, res, req.body));
 
       if (transport.sessionId && !sessions.has(transport.sessionId)) {
         sessions.set(transport.sessionId, transport);

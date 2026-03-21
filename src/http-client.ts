@@ -1,6 +1,11 @@
-import { getAuthToken } from './auth/async-context.js';
+import { getAuthToken, getClientName } from './auth/async-context.js';
 
-const SYNC_SOURCE = 'mcp';
+// Fallback client name for stdio transport (single session, no AsyncLocalStorage)
+let staticClientName: string | undefined;
+
+export function setStaticClientName(name: string): void {
+  staticClientName = name;
+}
 
 type AuthHeaders = Record<string, string>;
 
@@ -41,9 +46,12 @@ export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders
         ? { Authorization: `Bearer ${perRequestToken}` }
         : { ...staticAuthHeaders };
 
+      const clientName = getClientName() ?? staticClientName;
+      const syncSource = clientName ? `mcp:${clientName}` : 'mcp';
+
       const headers: Record<string, string> = {
         ...authHeaders,
-        'x-sync-source': SYNC_SOURCE,
+        'x-sync-source': syncSource,
         ...options.headers,
       };
 

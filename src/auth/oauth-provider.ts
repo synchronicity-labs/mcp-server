@@ -1,7 +1,7 @@
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 /**
  * Creates an OAuth provider that proxies to the Sync API's OAuth endpoints.
