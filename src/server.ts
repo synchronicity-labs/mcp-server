@@ -3,11 +3,11 @@ import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { loadToken } from './auth/token-store.js';
 import type { SyncMcpConfig } from './config.js';
-import { createHttpClient, type HttpClient } from './http-client.js';
+import { createHttpClient, type HttpClient, setStaticClientName } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
-import type { McpToolDefinition } from './tools/index.js';
 import { generateTools } from './tools/generator.js';
+import type { McpToolDefinition } from './tools/index.js';
 
 const SERVER_DESCRIPTION =
   'Sync is an AI video platform for lipsync and visual dubbing. ' +
@@ -66,6 +66,13 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   registerTools(server, tools);
   log(`Registered ${tools.length} MCP tools\n`);
 
+  server.server.oninitialized = () => {
+    const clientVersion = server.server.getClientVersion();
+    if (clientVersion?.name) {
+      setStaticClientName(clientVersion.name);
+    }
+  };
+
   return server;
 }
 
@@ -93,7 +100,11 @@ export async function createMcpServerFactory(
   return {
     toolCount: tools.length,
     createServer: () => {
-      const server = new McpServer({ name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION });
+      const server = new McpServer({
+        name: 'sync',
+        version: '0.1.0',
+        description: SERVER_DESCRIPTION,
+      });
       registerTools(server, tools);
       return server;
     },
@@ -114,7 +125,6 @@ async function resolveAuth(
     log('Using cached device auth token\n');
     return {
       Authorization: `Bearer ${cachedToken}`,
-      'x-sync-source': 'mcp',
     };
   }
 
