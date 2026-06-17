@@ -1,7 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
-import { generateTools, operationIdToToolName } from './generator.js';
+import { deriveAnnotations, generateTools, operationIdToToolName } from './generator.js';
+
+describe('deriveAnnotations', () => {
+  it('marks reads read-only, deletes destructive, and writes open-world', () => {
+    expect(deriveAnnotations('get')).toMatchObject({
+      readOnlyHint: true,
+      openWorldHint: false,
+    });
+    expect(deriveAnnotations('delete')).toMatchObject({
+      destructiveHint: true,
+      openWorldHint: true,
+    });
+    expect(deriveAnnotations('post')).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+  });
+});
 
 describe('operationIdToToolName', () => {
   it('converts controller operation IDs to tool names', () => {
