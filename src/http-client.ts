@@ -7,6 +7,29 @@ export function setStaticClientName(name: string): void {
   staticClientName = name;
 }
 
+/**
+ * Flagship assistant surfaces are first-class `x-sync-source` values in Sync
+ * analytics; every other MCP client rides the `mcp:<client>` namespace (which
+ * collapses to `mcp` in reporting). Keys are the lowercased `clientInfo.name`
+ * each host reports in the MCP `initialize` handshake — verify the exact string
+ * against a real connection when onboarding a new host (see the publishing
+ * runbook) and add it here.
+ */
+const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
+  chatgpt: 'chatgpt',
+  openai: 'chatgpt',
+  'openai-chatgpt': 'chatgpt',
+  claude: 'claude',
+  'claude-ai': 'claude',
+  gemini: 'gemini',
+  google: 'gemini',
+};
+
+export function resolveSyncSource(clientName?: string): string {
+  if (!clientName) return 'mcp';
+  return FIRST_CLASS_SOURCE_BY_CLIENT[clientName.toLowerCase()] ?? `mcp:${clientName}`;
+}
+
 type AuthHeaders = Record<string, string>;
 
 export type HttpClient = {
@@ -47,7 +70,7 @@ export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders
         : { ...staticAuthHeaders };
 
       const clientName = getClientName() ?? staticClientName;
-      const syncSource = clientName ? `mcp:${clientName}` : 'mcp';
+      const syncSource = resolveSyncSource(clientName);
 
       const headers: Record<string, string> = {
         ...authHeaders,
