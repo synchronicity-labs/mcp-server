@@ -120,14 +120,25 @@ Tools are dynamically generated from the Sync API. Core tools include:
 
 | Tool | Description |
 |------|-------------|
+| `models_get` | List available lipsync models |
 | `generate_create-generation` | Create a lipsync video from video + audio inputs |
 | `generate_get-generation` | Get generation status — poll until COMPLETED |
 | `generate_get-generations` | List recent generations |
-| `models_get` | List available lipsync models |
+| `generate_estimate-cost` | Estimate generation cost before creating |
+| `generations_get-by-id` | Get a generation by ID |
+| `generations_delete` | Delete a generation |
+| `assets_create-upload-url` | Get a presigned URL to upload a local file |
+| `assets_create` | Register a media URL as a reusable asset |
 | `assets_get-all` | List all assets in your organization |
 | `assets_get` | Get a specific asset by ID |
-| `generations_estimate-cost` | Estimate generation cost before creating |
-| `generations_get-by-id` | Get a generation by ID |
+| `assets_update` / `assets_delete` | Update or delete an asset |
+| `voices_get-voices` | List premade + cloned voices |
+| `voices_clone-voice` | Clone a voice from an audio/video sample |
+| `voices_delete-voice` | Delete a cloned voice |
+| `tts_create` | Synthesize speech from text → audio URL |
+| `projects_create` | Create a project to group generations + assets |
+| `projects_get-all` / `projects_get` | List / get projects |
+| `projects_update` / `projects_delete` | Update or delete a project |
 
 ## Example Prompts
 

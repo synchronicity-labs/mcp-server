@@ -3,7 +3,15 @@ import type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from '
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
 /** Only these tags produce MCP tools — everything else is filtered out. */
-const ALLOWED_TAGS = new Set(['generate', 'generations', 'models', 'assets']);
+const ALLOWED_TAGS = new Set([
+  'generate',
+  'generations',
+  'models',
+  'assets',
+  'projects',
+  'voices',
+  'text-to-speech',
+]);
 
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
   const operations: ParsedOperation[] = [];
