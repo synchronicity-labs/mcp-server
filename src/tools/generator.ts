@@ -1,3 +1,4 @@
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
@@ -7,6 +8,10 @@ export type McpToolDefinition = {
   name: string;
   description: string;
   inputSchema: Record<string, z.ZodType>;
+  annotations?: ToolAnnotations;
+  // Tool-level metadata passed through to the MCP client (e.g. OpenAI's
+  // `openai/fileParams` and invocation-status hints for ChatGPT apps).
+  meta?: Record<string, unknown>;
   handler: (args: Record<string, unknown>) => Promise<unknown>;
 };
 
@@ -15,6 +20,23 @@ export function generateTools(
   httpClient: HttpClient,
 ): McpToolDefinition[] {
   return operations.map((op) => generateTool(op, httpClient));
+}
+
+/**
+ * Behaviour hints required by the ChatGPT and Claude app/connector directories
+ * (missing/incorrect annotations are a top review-rejection cause). Derived
+ * from the HTTP verb: reads are read-only; deletes are destructive; every write
+ * touches external Sync systems, so it is open-world.
+ */
+export function deriveAnnotations(method: string): ToolAnnotations {
+  if (method === 'get') {
+    return { readOnlyHint: true, openWorldHint: false };
+  }
+  if (method === 'delete') {
+    return { readOnlyHint: false, destructiveHint: true, openWorldHint: true };
+  }
+  // post / patch / put — create/update operations against the Sync API
+  return { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
 }
 
 function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpToolDefinition {
@@ -28,6 +50,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     name,
     description,
     inputSchema,
+    annotations: deriveAnnotations(operation.method),
     handler: async (args: Record<string, unknown>) => {
       const path = buildPath(operation.path, args);
       const query = buildQuery(operation.parameters, args);

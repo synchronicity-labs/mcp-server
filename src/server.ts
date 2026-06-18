@@ -6,6 +6,7 @@ import type { SyncMcpConfig } from './config.js';
 import { createHttpClient, type HttpClient, setStaticClientName } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
+import { createAppTools } from './tools/app-tools.js';
 import { generateTools } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 
@@ -16,25 +17,34 @@ const SERVER_DESCRIPTION =
 
 function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
-    server.tool(tool.name, tool.description, tool.inputSchema, async (args) => {
-      try {
-        const result = await tool.handler((args ?? {}) as Record<string, unknown>);
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          content: [{ type: 'text' as const, text: `Error: ${message}` }],
-          isError: true,
-        };
-      }
-    });
+    server.registerTool(
+      tool.name,
+      {
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+        _meta: tool.meta,
+      },
+      async (args) => {
+        try {
+          const result = await tool.handler((args ?? {}) as Record<string, unknown>);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: 'text' as const, text: `Error: ${message}` }],
+            isError: true,
+          };
+        }
+      },
+    );
   }
 }
 
@@ -61,7 +71,7 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   const operations = parseSpec(spec);
   log(`Discovered ${operations.length} API operations\n`);
 
-  const tools = generateTools(operations, httpClient);
+  const tools = [...generateTools(operations, httpClient), ...createAppTools(httpClient)];
   const server = new McpServer({ name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION });
   registerTools(server, tools);
   log(`Registered ${tools.length} MCP tools\n`);
@@ -95,7 +105,7 @@ export async function createMcpServerFactory(
   const operations = parseSpec(spec);
   log(`Discovered ${operations.length} API operations\n`);
 
-  const tools = generateTools(operations, httpClient);
+  const tools = [...generateTools(operations, httpClient), ...createAppTools(httpClient)];
 
   return {
     toolCount: tools.length,
