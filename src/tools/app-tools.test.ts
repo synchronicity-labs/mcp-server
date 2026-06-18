@@ -153,4 +153,34 @@ describe('createAppTools — create-lipsync', () => {
     await expect(tool.handler({ video: { download_url: 'https://x/v.mp4' } })).rejects.toThrow();
     expect(request).not.toHaveBeenCalled();
   });
+
+  it('rejects a non-http(s) upload reference and echoes the value', async () => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({
+        image: { download_url: 'sandbox:/mnt/data/face.png' },
+        audioUrl: 'https://x/a.wav',
+      }),
+    ).rejects.toThrow(/sandbox:\/mnt\/data\/face\.png[\s\S]*imageUrl/);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the host + underlying cause when the upload URL can't be reached", async () => {
+    const { tool } = setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed', {
+          cause: new Error('getaddrinfo ENOTFOUND files.oai'),
+        });
+      }),
+    );
+    await expect(
+      tool.handler({
+        image: { download_url: 'https://files.oai/face.png' },
+        audioUrl: 'https://x/a.wav',
+      }),
+    ).rejects.toThrow(/files\.oai[\s\S]*ENOTFOUND/);
+  });
 });

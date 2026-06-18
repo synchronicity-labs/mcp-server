@@ -27,6 +27,27 @@ const DEFAULT_CONTENT_TYPE: Record<MediaKind, string> = {
   audio: 'audio/mpeg',
 };
 
+// The host of a URL, for error messages — so a failure says *where* it tried to
+// reach, not just "fetch failed".
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+// Node's fetch throws `TypeError: fetch failed` and hides the real reason (DNS,
+// TLS, connection refused, unsupported protocol) on `.cause`. Surface it.
+function reason(err: unknown): string {
+  if (err instanceof Error) {
+    const cause = (err as { cause?: unknown }).cause;
+    if (cause instanceof Error && cause.message) return `${err.message} — ${cause.message}`;
+    return err.message;
+  }
+  return String(err);
+}
+
 /**
  * Copy a user-uploaded file into Sync storage and return its durable assetId.
  *
@@ -36,38 +57,68 @@ const DEFAULT_CONTENT_TYPE: Record<MediaKind, string> = {
  * this call returns — by which point the ChatGPT URL is dead. So we pull the
  * bytes now and re-host them through the assets pipeline; the returned assetId
  * resolves to a durable Sync URL at submit time and survives the job queue.
+ *
+ * Each hop throws a distinct, host-tagged error: the three external steps
+ * (download from ChatGPT, PUT to Sync storage, register) fail in different ways
+ * and a bare "fetch failed" can't be acted on — by the model or by us.
  */
 async function rehostUpload(
   httpClient: HttpClient,
   file: FileInput,
   kind: MediaKind,
 ): Promise<string> {
-  if (!file.download_url) {
+  const src = file.download_url;
+  if (!src) {
     throw new Error(`The uploaded ${kind} is missing its download_url.`);
   }
+  // A real upload is an http(s) URL we can fetch. A sandbox/local reference
+  // (e.g. "sandbox:/mnt/data/...") can't be re-hosted — tell the caller to pass
+  // a public URL instead, and echo the value so the cause is visible.
+  if (!/^https?:\/\//i.test(src)) {
+    throw new Error(
+      `The uploaded ${kind} isn't a fetchable URL (received "${src.slice(0, 80)}"). ` +
+        `Pass a public ${kind} URL via ${kind}Url instead.`,
+    );
+  }
 
-  const download = await fetch(file.download_url);
+  // 1. Download the bytes from ChatGPT's temporary URL.
+  let download: Response;
+  try {
+    download = await fetch(src);
+  } catch (err) {
+    throw new Error(`Could not reach the uploaded ${kind} at ${hostOf(src)}: ${reason(err)}.`);
+  }
   if (!download.ok) {
-    throw new Error(`Could not read the uploaded ${kind} (HTTP ${download.status}).`);
+    throw new Error(`The uploaded ${kind} URL returned HTTP ${download.status}.`);
   }
   const bytes = await download.arrayBuffer();
   const contentType =
     download.headers.get('content-type') ?? file.mime_type ?? DEFAULT_CONTENT_TYPE[kind];
   const fileName = file.file_name ?? `chatgpt-upload-${kind}`;
 
+  // 2. Ask Sync for a presigned upload URL.
   const { uploadUrl, url } = (await httpClient.request('post', '/v2/assets/upload', {
     body: { fileName, contentType, size: bytes.byteLength },
   })) as { uploadUrl: string; url: string };
 
-  const put = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: bytes,
-  });
+  // 3. Upload the bytes to Sync storage.
+  let put: Response;
+  try {
+    put = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: bytes,
+    });
+  } catch (err) {
+    throw new Error(
+      `Could not upload the ${kind} to Sync storage at ${hostOf(uploadUrl)}: ${reason(err)}.`,
+    );
+  }
   if (!put.ok) {
-    throw new Error(`Failed to store the uploaded ${kind} in Sync (HTTP ${put.status}).`);
+    throw new Error(`Sync storage rejected the ${kind} upload (HTTP ${put.status}).`);
   }
 
+  // 4. Register the uploaded object as an asset.
   const asset = (await httpClient.request('post', '/v2/assets', {
     body: { url, type: ASSET_TYPE_BY_KIND[kind] },
   })) as { id: string };
