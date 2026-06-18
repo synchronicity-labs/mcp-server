@@ -126,6 +126,38 @@ async function rehostUpload(
   return asset.id;
 }
 
+// A media slot can be filled by an explicit `*Url`, or by the fileParam — which
+// arrives either as a real file object (re-host it) or, on hosts that don't
+// attach uploads (e.g. ChatGPT dev mode passes the model's own "/mnt/data/..."
+// path), as a bare string. Resolve all of these to a generation input item.
+type MediaParam = string | FileInput | undefined;
+
+async function resolveMedia(
+  httpClient: HttpClient,
+  kind: MediaKind,
+  urlParam: string | undefined,
+  fileParam: MediaParam,
+): Promise<{ type: string; url?: string; assetId?: string }> {
+  // An explicit URL the model already holds (tts output, public/asset URL) wins.
+  if (urlParam) return { type: kind, url: urlParam };
+
+  if (typeof fileParam === 'string') {
+    if (/^https?:\/\//i.test(fileParam)) return { type: kind, url: fileParam };
+    // A non-URL string is a host-local reference we can't fetch — say so.
+    throw new Error(
+      `Got a local path for the ${kind} ("${fileParam.slice(0, 80)}"), not an uploadable file — ` +
+        `this host didn't attach the upload. Pass a public ${kind} URL via ${kind}Url instead.`,
+    );
+  }
+
+  if (fileParam) {
+    return { type: kind, assetId: await rehostUpload(httpClient, fileParam, kind) };
+  }
+
+  // Unreachable — callers validate presence first.
+  throw new Error(`No ${kind} provided.`);
+}
+
 /**
  * Hand-written tools layered on top of the auto-generated ones.
  *
@@ -156,9 +188,9 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         videoUrl: z.string().optional(),
         imageUrl: z.string().optional(),
         audioUrl: z.string().optional(),
-        video: fileInput.optional(),
-        image: fileInput.optional(),
-        audio: fileInput.optional(),
+        video: z.union([z.string(), fileInput]).optional(),
+        image: z.union([z.string(), fileInput]).optional(),
+        audio: z.union([z.string(), fileInput]).optional(),
         model: z.string().optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
@@ -172,16 +204,16 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           videoUrl?: string;
           imageUrl?: string;
           audioUrl?: string;
-          video?: FileInput;
-          image?: FileInput;
-          audio?: FileInput;
+          video?: MediaParam;
+          image?: MediaParam;
+          audio?: MediaParam;
           model?: string;
         };
 
         // Validate the shape up front, before re-hosting any bytes.
-        const hasAudio = Boolean(audioUrl || audio?.download_url);
-        const hasVideo = Boolean(videoUrl || video?.download_url);
-        const hasImage = Boolean(imageUrl || image?.download_url);
+        const hasAudio = Boolean(audioUrl || audio);
+        const hasVideo = Boolean(videoUrl || video);
+        const hasImage = Boolean(imageUrl || image);
 
         if (!hasAudio) {
           throw new Error(
@@ -198,26 +230,10 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         }
 
         // A URL goes through verbatim; an uploaded file is re-hosted to an assetId.
-        const audioItem = audioUrl
-          ? { type: 'audio', url: audioUrl }
-          : { type: 'audio', assetId: await rehostUpload(httpClient, audio as FileInput, 'audio') };
-
-        let visual: { type: string; url?: string; assetId?: string };
-        if (hasImage) {
-          visual = imageUrl
-            ? { type: 'image', url: imageUrl }
-            : {
-                type: 'image',
-                assetId: await rehostUpload(httpClient, image as FileInput, 'image'),
-              };
-        } else {
-          visual = videoUrl
-            ? { type: 'video', url: videoUrl }
-            : {
-                type: 'video',
-                assetId: await rehostUpload(httpClient, video as FileInput, 'video'),
-              };
-        }
+        const audioItem = await resolveMedia(httpClient, 'audio', audioUrl, audio);
+        const visual = hasImage
+          ? await resolveMedia(httpClient, 'image', imageUrl, image)
+          : await resolveMedia(httpClient, 'video', videoUrl, video);
 
         // Image-to-video is only supported by sync-3; default the model to match.
         const resolvedModel = model ?? (hasImage ? 'sync-3' : 'lipsync-2');

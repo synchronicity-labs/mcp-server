@@ -166,6 +166,33 @@ describe('createAppTools — create-lipsync', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('rejects a bare local path string (ChatGPT dev-mode upload) with a clear message', async () => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({
+        image: '/mnt/data/mhadi(1).jpeg',
+        audioUrl: 'https://assets.sync.so/tts/take.mp3',
+      }),
+    ).rejects.toThrow(/\/mnt\/data\/mhadi\(1\)\.jpeg[\s\S]*imageUrl/);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('treats an http(s) string in a file slot as a URL passthrough', async () => {
+    const { tool, request } = setup();
+    await tool.handler({ video: 'https://x/v.mp4', audio: 'https://x/a.wav' });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
+      body: {
+        model: 'lipsync-2',
+        input: [
+          { type: 'video', url: 'https://x/v.mp4' },
+          { type: 'audio', url: 'https://x/a.wav' },
+        ],
+      },
+    });
+  });
+
   it("surfaces the host + underlying cause when the upload URL can't be reached", async () => {
     const { tool } = setup();
     vi.stubGlobal(
