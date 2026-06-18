@@ -35,6 +35,40 @@ describe('createAppTools — create-lipsync', () => {
     });
   });
 
+  it('chains a tts audioUrl with an uploaded image (the lipsync-an-image-to-speech flow)', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      image: { download_url: 'https://x/face.png' },
+      audioUrl: 'https://assets.sync.so/tts/take.mp3',
+    });
+    expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
+      body: {
+        model: 'sync-3',
+        input: [
+          { type: 'image', url: 'https://x/face.png' },
+          { type: 'audio', url: 'https://assets.sync.so/tts/take.mp3' },
+        ],
+      },
+    });
+  });
+
+  it('accepts plain URLs for every input', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      videoUrl: 'https://x/v.mp4',
+      audioUrl: 'https://x/a.wav',
+    });
+    expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
+      body: {
+        model: 'lipsync-2',
+        input: [
+          { type: 'video', url: 'https://x/v.mp4' },
+          { type: 'audio', url: 'https://x/a.wav' },
+        ],
+      },
+    });
+  });
+
   it('rejects passing both a video and an image', async () => {
     const { tool, request } = setup();
     await expect(
