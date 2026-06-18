@@ -83,7 +83,7 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   const operations = parseSpec(spec);
   log(`Discovered ${operations.length} API operations\n`);
 
-  const tools = [...generateTools(operations, httpClient), ...createAppTools(httpClient)];
+  const tools = [...createAppTools(httpClient), ...generateTools(operations, httpClient)];
   const server = new McpServer({ name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION });
   registerTools(server, tools);
   log(`Registered ${tools.length} MCP tools\n`);
@@ -117,7 +117,7 @@ export async function createMcpServerFactory(
   const operations = parseSpec(spec);
   log(`Discovered ${operations.length} API operations\n`);
 
-  const tools = [...generateTools(operations, httpClient), ...createAppTools(httpClient)];
+  const tools = [...createAppTools(httpClient), ...generateTools(operations, httpClient)];
 
   return {
     toolCount: tools.length,

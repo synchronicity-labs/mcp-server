@@ -191,18 +191,64 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — poll generate_get-generation until status is COMPLETED, then read outputUrl. ' +
         'For assetId inputs or advanced options (segments, speaker selection), use generate_create-generation.',
       inputSchema: {
-        videoUrl: z.string().optional(),
-        imageUrl: z.string().optional(),
-        audioUrl: z.string().optional(),
-        script: z.string().optional(),
-        voiceId: z.string().optional(),
-        provider: z.string().optional(),
-        stability: z.number().optional(),
-        similarityBoost: z.number().optional(),
-        video: z.union([z.string(), fileInput]).optional(),
-        image: z.union([z.string(), fileInput]).optional(),
-        audio: z.union([z.string(), fileInput]).optional(),
-        model: z.string().optional(),
+        videoUrl: z
+          .string()
+          .describe(
+            'Public or Sync-hosted video URL. Use exactly one of videoUrl/video/imageUrl/image.',
+          )
+          .optional(),
+        imageUrl: z
+          .string()
+          .describe(
+            'Public or Sync-hosted still image URL. Use this for image-to-video lipsync with sync-3.',
+          )
+          .optional(),
+        audioUrl: z
+          .string()
+          .describe('Public or Sync-hosted audio URL. Use this when the user supplies audio.')
+          .optional(),
+        script: z
+          .string()
+          .describe(
+            'Text for the image or video to say. For "make this say X", pass X here directly instead of calling tts_create.',
+          )
+          .optional(),
+        voiceId: z
+          .string()
+          .describe('Voice id from voices_get-voices. Required when script is provided.')
+          .optional(),
+        provider: z
+          .string()
+          .describe('Voice provider for script-driven lipsync. Defaults to elevenlabs.')
+          .optional(),
+        stability: z
+          .number()
+          .describe('Optional ElevenLabs voice stability for script input.')
+          .optional(),
+        similarityBoost: z
+          .number()
+          .describe('Optional ElevenLabs similarity boost for script input.')
+          .optional(),
+        video: z
+          .union([z.string(), fileInput])
+          .describe('Uploaded video file from ChatGPT, or a URL string if the host provides one.')
+          .optional(),
+        image: z
+          .union([z.string(), fileInput])
+          .describe(
+            'Uploaded still image file from ChatGPT, or a URL string if the host provides one.',
+          )
+          .optional(),
+        audio: z
+          .union([z.string(), fileInput])
+          .describe('Uploaded audio file from ChatGPT, or a URL string if the host provides one.')
+          .optional(),
+        model: z
+          .string()
+          .describe(
+            'Optional model override. Defaults to sync-3 for image input and lipsync-2 for video.',
+          )
+          .optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       meta: {
