@@ -11,11 +11,40 @@ describe('createAppTools — create-lipsync', () => {
     return { tool, request };
   }
 
-  it('declares openai/fileParams for video + audio and is an open-world write', () => {
+  it('declares openai/fileParams for video, image + audio and is an open-world write', () => {
     const { tool } = setup();
-    expect(tool.meta?.['openai/fileParams']).toEqual(['video', 'audio']);
+    expect(tool.meta?.['openai/fileParams']).toEqual(['video', 'image', 'audio']);
     expect(tool.annotations?.openWorldHint).toBe(true);
     expect(tool.annotations?.readOnlyHint).toBe(false);
+  });
+
+  it('maps an image input to a sync-3 image-to-video generation', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      image: { download_url: 'https://x/face.png' },
+      audio: { download_url: 'https://x/a.wav' },
+    });
+    expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
+      body: {
+        model: 'sync-3',
+        input: [
+          { type: 'image', url: 'https://x/face.png' },
+          { type: 'audio', url: 'https://x/a.wav' },
+        ],
+      },
+    });
+  });
+
+  it('rejects passing both a video and an image', async () => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({
+        video: { download_url: 'https://x/v.mp4' },
+        image: { download_url: 'https://x/face.png' },
+        audio: { download_url: 'https://x/a.wav' },
+      }),
+    ).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('maps file download URLs into a POST /v2/generate body', async () => {

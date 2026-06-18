@@ -27,38 +27,47 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
     {
       name: 'create-lipsync',
       description:
-        'Create a lipsync video from a video and an audio file. Drop a video + audio into the chat (or pass their URLs) and Sync syncs the lips to the audio. Returns a generation id — poll generate_get-generation until status is COMPLETED, then read outputUrl. For URL/assetId inputs or advanced options (segments, speaker selection, models other than lipsync), use generate_create-generation.',
+        'Create a lipsync video from an audio file plus EITHER a video or a still image (an image drives sync-3 image-to-video). Drop the files into the chat (or pass their URLs) and Sync syncs the lips to the audio. Provide exactly one of `video` or `image`. Returns a generation id — poll generate_get-generation until status is COMPLETED, then read outputUrl. For assetId inputs or advanced options (segments, speaker selection), use generate_create-generation.',
       inputSchema: {
-        video: fileInput,
+        video: fileInput.optional(),
+        image: fileInput.optional(),
         audio: fileInput,
         model: z.string().optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       meta: {
-        'openai/fileParams': ['video', 'audio'],
+        'openai/fileParams': ['video', 'image', 'audio'],
         'openai/toolInvocation/invoking': 'Creating your lipsync video…',
         'openai/toolInvocation/invoked': 'Lipsync generation started.',
       },
       handler: async (args) => {
-        const { video, audio, model } = args as {
+        const { video, image, audio, model } = args as {
           video?: { download_url?: string };
+          image?: { download_url?: string };
           audio?: { download_url?: string };
           model?: string;
         };
-        const videoUrl = video?.download_url;
         const audioUrl = audio?.download_url;
-        if (!videoUrl || !audioUrl) {
-          throw new Error(
-            'Both a video and an audio file are required (each as an uploaded file or { download_url }).',
-          );
+        const videoUrl = video?.download_url;
+        const imageUrl = image?.download_url;
+        if (!audioUrl) {
+          throw new Error('An audio file is required (an uploaded file or { download_url }).');
         }
+        if (!videoUrl && !imageUrl) {
+          throw new Error('Provide a video or an image (an uploaded file or { download_url }).');
+        }
+        if (videoUrl && imageUrl) {
+          throw new Error('Provide either a video or an image, not both.');
+        }
+        const visual = imageUrl
+          ? { type: 'image', url: imageUrl }
+          : { type: 'video', url: videoUrl };
+        // Image-to-video is only supported by sync-3; default the model to match.
+        const resolvedModel = model ?? (imageUrl ? 'sync-3' : 'lipsync-2');
         return httpClient.request('post', '/v2/generate', {
           body: {
-            model: model ?? 'lipsync-2',
-            input: [
-              { type: 'video', url: videoUrl },
-              { type: 'audio', url: audioUrl },
-            ],
+            model: resolvedModel,
+            input: [visual, { type: 'audio', url: audioUrl }],
           },
         });
       },
