@@ -173,21 +173,32 @@ async function resolveMedia(
  *    ChatGPT can hand a user-uploaded file straight in. These carry a
  *    short-lived `download_url`, so we re-host the bytes through the assets
  *    pipeline and pass a durable `assetId` (see rehostUpload).
+ *
+ * The generation can be driven by either audio (`audioUrl`/`audio`) or text
+ * (`script` + `voiceId`). Text is sent directly to POST /v2/generate as a text
+ * input, avoiding a separate tts_create call.
  */
 export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
   return [
     {
       name: 'create-lipsync',
+      title: 'Create lipsync',
       description:
         'Create a lipsync video from audio + EITHER a video or a still image (an image drives sync-3 image-to-video). ' +
-        'Pass URLs whenever you have them — set `audioUrl` to the `url` returned by tts_create (or any public audio URL), and `videoUrl`/`imageUrl` to a hosted media URL. ' +
+        'For "make this image/video say X" requests, pass `script` with a `voiceId` from voices_get-voices; do not call tts_create first. ' +
+        'Pass URLs whenever you have them — set `audioUrl` to any public audio URL, and `videoUrl`/`imageUrl` to a hosted media URL. ' +
         'Files a user uploaded in chat arrive via the `audio`/`video`/`image` file params instead. ' +
-        'Provide audio plus exactly one of video or image. Returns a generation id — poll generate_get-generation until status is COMPLETED, then read outputUrl. ' +
+        'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — poll generate_get-generation until status is COMPLETED, then read outputUrl. ' +
         'For assetId inputs or advanced options (segments, speaker selection), use generate_create-generation.',
       inputSchema: {
         videoUrl: z.string().optional(),
         imageUrl: z.string().optional(),
         audioUrl: z.string().optional(),
+        script: z.string().optional(),
+        voiceId: z.string().optional(),
+        provider: z.string().optional(),
+        stability: z.number().optional(),
+        similarityBoost: z.number().optional(),
         video: z.union([z.string(), fileInput]).optional(),
         image: z.union([z.string(), fileInput]).optional(),
         audio: z.union([z.string(), fileInput]).optional(),
@@ -200,10 +211,28 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         'openai/toolInvocation/invoked': 'Lipsync generation started.',
       },
       handler: async (args) => {
-        const { videoUrl, imageUrl, audioUrl, video, image, audio, model } = args as {
+        const {
+          videoUrl,
+          imageUrl,
+          audioUrl,
+          script,
+          voiceId,
+          provider,
+          stability,
+          similarityBoost,
+          video,
+          image,
+          audio,
+          model,
+        } = args as {
           videoUrl?: string;
           imageUrl?: string;
           audioUrl?: string;
+          script?: string;
+          voiceId?: string;
+          provider?: string;
+          stability?: number;
+          similarityBoost?: number;
           video?: MediaParam;
           image?: MediaParam;
           audio?: MediaParam;
@@ -212,13 +241,20 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
 
         // Validate the shape up front, before re-hosting any bytes.
         const hasAudio = Boolean(audioUrl || audio);
+        const hasScript = Boolean(script);
         const hasVideo = Boolean(videoUrl || video);
         const hasImage = Boolean(imageUrl || image);
 
-        if (!hasAudio) {
+        if (!hasAudio && !hasScript) {
           throw new Error(
-            'Audio is required — pass `audioUrl` (e.g. the url from tts_create) or upload an audio file.',
+            'Audio or script is required — pass `audioUrl`/upload audio, or pass `script` with a `voiceId` from voices_get-voices.',
           );
+        }
+        if (hasAudio && hasScript) {
+          throw new Error('Provide either audio or script, not both.');
+        }
+        if (hasScript && !voiceId) {
+          throw new Error('voiceId is required when using script — call voices_get-voices first.');
         }
         if (!hasVideo && !hasImage) {
           throw new Error(
@@ -230,7 +266,18 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         }
 
         // A URL goes through verbatim; an uploaded file is re-hosted to an assetId.
-        const audioItem = await resolveMedia(httpClient, 'audio', audioUrl, audio);
+        const driver = hasScript
+          ? {
+              type: 'text',
+              provider: {
+                name: provider ?? 'elevenlabs',
+                voiceId,
+                script,
+                ...(stability === undefined ? {} : { stability }),
+                ...(similarityBoost === undefined ? {} : { similarityBoost }),
+              },
+            }
+          : await resolveMedia(httpClient, 'audio', audioUrl, audio);
         const visual = hasImage
           ? await resolveMedia(httpClient, 'image', imageUrl, image)
           : await resolveMedia(httpClient, 'video', videoUrl, video);
@@ -241,7 +288,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         return httpClient.request('post', '/v2/generate', {
           body: {
             model: resolvedModel,
-            input: [visual, audioItem],
+            input: [visual, driver],
           },
         });
       },

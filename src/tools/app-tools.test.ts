@@ -53,9 +53,11 @@ describe('createAppTools — create-lipsync', () => {
 
   it('declares openai/fileParams for video, image + audio and is an open-world write', () => {
     const { tool } = setup();
+    expect(tool.title).toBe('Create lipsync');
     expect(tool.meta?.['openai/fileParams']).toEqual(['video', 'image', 'audio']);
     expect(tool.annotations?.openWorldHint).toBe(true);
     expect(tool.annotations?.readOnlyHint).toBe(false);
+    expect(tool.annotations?.destructiveHint).toBe(false);
   });
 
   it('passes plain URLs straight through without re-hosting', async () => {
@@ -89,6 +91,58 @@ describe('createAppTools — create-lipsync', () => {
     expect(body.model).toBe('sync-3');
     expect(body.input[0]).toEqual({ type: 'image', assetId: 'asset-1' });
     expect(body.input[1]).toEqual({ type: 'audio', url: 'https://assets.sync.so/tts/take.mp3' });
+  });
+
+  it('creates image-to-video lipsync directly from script text', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      imageUrl: 'https://x/face.png',
+      script: 'hello from the direct text path',
+      voiceId: 'voice-1',
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
+      body: {
+        model: 'sync-3',
+        input: [
+          { type: 'image', url: 'https://x/face.png' },
+          {
+            type: 'text',
+            provider: {
+              name: 'elevenlabs',
+              voiceId: 'voice-1',
+              script: 'hello from the direct text path',
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it('passes optional text voice controls through to generation', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      videoUrl: 'https://x/clip.mp4',
+      script: 'controlled voice',
+      voiceId: 'voice-2',
+      provider: 'elevenlabs',
+      stability: 0.4,
+      similarityBoost: 0.8,
+    });
+
+    const body = lastGenerateBody(request);
+    expect(body.model).toBe('lipsync-2');
+    expect(body.input[1]).toEqual({
+      type: 'text',
+      provider: {
+        name: 'elevenlabs',
+        voiceId: 'voice-2',
+        script: 'controlled voice',
+        stability: 0.4,
+        similarityBoost: 0.8,
+      },
+    });
   });
 
   it('re-hosts uploaded files through the asset pipeline and passes assetIds', async () => {
@@ -151,6 +205,30 @@ describe('createAppTools — create-lipsync', () => {
   it('throws when audio is missing', async () => {
     const { tool, request } = setup();
     await expect(tool.handler({ video: { download_url: 'https://x/v.mp4' } })).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('throws when both audio and script are provided', async () => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({
+        videoUrl: 'https://x/v.mp4',
+        audioUrl: 'https://x/a.wav',
+        script: 'too many drivers',
+        voiceId: 'voice-1',
+      }),
+    ).rejects.toThrow(/either audio or script/);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('throws when script is provided without a voiceId', async () => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({
+        imageUrl: 'https://x/face.png',
+        script: 'missing voice',
+      }),
+    ).rejects.toThrow(/voiceId is required/);
     expect(request).not.toHaveBeenCalled();
   });
 

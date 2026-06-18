@@ -15,15 +15,27 @@ const SERVER_DESCRIPTION =
   'Create lipsync videos by providing a video URL and audio URL — Sync generates a video with perfectly synchronized lip movements. ' +
   'Typical workflow: generate_create-generation → poll generate_get-generation until COMPLETED → return output URL.';
 
+const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
+
+export function createToolDescriptorMeta(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  return {
+    ...meta,
+    securitySchemes: meta?.securitySchemes ?? TOOL_SECURITY_SCHEMES,
+  };
+}
+
 function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
     server.registerTool(
       tool.name,
       {
+        title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
-        _meta: tool.meta,
+        _meta: createToolDescriptorMeta(tool.meta),
       },
       async (args) => {
         try {

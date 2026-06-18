@@ -5,15 +5,17 @@ import { deriveAnnotations, generateTools, operationIdToToolName } from './gener
 
 describe('deriveAnnotations', () => {
   it('marks reads read-only, deletes destructive, and writes open-world', () => {
-    expect(deriveAnnotations('get')).toMatchObject({
+    expect(deriveAnnotations('get')).toEqual({
       readOnlyHint: true,
+      destructiveHint: false,
       openWorldHint: false,
     });
-    expect(deriveAnnotations('delete')).toMatchObject({
+    expect(deriveAnnotations('delete')).toEqual({
+      readOnlyHint: false,
       destructiveHint: true,
       openWorldHint: true,
     });
-    expect(deriveAnnotations('post')).toMatchObject({
+    expect(deriveAnnotations('post')).toEqual({
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: true,
@@ -87,6 +89,7 @@ describe('generateTools', () => {
     const tools = generateTools(operations, mockHttpClient);
     expect(tools).toHaveLength(2);
     expect(tools[0]?.name).toBe('generate_create-generation');
+    expect(tools[0]?.title).toBe('Generate Create Generation');
     expect(tools[1]?.name).toBe('generate_get-generation');
   });
 

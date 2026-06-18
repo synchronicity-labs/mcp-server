@@ -6,6 +6,7 @@ import { getOverride } from './overrides.js';
 
 export type McpToolDefinition = {
   name: string;
+  title?: string;
   description: string;
   inputSchema: Record<string, z.ZodType>;
   annotations?: ToolAnnotations;
@@ -30,7 +31,7 @@ export function generateTools(
  */
 export function deriveAnnotations(method: string): ToolAnnotations {
   if (method === 'get') {
-    return { readOnlyHint: true, openWorldHint: false };
+    return { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   }
   if (method === 'delete') {
     return { readOnlyHint: false, destructiveHint: true, openWorldHint: true };
@@ -48,6 +49,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
 
   return {
     name,
+    title: titleForToolName(name),
     description,
     inputSchema,
     annotations: deriveAnnotations(operation.method),
@@ -59,6 +61,10 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
       return httpClient.request(operation.method, path, { query, body });
     },
   };
+}
+
+function titleForToolName(name: string): string {
+  return name.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function operationIdToToolName(operationId: string): string {
