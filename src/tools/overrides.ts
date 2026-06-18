@@ -15,7 +15,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'voices_get-voices': {
     description:
-      'List available voices — premade ElevenLabs voices plus voices your org has cloned. Use a voice `id` as `voiceId` in tts_create or in a generation text input. Pass `provider` to filter.',
+      'List available voices — premade ElevenLabs voices plus voices your org has cloned. For "make this image/video say X", use a returned voice `id` as `voiceId` in create-lipsync with `script` directly. Use tts_create only when the user explicitly asks for standalone audio.',
   },
 
   // --- Assets (upload + manage reusable media) ---
@@ -53,7 +53,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // --- Text-to-speech ---
   tts_create: {
     description:
-      'Synthesize speech from text. Provide `script`, a `voiceId` (from voices_get-voices) and `provider` (elevenlabs). Returns a hosted audio `url` — pass it as an audio input to generate_create-generation to lip-sync the take.',
+      'Synthesize standalone speech audio from text. Use only when the user specifically asks for an audio file or voice preview. Do not use this for "make this image/video say X" lipsync requests — use create-lipsync with `script` and `voiceId` directly.',
   },
 
   // --- Generate + poll ---
