@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
-import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
+import {
+  createOAuthMetadata,
+  mcpAuthRouter,
+} from '@modelcontextprotocol/sdk/server/auth/router.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import cors from 'cors';
@@ -85,12 +88,29 @@ export async function startHttpServer(
 
   // OAuth auth router — handles /.well-known/*, /authorize, /token, /register, /revoke
   const mcpEndpointUrl = new URL('/mcp', issuerUrl);
+  const serviceDocumentationUrl = new URL('https://sync.so/docs');
+
+  // The Sync API OAuth backend issues confidential clients and requires a
+  // client_secret at token time. The MCP SDK advertises both confidential and
+  // public-client auth by default, so override the AS metadata before mounting
+  // the SDK router to keep ChatGPT from registering as a public client.
+  const confidentialOAuthMetadata = createOAuthMetadata({
+    provider: oauthProvider,
+    issuerUrl,
+    serviceDocumentationUrl,
+  });
+  confidentialOAuthMetadata.token_endpoint_auth_methods_supported = ['client_secret_post'];
+
+  app.get('/.well-known/oauth-authorization-server', (_req, res) => {
+    res.json(confidentialOAuthMetadata);
+  });
+
   app.use(
     mcpAuthRouter({
       provider: oauthProvider,
       issuerUrl,
       resourceServerUrl: mcpEndpointUrl,
-      serviceDocumentationUrl: new URL('https://sync.so/docs'),
+      serviceDocumentationUrl,
     }),
   );
 
