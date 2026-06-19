@@ -2,17 +2,15 @@ import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
 
-// A file as ChatGPT delivers it for an `openai/fileParams` field. Only
-// download_url is needed to pull the bytes; the rest is metadata ChatGPT
-// includes.
+// A file as ChatGPT delivers it for an `openai/fileParams` field.
 const fileInput = z.object({
   download_url: z.string(),
-  file_id: z.string().optional(),
+  file_id: z.string(),
   mime_type: z.string().optional(),
   file_name: z.string().optional(),
 });
 
-type FileInput = { download_url?: string; mime_type?: string; file_name?: string };
+type FileInput = z.infer<typeof fileInput>;
 type MediaKind = 'video' | 'image' | 'audio';
 type ResolvedMedia = { type: MediaKind; url?: string; assetId?: string };
 
@@ -127,10 +125,9 @@ async function rehostUpload(
   return asset.id;
 }
 
-// A media slot can be filled by an explicit `*Url`, or by the fileParam — which
-// arrives either as a real file object (re-host it) or, on hosts that don't
-// attach uploads (e.g. ChatGPT dev mode passes the model's own "/mnt/data/..."
-// path), as a bare string. Resolve all of these to a generation input item.
+// A media slot can be filled by an explicit `*Url`, a Sync asset id, or by the
+// fileParam object declared in `openai/fileParams`. `string` is kept here only
+// to reject malformed direct handler calls with a useful error.
 type MediaParam = string | FileInput | undefined;
 
 function providedCount(...values: unknown[]): number {
@@ -160,19 +157,8 @@ async function registerAssetUrl(
 async function uploadMediaAsset(
   httpClient: HttpClient,
   kind: MediaKind,
-  fileParam: string | FileInput,
+  fileParam: FileInput,
 ): Promise<string> {
-  if (typeof fileParam === 'string') {
-    if (/^https?:\/\//i.test(fileParam)) {
-      return registerAssetUrl(httpClient, kind, fileParam);
-    }
-
-    throw new Error(
-      `Got a local path for the ${kind} ("${fileParam.slice(0, 80)}"), not an uploadable file — ` +
-        `this host didn't attach the upload. Pass a public ${kind} URL instead.`,
-    );
-  }
-
   return rehostUpload(httpClient, fileParam, kind);
 }
 
@@ -189,11 +175,9 @@ async function resolveMedia(
   if (urlParam) return { type: kind, url: urlParam };
 
   if (typeof fileParam === 'string') {
-    if (/^https?:\/\//i.test(fileParam)) return { type: kind, url: fileParam };
-    // A non-URL string is a host-local reference we can't fetch — say so.
     throw new Error(
-      `Got a local path for the ${kind} ("${fileParam.slice(0, 80)}"), not an uploadable file — ` +
-        `this host didn't attach the upload. Pass a public ${kind} URL via ${kind}Url instead.`,
+      `Got a string in the ${kind} file slot ("${fileParam.slice(0, 80)}"). ` +
+        `Pass public URLs via ${kind}Url instead; file slots must be ChatGPT file objects.`,
     );
   }
 
@@ -237,16 +221,19 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
       description:
         'Upload a user-provided image, video, or audio file to Sync asset storage and return a durable assetId. ' +
         'Use this when the user uploaded media in chat and a later Sync tool call should reference it by assetId. ' +
-        'This tool only stores the media; it does not create a lipsync generation. After it returns, pass the assetId to create-lipsync as imageAssetId, videoAssetId, or audioAssetId.',
+        'For public URLs, pass sourceUrl instead of file. This tool only stores the media; it does not create a lipsync generation. After it returns, pass the assetId to create-lipsync as imageAssetId, videoAssetId, or audioAssetId.',
       inputSchema: {
         mediaType: z
           .enum(['video', 'image', 'audio'])
           .describe('Type of media being uploaded: image, video, or audio.'),
         file: z
-          .union([z.string(), fileInput])
-          .describe(
-            'Uploaded media file from ChatGPT, or a public URL string to register as an asset.',
-          ),
+          .object(fileInput.shape)
+          .describe('Uploaded media file from ChatGPT. Use sourceUrl for public URLs instead.')
+          .optional(),
+        sourceUrl: z
+          .string()
+          .describe('Public or Sync-hosted media URL to register as an asset.')
+          .optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       meta: {
@@ -255,19 +242,23 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         'openai/toolInvocation/invoked': 'Media uploaded to Sync.',
       },
       handler: async (args) => {
-        const { mediaType, file } = args as {
+        const { mediaType, file, sourceUrl } = args as {
           mediaType?: MediaKind;
-          file?: string | FileInput;
+          file?: FileInput;
+          sourceUrl?: string;
         };
 
         if (!mediaType || !['video', 'image', 'audio'].includes(mediaType)) {
           throw new Error('mediaType is required and must be one of: video, image, audio.');
         }
-        if (!file) {
-          throw new Error('file is required — pass an uploaded media file or a public URL.');
+        const sourceCount = providedCount(file, sourceUrl);
+        if (sourceCount !== 1) {
+          throw new Error('Provide exactly one source — pass either file or sourceUrl.');
         }
 
-        const assetId = await uploadMediaAsset(httpClient, mediaType, file);
+        const assetId = sourceUrl
+          ? await registerAssetUrl(httpClient, mediaType, sourceUrl)
+          : await uploadMediaAsset(httpClient, mediaType, file as FileInput);
         return {
           assetId,
           mediaType,
@@ -343,18 +334,16 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           .describe('Optional ElevenLabs similarity boost for script input.')
           .optional(),
         video: z
-          .union([z.string(), fileInput])
-          .describe('Uploaded video file from ChatGPT, or a URL string if the host provides one.')
+          .object(fileInput.shape)
+          .describe('Uploaded video file from ChatGPT. Use videoUrl for public URLs instead.')
           .optional(),
         image: z
-          .union([z.string(), fileInput])
-          .describe(
-            'Uploaded still image file from ChatGPT, or a URL string if the host provides one.',
-          )
+          .object(fileInput.shape)
+          .describe('Uploaded still image file from ChatGPT. Use imageUrl for public URLs instead.')
           .optional(),
         audio: z
-          .union([z.string(), fileInput])
-          .describe('Uploaded audio file from ChatGPT, or a URL string if the host provides one.')
+          .object(fileInput.shape)
+          .describe('Uploaded audio file from ChatGPT. Use audioUrl for public URLs instead.')
           .optional(),
         model: z
           .string()
