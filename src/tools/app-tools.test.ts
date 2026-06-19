@@ -105,23 +105,17 @@ describe('createAppTools — create-lipsync', () => {
     });
   });
 
-  it('registers a public media URL through sourceUrl', async () => {
+  it('rejects a URL string passed to upload-media file with a clear message', async () => {
     const { uploadTool, request } = setup();
-    const result = await uploadTool.handler({
-      mediaType: 'image',
-      sourceUrl: 'https://cdn.example/face.png',
-    });
 
+    await expect(
+      uploadTool.handler({
+        mediaType: 'image',
+        file: 'https://cdn.example/face.png',
+      }),
+    ).rejects.toThrow(/file slot[\s\S]*assets_create/);
     expect(fetch).not.toHaveBeenCalled();
-    expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
-      body: { url: 'https://cdn.example/face.png', type: 'IMAGE' },
-    });
-    expect(result).toEqual({
-      assetId: 'asset-1',
-      mediaType: 'image',
-      assetType: 'IMAGE',
-      input: { type: 'image', assetId: 'asset-1' },
-    });
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('passes plain URLs straight through without re-hosting', async () => {
