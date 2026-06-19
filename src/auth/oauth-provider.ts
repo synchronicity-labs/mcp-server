@@ -3,11 +3,24 @@ import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 
+const CONFIDENTIAL_CLIENT_AUTH_METHOD = 'client_secret_post';
+const NON_EXPIRING_CLIENT_SECRET = 0;
+
 function normalizeClientInfo(client: OAuthClientInformationFull): OAuthClientInformationFull {
   return {
     ...client,
     response_types: client.response_types ?? ['code'],
-    token_endpoint_auth_method: client.token_endpoint_auth_method ?? 'none',
+    token_endpoint_auth_method: CONFIDENTIAL_CLIENT_AUTH_METHOD,
+    ...(client.client_secret && client.client_secret_expires_at == null
+      ? { client_secret_expires_at: NON_EXPIRING_CLIENT_SECRET }
+      : {}),
+  };
+}
+
+function asConfidentialClient(client: OAuthClientInformationFull): OAuthClientInformationFull {
+  return {
+    ...client,
+    token_endpoint_auth_method: CONFIDENTIAL_CLIENT_AUTH_METHOD,
   };
 }
 
@@ -44,10 +57,14 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
         grant_types?: string[];
         response_types?: string[];
         scope?: string;
+        client_secret?: string;
+        client_secret_expires_at?: number;
         token_endpoint_auth_method?: string;
       };
       const client = normalizeClientInfo({
         client_id: info.client_id,
+        client_secret: info.client_secret,
+        client_secret_expires_at: info.client_secret_expires_at,
         redirect_uris: info.redirect_uris,
         client_name: info.client_name,
         grant_types: info.grant_types,
@@ -115,7 +132,9 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
         getClient: resolveClient,
         ...(originalRegister && {
           registerClient: async (client: OAuthClientInformationFull) => {
-            const registered = normalizeClientInfo(await originalRegister(client));
+            const registered = normalizeClientInfo(
+              await originalRegister(asConfidentialClient(client)),
+            );
             clientCache.set(registered.client_id, registered);
             return registered;
           },

@@ -14,7 +14,7 @@ describe('createOAuthProvider — getClient', () => {
   });
 
   it('reads a client back from the API on a cold cache (survives restarts)', async () => {
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
       ok: true,
       json: async () => ({
         client_id: 'client-123',
@@ -37,19 +37,24 @@ describe('createOAuthProvider — getClient', () => {
       client_id: 'client-123',
       redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none',
+      token_endpoint_auth_method: 'client_secret_post',
     });
   });
 
-  it('returns complete metadata for newly registered public clients', async () => {
-    const fetchMock = vi.fn(async () => ({
+  it('returns complete metadata for newly registered confidential clients', async () => {
+    let registrationBody: unknown;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({
       ok: true,
-      json: async () => ({
-        client_id: 'client-123',
-        client_name: 'ChatGPT',
-        redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
-        grant_types: ['authorization_code', 'refresh_token'],
-      }),
+      json: async () => {
+        registrationBody = JSON.parse(String(init?.body));
+        return {
+          client_id: 'client-123',
+          client_secret: 'client-secret',
+          client_name: 'ChatGPT',
+          redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+          grant_types: ['authorization_code', 'refresh_token'],
+        };
+      },
     }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -64,9 +69,14 @@ describe('createOAuthProvider — getClient', () => {
 
     expect(registered).toMatchObject({
       client_id: 'client-123',
+      client_secret: 'client-secret',
+      client_secret_expires_at: 0,
       redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none',
+      token_endpoint_auth_method: 'client_secret_post',
+    });
+    expect(registrationBody).toMatchObject({
+      token_endpoint_auth_method: 'client_secret_post',
     });
   });
 
