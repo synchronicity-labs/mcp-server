@@ -14,6 +14,7 @@ const fileInput = z.object({
 
 type FileInput = { download_url?: string; mime_type?: string; file_name?: string };
 type MediaKind = 'video' | 'image' | 'audio';
+type ResolvedMedia = { type: MediaKind; url?: string; assetId?: string };
 
 const ASSET_TYPE_BY_KIND: Record<MediaKind, 'VIDEO' | 'IMAGE' | 'AUDIO'> = {
   video: 'VIDEO',
@@ -132,12 +133,58 @@ async function rehostUpload(
 // path), as a bare string. Resolve all of these to a generation input item.
 type MediaParam = string | FileInput | undefined;
 
+function providedCount(...values: unknown[]): number {
+  return values.filter(Boolean).length;
+}
+
+function assertSingleSource(kind: MediaKind, count: number): void {
+  if (count > 1) {
+    throw new Error(
+      `Provide only one ${kind} source — use either ${kind}Url, ${kind}AssetId, or the uploaded ${kind} file param.`,
+    );
+  }
+}
+
+async function registerAssetUrl(
+  httpClient: HttpClient,
+  kind: MediaKind,
+  url: string,
+): Promise<string> {
+  const asset = (await httpClient.request('post', '/v2/assets', {
+    body: { url, type: ASSET_TYPE_BY_KIND[kind] },
+  })) as { id: string };
+
+  return asset.id;
+}
+
+async function uploadMediaAsset(
+  httpClient: HttpClient,
+  kind: MediaKind,
+  fileParam: string | FileInput,
+): Promise<string> {
+  if (typeof fileParam === 'string') {
+    if (/^https?:\/\//i.test(fileParam)) {
+      return registerAssetUrl(httpClient, kind, fileParam);
+    }
+
+    throw new Error(
+      `Got a local path for the ${kind} ("${fileParam.slice(0, 80)}"), not an uploadable file — ` +
+        `this host didn't attach the upload. Pass a public ${kind} URL instead.`,
+    );
+  }
+
+  return rehostUpload(httpClient, fileParam, kind);
+}
+
 async function resolveMedia(
   httpClient: HttpClient,
   kind: MediaKind,
   urlParam: string | undefined,
+  assetIdParam: string | undefined,
   fileParam: MediaParam,
-): Promise<{ type: string; url?: string; assetId?: string }> {
+): Promise<ResolvedMedia> {
+  if (assetIdParam) return { type: kind, assetId: assetIdParam };
+
   // An explicit URL the model already holds (tts output, public/asset URL) wins.
   if (urlParam) return { type: kind, url: urlParam };
 
@@ -164,22 +211,71 @@ async function resolveMedia(
  * `create-lipsync` is a flat convenience wrapper over POST /v2/generate (the
  * auto-generated generate_create-generation takes a nested `input[]` array).
  *
- * Each media input can arrive two ways:
+ * Each media input can arrive three ways:
  *  - `*Url` string — a hosted/public URL, e.g. the `url` returned by tts_create
  *    or an asset URL. This is the only way to chain another tool's output (the
  *    model can't synthesise a fileParam object), and it's passed straight to
  *    the generation as `url`.
+ *  - `*AssetId` string — a durable Sync asset created earlier, typically by
+ *    upload-media. This keeps uploaded-file handling separate from generation
+ *    creation when the host supports file params but should not pass the file
+ *    directly to the generation tool.
  *  - `video`/`image`/`audio` file objects — declared as `openai/fileParams` so
  *    ChatGPT can hand a user-uploaded file straight in. These carry a
  *    short-lived `download_url`, so we re-host the bytes through the assets
  *    pipeline and pass a durable `assetId` (see rehostUpload).
  *
- * The generation can be driven by either audio (`audioUrl`/`audio`) or text
- * (`script` + `voiceId`). Text is sent directly to POST /v2/generate as a text
- * input, avoiding a separate tts_create call.
+ * The generation can be driven by either audio (`audioUrl`/`audioAssetId`/
+ * `audio`) or text (`script` + `voiceId`). Text is sent directly to POST
+ * /v2/generate as a text input, avoiding a separate tts_create call.
  */
 export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
   return [
+    {
+      name: 'upload-media',
+      title: 'Upload media',
+      description:
+        'Upload a user-provided image, video, or audio file to Sync asset storage and return a durable assetId. ' +
+        'Use this when the user uploaded media in chat and a later Sync tool call should reference it by assetId. ' +
+        'This tool only stores the media; it does not create a lipsync generation. After it returns, pass the assetId to create-lipsync as imageAssetId, videoAssetId, or audioAssetId.',
+      inputSchema: {
+        mediaType: z
+          .enum(['video', 'image', 'audio'])
+          .describe('Type of media being uploaded: image, video, or audio.'),
+        file: z
+          .union([z.string(), fileInput])
+          .describe(
+            'Uploaded media file from ChatGPT, or a public URL string to register as an asset.',
+          ),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      meta: {
+        'openai/fileParams': ['file'],
+        'openai/toolInvocation/invoking': 'Uploading media to Sync…',
+        'openai/toolInvocation/invoked': 'Media uploaded to Sync.',
+      },
+      handler: async (args) => {
+        const { mediaType, file } = args as {
+          mediaType?: MediaKind;
+          file?: string | FileInput;
+        };
+
+        if (!mediaType || !['video', 'image', 'audio'].includes(mediaType)) {
+          throw new Error('mediaType is required and must be one of: video, image, audio.');
+        }
+        if (!file) {
+          throw new Error('file is required — pass an uploaded media file or a public URL.');
+        }
+
+        const assetId = await uploadMediaAsset(httpClient, mediaType, file);
+        return {
+          assetId,
+          mediaType,
+          assetType: ASSET_TYPE_BY_KIND[mediaType],
+          input: { type: mediaType, assetId },
+        };
+      },
+    },
     {
       name: 'create-lipsync',
       title: 'Create lipsync',
@@ -187,14 +283,21 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         'Create a lipsync video from audio + EITHER a video or a still image (an image drives sync-3 image-to-video). ' +
         'For "make this image/video say X" requests, pass `script` with a `voiceId` from voices_get-voices; do not call tts_create first. ' +
         'Pass URLs whenever you have them — set `audioUrl` to any public audio URL, and `videoUrl`/`imageUrl` to a hosted media URL. ' +
-        'Files a user uploaded in chat arrive via the `audio`/`video`/`image` file params instead. ' +
+        'If media was uploaded to Sync first, pass `audioAssetId`, `videoAssetId`, or `imageAssetId`. ' +
+        'For files the user uploaded in chat, prefer calling upload-media first and pass the returned assetId here; direct `audio`/`video`/`image` file params are supported when a host invokes this tool with file params directly. ' +
         'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — poll generate_get-generation until status is COMPLETED, then read outputUrl. ' +
-        'For assetId inputs or advanced options (segments, speaker selection), use generate_create-generation.',
+        'For advanced options (segments, speaker selection), use generate_create-generation.',
       inputSchema: {
         videoUrl: z
           .string()
           .describe(
-            'Public or Sync-hosted video URL. Use exactly one of videoUrl/video/imageUrl/image.',
+            'Public or Sync-hosted video URL. Use exactly one of videoUrl/videoAssetId/video/imageUrl/imageAssetId/image.',
+          )
+          .optional(),
+        videoAssetId: z
+          .string()
+          .describe(
+            'Sync asset id for a video, returned by upload-media or assets_create. Use exactly one visual input.',
           )
           .optional(),
         imageUrl: z
@@ -203,9 +306,19 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
             'Public or Sync-hosted still image URL. Use this for image-to-video lipsync with sync-3.',
           )
           .optional(),
+        imageAssetId: z
+          .string()
+          .describe(
+            'Sync asset id for a still image, returned by upload-media or assets_create. Use this for image-to-video lipsync with sync-3.',
+          )
+          .optional(),
         audioUrl: z
           .string()
           .describe('Public or Sync-hosted audio URL. Use this when the user supplies audio.')
+          .optional(),
+        audioAssetId: z
+          .string()
+          .describe('Sync asset id for audio, returned by upload-media or assets_create.')
           .optional(),
         script: z
           .string()
@@ -259,8 +372,11 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
       handler: async (args) => {
         const {
           videoUrl,
+          videoAssetId,
           imageUrl,
+          imageAssetId,
           audioUrl,
+          audioAssetId,
           script,
           voiceId,
           provider,
@@ -272,8 +388,11 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           model,
         } = args as {
           videoUrl?: string;
+          videoAssetId?: string;
           imageUrl?: string;
+          imageAssetId?: string;
           audioUrl?: string;
+          audioAssetId?: string;
           script?: string;
           voiceId?: string;
           provider?: string;
@@ -286,10 +405,17 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         };
 
         // Validate the shape up front, before re-hosting any bytes.
-        const hasAudio = Boolean(audioUrl || audio);
+        const audioSourceCount = providedCount(audioUrl, audioAssetId, audio);
+        const videoSourceCount = providedCount(videoUrl, videoAssetId, video);
+        const imageSourceCount = providedCount(imageUrl, imageAssetId, image);
+        assertSingleSource('audio', audioSourceCount);
+        assertSingleSource('video', videoSourceCount);
+        assertSingleSource('image', imageSourceCount);
+
+        const hasAudio = audioSourceCount > 0;
         const hasScript = Boolean(script);
-        const hasVideo = Boolean(videoUrl || video);
-        const hasImage = Boolean(imageUrl || image);
+        const hasVideo = videoSourceCount > 0;
+        const hasImage = imageSourceCount > 0;
 
         if (!hasAudio && !hasScript) {
           throw new Error(
@@ -311,7 +437,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           throw new Error('Provide either a video or an image, not both.');
         }
 
-        // A URL goes through verbatim; an uploaded file is re-hosted to an assetId.
+        // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript
           ? {
               type: 'text',
@@ -323,10 +449,10 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
                 ...(similarityBoost === undefined ? {} : { similarityBoost }),
               },
             }
-          : await resolveMedia(httpClient, 'audio', audioUrl, audio);
+          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio);
         const visual = hasImage
-          ? await resolveMedia(httpClient, 'image', imageUrl, image)
-          : await resolveMedia(httpClient, 'video', videoUrl, video);
+          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image)
+          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video);
 
         // Image-to-video is only supported by sync-3; default the model to match.
         const resolvedModel = model ?? (hasImage ? 'sync-3' : 'lipsync-2');
