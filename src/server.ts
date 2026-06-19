@@ -15,6 +15,9 @@ const SERVER_DESCRIPTION =
   'Create lipsync videos by providing a video URL and audio URL — Sync generates a video with perfectly synchronized lip movements. ' +
   'Typical workflow: generate_create-generation → poll generate_get-generation until COMPLETED → return output URL.';
 
+const SERVER_INSTRUCTIONS =
+  'For lipsync requests, prefer create-lipsync. If the user asks an image or video to say text, call voices_get-voices, then create-lipsync with script + voiceId and the uploaded image/video or URL. Do not call tts_create for that flow. If the user uploads video plus audio, call create-lipsync with the uploaded video/audio file params. Poll generate_get-generation until COMPLETED and return outputUrl.';
+
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 
 export function createToolDescriptorMeta(
@@ -84,7 +87,10 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   log(`Discovered ${operations.length} API operations\n`);
 
   const tools = [...createAppTools(httpClient), ...generateTools(operations, httpClient)];
-  const server = new McpServer({ name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION });
+  const server = new McpServer(
+    { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
   registerTools(server, tools);
   log(`Registered ${tools.length} MCP tools\n`);
 
@@ -122,11 +128,14 @@ export async function createMcpServerFactory(
   return {
     toolCount: tools.length,
     createServer: () => {
-      const server = new McpServer({
-        name: 'sync',
-        version: '0.1.0',
-        description: SERVER_DESCRIPTION,
-      });
+      const server = new McpServer(
+        {
+          name: 'sync',
+          version: '0.1.0',
+          description: SERVER_DESCRIPTION,
+        },
+        { instructions: SERVER_INSTRUCTIONS },
+      );
       registerTools(server, tools);
       return server;
     },
