@@ -18,9 +18,12 @@ describe('createAppTools — create-lipsync', () => {
       return { id: 'gen-1', status: 'PENDING' };
     });
     const httpClient: HttpClient = { request };
-    const tool = createAppTools(httpClient).find((t) => t.name === 'create-lipsync');
+    const tools = createAppTools(httpClient);
+    const uploadTool = tools.find((t) => t.name === 'upload-media');
+    const tool = tools.find((t) => t.name === 'create-lipsync');
+    if (!uploadTool) throw new Error('upload-media tool not found');
     if (!tool) throw new Error('create-lipsync tool not found');
-    return { tool, request };
+    return { tool, uploadTool, request };
   }
 
   // Default fetch mock: a GET reads the upload bytes, a PUT stores them.
@@ -58,6 +61,38 @@ describe('createAppTools — create-lipsync', () => {
     expect(tool.annotations?.openWorldHint).toBe(true);
     expect(tool.annotations?.readOnlyHint).toBe(false);
     expect(tool.annotations?.destructiveHint).toBe(false);
+  });
+
+  it('declares upload-media as a file-param asset staging tool', () => {
+    const { uploadTool } = setup();
+    expect(uploadTool.title).toBe('Upload media');
+    expect(uploadTool.meta?.['openai/fileParams']).toEqual(['file']);
+    expect(uploadTool.annotations?.openWorldHint).toBe(true);
+    expect(uploadTool.annotations?.readOnlyHint).toBe(false);
+    expect(uploadTool.annotations?.destructiveHint).toBe(false);
+  });
+
+  it('uploads a ChatGPT file to a durable Sync asset', async () => {
+    const { uploadTool, request } = setup();
+    const result = await uploadTool.handler({
+      mediaType: 'image',
+      file: {
+        download_url: 'https://files.oai/face.png',
+        file_name: 'face.png',
+        mime_type: 'image/png',
+      },
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(1, 'https://files.oai/face.png');
+    expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
+      body: { url: 'https://cdn.sync.so/stored.bin', type: 'IMAGE' },
+    });
+    expect(result).toEqual({
+      assetId: 'asset-1',
+      mediaType: 'image',
+      assetType: 'IMAGE',
+      input: { type: 'image', assetId: 'asset-1' },
+    });
   });
 
   it('passes plain URLs straight through without re-hosting', async () => {
@@ -113,6 +148,33 @@ describe('createAppTools — create-lipsync', () => {
               name: 'elevenlabs',
               voiceId: 'voice-1',
               script: 'hello from the direct text path',
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it('creates image-to-video lipsync from a pre-uploaded image asset id', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      imageAssetId: 'asset-face',
+      script: 'hello from the asset path',
+      voiceId: 'voice-1',
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
+      body: {
+        model: 'sync-3',
+        input: [
+          { type: 'image', assetId: 'asset-face' },
+          {
+            type: 'text',
+            provider: {
+              name: 'elevenlabs',
+              voiceId: 'voice-1',
+              script: 'hello from the asset path',
             },
           },
         ],
