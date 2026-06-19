@@ -3,6 +3,14 @@ import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 
+function normalizeClientInfo(client: OAuthClientInformationFull): OAuthClientInformationFull {
+  return {
+    ...client,
+    response_types: client.response_types ?? ['code'],
+    token_endpoint_auth_method: client.token_endpoint_auth_method ?? 'none',
+  };
+}
+
 /**
  * Creates an OAuth provider that proxies to the Sync API's OAuth endpoints.
  *
@@ -34,15 +42,19 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
         client_name?: string;
         redirect_uris: string[];
         grant_types?: string[];
+        response_types?: string[];
         scope?: string;
+        token_endpoint_auth_method?: string;
       };
-      const client: OAuthClientInformationFull = {
+      const client = normalizeClientInfo({
         client_id: info.client_id,
         redirect_uris: info.redirect_uris,
         client_name: info.client_name,
         grant_types: info.grant_types,
+        response_types: info.response_types,
         scope: info.scope,
-      };
+        token_endpoint_auth_method: info.token_endpoint_auth_method,
+      });
       clientCache.set(client.client_id, client);
       return client;
     } catch {
@@ -103,7 +115,7 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
         getClient: resolveClient,
         ...(originalRegister && {
           registerClient: async (client: OAuthClientInformationFull) => {
-            const registered = await originalRegister(client);
+            const registered = normalizeClientInfo(await originalRegister(client));
             clientCache.set(registered.client_id, registered);
             return registered;
           },

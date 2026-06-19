@@ -36,6 +36,37 @@ describe('createOAuthProvider — getClient', () => {
     expect(client).toMatchObject({
       client_id: 'client-123',
       redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    });
+  });
+
+  it('returns complete metadata for newly registered public clients', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        client_id: 'client-123',
+        client_name: 'ChatGPT',
+        redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        grant_types: ['authorization_code', 'refresh_token'],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const provider = createOAuthProvider(API);
+    const registered = await provider.clientsStore.registerClient?.({
+      client_name: 'ChatGPT',
+      redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    });
+
+    expect(registered).toMatchObject({
+      client_id: 'client-123',
+      redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
     });
   });
 
