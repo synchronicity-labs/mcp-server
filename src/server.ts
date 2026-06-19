@@ -16,7 +16,7 @@ const SERVER_DESCRIPTION =
   'Typical workflow: generate_create-generation → poll generate_get-generation until COMPLETED → return output URL.';
 
 const SERVER_INSTRUCTIONS =
-  'For lipsync requests, prefer create-lipsync. If the user asks an image or video to say text, call voices_get-voices, then create-lipsync with script + voiceId and the image/video URL or Sync assetId. Do not call tts_create for that flow. If the user uploads media in chat, first call upload-media for each uploaded image/video/audio file, then pass the returned imageAssetId/videoAssetId/audioAssetId to create-lipsync. Poll generate_get-generation until COMPLETED and return outputUrl.';
+  'For lipsync requests, prefer create-lipsync. If the user asks an image or video to say text, call voices_get-voices, then create-lipsync with script + voiceId and the image/video URL or Sync assetId. Do not call tts_create for that flow. If the user uploads media in chat, first call upload-media with the uploaded file field for each image/video/audio file, then pass the returned imageAssetId/videoAssetId/audioAssetId to create-lipsync. If the user provides a public media URL for asset staging, call upload-media with sourceUrl instead of file. Poll generate_get-generation until COMPLETED and return outputUrl.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 

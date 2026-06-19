@@ -54,6 +54,17 @@ describe('createAppTools — create-lipsync', () => {
     return (call[2] as { body: { model: string; input: Array<Record<string, unknown>> } }).body;
   }
 
+  function chatGptFile(
+    downloadUrl: string,
+    extra: { mime_type?: string; file_name?: string } = {},
+  ) {
+    return {
+      download_url: downloadUrl,
+      file_id: `file-${downloadUrl.split('/').pop() ?? 'upload'}`,
+      ...extra,
+    };
+  }
+
   it('declares openai/fileParams for video, image + audio and is an open-world write', () => {
     const { tool } = setup();
     expect(tool.title).toBe('Create lipsync');
@@ -76,16 +87,34 @@ describe('createAppTools — create-lipsync', () => {
     const { uploadTool, request } = setup();
     const result = await uploadTool.handler({
       mediaType: 'image',
-      file: {
-        download_url: 'https://files.oai/face.png',
+      file: chatGptFile('https://files.oai/face.png', {
         file_name: 'face.png',
         mime_type: 'image/png',
-      },
+      }),
     });
 
     expect(fetch).toHaveBeenNthCalledWith(1, 'https://files.oai/face.png');
     expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
       body: { url: 'https://cdn.sync.so/stored.bin', type: 'IMAGE' },
+    });
+    expect(result).toEqual({
+      assetId: 'asset-1',
+      mediaType: 'image',
+      assetType: 'IMAGE',
+      input: { type: 'image', assetId: 'asset-1' },
+    });
+  });
+
+  it('registers a public media URL through sourceUrl', async () => {
+    const { uploadTool, request } = setup();
+    const result = await uploadTool.handler({
+      mediaType: 'image',
+      sourceUrl: 'https://cdn.example/face.png',
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
+      body: { url: 'https://cdn.example/face.png', type: 'IMAGE' },
     });
     expect(result).toEqual({
       assetId: 'asset-1',
@@ -114,7 +143,7 @@ describe('createAppTools — create-lipsync', () => {
   it('chains a tts audioUrl with an uploaded image — re-hosts only the image', async () => {
     const { tool, request } = setup();
     await tool.handler({
-      image: { download_url: 'https://files.oai/face.png', mime_type: 'image/png' },
+      image: chatGptFile('https://files.oai/face.png', { mime_type: 'image/png' }),
       audioUrl: 'https://assets.sync.so/tts/take.mp3',
     });
 
@@ -210,8 +239,8 @@ describe('createAppTools — create-lipsync', () => {
   it('re-hosts uploaded files through the asset pipeline and passes assetIds', async () => {
     const { tool, request } = setup();
     await tool.handler({
-      video: { download_url: 'https://files.oai/clip.mp4' },
-      audio: { download_url: 'https://files.oai/voice.wav' },
+      video: chatGptFile('https://files.oai/clip.mp4'),
+      audio: chatGptFile('https://files.oai/voice.wav'),
     });
 
     // upload-url requested with the byte size, then registered as the right type
@@ -238,8 +267,8 @@ describe('createAppTools — create-lipsync', () => {
   it('honours an explicit model', async () => {
     const { tool, request } = setup();
     await tool.handler({
-      video: { download_url: 'https://files.oai/clip.mp4' },
-      audio: { download_url: 'https://files.oai/voice.wav' },
+      video: chatGptFile('https://files.oai/clip.mp4'),
+      audio: chatGptFile('https://files.oai/voice.wav'),
       model: 'lipsync-2-pro',
     });
     expect(lastGenerateBody(request).model).toBe('lipsync-2-pro');
@@ -249,8 +278,8 @@ describe('createAppTools — create-lipsync', () => {
     const { tool, request } = setup();
     await expect(
       tool.handler({
-        video: { download_url: 'https://x/v.mp4' },
-        image: { download_url: 'https://x/face.png' },
+        video: chatGptFile('https://x/v.mp4'),
+        image: chatGptFile('https://x/face.png'),
         audioUrl: 'https://x/a.wav',
       }),
     ).rejects.toThrow();
@@ -266,7 +295,7 @@ describe('createAppTools — create-lipsync', () => {
 
   it('throws when audio is missing', async () => {
     const { tool, request } = setup();
-    await expect(tool.handler({ video: { download_url: 'https://x/v.mp4' } })).rejects.toThrow();
+    await expect(tool.handler({ video: chatGptFile('https://x/v.mp4') })).rejects.toThrow();
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -298,7 +327,7 @@ describe('createAppTools — create-lipsync', () => {
     const { tool, request } = setup();
     await expect(
       tool.handler({
-        image: { download_url: 'sandbox:/mnt/data/face.png' },
+        image: chatGptFile('sandbox:/mnt/data/face.png'),
         audioUrl: 'https://x/a.wav',
       }),
     ).rejects.toThrow(/sandbox:\/mnt\/data\/face\.png[\s\S]*imageUrl/);
@@ -318,19 +347,13 @@ describe('createAppTools — create-lipsync', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('treats an http(s) string in a file slot as a URL passthrough', async () => {
+  it('rejects an http(s) string in a file slot with a clear message', async () => {
     const { tool, request } = setup();
-    await tool.handler({ video: 'https://x/v.mp4', audio: 'https://x/a.wav' });
+    await expect(
+      tool.handler({ video: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' }),
+    ).rejects.toThrow(/file slot[\s\S]*videoUrl/);
     expect(fetch).not.toHaveBeenCalled();
-    expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
-      body: {
-        model: 'lipsync-2',
-        input: [
-          { type: 'video', url: 'https://x/v.mp4' },
-          { type: 'audio', url: 'https://x/a.wav' },
-        ],
-      },
-    });
+    expect(request).not.toHaveBeenCalled();
   });
 
   it("surfaces the host + underlying cause when the upload URL can't be reached", async () => {
@@ -345,7 +368,7 @@ describe('createAppTools — create-lipsync', () => {
     );
     await expect(
       tool.handler({
-        image: { download_url: 'https://files.oai/face.png' },
+        image: chatGptFile('https://files.oai/face.png'),
         audioUrl: 'https://x/a.wav',
       }),
     ).rejects.toThrow(/files\.oai[\s\S]*ENOTFOUND/);
