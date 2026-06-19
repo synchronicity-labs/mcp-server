@@ -142,18 +142,6 @@ function assertSingleSource(kind: MediaKind, count: number): void {
   }
 }
 
-async function registerAssetUrl(
-  httpClient: HttpClient,
-  kind: MediaKind,
-  url: string,
-): Promise<string> {
-  const asset = (await httpClient.request('post', '/v2/assets', {
-    body: { url, type: ASSET_TYPE_BY_KIND[kind] },
-  })) as { id: string };
-
-  return asset.id;
-}
-
 async function uploadMediaAsset(
   httpClient: HttpClient,
   kind: MediaKind,
@@ -203,7 +191,8 @@ async function resolveMedia(
  *  - `*AssetId` string — a durable Sync asset created earlier, typically by
  *    upload-media. This keeps uploaded-file handling separate from generation
  *    creation when the host supports file params but should not pass the file
- *    directly to the generation tool.
+ *    directly to the generation tool. For public URLs, use the explicit `*Url`
+ *    fields or the generated assets_create tool instead.
  *  - `video`/`image`/`audio` file objects — declared as `openai/fileParams` so
  *    ChatGPT can hand a user-uploaded file straight in. These carry a
  *    short-lived `download_url`, so we re-host the bytes through the assets
@@ -221,19 +210,15 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
       description:
         'Upload a user-provided image, video, or audio file to Sync asset storage and return a durable assetId. ' +
         'Use this when the user uploaded media in chat and a later Sync tool call should reference it by assetId. ' +
-        'For public URLs, pass sourceUrl instead of file. This tool only stores the media; it does not create a lipsync generation. After it returns, pass the assetId to create-lipsync as imageAssetId, videoAssetId, or audioAssetId.',
+        'The file field must be the uploaded ChatGPT file object. For public URLs, use assets_create or pass the URL directly to create-lipsync. ' +
+        'This tool only stores the media; it does not create a lipsync generation. After it returns, pass the assetId to create-lipsync as imageAssetId, videoAssetId, or audioAssetId.',
       inputSchema: {
         mediaType: z
           .enum(['video', 'image', 'audio'])
           .describe('Type of media being uploaded: image, video, or audio.'),
         file: z
           .object(fileInput.shape)
-          .describe('Uploaded media file from ChatGPT. Use sourceUrl for public URLs instead.')
-          .optional(),
-        sourceUrl: z
-          .string()
-          .describe('Public or Sync-hosted media URL to register as an asset.')
-          .optional(),
+          .describe('Uploaded media file from ChatGPT. Do not pass URL strings here.'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       meta: {
@@ -242,23 +227,25 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         'openai/toolInvocation/invoked': 'Media uploaded to Sync.',
       },
       handler: async (args) => {
-        const { mediaType, file, sourceUrl } = args as {
+        const { mediaType, file } = args as {
           mediaType?: MediaKind;
-          file?: FileInput;
-          sourceUrl?: string;
+          file?: MediaParam;
         };
 
         if (!mediaType || !['video', 'image', 'audio'].includes(mediaType)) {
           throw new Error('mediaType is required and must be one of: video, image, audio.');
         }
-        const sourceCount = providedCount(file, sourceUrl);
-        if (sourceCount !== 1) {
-          throw new Error('Provide exactly one source — pass either file or sourceUrl.');
+        if (!file) {
+          throw new Error('file is required — pass the uploaded ChatGPT file object.');
+        }
+        if (typeof file === 'string') {
+          throw new Error(
+            `Got a string in the file slot ("${file.slice(0, 80)}"). ` +
+              'This tool only accepts uploaded ChatGPT file objects; pass public URLs to assets_create or create-lipsync.',
+          );
         }
 
-        const assetId = sourceUrl
-          ? await registerAssetUrl(httpClient, mediaType, sourceUrl)
-          : await uploadMediaAsset(httpClient, mediaType, file as FileInput);
+        const assetId = await uploadMediaAsset(httpClient, mediaType, file);
         return {
           assetId,
           mediaType,
