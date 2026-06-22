@@ -22,12 +22,11 @@ describe('createUploadWidgetTool', () => {
     }
     const result = await tool.handler({
       requestedMediaType: 'image',
-      script: 'hello from tests',
     });
 
     expect(result.structuredContent).toEqual({
       requestedMediaType: 'image',
-      script: 'hello from tests',
+      script: undefined,
     });
     expect(result.content[0]).toMatchObject({
       type: 'text',
