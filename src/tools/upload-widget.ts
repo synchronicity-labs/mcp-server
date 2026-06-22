@@ -171,7 +171,7 @@ export const UPLOAD_WIDGET_HTML = `
   <body>
     <main>
       <h1>Upload to Sync</h1>
-      <p id="hint">Choose a ChatGPT file or upload a local image, video, or audio file.</p>
+      <p id="hint">Choose a ChatGPT file or upload a local image or audio file. Attach videos in chat first.</p>
       <label class="script-field" for="scriptInput">
         <span>Script</span>
         <input id="scriptInput" type="text" autocomplete="off" placeholder="Text for the image or video to say" />
@@ -180,7 +180,7 @@ export const UPLOAD_WIDGET_HTML = `
         <button id="selectFile" class="primary" type="button">Choose from ChatGPT</button>
         <button id="uploadLocal" class="secondary" type="button">Upload local file</button>
         <button id="runLipsync" class="secondary" type="button">Run lipsync</button>
-        <input id="localFile" type="file" accept="image/*,video/*,audio/*" />
+        <input id="localFile" type="file" accept="image/*,audio/*" />
       </div>
       <div class="status" id="status" aria-live="polite">
         <strong>Ready</strong>
@@ -239,7 +239,7 @@ export const UPLOAD_WIDGET_HTML = `
               ? "Choose the " + requestedMediaType + " for: " + script
               : "Choose the media for: " + script;
           } else {
-            hint.textContent = "Choose a ChatGPT file or upload a local image, video, or audio file.";
+            hint.textContent = "Choose a ChatGPT file or upload a local image or audio file. Attach videos in chat first.";
           }
           if (openai && typeof openai.notifyIntrinsicHeight === "function") {
             openai.notifyIntrinsicHeight();
@@ -745,11 +745,11 @@ export function createUploadWidgetTool(): McpToolDefinition {
     name: 'open-upload-widget',
     title: 'Open upload widget',
     description:
-      'Open the Sync upload widget so a user can choose a ChatGPT file or upload a supported local image/audio file, then stage it as a durable Sync assetId. For local videos in ChatGPT, prefer asking the user to attach the video to the chat composer, then call upload-media or create-lipsync with file params; the widget local-file bridge may reject video formats before Sync can read them.',
+      'Open the Sync upload widget so a user can choose a ChatGPT file or upload a supported local image/audio file, then stage it as a durable Sync assetId. Do not use this tool for local video requests; ask the user to attach the video to the ChatGPT composer, then call upload-media or create-lipsync with file params.',
     inputSchema: {
       requestedMediaType: z
-        .enum(['image', 'video', 'audio'])
-        .describe('Optional media type expected from the user.')
+        .enum(['image', 'audio'])
+        .describe('Optional image or audio media type expected from the user.')
         .optional(),
     },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -763,9 +763,7 @@ export function createUploadWidgetTool(): McpToolDefinition {
     resultFormat: 'mcp',
     handler: async (args): Promise<CallToolResult> => {
       const requestedMediaType =
-        args.requestedMediaType === 'image' ||
-        args.requestedMediaType === 'video' ||
-        args.requestedMediaType === 'audio'
+        args.requestedMediaType === 'image' || args.requestedMediaType === 'audio'
           ? args.requestedMediaType
           : undefined;
       const script = undefined;

@@ -32,6 +32,21 @@ describe('createUploadWidgetTool', () => {
       type: 'text',
     });
   });
+
+  it('does not accept video as a requested widget media type', async () => {
+    const tool = createUploadWidgetTool();
+    if (tool.resultFormat !== 'mcp') {
+      throw new Error('open-upload-widget must return a raw MCP result');
+    }
+    const result = await tool.handler({
+      requestedMediaType: 'video',
+    });
+
+    expect(result.structuredContent).toEqual({
+      requestedMediaType: undefined,
+      script: undefined,
+    });
+  });
 });
 
 describe('UPLOAD_WIDGET_HTML', () => {
@@ -39,6 +54,9 @@ describe('UPLOAD_WIDGET_HTML', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('openai.selectFiles');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.uploadFile');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.getFileDownloadUrl');
+    expect(UPLOAD_WIDGET_HTML).not.toContain('accept="image/*,video/*,audio/*"');
+    expect(UPLOAD_WIDGET_HTML).toContain('accept="image/*,audio/*"');
+    expect(UPLOAD_WIDGET_HTML).toContain('Attach videos in chat first.');
     expect(UPLOAD_WIDGET_HTML).toContain('sourceOpenai.toolOutput');
     expect(UPLOAD_WIDGET_HTML).toContain('openai:set_globals');
     expect(UPLOAD_WIDGET_HTML).toContain('mcpToolResult._meta');
