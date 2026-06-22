@@ -1,5 +1,15 @@
+import type {
+  ReadResourceCallback,
+  ResourceMetadata,
+} from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describe, expect, it } from 'vitest';
-import { createUploadWidgetTool, UPLOAD_WIDGET_HTML, UPLOAD_WIDGET_URI } from './upload-widget.js';
+import {
+  createUploadWidgetTool,
+  registerUploadWidgetResource,
+  UPLOAD_WIDGET_HTML,
+  UPLOAD_WIDGET_LEGACY_URIS,
+  UPLOAD_WIDGET_URI,
+} from './upload-widget.js';
 
 describe('createUploadWidgetTool', () => {
   it('declares the ChatGPT render template metadata', () => {
@@ -72,5 +82,62 @@ describe('UPLOAD_WIDGET_HTML', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("generate_get-generation"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="scriptInput"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="runLipsync"');
+  });
+});
+
+describe('registerUploadWidgetResource', () => {
+  it('keeps legacy template URIs readable for cached ChatGPT sessions', async () => {
+    const registrations: Array<{
+      name: string;
+      uri: string;
+      readCallback: ReadResourceCallback;
+    }> = [];
+    const server = {
+      registerResource: (
+        name: string,
+        uri: string,
+        _metadata: ResourceMetadata,
+        readCallback: ReadResourceCallback,
+      ) => {
+        registrations.push({ name, uri, readCallback });
+      },
+    };
+
+    registerUploadWidgetResource(server);
+
+    expect(registrations.map((registration) => registration.uri)).toEqual([
+      UPLOAD_WIDGET_URI,
+      ...UPLOAD_WIDGET_LEGACY_URIS,
+    ]);
+    expect(registrations.map((registration) => registration.name)).toEqual([
+      'sync-upload-widget-v7',
+      'sync-upload-widget-v1',
+      'sync-upload-widget-v2',
+      'sync-upload-widget-v3',
+      'sync-upload-widget-v4',
+      'sync-upload-widget-v5',
+      'sync-upload-widget-v6',
+    ]);
+
+    const legacyRegistration = registrations.find(
+      (registration) => registration.uri === 'ui://sync/upload-widget-v6.html',
+    );
+    const extra = {
+      signal: new AbortController().signal,
+      requestId: 1,
+      sendNotification: async () => {},
+      sendRequest: async () => {
+        throw new Error('not implemented');
+      },
+    } satisfies Parameters<ReadResourceCallback>[1];
+    const result = await legacyRegistration?.readCallback(
+      new URL('ui://sync/upload-widget-v6.html'),
+      extra,
+    );
+
+    expect(result?.contents[0]).toMatchObject({
+      uri: 'ui://sync/upload-widget-v6.html',
+      text: UPLOAD_WIDGET_HTML,
+    });
   });
 });
