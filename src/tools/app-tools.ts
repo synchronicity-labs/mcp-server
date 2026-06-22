@@ -267,7 +267,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         'Pass URLs whenever you have them — set `audioUrl` to any public audio URL, and `videoUrl`/`imageUrl` to a hosted media URL. ' +
         'If media was uploaded to Sync first, pass `audioAssetId`, `videoAssetId`, or `imageAssetId`. ' +
         'For files the user uploaded in chat, prefer calling upload-media first and pass the returned assetId here; direct `audio`/`video`/`image` file params are supported when a host invokes this tool with file params directly. ' +
-        'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — poll generate_get-generation until status is COMPLETED, then read outputUrl. ' +
+        'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — call generate_get-generation once with wait: true and timeout: 55, then read outputUrl. Copy signed outputUrl values exactly from the tool result; never reconstruct or shorten them. ' +
         'For advanced options (segments, speaker selection), use generate_create-generation.',
       inputSchema: {
         videoUrl: z

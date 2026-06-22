@@ -7,7 +7,9 @@ export const generationOutputSchema = {
   outputUrl: z
     .string()
     .nullable()
-    .describe('Signed result URL when the generation is complete.')
+    .describe(
+      'Signed result URL when the generation is complete. Copy this exact string verbatim; do not reconstruct, shorten, or edit it.',
+    )
     .optional(),
   outputDuration: z.number().nullable().describe('Output duration in seconds.').optional(),
   error: z.unknown().optional(),
