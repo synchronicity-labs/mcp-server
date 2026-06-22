@@ -13,6 +13,70 @@ import { runWithAuth } from './auth/async-context.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 
+const OAUTH_FORM_FIELDS = [
+  'grant_type',
+  'code',
+  'redirect_uri',
+  'client_id',
+  'client_secret',
+  'code_verifier',
+  'refresh_token',
+  'scope',
+  'resource',
+  'token',
+  'token_type_hint',
+] as const;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+export function extractBasicClientCredentials(
+  authorization: string | undefined,
+): { clientId: string; clientSecret?: string } | undefined {
+  if (!authorization?.startsWith('Basic ')) return undefined;
+
+  try {
+    const decoded = Buffer.from(authorization.slice(6), 'base64').toString();
+    const separatorIndex = decoded.indexOf(':');
+    if (separatorIndex === -1) return undefined;
+
+    const clientId = decodeURIComponent(decoded.slice(0, separatorIndex));
+    const encodedSecret = decoded.slice(separatorIndex + 1);
+    const clientSecret = encodedSecret ? decodeURIComponent(encodedSecret) : undefined;
+    return clientId ? { clientId, clientSecret } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function mergeBasicClientCredentials(
+  body: Record<string, unknown>,
+  authorization: string | undefined,
+): Record<string, unknown> {
+  if (typeof body.client_id === 'string' && body.client_id) return body;
+
+  const credentials = extractBasicClientCredentials(authorization);
+  if (!credentials) return body;
+
+  return {
+    ...body,
+    client_id: credentials.clientId,
+    ...(credentials.clientSecret ? { client_secret: credentials.clientSecret } : {}),
+  };
+}
+
+export function encodeOAuthFormBody(body: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  for (const field of OAUTH_FORM_FIELDS) {
+    const value = body[field];
+    if (typeof value === 'string' && value !== '') {
+      params.set(field, value);
+    }
+  }
+  return params.toString();
+}
+
 export async function startHttpServer(
   serverFactory: { createServer: () => McpServer; toolCount: number },
   config: SyncMcpConfig,
@@ -70,20 +134,44 @@ export async function startHttpServer(
     res.send(buffer);
   });
 
-  // Workaround for ChatGPT sending client credentials via HTTP Basic Auth header
-  // instead of in the request body (SDK only supports client_secret_post).
-  // See: https://github.com/modelcontextprotocol/typescript-sdk/issues/676
-  app.use('/token', express.urlencoded({ extended: false }), (req, _res, next) => {
-    if (req.method === 'POST' && !req.body?.client_id) {
-      const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith('Basic ')) {
-        const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
-        const [clientId, clientSecret] = decoded.split(':');
-        if (clientId) req.body.client_id = decodeURIComponent(clientId);
-        if (clientSecret) req.body.client_secret = decodeURIComponent(clientSecret);
+  // ChatGPT may send client credentials via HTTP Basic Auth. Also, after an MCP
+  // server restart, the SDK can recover registered client metadata but not the
+  // raw client_secret. Proxy token/revoke requests with the incoming secret and
+  // let the Sync API validate the confidential client.
+  app.use(['/token', '/revoke'], express.urlencoded({ extended: false }), (req, _res, next) => {
+    req.body = mergeBasicClientCredentials(asRecord(req.body), req.headers.authorization);
+    next();
+  });
+
+  const oauthProxyRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
+  const proxyOAuthFormRequest = async (
+    path: 'token' | 'revoke',
+    req: express.Request,
+    res: express.Response,
+  ) => {
+    try {
+      const upstream = await fetch(new URL(`/v2/oauth/${path}`, config.baseUrl), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: encodeOAuthFormBody(asRecord(req.body)),
+      });
+      const contentType = upstream.headers.get('content-type');
+      if (contentType) res.setHeader('Content-Type', contentType);
+      res.status(upstream.status).send(await upstream.text());
+    } catch (error) {
+      log(`OAuth ${path} proxy error: ${error instanceof Error ? error.stack : error}\n`);
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'OAuth upstream request failed' });
       }
     }
-    next();
+  };
+
+  app.post('/token', oauthProxyRateLimit, (req, res) => {
+    void proxyOAuthFormRequest('token', req, res);
+  });
+
+  app.post('/revoke', oauthProxyRateLimit, (req, res) => {
+    void proxyOAuthFormRequest('revoke', req, res);
   });
 
   // OAuth auth router — handles /.well-known/*, /authorize, /token, /register, /revoke
