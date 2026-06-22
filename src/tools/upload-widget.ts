@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
-export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v5.html';
+export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v6.html';
 
 const UPLOAD_WIDGET_DESCRIPTION =
   'Select or upload media inside ChatGPT, stage it as a durable Sync asset, and report the assetId back into the conversation.';
@@ -745,17 +745,11 @@ export function createUploadWidgetTool(): McpToolDefinition {
     name: 'open-upload-widget',
     title: 'Open upload widget',
     description:
-      'Open the Sync upload widget so a user can choose a ChatGPT file or upload a local image, video, or audio file, then stage it as a durable Sync assetId. For "make this image/video say X" requests, pass requestedMediaType and set script to the exact text X so the widget can complete the lipsync flow after file selection.',
+      'Open the Sync upload widget so a user can choose a ChatGPT file or upload a local image, video, or audio file, then stage it as a durable Sync assetId. For "make this image/video say X" requests in ChatGPT, pass requestedMediaType only and tell the user to enter the exact text in the widget Script field; the widget can complete the lipsync flow after file selection.',
     inputSchema: {
       requestedMediaType: z
         .enum(['image', 'video', 'audio'])
         .describe('Optional media type expected from the user.')
-        .optional(),
-      script: z
-        .string()
-        .describe(
-          'Exact text the selected image or video should say. Required when the user asks media to say or speak text.',
-        )
         .optional(),
     },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -774,7 +768,7 @@ export function createUploadWidgetTool(): McpToolDefinition {
         args.requestedMediaType === 'audio'
           ? args.requestedMediaType
           : undefined;
-      const script = typeof args.script === 'string' ? args.script : undefined;
+      const script = undefined;
 
       return {
         structuredContent: {
