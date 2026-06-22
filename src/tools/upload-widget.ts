@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
-export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v4.html';
+export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v5.html';
 
 const UPLOAD_WIDGET_DESCRIPTION =
   'Select or upload media inside ChatGPT, stage it as a durable Sync asset, and report the assetId back into the conversation.';
@@ -100,6 +100,27 @@ export const UPLOAD_WIDGET_HTML = `
         gap: 8px;
       }
 
+      .script-field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .script-field span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      input[type="text"] {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 10px;
+        background: transparent;
+        color: var(--fg);
+        font: inherit;
+      }
+
       button {
         min-height: 36px;
         border: 1px solid var(--line);
@@ -151,9 +172,14 @@ export const UPLOAD_WIDGET_HTML = `
     <main>
       <h1>Upload to Sync</h1>
       <p id="hint">Choose a ChatGPT file or upload a local image, video, or audio file.</p>
+      <label class="script-field" for="scriptInput">
+        <span>Script</span>
+        <input id="scriptInput" type="text" autocomplete="off" placeholder="Text for the image or video to say" />
+      </label>
       <div class="actions">
         <button id="selectFile" class="primary" type="button">Choose from ChatGPT</button>
         <button id="uploadLocal" class="secondary" type="button">Upload local file</button>
+        <button id="runLipsync" class="secondary" type="button">Run lipsync</button>
         <input id="localFile" type="file" accept="image/*,video/*,audio/*" />
       </div>
       <div class="status" id="status" aria-live="polite">
@@ -200,9 +226,12 @@ export const UPLOAD_WIDGET_HTML = `
 
         var selectButton = document.getElementById("selectFile");
         var localButton = document.getElementById("uploadLocal");
+        var runButton = document.getElementById("runLipsync");
         var localInput = document.getElementById("localFile");
+        var scriptInput = document.getElementById("scriptInput");
         var status = document.getElementById("status");
         var hint = document.getElementById("hint");
+        var isBusy = false;
 
         function updateHint() {
           if (script) {
@@ -215,6 +244,21 @@ export const UPLOAD_WIDGET_HTML = `
           if (openai && typeof openai.notifyIntrinsicHeight === "function") {
             openai.notifyIntrinsicHeight();
           }
+        }
+
+        function syncScriptInput() {
+          var nextScript = scriptInput.value.trim();
+          if (script === nextScript) {
+            updateRunButton();
+            return;
+          }
+          script = nextScript;
+          state = Object.assign({}, state, { script: script || undefined });
+          if (openai && typeof openai.setWidgetState === "function") {
+            openai.setWidgetState(state);
+          }
+          updateHint();
+          updateRunButton();
         }
 
         function escapeHtml(value) {
@@ -238,11 +282,14 @@ export const UPLOAD_WIDGET_HTML = `
           if (openai && typeof openai.notifyIntrinsicHeight === "function") {
             openai.notifyIntrinsicHeight();
           }
+          updateRunButton();
         }
 
-        function setBusy(isBusy) {
+        function setBusy(nextBusy) {
+          isBusy = nextBusy;
           selectButton.disabled = isBusy || !canSelectFiles();
           localButton.disabled = isBusy || !canUploadLocal();
+          updateRunButton();
         }
 
         function canSelectFiles() {
@@ -251,6 +298,22 @@ export const UPLOAD_WIDGET_HTML = `
 
         function canUploadLocal() {
           return Boolean(openai && openai.uploadFile && openai.getFileDownloadUrl && openai.callTool);
+        }
+
+        function canRunLipsync() {
+          return Boolean(
+            openai &&
+              openai.callTool &&
+              script &&
+              state.assetId &&
+              (state.mediaType === "image" || state.mediaType === "video") &&
+              !state.generationId &&
+              !state.lipsyncStarted
+          );
+        }
+
+        function updateRunButton() {
+          runButton.disabled = isBusy || !canRunLipsync();
         }
 
         function applyBridgeInput(nextInput) {
@@ -267,6 +330,7 @@ export const UPLOAD_WIDGET_HTML = `
           }
           if (nextScript && script !== nextScript) {
             script = nextScript;
+            scriptInput.value = script;
             changed = true;
           }
 
@@ -292,7 +356,9 @@ export const UPLOAD_WIDGET_HTML = `
             openai.setWidgetState(state);
           }
           void runLipsyncFlow(state.assetId, state.mediaType).catch(function (error) {
-            setStatus("Lipsync failed", error && error.message ? error.message : String(error));
+            setStatus("Lipsync failed", error && error.message ? error.message : String(error), {
+              lipsyncStarted: false,
+            });
           });
         }
 
@@ -506,6 +572,7 @@ export const UPLOAD_WIDGET_HTML = `
         }
 
         async function uploadToSync(fileRef) {
+          syncScriptInput();
           var fileId = fileIdFrom(fileRef);
           var fileName = fileRef.fileName || fileRef.file_name || "chatgpt-upload";
           var mimeType = fileRef.mimeType || fileRef.mime_type || "";
@@ -553,6 +620,29 @@ export const UPLOAD_WIDGET_HTML = `
           setStatus("Uploaded", assetField + " " + assetId, nextState);
 
           await runLipsyncFlow(assetId, mediaType);
+        }
+
+        async function runUploadedLipsync() {
+          syncScriptInput();
+          if (!script) {
+            setStatus("Script required", "Enter text for the image or video to say.");
+            return;
+          }
+          if (!state.assetId || (state.mediaType !== "image" && state.mediaType !== "video")) {
+            setStatus("Upload media first", "Choose or upload an image or video before running lipsync.");
+            return;
+          }
+
+          try {
+            setBusy(true);
+            await runLipsyncFlow(state.assetId, state.mediaType);
+          } catch (error) {
+            setStatus("Lipsync failed", error && error.message ? error.message : String(error), {
+              lipsyncStarted: false,
+            });
+          } finally {
+            setBusy(false);
+          }
         }
 
         async function chooseFromChatGpt() {
@@ -610,11 +700,14 @@ export const UPLOAD_WIDGET_HTML = `
           var file = event.target.files && event.target.files[0];
           if (file) void uploadLocalFile(file);
         });
+        scriptInput.addEventListener("input", syncScriptInput);
+        runButton.addEventListener("click", runUploadedLipsync);
         window.addEventListener("openai:set_globals", function (event) {
           openai = window.openai || openai;
           syncBridgeInput(Object.assign({}, bridgeObject(openai), globalsFromEvent(event)));
         });
 
+        scriptInput.value = script;
         syncBridgeInput(openai);
         updateHint();
         if (!openai) {
