@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
-export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v2.html';
+export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v3.html';
 
 const UPLOAD_WIDGET_DESCRIPTION =
   'Select or upload media inside ChatGPT, stage it as a durable Sync asset, and report the assetId back into the conversation.';
@@ -165,7 +165,27 @@ export const UPLOAD_WIDGET_HTML = `
     <script>
       (function () {
         var openai = window.openai;
-        var input = (openai && openai.toolInput) || {};
+        function bridgeObject(value) {
+          return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+        }
+
+        function bridgeStructuredContent() {
+          var metadata = bridgeObject(openai && openai.toolResponseMetadata);
+          var callToolResult = bridgeObject(metadata.call_tool_result);
+          var mcpToolResult = bridgeObject(metadata.mcp_tool_result);
+          return Object.assign(
+            {},
+            bridgeObject(mcpToolResult.structuredContent),
+            bridgeObject(callToolResult.structuredContent)
+          );
+        }
+
+        var input = Object.assign(
+          {},
+          bridgeStructuredContent(),
+          bridgeObject(openai && openai.toolOutput),
+          bridgeObject(openai && openai.toolInput)
+        );
         var requestedMediaType = typeof input.requestedMediaType === "string" ? input.requestedMediaType : "";
         var script = typeof input.script === "string" ? input.script : "";
         var state = (openai && openai.widgetState && typeof openai.widgetState === "object")
@@ -558,7 +578,7 @@ export function createUploadWidgetTool(): McpToolDefinition {
     name: 'open-upload-widget',
     title: 'Open upload widget',
     description:
-      'Open the Sync upload widget so a user can choose a ChatGPT file or upload a local image, video, or audio file, then stage it as a durable Sync assetId. Use this in ChatGPT before create-lipsync when the user uploads or wants to upload media.',
+      'Open the Sync upload widget so a user can choose a ChatGPT file or upload a local image, video, or audio file, then stage it as a durable Sync assetId. For "make this image/video say X" requests, pass requestedMediaType and set script to the exact text X so the widget can complete the lipsync flow after file selection.',
     inputSchema: {
       requestedMediaType: z
         .enum(['image', 'video', 'audio'])
@@ -567,7 +587,7 @@ export function createUploadWidgetTool(): McpToolDefinition {
       script: z
         .string()
         .describe(
-          'Optional text the selected image or video should say. The widget will return the assetId and ask ChatGPT to continue the lipsync flow.',
+          'Exact text the selected image or video should say. Required when the user asks media to say or speak text.',
         )
         .optional(),
     },
