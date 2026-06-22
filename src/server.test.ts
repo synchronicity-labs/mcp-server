@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createJsonToolResult, createToolDescriptorMeta, selectHostedHttpTools } from './server.js';
+import {
+  createJsonToolResult,
+  createToolDescriptorMeta,
+  SERVER_INSTRUCTIONS,
+  selectHostedHttpTools,
+} from './server.js';
 import type { McpToolDefinition } from './tools/index.js';
 
 function tool(name: string): McpToolDefinition {
@@ -90,6 +95,15 @@ describe('createJsonToolResult', () => {
         },
       ],
     });
+  });
+});
+
+describe('SERVER_INSTRUCTIONS', () => {
+  it('forbids routing local video through the upload widget', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('open-upload-widget is image/audio only');
+    expect(SERVER_INSTRUCTIONS).toContain('Never call, recommend, or describe open-upload-widget');
+    expect(SERVER_INSTRUCTIONS).toContain('Never mention requestedMediaType: "video"');
+    expect(SERVER_INSTRUCTIONS).toContain('attaching the video to the ChatGPT composer');
   });
 });
 
