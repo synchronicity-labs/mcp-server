@@ -57,6 +57,12 @@ describe('UPLOAD_WIDGET_HTML', () => {
     expect(UPLOAD_WIDGET_HTML).not.toContain('accept="image/*,video/*,audio/*"');
     expect(UPLOAD_WIDGET_HTML).toContain('accept="image/*,audio/*"');
     expect(UPLOAD_WIDGET_HTML).toContain('Attach videos in chat first.');
+    expect(UPLOAD_WIDGET_HTML).toContain(
+      'The upload widget supports images and audio only. Attach videos in the ChatGPT composer',
+    );
+    expect(UPLOAD_WIDGET_HTML).not.toContain('videoAssetId');
+    expect(UPLOAD_WIDGET_HTML).not.toContain('lowerMime.indexOf("video/")');
+    expect(UPLOAD_WIDGET_HTML).not.toContain('mp4|mov|m4v|webm');
     expect(UPLOAD_WIDGET_HTML).toContain('sourceOpenai.toolOutput');
     expect(UPLOAD_WIDGET_HTML).toContain('openai:set_globals');
     expect(UPLOAD_WIDGET_HTML).toContain('mcpToolResult._meta');

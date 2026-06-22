@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
-export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v6.html';
+export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v7.html';
 
 const UPLOAD_WIDGET_DESCRIPTION =
   'Select or upload media inside ChatGPT, stage it as a durable Sync asset, and report the assetId back into the conversation.';
@@ -174,7 +174,7 @@ export const UPLOAD_WIDGET_HTML = `
       <p id="hint">Choose a ChatGPT file or upload a local image or audio file. Attach videos in chat first.</p>
       <label class="script-field" for="scriptInput">
         <span>Script</span>
-        <input id="scriptInput" type="text" autocomplete="off" placeholder="Text for the image or video to say" />
+        <input id="scriptInput" type="text" autocomplete="off" placeholder="Text for the image to say" />
       </label>
       <div class="actions">
         <button id="selectFile" class="primary" type="button">Choose from ChatGPT</button>
@@ -306,7 +306,7 @@ export const UPLOAD_WIDGET_HTML = `
               openai.callTool &&
               script &&
               state.assetId &&
-              (state.mediaType === "image" || state.mediaType === "video") &&
+              state.mediaType === "image" &&
               !state.generationId &&
               !state.lipsyncStarted
           );
@@ -322,7 +322,7 @@ export const UPLOAD_WIDGET_HTML = `
           var changed = false;
 
           if (
-            (nextMediaType === "image" || nextMediaType === "video" || nextMediaType === "audio") &&
+            (nextMediaType === "image" || nextMediaType === "audio") &&
             requestedMediaType !== nextMediaType
           ) {
             requestedMediaType = nextMediaType;
@@ -349,7 +349,7 @@ export const UPLOAD_WIDGET_HTML = `
         }
 
         function maybeRunPendingLipsync() {
-          if (!script || !state.assetId || (state.mediaType !== "image" && state.mediaType !== "video")) return;
+          if (!script || !state.assetId || state.mediaType !== "image") return;
           if (state.generationId || state.lipsyncStarted || state.statusTitle !== "Uploaded") return;
           state = Object.assign({}, state, { lipsyncStarted: true });
           if (openai && typeof openai.setWidgetState === "function") {
@@ -363,18 +363,16 @@ export const UPLOAD_WIDGET_HTML = `
         }
 
         function mediaTypeFrom(mimeType, fileName) {
-          if (requestedMediaType === "image" || requestedMediaType === "video" || requestedMediaType === "audio") {
+          if (requestedMediaType === "image" || requestedMediaType === "audio") {
             return requestedMediaType;
           }
           var lowerMime = String(mimeType || "").toLowerCase();
           if (lowerMime.indexOf("image/") === 0) return "image";
-          if (lowerMime.indexOf("video/") === 0) return "video";
           if (lowerMime.indexOf("audio/") === 0) return "audio";
           var lowerName = String(fileName || "").toLowerCase();
           if (/\\.(png|jpg|jpeg|webp|gif)$/.test(lowerName)) return "image";
-          if (/\\.(mp4|mov|m4v|webm)$/.test(lowerName)) return "video";
           if (/\\.(mp3|wav|m4a|aac|ogg)$/.test(lowerName)) return "audio";
-          return "video";
+          return "";
         }
 
         function fileIdFrom(value) {
@@ -490,7 +488,7 @@ export const UPLOAD_WIDGET_HTML = `
         }
 
         async function runLipsyncFlow(assetId, mediaType) {
-          if (!script || (mediaType !== "image" && mediaType !== "video")) return;
+          if (!script || mediaType !== "image") return;
 
           state = Object.assign({}, state, { lipsyncStarted: true });
           if (openai && typeof openai.setWidgetState === "function") {
@@ -515,10 +513,7 @@ export const UPLOAD_WIDGET_HTML = `
             voiceId: voice.id,
             lipsyncStarted: true,
           });
-          var createArgs =
-            mediaType === "image"
-              ? { imageAssetId: assetId, script: script, voiceId: voice.id }
-              : { videoAssetId: assetId, script: script, voiceId: voice.id };
+          var createArgs = { imageAssetId: assetId, script: script, voiceId: voice.id };
           var createResult = await openai.callTool("create-lipsync", createArgs);
           var generationId = generationIdFrom(createResult);
           if (!generationId) {
@@ -581,6 +576,11 @@ export const UPLOAD_WIDGET_HTML = `
           }
 
           var mediaType = mediaTypeFrom(mimeType, fileName);
+          if (!mediaType) {
+            throw new Error(
+              "The upload widget supports images and audio only. Attach videos in the ChatGPT composer, then ask Sync to create the lipsync."
+            );
+          }
           setStatus("Preparing file", fileName, { fileId: fileId, fileName: fileName, mediaType: mediaType });
           var downloadUrl = await getDownloadUrl(fileId);
           setStatus("Uploading to Sync", fileName, { fileId: fileId, fileName: fileName, mediaType: mediaType });
@@ -625,11 +625,11 @@ export const UPLOAD_WIDGET_HTML = `
         async function runUploadedLipsync() {
           syncScriptInput();
           if (!script) {
-            setStatus("Script required", "Enter text for the image or video to say.");
+            setStatus("Script required", "Enter text for the image to say.");
             return;
           }
-          if (!state.assetId || (state.mediaType !== "image" && state.mediaType !== "video")) {
-            setStatus("Upload media first", "Choose or upload an image or video before running lipsync.");
+          if (!state.assetId || state.mediaType !== "image") {
+            setStatus("Upload media first", "Choose or upload an image before running lipsync.");
             return;
           }
 
