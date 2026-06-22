@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
-export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v3.html';
+export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v4.html';
 
 const UPLOAD_WIDGET_DESCRIPTION =
   'Select or upload media inside ChatGPT, stage it as a durable Sync asset, and report the assetId back into the conversation.';
@@ -169,23 +169,29 @@ export const UPLOAD_WIDGET_HTML = `
           return value && typeof value === "object" && !Array.isArray(value) ? value : {};
         }
 
-        function bridgeStructuredContent() {
-          var metadata = bridgeObject(openai && openai.toolResponseMetadata);
+        function bridgeStructuredContent(sourceOpenai) {
+          var metadata = bridgeObject(sourceOpenai && sourceOpenai.toolResponseMetadata);
           var callToolResult = bridgeObject(metadata.call_tool_result);
           var mcpToolResult = bridgeObject(metadata.mcp_tool_result);
           return Object.assign(
             {},
+            bridgeObject(mcpToolResult._meta),
+            bridgeObject(callToolResult._meta),
             bridgeObject(mcpToolResult.structuredContent),
             bridgeObject(callToolResult.structuredContent)
           );
         }
 
-        var input = Object.assign(
-          {},
-          bridgeStructuredContent(),
-          bridgeObject(openai && openai.toolOutput),
-          bridgeObject(openai && openai.toolInput)
-        );
+        function bridgeInputFrom(sourceOpenai) {
+          return Object.assign(
+            {},
+            bridgeStructuredContent(sourceOpenai),
+            bridgeObject(sourceOpenai && sourceOpenai.toolOutput),
+            bridgeObject(sourceOpenai && sourceOpenai.toolInput)
+          );
+        }
+
+        var input = bridgeInputFrom(openai);
         var requestedMediaType = typeof input.requestedMediaType === "string" ? input.requestedMediaType : "";
         var script = typeof input.script === "string" ? input.script : "";
         var state = (openai && openai.widgetState && typeof openai.widgetState === "object")
@@ -197,6 +203,19 @@ export const UPLOAD_WIDGET_HTML = `
         var localInput = document.getElementById("localFile");
         var status = document.getElementById("status");
         var hint = document.getElementById("hint");
+
+        function updateHint() {
+          if (script) {
+            hint.textContent = requestedMediaType
+              ? "Choose the " + requestedMediaType + " for: " + script
+              : "Choose the media for: " + script;
+          } else {
+            hint.textContent = "Choose a ChatGPT file or upload a local image, video, or audio file.";
+          }
+          if (openai && typeof openai.notifyIntrinsicHeight === "function") {
+            openai.notifyIntrinsicHeight();
+          }
+        }
 
         function escapeHtml(value) {
           return String(value)
@@ -232,6 +251,49 @@ export const UPLOAD_WIDGET_HTML = `
 
         function canUploadLocal() {
           return Boolean(openai && openai.uploadFile && openai.getFileDownloadUrl && openai.callTool);
+        }
+
+        function applyBridgeInput(nextInput) {
+          var nextMediaType = typeof nextInput.requestedMediaType === "string" ? nextInput.requestedMediaType : "";
+          var nextScript = typeof nextInput.script === "string" ? nextInput.script : "";
+          var changed = false;
+
+          if (
+            (nextMediaType === "image" || nextMediaType === "video" || nextMediaType === "audio") &&
+            requestedMediaType !== nextMediaType
+          ) {
+            requestedMediaType = nextMediaType;
+            changed = true;
+          }
+          if (nextScript && script !== nextScript) {
+            script = nextScript;
+            changed = true;
+          }
+
+          if (changed) {
+            updateHint();
+            maybeRunPendingLipsync();
+          }
+        }
+
+        function syncBridgeInput(sourceOpenai) {
+          applyBridgeInput(bridgeInputFrom(sourceOpenai || openai));
+        }
+
+        function globalsFromEvent(event) {
+          return bridgeObject(event && event.detail && event.detail.globals);
+        }
+
+        function maybeRunPendingLipsync() {
+          if (!script || !state.assetId || (state.mediaType !== "image" && state.mediaType !== "video")) return;
+          if (state.generationId || state.lipsyncStarted || state.statusTitle !== "Uploaded") return;
+          state = Object.assign({}, state, { lipsyncStarted: true });
+          if (openai && typeof openai.setWidgetState === "function") {
+            openai.setWidgetState(state);
+          }
+          void runLipsyncFlow(state.assetId, state.mediaType).catch(function (error) {
+            setStatus("Lipsync failed", error && error.message ? error.message : String(error));
+          });
         }
 
         function mediaTypeFrom(mimeType, fileName) {
@@ -364,10 +426,15 @@ export const UPLOAD_WIDGET_HTML = `
         async function runLipsyncFlow(assetId, mediaType) {
           if (!script || (mediaType !== "image" && mediaType !== "video")) return;
 
+          state = Object.assign({}, state, { lipsyncStarted: true });
+          if (openai && typeof openai.setWidgetState === "function") {
+            openai.setWidgetState(state);
+          }
           setStatus("Choosing voice", "Finding an available Sync voice.", {
             assetId: assetId,
             mediaType: mediaType,
             script: script,
+            lipsyncStarted: true,
           });
           var voicesResult = await openai.callTool("voices_get-voices", {});
           var voice = voiceFromToolResult(voicesResult);
@@ -380,6 +447,7 @@ export const UPLOAD_WIDGET_HTML = `
             mediaType: mediaType,
             script: script,
             voiceId: voice.id,
+            lipsyncStarted: true,
           });
           var createArgs =
             mediaType === "image"
@@ -398,6 +466,7 @@ export const UPLOAD_WIDGET_HTML = `
               script: script,
               voiceId: voice.id,
               generationId: generationId,
+              lipsyncStarted: true,
             });
             var generation = await openai.callTool("generate_get-generation", { id: generationId });
             var statusText = generationStatusFrom(generation).toUpperCase();
@@ -410,6 +479,7 @@ export const UPLOAD_WIDGET_HTML = `
                 voiceId: voice.id,
                 generationId: generationId,
                 outputUrl: outputUrl,
+                lipsyncStarted: true,
                 modelContent:
                   "Sync lipsync completed. generationId: " +
                   generationId +
@@ -471,6 +541,7 @@ export const UPLOAD_WIDGET_HTML = `
             mediaType: mediaType,
             assetId: assetId,
             assetField: assetField,
+            lipsyncStarted: false,
             modelContent: modelContent,
             privateContent: {
               fileId: fileId,
@@ -539,10 +610,13 @@ export const UPLOAD_WIDGET_HTML = `
           var file = event.target.files && event.target.files[0];
           if (file) void uploadLocalFile(file);
         });
+        window.addEventListener("openai:set_globals", function (event) {
+          openai = window.openai || openai;
+          syncBridgeInput(Object.assign({}, bridgeObject(openai), globalsFromEvent(event)));
+        });
 
-        if (script) {
-          hint.textContent = "Choose the media for: " + script;
-        }
+        syncBridgeInput(openai);
+        updateHint();
         if (!openai) {
           setStatus("Unavailable", "Open this widget inside ChatGPT.");
         } else {

@@ -40,7 +40,9 @@ describe('UPLOAD_WIDGET_HTML', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('openai.selectFiles');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.uploadFile');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.getFileDownloadUrl');
-    expect(UPLOAD_WIDGET_HTML).toContain('openai.toolOutput');
+    expect(UPLOAD_WIDGET_HTML).toContain('sourceOpenai.toolOutput');
+    expect(UPLOAD_WIDGET_HTML).toContain('openai:set_globals');
+    expect(UPLOAD_WIDGET_HTML).toContain('mcpToolResult._meta');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("upload-media"');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("voices_get-voices"');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("create-lipsync"');
