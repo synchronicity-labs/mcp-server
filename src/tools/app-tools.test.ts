@@ -68,8 +68,8 @@ describe('createAppTools — create-lipsync', () => {
   it('declares openai/fileParams for video, image + audio and is an open-world write', () => {
     const { tool } = setup();
     expect(tool.title).toBe('Create lipsync');
-    expect(tool.description).toContain('pass direct `audio`/`video`/`image` file params');
-    expect(tool.description).not.toContain('prefer calling upload-media first');
+    expect(tool.description).toContain('prefer calling upload-media first');
+    expect(tool.description).toContain('direct `audio`/`video`/`image` file params are supported');
     expect(tool.meta?.['openai/fileParams']).toEqual(['video', 'image', 'audio']);
     expect(tool.outputSchema).toMatchObject({
       id: expect.any(Object),
