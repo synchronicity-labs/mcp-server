@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { loadToken } from './auth/token-store.js';
@@ -9,6 +10,7 @@ import { parseSpec } from './openapi/parser.js';
 import { createAppTools } from './tools/app-tools.js';
 import { generateTools } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
+import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
 const SERVER_DESCRIPTION =
   'Sync is an AI video platform for lipsync and visual dubbing. ' +
@@ -16,10 +18,11 @@ const SERVER_DESCRIPTION =
   'Typical workflow: generate_create-generation → poll generate_get-generation until COMPLETED → return output URL.';
 
 const SERVER_INSTRUCTIONS =
-  'For lipsync requests, prefer create-lipsync. If the user asks an image or video to say text, call voices_get-voices, then create-lipsync with script + voiceId and the image/video URL or Sync assetId. Do not call tts_create for that flow. If the user uploads media in chat, first call upload-media with the uploaded file field for each image/video/audio file, then pass the returned imageAssetId/videoAssetId/audioAssetId to create-lipsync. If the user provides a public media URL, pass it directly as imageUrl, videoUrl, or audioUrl. Poll generate_get-generation until COMPLETED and return outputUrl.';
+  'For lipsync requests, prefer create-lipsync. If the user asks an image or video to say text, call voices_get-voices, then create-lipsync with script + voiceId and the image/video URL or Sync assetId. Do not call tts_create for that flow. In ChatGPT, if the user uploads media in chat or needs to pick a local file, open open-upload-widget first so the user can select or upload the file through the app bridge; use the returned assetId as imageAssetId, videoAssetId, or audioAssetId. If the host directly supplies file params, upload-media can stage a single file to a Sync assetId. If the user provides a public media URL, pass it directly as imageUrl, videoUrl, or audioUrl. Poll generate_get-generation until COMPLETED and return outputUrl.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'open-upload-widget',
   'upload-media',
   'create-lipsync',
   'voices_get-voices',
@@ -46,8 +49,11 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
-      async (args) => {
+      async (args): Promise<CallToolResult> => {
         try {
+          if (tool.resultFormat === 'mcp') {
+            return tool.handler((args ?? {}) as Record<string, unknown>);
+          }
           const result = await tool.handler((args ?? {}) as Record<string, unknown>);
           return {
             content: [
@@ -96,11 +102,16 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   const operations = parseSpec(spec);
   log(`Discovered ${operations.length} API operations\n`);
 
-  const tools = [...createAppTools(httpClient), ...generateTools(operations, httpClient)];
+  const tools = [
+    createUploadWidgetTool(),
+    ...createAppTools(httpClient),
+    ...generateTools(operations, httpClient),
+  ];
   const server = new McpServer(
     { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
     { instructions: SERVER_INSTRUCTIONS },
   );
+  registerUploadWidgetResource(server);
   registerTools(server, tools);
   log(`Registered ${tools.length} MCP tools\n`);
 
@@ -134,6 +145,7 @@ export async function createMcpServerFactory(
   log(`Discovered ${operations.length} API operations\n`);
 
   const tools = selectHostedHttpTools([
+    createUploadWidgetTool(),
     ...createAppTools(httpClient),
     ...generateTools(operations, httpClient),
   ]);
@@ -149,6 +161,7 @@ export async function createMcpServerFactory(
         },
         { instructions: SERVER_INSTRUCTIONS },
       );
+      registerUploadWidgetResource(server);
       registerTools(server, tools);
       return server;
     },
