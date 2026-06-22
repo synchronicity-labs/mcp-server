@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createToolDescriptorMeta, selectHostedHttpTools } from './server.js';
+import { createJsonToolResult, createToolDescriptorMeta, selectHostedHttpTools } from './server.js';
 import type { McpToolDefinition } from './tools/index.js';
 
 function tool(name: string): McpToolDefinition {
@@ -26,6 +26,39 @@ describe('createToolDescriptorMeta', () => {
     ).toEqual({
       'openai/fileParams': ['image'],
       securitySchemes: [{ type: 'oauth2', scopes: [] }],
+    });
+  });
+});
+
+describe('createJsonToolResult', () => {
+  it('exposes JSON object results as structured content and text', () => {
+    const result = {
+      id: 'gen-123',
+      status: 'PENDING',
+      outputUrl: null,
+    };
+
+    expect(createJsonToolResult(result)).toEqual({
+      structuredContent: result,
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    });
+  });
+
+  it('leaves array results as text-only JSON', () => {
+    const result = [{ id: 'voice-1' }];
+
+    expect(createJsonToolResult(result)).toEqual({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
     });
   });
 });
