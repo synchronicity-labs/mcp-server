@@ -1,10 +1,32 @@
-import type { McpServer, ResourceMetadata } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type {
+  ReadResourceCallback,
+  ResourceMetadata,
+} from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
 export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v7.html';
+export const UPLOAD_WIDGET_LEGACY_URIS = [
+  'ui://sync/upload-widget-v1.html',
+  'ui://sync/upload-widget-v2.html',
+  'ui://sync/upload-widget-v3.html',
+  'ui://sync/upload-widget-v4.html',
+  'ui://sync/upload-widget-v5.html',
+  'ui://sync/upload-widget-v6.html',
+] as const;
+
+const UPLOAD_WIDGET_RESOURCE_URIS = [UPLOAD_WIDGET_URI, ...UPLOAD_WIDGET_LEGACY_URIS] as const;
+
+type UploadWidgetResourceServer = {
+  registerResource(
+    name: string,
+    uri: string,
+    metadata: ResourceMetadata,
+    readCallback: ReadResourceCallback,
+  ): unknown;
+};
 
 const UPLOAD_WIDGET_DESCRIPTION =
   'Select or upload media inside ChatGPT, stage it as a durable Sync asset, and report the assetId back into the conversation.';
@@ -722,22 +744,25 @@ export const UPLOAD_WIDGET_HTML = `
 </html>
 `.trim();
 
-export function registerUploadWidgetResource(server: McpServer): void {
-  server.registerResource(
-    'sync-upload-widget',
-    UPLOAD_WIDGET_URI,
-    UPLOAD_WIDGET_RESOURCE_METADATA,
-    async () => ({
-      contents: [
-        {
-          uri: UPLOAD_WIDGET_URI,
-          mimeType: MCP_APP_RESOURCE_MIME_TYPE,
-          text: UPLOAD_WIDGET_HTML,
-          _meta: UPLOAD_WIDGET_RESOURCE_META,
-        },
-      ],
-    }),
-  );
+export function registerUploadWidgetResource(server: UploadWidgetResourceServer): void {
+  for (const uri of UPLOAD_WIDGET_RESOURCE_URIS) {
+    const version = uri.match(/upload-widget-(v\d+)\.html$/)?.[1] ?? 'current';
+    server.registerResource(
+      `sync-upload-widget-${version}`,
+      uri,
+      UPLOAD_WIDGET_RESOURCE_METADATA,
+      async (requestedUri) => ({
+        contents: [
+          {
+            uri: requestedUri.toString(),
+            mimeType: MCP_APP_RESOURCE_MIME_TYPE,
+            text: UPLOAD_WIDGET_HTML,
+            _meta: UPLOAD_WIDGET_RESOURCE_META,
+          },
+        ],
+      }),
+    );
+  }
 }
 
 export function createUploadWidgetTool(): McpToolDefinition {
