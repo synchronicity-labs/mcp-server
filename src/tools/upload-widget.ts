@@ -768,13 +768,13 @@ export function registerUploadWidgetResource(server: UploadWidgetResourceServer)
 export function createUploadWidgetTool(): McpToolDefinition {
   return {
     name: 'open-upload-widget',
-    title: 'Open upload widget',
+    title: 'Open image/audio upload widget',
     description:
-      'Open the Sync upload widget so a user can choose a ChatGPT file or upload a supported local image/audio file, then stage it as a durable Sync assetId. Do not use this tool for local video requests; ask the user to attach the video to the ChatGPT composer, then call upload-media or create-lipsync with file params.',
+      'Open the Sync image/audio upload widget so a user can choose a ChatGPT file or upload a supported local image/audio file, then stage it as a durable Sync assetId. This widget cannot accept video or MP4 files. Never use, recommend, or describe this tool for local video requests, and never use requestedMediaType: "video". For local video or MP4, ask the user to attach the video to the ChatGPT composer, then call upload-media or create-lipsync with file params.',
     inputSchema: {
       requestedMediaType: z
         .enum(['image', 'audio'])
-        .describe('Optional image or audio media type expected from the user.')
+        .describe('Optional image or audio media type expected from the user. Video is invalid.')
         .optional(),
     },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
