@@ -9,6 +9,7 @@ type McpToolBaseDefinition = {
   title?: string;
   description: string;
   inputSchema: Record<string, z.ZodType>;
+  outputSchema?: Record<string, z.ZodType>;
   annotations?: ToolAnnotations;
   // Tool-level metadata passed through to the MCP client (e.g. OpenAI's
   // `openai/fileParams` and invocation-status hints for ChatGPT apps).
@@ -63,6 +64,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     title: titleForToolName(name),
     description,
     inputSchema,
+    outputSchema: override?.outputSchema,
     annotations: deriveAnnotations(operation.method),
     handler: async (args: Record<string, unknown>) => {
       const path = buildPath(operation.path, args);

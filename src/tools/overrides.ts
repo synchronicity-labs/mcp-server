@@ -1,5 +1,9 @@
+import type { z } from 'zod';
+import { generationOutputSchema } from './output-schemas.js';
+
 type ToolOverride = {
   description: string;
+  outputSchema?: Record<string, z.ZodType>;
 };
 
 // Agent-friendly descriptions, keyed by generated tool name
@@ -60,10 +64,12 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   'generate_create-generation': {
     description:
       'Create a lipsync video. Provide a video input (or an image for sync-3) and an audio input, each by `url` or `assetId`. Returns a generation `id` — poll generate_get-generation until status is COMPLETED, then read `outputUrl`. To choose which face to sync in a multi-person video, pass `options.active_speaker_detection` (auto_detect, or coordinates + frame_number).',
+    outputSchema: generationOutputSchema,
   },
   'generate_get-generation': {
     description:
       'Get a generation by id and poll until status is COMPLETED; the result includes `outputUrl`. Supports waiting for terminal status.',
+    outputSchema: generationOutputSchema,
   },
   'generate_get-generations': {
     description:
@@ -76,6 +82,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   'generations_get-by-id': {
     description:
       'Get a generation by id (organization-scoped). Returns status and, when COMPLETED, `outputUrl`.',
+    outputSchema: generationOutputSchema,
   },
   generations_delete: {
     description:
