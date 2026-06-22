@@ -770,7 +770,7 @@ export function createUploadWidgetTool(): McpToolDefinition {
     name: 'open-upload-widget',
     title: 'Open image/audio upload widget',
     description:
-      'Open the Sync image/audio upload widget so a user can choose a ChatGPT file or upload a supported local image/audio file, then stage it as a durable Sync assetId. This widget cannot accept video or MP4 files. Never use, recommend, or describe this tool for local video requests, and never use requestedMediaType: "video". For local video or MP4, ask the user to attach the video to the ChatGPT composer, then call upload-media or create-lipsync with file params.',
+      'Open the Sync image/audio upload widget so a user can choose a ChatGPT file or upload a supported local image/audio file, then stage it as a durable Sync assetId. Use this by default when the user wants to upload or choose a local image/audio file and has not attached the file to ChatGPT yet. For image-to-speech requests, call this with requestedMediaType: "image" and tell the user to enter the exact requested text in the widget Script field. This widget cannot accept video or MP4 files. Never use, recommend, or describe this tool for local video requests, and never use requestedMediaType: "video". For local video or MP4, ask the user to attach the video to the ChatGPT composer, then call upload-media or create-lipsync with file params.',
     inputSchema: {
       requestedMediaType: z
         .enum(['image', 'audio'])
