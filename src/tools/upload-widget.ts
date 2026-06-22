@@ -54,6 +54,11 @@ const UPLOAD_WIDGET_RESOURCE_METADATA: ResourceMetadata = {
   _meta: UPLOAD_WIDGET_RESOURCE_META,
 };
 
+const uploadWidgetOutputSchema = {
+  requestedMediaType: z.enum(['image', 'audio']).optional(),
+  script: z.string().optional(),
+};
+
 export const UPLOAD_WIDGET_HTML = `
 <!doctype html>
 <html lang="en">
@@ -777,6 +782,7 @@ export function createUploadWidgetTool(): McpToolDefinition {
         .describe('Optional image or audio media type expected from the user. Video is invalid.')
         .optional(),
     },
+    outputSchema: uploadWidgetOutputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     meta: {
       ui: { resourceUri: UPLOAD_WIDGET_URI, visibility: ['model', 'app'] },
@@ -791,23 +797,20 @@ export function createUploadWidgetTool(): McpToolDefinition {
         args.requestedMediaType === 'image' || args.requestedMediaType === 'audio'
           ? args.requestedMediaType
           : undefined;
-      const script = undefined;
+      const structuredContent: { requestedMediaType?: 'image' | 'audio'; script?: string } = {};
+      if (requestedMediaType) {
+        structuredContent.requestedMediaType = requestedMediaType;
+      }
 
       return {
-        structuredContent: {
-          requestedMediaType,
-          script,
-        },
+        structuredContent,
         content: [
           {
             type: 'text',
             text: 'Sync uploader opened. Select media in the widget; it will return a durable Sync assetId.',
           },
         ],
-        _meta: {
-          requestedMediaType,
-          script,
-        },
+        _meta: structuredContent,
       };
     },
   };
