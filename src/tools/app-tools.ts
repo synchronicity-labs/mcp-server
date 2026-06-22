@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
+import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 
 // A file as ChatGPT delivers it for an `openai/fileParams` field.
 const fileInput = z.object({
@@ -220,6 +221,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           .object(fileInput.shape)
           .describe('Uploaded media file from ChatGPT. Do not pass URL strings here.'),
       },
+      outputSchema: uploadMediaOutputSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       meta: {
         ui: { visibility: ['model', 'app'] },
@@ -341,6 +343,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           )
           .optional(),
       },
+      outputSchema: generationOutputSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       meta: {
         'openai/fileParams': ['video', 'image', 'audio'],

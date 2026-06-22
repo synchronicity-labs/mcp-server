@@ -69,6 +69,12 @@ describe('createAppTools — create-lipsync', () => {
     const { tool } = setup();
     expect(tool.title).toBe('Create lipsync');
     expect(tool.meta?.['openai/fileParams']).toEqual(['video', 'image', 'audio']);
+    expect(tool.outputSchema).toMatchObject({
+      id: expect.any(Object),
+      status: expect.any(Object),
+      model: expect.any(Object),
+      outputUrl: expect.any(Object),
+    });
     expect(tool.annotations?.openWorldHint).toBe(true);
     expect(tool.annotations?.readOnlyHint).toBe(false);
     expect(tool.annotations?.destructiveHint).toBe(false);
@@ -79,6 +85,12 @@ describe('createAppTools — create-lipsync', () => {
     expect(uploadTool.title).toBe('Upload media');
     expect(uploadTool.meta?.['openai/fileParams']).toEqual(['file']);
     expect(uploadTool.meta?.['openai/widgetAccessible']).toBe(true);
+    expect(uploadTool.outputSchema).toMatchObject({
+      assetId: expect.any(Object),
+      mediaType: expect.any(Object),
+      assetType: expect.any(Object),
+      input: expect.any(Object),
+    });
     expect(uploadTool.annotations?.openWorldHint).toBe(true);
     expect(uploadTool.annotations?.readOnlyHint).toBe(false);
     expect(uploadTool.annotations?.destructiveHint).toBe(false);

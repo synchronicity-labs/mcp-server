@@ -98,6 +98,22 @@ describe('generateTools', () => {
     expect(tools[0]?.description).toContain('lipsync video');
   });
 
+  it('applies output schemas from overrides', () => {
+    const tools = generateTools(operations, mockHttpClient);
+    expect(tools[0]?.outputSchema).toMatchObject({
+      id: expect.any(Object),
+      status: expect.any(Object),
+      model: expect.any(Object),
+      outputUrl: expect.any(Object),
+    });
+    expect(tools[1]?.outputSchema).toMatchObject({
+      id: expect.any(Object),
+      status: expect.any(Object),
+      model: expect.any(Object),
+      outputUrl: expect.any(Object),
+    });
+  });
+
   it('handler calls httpClient with correct params', async () => {
     const tools = generateTools(operations, mockHttpClient);
 

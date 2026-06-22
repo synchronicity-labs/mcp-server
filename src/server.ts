@@ -52,6 +52,7 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
         title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema,
+        outputSchema: tool.outputSchema,
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
