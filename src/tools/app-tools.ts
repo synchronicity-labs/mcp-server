@@ -266,7 +266,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         'For "make this image/video say X" requests, pass `script` with a `voiceId` from voices_get-voices; do not call tts_create first. ' +
         'Pass URLs whenever you have them — set `audioUrl` to any public audio URL, and `videoUrl`/`imageUrl` to a hosted media URL. ' +
         'If media was uploaded to Sync first, pass `audioAssetId`, `videoAssetId`, or `imageAssetId`. ' +
-        'For files the user uploaded in chat, prefer calling upload-media first and pass the returned assetId here; direct `audio`/`video`/`image` file params are supported when a host invokes this tool with file params directly. ' +
+        'For files the user uploaded in chat, prefer calling upload-media first and pass the returned assetId here; direct `audio`/`video`/`image` file params are supported when a host invokes this tool with file params directly. If the user wants to choose a local image/audio file that is not attached yet, use open-upload-widget first. ' +
         'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — call generate_get-generation once with wait: true and timeout: 55, then read outputUrl. Copy signed outputUrl values exactly from the tool result; never reconstruct or shorten them. ' +
         'For advanced options (segments, speaker selection), use generate_create-generation.',
       inputSchema: {
