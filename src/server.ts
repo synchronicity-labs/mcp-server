@@ -19,6 +19,12 @@ const SERVER_INSTRUCTIONS =
   'For lipsync requests, prefer create-lipsync. If the user asks an image or video to say text, call voices_get-voices, then create-lipsync with script + voiceId and the image/video URL or Sync assetId. Do not call tts_create for that flow. If the user uploads media in chat, first call upload-media with the uploaded file field for each image/video/audio file, then pass the returned imageAssetId/videoAssetId/audioAssetId to create-lipsync. If the user provides a public media URL, pass it directly as imageUrl, videoUrl, or audioUrl. Poll generate_get-generation until COMPLETED and return outputUrl.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
+const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'upload-media',
+  'create-lipsync',
+  'voices_get-voices',
+  'generate_get-generation',
+]);
 
 export function createToolDescriptorMeta(
   meta: Record<string, unknown> | undefined,
@@ -61,6 +67,10 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
       },
     );
   }
+}
+
+export function selectHostedHttpTools(tools: McpToolDefinition[]): McpToolDefinition[] {
+  return tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name));
 }
 
 /**
@@ -123,7 +133,10 @@ export async function createMcpServerFactory(
   const operations = parseSpec(spec);
   log(`Discovered ${operations.length} API operations\n`);
 
-  const tools = [...createAppTools(httpClient), ...generateTools(operations, httpClient)];
+  const tools = selectHostedHttpTools([
+    ...createAppTools(httpClient),
+    ...generateTools(operations, httpClient),
+  ]);
 
   return {
     toolCount: tools.length,
