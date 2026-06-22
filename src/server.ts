@@ -28,6 +28,12 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'voices_get-voices',
   'generate_get-generation',
 ]);
+const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'upload-media',
+  'create-lipsync',
+  'voices_get-voices',
+  'generate_get-generation',
+]);
 
 export function createToolDescriptorMeta(
   meta: Record<string, unknown> | undefined,
@@ -76,7 +82,32 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
 }
 
 export function selectHostedHttpTools(tools: McpToolDefinition[]): McpToolDefinition[] {
-  return tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name));
+  return tools
+    .filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
+    .map((tool) => (WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool));
+}
+
+function exposeToolToWidget(tool: McpToolDefinition): McpToolDefinition {
+  const meta = tool.meta ?? {};
+  const ui = asRecord(meta.ui);
+  return {
+    ...tool,
+    meta: {
+      ...meta,
+      ui: {
+        ...ui,
+        visibility: ['model', 'app'],
+      },
+      'openai/widgetAccessible': true,
+    },
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
 }
 
 /**

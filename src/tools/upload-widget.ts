@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
-export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v1.html';
+export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v2.html';
 
 const UPLOAD_WIDGET_DESCRIPTION =
   'Select or upload media inside ChatGPT, stage it as a durable Sync asset, and report the assetId back into the conversation.';
@@ -249,27 +249,161 @@ export const UPLOAD_WIDGET_HTML = `
           }
         }
 
-        function assetIdFrom(value) {
-          if (!value || typeof value !== "object") return "";
-          if (typeof value.assetId === "string") return value.assetId;
-          if (typeof value.asset_id === "string") return value.asset_id;
-          if (value.structuredContent) {
-            var structuredAssetId = assetIdFrom(value.structuredContent);
-            if (structuredAssetId) return structuredAssetId;
-          }
+        function payloadFromToolResult(value) {
+          if (!value || typeof value !== "object") return value;
+          if (value.structuredContent) return value.structuredContent;
+          if (value.call_tool_result) return payloadFromToolResult(value.call_tool_result);
+          if (value.mcp_tool_result) return payloadFromToolResult(value.mcp_tool_result);
           if (Array.isArray(value.content)) {
             for (var i = 0; i < value.content.length; i += 1) {
               var item = value.content[i];
               if (item && item.type === "text" && typeof item.text === "string") {
                 var parsed = parseJson(item.text);
-                var parsedAssetId = assetIdFrom(parsed);
-                if (parsedAssetId) return parsedAssetId;
+                if (parsed) return parsed;
               }
             }
           }
-          if (value.call_tool_result) return assetIdFrom(value.call_tool_result);
-          if (value.mcp_tool_result) return assetIdFrom(value.mcp_tool_result);
+          return value;
+        }
+
+        function findStringByKeys(value, keys, depth) {
+          if (!value || typeof value !== "object" || depth > 8) return "";
+          for (var i = 0; i < keys.length; i += 1) {
+            var direct = value[keys[i]];
+            if (typeof direct === "string" && direct) return direct;
+          }
+          if (Array.isArray(value)) {
+            for (var a = 0; a < value.length; a += 1) {
+              var fromArray = findStringByKeys(value[a], keys, depth + 1);
+              if (fromArray) return fromArray;
+            }
+            return "";
+          }
+          var objectKeys = Object.keys(value);
+          for (var k = 0; k < objectKeys.length; k += 1) {
+            var fromObject = findStringByKeys(value[objectKeys[k]], keys, depth + 1);
+            if (fromObject) return fromObject;
+          }
           return "";
+        }
+
+        function assetIdFrom(value) {
+          return findStringByKeys(payloadFromToolResult(value), ["assetId", "asset_id"], 0);
+        }
+
+        function generationIdFrom(value) {
+          return findStringByKeys(payloadFromToolResult(value), ["id", "generationId", "generation_id"], 0);
+        }
+
+        function generationStatusFrom(value) {
+          return findStringByKeys(payloadFromToolResult(value), ["status", "state"], 0);
+        }
+
+        function outputUrlFrom(value) {
+          return findStringByKeys(payloadFromToolResult(value), ["outputUrl", "output_url"], 0);
+        }
+
+        function voiceFromToolResult(value) {
+          return findVoice(payloadFromToolResult(value), 0);
+        }
+
+        function findVoice(value, depth) {
+          if (!value || typeof value !== "object" || depth > 8) return null;
+          if (Array.isArray(value)) {
+            for (var i = 0; i < value.length; i += 1) {
+              var fromArray = findVoice(value[i], depth + 1);
+              if (fromArray) return fromArray;
+            }
+            return null;
+          }
+          if (typeof value.id === "string" && value.id) {
+            return {
+              id: value.id,
+              name: typeof value.name === "string" ? value.name : value.id,
+            };
+          }
+          var preferred = ["voices", "data", "items", "results"];
+          for (var p = 0; p < preferred.length; p += 1) {
+            var fromPreferred = findVoice(value[preferred[p]], depth + 1);
+            if (fromPreferred) return fromPreferred;
+          }
+          var keys = Object.keys(value);
+          for (var k = 0; k < keys.length; k += 1) {
+            var fromObject = findVoice(value[keys[k]], depth + 1);
+            if (fromObject) return fromObject;
+          }
+          return null;
+        }
+
+        function delay(ms) {
+          return new Promise(function (resolve) {
+            setTimeout(resolve, ms);
+          });
+        }
+
+        async function runLipsyncFlow(assetId, mediaType) {
+          if (!script || (mediaType !== "image" && mediaType !== "video")) return;
+
+          setStatus("Choosing voice", "Finding an available Sync voice.", {
+            assetId: assetId,
+            mediaType: mediaType,
+            script: script,
+          });
+          var voicesResult = await openai.callTool("voices_get-voices", {});
+          var voice = voiceFromToolResult(voicesResult);
+          if (!voice || !voice.id) {
+            throw new Error("No Sync voice id was returned.");
+          }
+
+          setStatus("Creating lipsync", voice.name || voice.id, {
+            assetId: assetId,
+            mediaType: mediaType,
+            script: script,
+            voiceId: voice.id,
+          });
+          var createArgs =
+            mediaType === "image"
+              ? { imageAssetId: assetId, script: script, voiceId: voice.id }
+              : { videoAssetId: assetId, script: script, voiceId: voice.id };
+          var createResult = await openai.callTool("create-lipsync", createArgs);
+          var generationId = generationIdFrom(createResult);
+          if (!generationId) {
+            throw new Error("Sync did not return a generation id.");
+          }
+
+          for (var attempt = 1; attempt <= 60; attempt += 1) {
+            setStatus("Generating", "Polling " + generationId + " (" + attempt + "/60)", {
+              assetId: assetId,
+              mediaType: mediaType,
+              script: script,
+              voiceId: voice.id,
+              generationId: generationId,
+            });
+            var generation = await openai.callTool("generate_get-generation", { id: generationId });
+            var statusText = generationStatusFrom(generation).toUpperCase();
+            var outputUrl = outputUrlFrom(generation);
+            if (statusText === "COMPLETED" || outputUrl) {
+              setStatus("Completed", outputUrl || generationId, {
+                assetId: assetId,
+                mediaType: mediaType,
+                script: script,
+                voiceId: voice.id,
+                generationId: generationId,
+                outputUrl: outputUrl,
+                modelContent:
+                  "Sync lipsync completed. generationId: " +
+                  generationId +
+                  (outputUrl ? "; outputUrl: " + outputUrl : ""),
+              });
+              return;
+            }
+            if (statusText === "FAILED" || statusText === "CANCELED" || statusText === "CANCELLED") {
+              throw new Error("Sync generation " + generationId + " ended with status " + statusText + ".");
+            }
+            await delay(5000);
+          }
+
+          throw new Error("Timed out polling Sync generation.");
         }
 
         async function getDownloadUrl(fileId) {
@@ -327,12 +461,7 @@ export const UPLOAD_WIDGET_HTML = `
           if (mediaType === "image") nextState.imageIds = [fileId];
           setStatus("Uploaded", assetField + " " + assetId, nextState);
 
-          if (openai && typeof openai.sendFollowUpMessage === "function") {
-            var prompt = script
-              ? "Continue the Sync lipsync request using " + assetField + " " + assetId + " and script " + JSON.stringify(script) + ". Call voices_get-voices, choose a suitable voiceId, call create-lipsync, then poll generate_get-generation until COMPLETED and return outputUrl."
-              : "The Sync upload is ready. mediaType: " + mediaType + "; assetId: " + assetId + ".";
-            await openai.sendFollowUpMessage({ prompt: prompt, scrollToBottom: true });
-          }
+          await runLipsyncFlow(assetId, mediaType);
         }
 
         async function chooseFromChatGpt() {

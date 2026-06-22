@@ -51,4 +51,28 @@ describe('selectHostedHttpTools', () => {
       'generate_get-generation',
     ]);
   });
+
+  it('marks hosted data tools callable from the upload widget', () => {
+    const tools = [
+      tool('open-upload-widget'),
+      tool('upload-media'),
+      tool('create-lipsync'),
+      tool('voices_get-voices'),
+      tool('generate_get-generation'),
+    ];
+
+    const selected = selectHostedHttpTools(tools);
+    const widgetCallableTools = selected.filter((t) => t.name !== 'open-upload-widget');
+
+    expect(widgetCallableTools.map((t) => t.name)).toEqual([
+      'upload-media',
+      'create-lipsync',
+      'voices_get-voices',
+      'generate_get-generation',
+    ]);
+    for (const selectedTool of widgetCallableTools) {
+      expect(selectedTool.meta?.['openai/widgetAccessible']).toBe(true);
+      expect(selectedTool.meta?.ui).toEqual({ visibility: ['model', 'app'] });
+    }
+  });
 });
