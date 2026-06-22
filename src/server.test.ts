@@ -34,6 +34,7 @@ describe('selectHostedHttpTools', () => {
   it('keeps only the lean ChatGPT lipsync flow tools in original order', () => {
     const tools = [
       tool('assets_create'),
+      tool('open-upload-widget'),
       tool('upload-media'),
       tool('create-lipsync'),
       tool('models_get'),
@@ -43,6 +44,7 @@ describe('selectHostedHttpTools', () => {
     ];
 
     expect(selectHostedHttpTools(tools).map((t) => t.name)).toEqual([
+      'open-upload-widget',
       'upload-media',
       'create-lipsync',
       'voices_get-voices',

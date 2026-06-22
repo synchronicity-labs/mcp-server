@@ -222,7 +222,9 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       meta: {
+        ui: { visibility: ['model', 'app'] },
         'openai/fileParams': ['file'],
+        'openai/widgetAccessible': true,
         'openai/toolInvocation/invoking': 'Uploading media to Sync…',
         'openai/toolInvocation/invoked': 'Media uploaded to Sync.',
       },

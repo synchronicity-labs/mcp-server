@@ -78,6 +78,7 @@ describe('createAppTools — create-lipsync', () => {
     const { uploadTool } = setup();
     expect(uploadTool.title).toBe('Upload media');
     expect(uploadTool.meta?.['openai/fileParams']).toEqual(['file']);
+    expect(uploadTool.meta?.['openai/widgetAccessible']).toBe(true);
     expect(uploadTool.annotations?.openWorldHint).toBe(true);
     expect(uploadTool.annotations?.readOnlyHint).toBe(false);
     expect(uploadTool.annotations?.destructiveHint).toBe(false);

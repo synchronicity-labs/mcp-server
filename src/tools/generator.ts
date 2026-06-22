@@ -1,10 +1,10 @@
-import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
 import { getOverride } from './overrides.js';
 
-export type McpToolDefinition = {
+type McpToolBaseDefinition = {
   name: string;
   title?: string;
   description: string;
@@ -13,8 +13,19 @@ export type McpToolDefinition = {
   // Tool-level metadata passed through to the MCP client (e.g. OpenAI's
   // `openai/fileParams` and invocation-status hints for ChatGPT apps).
   meta?: Record<string, unknown>;
+};
+
+type JsonMcpToolDefinition = McpToolBaseDefinition & {
+  resultFormat?: 'json';
   handler: (args: Record<string, unknown>) => Promise<unknown>;
 };
+
+type RawMcpToolDefinition = McpToolBaseDefinition & {
+  resultFormat: 'mcp';
+  handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
+};
+
+export type McpToolDefinition = JsonMcpToolDefinition | RawMcpToolDefinition;
 
 export function generateTools(
   operations: ParsedOperation[],
