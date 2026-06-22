@@ -61,6 +61,36 @@ describe('createJsonToolResult', () => {
       ],
     });
   });
+
+  it('projects structured content to output schema fields when provided', () => {
+    const result = {
+      id: 'gen-123',
+      status: 'COMPLETED',
+      input: [{ url: 'https://storage.example/private-input.mp4' }],
+      outputUrl: 'https://api.sync.so/result',
+    };
+    const expected = {
+      id: 'gen-123',
+      status: 'COMPLETED',
+      outputUrl: 'https://api.sync.so/result',
+    };
+
+    expect(
+      createJsonToolResult(result, {
+        id: {},
+        status: {},
+        outputUrl: {},
+      }),
+    ).toEqual({
+      structuredContent: expected,
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(expected, null, 2),
+        },
+      ],
+    });
+  });
 });
 
 describe('selectHostedHttpTools', () => {

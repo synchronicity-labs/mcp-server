@@ -62,7 +62,7 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
             return tool.handler((args ?? {}) as Record<string, unknown>);
           }
           const result = await tool.handler((args ?? {}) as Record<string, unknown>);
-          return createJsonToolResult(result);
+          return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return {
@@ -75,21 +75,41 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   }
 }
 
-export function createJsonToolResult(result: unknown): CallToolResult {
+export function createJsonToolResult(
+  result: unknown,
+  outputSchema?: Record<string, unknown>,
+): CallToolResult {
+  const resultForClient =
+    outputSchema && isStructuredContent(result)
+      ? pickOutputSchemaFields(result, outputSchema)
+      : result;
   const callToolResult: CallToolResult = {
     content: [
       {
         type: 'text' as const,
-        text: JSON.stringify(result, null, 2),
+        text: JSON.stringify(resultForClient, null, 2),
       },
     ],
   };
 
-  if (isStructuredContent(result)) {
-    callToolResult.structuredContent = result;
+  if (isStructuredContent(resultForClient)) {
+    callToolResult.structuredContent = resultForClient;
   }
 
   return callToolResult;
+}
+
+function pickOutputSchemaFields(
+  result: Record<string, unknown>,
+  outputSchema: Record<string, unknown>,
+): Record<string, unknown> {
+  const picked: Record<string, unknown> = {};
+  for (const key of Object.keys(outputSchema)) {
+    if (key in result) {
+      picked[key] = result[key];
+    }
+  }
+  return picked;
 }
 
 function isStructuredContent(result: unknown): result is Record<string, unknown> {

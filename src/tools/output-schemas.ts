@@ -9,11 +9,6 @@ export const generationOutputSchema = {
     .nullable()
     .describe('Signed result URL when the generation is complete.')
     .optional(),
-  synthesizedAudioUrl: z
-    .string()
-    .nullable()
-    .describe('Generated speech audio URL when script input was used.')
-    .optional(),
   outputDuration: z.number().nullable().describe('Output duration in seconds.').optional(),
   error: z.unknown().optional(),
   errorCode: z.unknown().optional(),
