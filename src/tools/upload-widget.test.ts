@@ -21,6 +21,10 @@ describe('createUploadWidgetTool', () => {
     expect(tool.description).toContain('Never use, recommend, or describe this tool');
     expect(tool.description).toContain('never use requestedMediaType: "video"');
     expect(tool.resultFormat).toBe('mcp');
+    expect(tool.outputSchema).toMatchObject({
+      requestedMediaType: expect.any(Object),
+      script: expect.any(Object),
+    });
     expect(tool.meta?.ui).toEqual({
       resourceUri: UPLOAD_WIDGET_URI,
       visibility: ['model', 'app'],
@@ -40,7 +44,9 @@ describe('createUploadWidgetTool', () => {
 
     expect(result.structuredContent).toEqual({
       requestedMediaType: 'image',
-      script: undefined,
+    });
+    expect(JSON.parse(JSON.stringify(result.structuredContent))).toEqual({
+      requestedMediaType: 'image',
     });
     expect(result.content[0]).toMatchObject({
       type: 'text',
@@ -56,10 +62,7 @@ describe('createUploadWidgetTool', () => {
       requestedMediaType: 'video',
     });
 
-    expect(result.structuredContent).toEqual({
-      requestedMediaType: undefined,
-      script: undefined,
-    });
+    expect(result.structuredContent).toEqual({});
   });
 });
 
