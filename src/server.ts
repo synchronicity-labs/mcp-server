@@ -61,14 +61,7 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
             return tool.handler((args ?? {}) as Record<string, unknown>);
           }
           const result = await tool.handler((args ?? {}) as Record<string, unknown>);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
+          return createJsonToolResult(result);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return {
@@ -79,6 +72,27 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
       },
     );
   }
+}
+
+export function createJsonToolResult(result: unknown): CallToolResult {
+  const callToolResult: CallToolResult = {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+
+  if (isStructuredContent(result)) {
+    callToolResult.structuredContent = result;
+  }
+
+  return callToolResult;
+}
+
+function isStructuredContent(result: unknown): result is Record<string, unknown> {
+  return result !== null && typeof result === 'object' && !Array.isArray(result);
 }
 
 export function selectHostedHttpTools(tools: McpToolDefinition[]): McpToolDefinition[] {
