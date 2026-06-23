@@ -26,6 +26,8 @@ const OAUTH_FORM_FIELDS = [
   'token',
   'token_type_hint',
 ] as const;
+const OPENAI_APPS_CHALLENGE_TOKEN =
+  process.env.OPENAI_APPS_CHALLENGE_TOKEN || 'npwmwee4nxi0N3Rm14jmmsldnkv27qSnU3mY5rFCc5E';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
@@ -119,6 +121,10 @@ export async function startHttpServer(
   // Health check (unauthenticated)
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  app.get('/.well-known/openai-apps-challenge', (_req, res) => {
+    res.type('text/plain').send(OPENAI_APPS_CHALLENGE_TOKEN);
   });
 
   // Favicon — proxy the Sync logo for connector branding
