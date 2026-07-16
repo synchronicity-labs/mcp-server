@@ -5,18 +5,31 @@ import { createAppTools } from './app-tools.js';
 describe('createAppTools — create-lipsync', () => {
   // Mock the asset pipeline + generation endpoints. /v2/assets returns a fresh
   // id per call so re-hosted inputs are distinguishable in the generate body.
-  function setup() {
+  function setup({ projects = [{ id: 'project-chatgpt', name: 'ChatGPT generations' }] } = {}) {
     let assetSeq = 0;
-    const request = vi.fn(async (_method: string, path: string, _options?: { body?: unknown }) => {
-      if (path === '/v2/assets/upload') {
-        return { uploadUrl: 'https://s3.example/put', url: 'https://cdn.sync.so/stored.bin' };
-      }
-      if (path === '/v2/assets') {
-        assetSeq += 1;
-        return { id: `asset-${assetSeq}` };
-      }
-      return { id: 'gen-1', status: 'PENDING' };
-    });
+    const request = vi.fn(
+      async (
+        method: string,
+        path: string,
+        options?: { query?: Record<string, string>; body?: unknown },
+      ) => {
+        if (path === '/v2/assets/upload') {
+          return { uploadUrl: 'https://s3.example/put', url: 'https://cdn.sync.so/stored.bin' };
+        }
+        if (path === '/v2/assets') {
+          assetSeq += 1;
+          return { id: `asset-${assetSeq}` };
+        }
+        if (method === 'get' && path === '/v2/projects') {
+          return { items: projects };
+        }
+        if (method === 'post' && path === '/v2/projects') {
+          const body = options?.body as { name?: string } | undefined;
+          return { id: 'project-created', name: body?.name ?? null };
+        }
+        return { id: 'gen-1', status: 'PENDING' };
+      },
+    );
     const httpClient: HttpClient = { request };
     const tools = createAppTools(httpClient);
     const uploadTool = tools.find((t) => t.name === 'upload-media');
@@ -51,7 +64,11 @@ describe('createAppTools — create-lipsync', () => {
   function lastGenerateBody(request: ReturnType<typeof setup>['request']) {
     const call = request.mock.calls.find((c) => c[1] === '/v2/generate');
     if (!call) throw new Error('POST /v2/generate was never called');
-    return (call[2] as { body: { model: string; input: Array<Record<string, unknown>> } }).body;
+    return (
+      call[2] as {
+        body: { model: string; input: Array<Record<string, unknown>>; projectId: string };
+      }
+    ).body;
   }
 
   function chatGptFile(
@@ -140,13 +157,71 @@ describe('createAppTools — create-lipsync', () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
       body: {
-        model: 'lipsync-2',
+        model: 'sync-3',
         input: [
           { type: 'video', url: 'https://x/v.mp4' },
           { type: 'audio', url: 'https://x/a.wav' },
         ],
+        projectId: 'project-chatgpt',
       },
     });
+  });
+
+  it('reuses the default ChatGPT project when it already exists', async () => {
+    const { tool, request } = setup();
+    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
+
+    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
+      query: {
+        searchQuery: 'ChatGPT generations',
+        sortBy: 'name',
+        limit: '100',
+      },
+    });
+    expect(
+      request.mock.calls.some(([method, path]) => method === 'post' && path === '/v2/projects'),
+    ).toBe(false);
+    expect(lastGenerateBody(request).projectId).toBe('project-chatgpt');
+  });
+
+  it('creates the default ChatGPT project when it does not exist', async () => {
+    const { tool, request } = setup({ projects: [] });
+    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
+
+    expect(request).toHaveBeenCalledWith('post', '/v2/projects', {
+      body: { name: 'ChatGPT generations' },
+    });
+    expect(lastGenerateBody(request).projectId).toBe('project-created');
+  });
+
+  it('reuses a user-requested project name instead of the ChatGPT default', async () => {
+    const { tool, request } = setup({
+      projects: [{ id: 'project-campaign', name: 'Campaign launch' }],
+    });
+    await tool.handler({
+      videoUrl: 'https://x/v.mp4',
+      audioUrl: 'https://x/a.wav',
+      projectName: 'Campaign launch',
+    });
+
+    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
+      query: { searchQuery: 'Campaign launch', sortBy: 'name', limit: '100' },
+    });
+    expect(lastGenerateBody(request).projectId).toBe('project-campaign');
+  });
+
+  it('creates a user-requested project name when it does not exist', async () => {
+    const { tool, request } = setup({ projects: [] });
+    await tool.handler({
+      videoUrl: 'https://x/v.mp4',
+      audioUrl: 'https://x/a.wav',
+      projectName: 'Campaign launch',
+    });
+
+    expect(request).toHaveBeenCalledWith('post', '/v2/projects', {
+      body: { name: 'Campaign launch' },
+    });
+    expect(lastGenerateBody(request).projectId).toBe('project-created');
   });
 
   it('chains a tts audioUrl with an uploaded image — re-hosts only the image', async () => {
@@ -189,6 +264,7 @@ describe('createAppTools — create-lipsync', () => {
             },
           },
         ],
+        projectId: 'project-chatgpt',
       },
     });
   });
@@ -216,6 +292,7 @@ describe('createAppTools — create-lipsync', () => {
             },
           },
         ],
+        projectId: 'project-chatgpt',
       },
     });
   });
@@ -232,7 +309,7 @@ describe('createAppTools — create-lipsync', () => {
     });
 
     const body = lastGenerateBody(request);
-    expect(body.model).toBe('lipsync-2');
+    expect(body.model).toBe('sync-3');
     expect(body.input[1]).toEqual({
       type: 'text',
       provider: {
@@ -265,7 +342,7 @@ describe('createAppTools — create-lipsync', () => {
 
     const body = lastGenerateBody(request);
     const [visual, audioItem] = body.input;
-    expect(body.model).toBe('lipsync-2');
+    expect(body.model).toBe('sync-3');
     expect(visual).toMatchObject({ type: 'video' });
     expect(visual?.assetId).toMatch(/^asset-/);
     expect(visual?.url).toBeUndefined();
