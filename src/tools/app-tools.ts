@@ -27,6 +27,11 @@ const DEFAULT_CONTENT_TYPE: Record<MediaKind, string> = {
   audio: 'audio/mpeg',
 };
 
+const DEFAULT_CHATGPT_PROJECT_NAME = 'ChatGPT generations';
+
+type ProjectSummary = { id: string; name: string | null };
+type ProjectsPage = { items: ProjectSummary[]; nextCursor?: string };
+
 // The host of a URL, for error messages — so a failure says *where* it tried to
 // reach, not just "fetch failed".
 function hostOf(url: string): string {
@@ -48,6 +53,20 @@ function reason(err: unknown): string {
   return String(err);
 }
 
+function validatedUploadUrl(file: FileInput, kind: MediaKind): string {
+  const src = file.download_url;
+  if (!src) {
+    throw new Error(`The uploaded ${kind} is missing its download_url.`);
+  }
+  if (!/^https?:\/\//i.test(src)) {
+    throw new Error(
+      `The uploaded ${kind} isn't a fetchable URL (received "${src.slice(0, 80)}"). ` +
+        `Pass a public ${kind} URL via ${kind}Url instead.`,
+    );
+  }
+  return src;
+}
+
 /**
  * Copy a user-uploaded file into Sync storage and return its durable assetId.
  *
@@ -67,19 +86,10 @@ async function rehostUpload(
   file: FileInput,
   kind: MediaKind,
 ): Promise<string> {
-  const src = file.download_url;
-  if (!src) {
-    throw new Error(`The uploaded ${kind} is missing its download_url.`);
-  }
   // A real upload is an http(s) URL we can fetch. A sandbox/local reference
   // (e.g. "sandbox:/mnt/data/...") can't be re-hosted — tell the caller to pass
   // a public URL instead, and echo the value so the cause is visible.
-  if (!/^https?:\/\//i.test(src)) {
-    throw new Error(
-      `The uploaded ${kind} isn't a fetchable URL (received "${src.slice(0, 80)}"). ` +
-        `Pass a public ${kind} URL via ${kind}Url instead.`,
-    );
-  }
+  const src = validatedUploadUrl(file, kind);
 
   // 1. Download the bytes from ChatGPT's temporary URL.
   let download: Response;
@@ -131,6 +141,19 @@ async function rehostUpload(
 // to reject malformed direct handler calls with a useful error.
 type MediaParam = string | FileInput | undefined;
 
+function assertValidFileParam(
+  kind: MediaKind,
+  fileParam: MediaParam,
+): asserts fileParam is FileInput | undefined {
+  if (typeof fileParam === 'string') {
+    throw new Error(
+      `Got a string in the ${kind} file slot ("${fileParam.slice(0, 80)}"). ` +
+        `Pass public URLs via ${kind}Url instead; file slots must be ChatGPT file objects.`,
+    );
+  }
+  if (fileParam) validatedUploadUrl(fileParam, kind);
+}
+
 function providedCount(...values: unknown[]): number {
   return values.filter(Boolean).length;
 }
@@ -141,6 +164,68 @@ function assertSingleSource(kind: MediaKind, count: number): void {
       `Provide only one ${kind} source — use either ${kind}Url, ${kind}AssetId, or the uploaded ${kind} file param.`,
     );
   }
+}
+
+function normalizedProjectName(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+async function findProjectIdByName(
+  httpClient: HttpClient,
+  projectName: string,
+): Promise<string | undefined> {
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+
+  do {
+    const result = (await httpClient.request('get', '/v2/projects', {
+      query: {
+        searchQuery: projectName,
+        sortBy: 'name',
+        limit: '100',
+        ...(cursor ? { cursor } : {}),
+      },
+    })) as ProjectsPage;
+
+    if (!Array.isArray(result?.items)) {
+      throw new Error('Sync returned an invalid projects list.');
+    }
+
+    const normalizedName = normalizedProjectName(projectName);
+    const existing = result.items.find(
+      (project) =>
+        typeof project.id === 'string' &&
+        typeof project.name === 'string' &&
+        normalizedProjectName(project.name) === normalizedName,
+    );
+    if (existing) return existing.id;
+
+    cursor = typeof result.nextCursor === 'string' ? result.nextCursor : undefined;
+    if (cursor && seenCursors.has(cursor)) {
+      throw new Error('Sync returned a repeated projects cursor.');
+    }
+    if (cursor) seenCursors.add(cursor);
+  } while (cursor);
+
+  return undefined;
+}
+
+async function getOrCreateProjectId(
+  httpClient: HttpClient,
+  requestedProjectName?: string,
+): Promise<string> {
+  const projectName = requestedProjectName?.trim() || DEFAULT_CHATGPT_PROJECT_NAME;
+  const existingProjectId = await findProjectIdByName(httpClient, projectName);
+  if (existingProjectId) return existingProjectId;
+
+  const created = (await httpClient.request('post', '/v2/projects', {
+    body: { name: projectName },
+  })) as { id?: unknown };
+  if (typeof created?.id !== 'string') {
+    throw new Error('Sync created a project without returning its id.');
+  }
+
+  return created.id;
 }
 
 async function uploadMediaAsset(
@@ -163,12 +248,7 @@ async function resolveMedia(
   // An explicit URL the model already holds (tts output, public/asset URL) wins.
   if (urlParam) return { type: kind, url: urlParam };
 
-  if (typeof fileParam === 'string') {
-    throw new Error(
-      `Got a string in the ${kind} file slot ("${fileParam.slice(0, 80)}"). ` +
-        `Pass public URLs via ${kind}Url instead; file slots must be ChatGPT file objects.`,
-    );
-  }
+  assertValidFileParam(kind, fileParam);
 
   if (fileParam) {
     return { type: kind, assetId: await rehostUpload(httpClient, fileParam, kind) };
@@ -263,6 +343,8 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
       title: 'Create lipsync',
       description:
         'Create a lipsync video from audio + EITHER a video or a still image (an image drives sync-3 image-to-video). ' +
+        'Defaults to sync-3 unless the user explicitly requests another model. ' +
+        `Generations are attached to an existing project with the requested projectName, or to "${DEFAULT_CHATGPT_PROJECT_NAME}" by default; if no matching project exists, it is created first. ` +
         'For "make this image/video say X" requests, pass `script` with a `voiceId` from voices_get-voices; do not call tts_create first. ' +
         'Pass URLs whenever you have them — set `audioUrl` to any public audio URL, and `videoUrl`/`imageUrl` to a hosted media URL. ' +
         'If media was uploaded to Sync first, pass `audioAssetId`, `videoAssetId`, or `imageAssetId`. ' +
@@ -339,7 +421,15 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
         model: z
           .string()
           .describe(
-            'Optional model override. Defaults to sync-3 for image input and lipsync-2 for video.',
+            'Set only when the user explicitly requests a model override. Otherwise omit it; image and video inputs default to sync-3.',
+          )
+          .optional(),
+        projectName: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            `Project to attach the generation to. Set this only when the user requests a specific project name; otherwise omit it to use "${DEFAULT_CHATGPT_PROJECT_NAME}". An existing project with the same name is reused, or a new one is created.`,
           )
           .optional(),
       },
@@ -367,6 +457,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           image,
           audio,
           model,
+          projectName,
         } = args as {
           videoUrl?: string;
           videoAssetId?: string;
@@ -383,6 +474,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           image?: MediaParam;
           audio?: MediaParam;
           model?: string;
+          projectName?: string;
         };
 
         // Validate the shape up front, before re-hosting any bytes.
@@ -418,6 +510,17 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           throw new Error('Provide either a video or an image, not both.');
         }
 
+        if (projectName !== undefined && !projectName.trim()) {
+          throw new Error('projectName must not be empty.');
+        }
+
+        // Reject malformed ChatGPT file params before making project or upload requests.
+        assertValidFileParam('video', video);
+        assertValidFileParam('image', image);
+        assertValidFileParam('audio', audio);
+
+        const projectId = await getOrCreateProjectId(httpClient, projectName);
+
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript
           ? {
@@ -435,13 +538,13 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image)
           : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video);
 
-        // Image-to-video is only supported by sync-3; default the model to match.
-        const resolvedModel = model ?? (hasImage ? 'sync-3' : 'lipsync-2');
+        const resolvedModel = model ?? 'sync-3';
 
         return httpClient.request('post', '/v2/generate', {
           body: {
             model: resolvedModel,
             input: [visual, driver],
+            projectId,
           },
         });
       },

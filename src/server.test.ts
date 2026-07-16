@@ -99,6 +99,13 @@ describe('createJsonToolResult', () => {
 });
 
 describe('SERVER_INSTRUCTIONS', () => {
+  it('defaults ChatGPT lipsync generations to sync-3 and a reusable project', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('defaults both image and video generations to sync-3');
+    expect(SERVER_INSTRUCTIONS).toContain('unless the user explicitly requests one');
+    expect(SERVER_INSTRUCTIONS).toContain('reuses or creates that named project');
+    expect(SERVER_INSTRUCTIONS).toContain('ChatGPT generations');
+  });
+
   it('forbids routing local video through the upload widget', () => {
     expect(SERVER_INSTRUCTIONS).toContain('open-upload-widget is image/audio only');
     expect(SERVER_INSTRUCTIONS).toContain('Never call, recommend, or describe open-upload-widget');
