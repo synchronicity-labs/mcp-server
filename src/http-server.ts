@@ -12,6 +12,7 @@ import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
+import { SessionRegistry } from './session-registry.js';
 
 const OAUTH_FORM_FIELDS = [
   'grant_type',
@@ -28,6 +29,51 @@ const OAUTH_FORM_FIELDS = [
 ] as const;
 const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN || 'npwmwee4nxi0N3Rm14jmmsldnkv27qSnU3mY5rFCc5E';
+const DEFAULT_SESSION_IDLE_TTL_MS = 30 * 60_000;
+const DEFAULT_MAX_SESSIONS = 1_000;
+const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 60_000;
+const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
+
+type SessionRuntimeConfig = {
+  idleTtlMs: number;
+  maxSessions: number;
+  sweepIntervalMs: number;
+  shutdownGraceMs: number;
+};
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function getSessionRuntimeConfig(
+  env: Record<string, string | undefined> = process.env,
+): SessionRuntimeConfig {
+  return {
+    idleTtlMs: positiveInteger(env.MCP_SESSION_IDLE_TTL_MS, DEFAULT_SESSION_IDLE_TTL_MS),
+    maxSessions: positiveInteger(env.MCP_MAX_SESSIONS, DEFAULT_MAX_SESSIONS),
+    sweepIntervalMs: positiveInteger(
+      env.MCP_SESSION_SWEEP_INTERVAL_MS,
+      DEFAULT_SESSION_SWEEP_INTERVAL_MS,
+    ),
+    shutdownGraceMs: positiveInteger(env.MCP_SHUTDOWN_GRACE_MS, DEFAULT_SHUTDOWN_GRACE_MS),
+  };
+}
+
+export async function runSessionSweepSafely(
+  sessions: { sweep: () => Promise<unknown> },
+  logTelemetry: () => void,
+  log: (message: string) => void,
+): Promise<void> {
+  try {
+    await sessions.sweep();
+  } catch (error) {
+    log(`MCP session sweep error: ${error instanceof Error ? error.stack : error}\n`);
+  } finally {
+    logTelemetry();
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
@@ -213,35 +259,105 @@ export async function startHttpServer(
   const bearerAuth = requireBearerAuth({ verifier: oauthProvider, resourceMetadataUrl });
   const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
 
-  // Per-session transports: MCP protocol requires stateful sessions since
-  // initialize and tools/list are separate requests on the same session.
-  const sessions = new Map<string, StreamableHTTPServerTransport>();
+  const sessionRuntimeConfig = getSessionRuntimeConfig();
   const sessionClientNames = new Map<string, string>();
+  const pendingTransports = new Set<StreamableHTTPServerTransport>();
+  const sessions = new SessionRegistry<StreamableHTTPServerTransport>({
+    idleTtlMs: sessionRuntimeConfig.idleTtlMs,
+    maxSessions: sessionRuntimeConfig.maxSessions,
+    onRemove: (sessionId) => sessionClientNames.delete(sessionId),
+    onCloseError: (error) => {
+      log(`MCP session close error: ${error instanceof Error ? error.stack : error}\n`);
+    },
+  });
+
+  const logRuntimeTelemetry = () => {
+    const memory = process.memoryUsage();
+    log(
+      `${JSON.stringify({
+        event: 'mcp_runtime',
+        pod: process.env.HOSTNAME,
+        uptimeSeconds: Math.round(process.uptime()),
+        sessions: sessions.stats(),
+        memory: {
+          rssBytes: memory.rss,
+          heapUsedBytes: memory.heapUsed,
+          heapTotalBytes: memory.heapTotal,
+          externalBytes: memory.external,
+        },
+      })}\n`,
+    );
+  };
+
+  let sweepRunning = false;
+  const sessionSweepInterval = setInterval(() => {
+    if (sweepRunning) return;
+    sweepRunning = true;
+    void runSessionSweepSafely(sessions, logRuntimeTelemetry, log).finally(() => {
+      sweepRunning = false;
+    });
+  }, sessionRuntimeConfig.sweepIntervalMs);
+  sessionSweepInterval.unref();
 
   // JSON body parsing for MCP requests
   app.use('/mcp', express.json());
 
+  let shuttingDown = false;
   app.all('/mcp', mcpRateLimit, bearerAuth, async (req, res) => {
     const token = req.auth?.token;
     if (!token) {
       res.status(401).json({ error: 'Missing auth token' });
       return;
     }
+    if (shuttingDown) {
+      res.setHeader('Retry-After', '10');
+      res.status(503).json({ error: 'MCP server is shutting down' });
+      return;
+    }
+
+    let reservation: ReturnType<typeof sessions.reserve>;
+    let lease: ReturnType<typeof sessions.acquire>;
+    let initializedSessionId: string | undefined;
+    let unregisteredTransport: StreamableHTTPServerTransport | undefined;
 
     try {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
       let transport: StreamableHTTPServerTransport;
 
-      if (sessionId && sessions.has(sessionId)) {
-        transport = sessions.get(sessionId)!;
-      } else if (!sessionId) {
+      if (sessionId) {
+        lease = sessions.acquire(sessionId);
+        if (!lease) {
+          res.status(404).json({ error: 'Session not found' });
+          return;
+        }
+        transport = lease.transport;
+      } else {
+        reservation = sessions.reserve();
+        if (!reservation) {
+          res.setHeader('Retry-After', '60');
+          res.status(503).json({ error: 'MCP session capacity reached' });
+          return;
+        }
+
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sessionId) => {
+            if (!reservation) {
+              throw new Error('MCP session initialized without a capacity reservation');
+            }
+            lease = reservation.commit(sessionId, transport);
+            reservation = undefined;
+            pendingTransports.delete(transport);
+            unregisteredTransport = undefined;
+            initializedSessionId = sessionId;
+          },
         });
+        pendingTransports.add(transport);
+        unregisteredTransport = transport;
         transport.onclose = () => {
+          pendingTransports.delete(transport);
           if (transport.sessionId) {
-            sessions.delete(transport.sessionId);
-            sessionClientNames.delete(transport.sessionId);
+            void sessions.remove(transport.sessionId, 'closed', false);
           }
         };
         const sessionServer = serverFactory.createServer();
@@ -252,9 +368,6 @@ export async function startHttpServer(
           }
         };
         await sessionServer.connect(transport);
-      } else {
-        res.status(404).json({ error: 'Session not found' });
-        return;
       }
 
       const clientName = transport.sessionId
@@ -262,20 +375,69 @@ export async function startHttpServer(
         : undefined;
       await runWithAuth(token, clientName, () => transport.handleRequest(req, res, req.body));
 
-      if (transport.sessionId && !sessions.has(transport.sessionId)) {
-        sessions.set(transport.sessionId, transport);
+      if (reservation) {
+        await transport.close();
+        unregisteredTransport = undefined;
       }
     } catch (error) {
+      if (initializedSessionId) {
+        await sessions.remove(initializedSessionId, 'closed');
+      } else if (unregisteredTransport) {
+        if (unregisteredTransport.sessionId) {
+          sessionClientNames.delete(unregisteredTransport.sessionId);
+        }
+        await unregisteredTransport.close().catch((closeError) => {
+          log(
+            `MCP session close error: ${closeError instanceof Error ? closeError.stack : closeError}\n`,
+          );
+        });
+      }
       log(`MCP handler error: ${error instanceof Error ? error.stack : error}\n`);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
       }
+    } finally {
+      lease?.release();
+      reservation?.release();
     }
   });
 
-  app.listen(config.port, () => {
+  const httpServer = app.listen(config.port, () => {
     log(`Sync MCP server listening on http://localhost:${config.port}\n`);
     log(`OAuth issuer: ${issuerUrl.toString()}\n`);
     log(`API base URL: ${config.baseUrl}\n`);
+    log(
+      `MCP session limits: ttl=${sessionRuntimeConfig.idleTtlMs}ms max=${sessionRuntimeConfig.maxSessions}\n`,
+    );
+    logRuntimeTelemetry();
   });
+
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    clearInterval(sessionSweepInterval);
+
+    // Stop admission first, then let requests and initializations already in progress drain.
+    httpServer.close();
+    httpServer.closeIdleConnections();
+    const deadline = Date.now() + sessionRuntimeConfig.shutdownGraceMs;
+    let runtimeStats = sessions.stats();
+    while ((runtimeStats.pending > 0 || runtimeStats.inFlight > 0) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      runtimeStats = sessions.stats();
+    }
+    if (runtimeStats.pending > 0 || runtimeStats.inFlight > 0) {
+      log(
+        `MCP shutdown grace expired: pending=${runtimeStats.pending} inFlight=${runtimeStats.inFlight}\n`,
+      );
+    }
+
+    // Freeze reservations before taking final snapshots so late initialization cannot escape cleanup.
+    sessions.stopAccepting();
+    await Promise.allSettled([...pendingTransports].map((transport) => transport.close()));
+    pendingTransports.clear();
+    await sessions.closeAll();
+  };
+  process.once('SIGTERM', () => void shutdown());
+  process.once('SIGINT', () => void shutdown());
 }
