@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import {
   createOAuthMetadata,
@@ -12,6 +13,7 @@ import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
+import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry } from './session-registry.js';
 
 const OAUTH_FORM_FIELDS = [
@@ -33,12 +35,15 @@ const DEFAULT_SESSION_IDLE_TTL_MS = 30 * 60_000;
 const DEFAULT_MAX_SESSIONS = 1_000;
 const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 60_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
+const DEFAULT_RUNTIME_TELEMETRY_INTERVAL_MS = 15_000;
+const MAX_REQUEST_ID_LENGTH = 128;
 
 type SessionRuntimeConfig = {
   idleTtlMs: number;
   maxSessions: number;
   sweepIntervalMs: number;
   shutdownGraceMs: number;
+  telemetryIntervalMs: number;
 };
 
 function positiveInteger(value: string | undefined, fallback: number): number {
@@ -58,21 +63,105 @@ export function getSessionRuntimeConfig(
       DEFAULT_SESSION_SWEEP_INTERVAL_MS,
     ),
     shutdownGraceMs: positiveInteger(env.MCP_SHUTDOWN_GRACE_MS, DEFAULT_SHUTDOWN_GRACE_MS),
+    telemetryIntervalMs: positiveInteger(
+      env.MCP_RUNTIME_TELEMETRY_INTERVAL_MS,
+      DEFAULT_RUNTIME_TELEMETRY_INTERVAL_MS,
+    ),
   };
 }
 
 export async function runSessionSweepSafely(
   sessions: { sweep: () => Promise<unknown> },
-  logTelemetry: () => void,
-  log: (message: string) => void,
+  logEvent: (event: string, details: Record<string, unknown>) => void,
 ): Promise<void> {
   try {
     await sessions.sweep();
   } catch (error) {
-    log(`MCP session sweep error: ${error instanceof Error ? error.stack : error}\n`);
-  } finally {
-    logTelemetry();
+    logEvent('mcp_session_sweep_error', { error: serializeError(error) });
   }
+}
+
+export function sanitizeDiagnosticUrl(value: string): string {
+  const url = new URL(value);
+  return `${url.origin}${url.pathname}`;
+}
+
+export function createRequestId(value: string | string[] | undefined): string {
+  const requestId = value?.toString();
+  return requestId && requestId.length <= MAX_REQUEST_ID_LENGTH ? requestId : randomUUID();
+}
+
+type HttpServerShutdownController = {
+  close: (callback: (error?: Error) => void) => unknown;
+  closeIdleConnections: () => void;
+  closeAllConnections: () => void;
+};
+
+export function closeHttpServerWithGrace(
+  httpServer: HttpServerShutdownController,
+  graceMs: number,
+): Promise<{ forced: boolean }> {
+  let closed = false;
+  let forced = false;
+  let forceTimer: NodeJS.Timeout | undefined;
+  const closing = new Promise<{ forced: boolean }>((resolve, reject) => {
+    httpServer.close((error) => {
+      closed = true;
+      if (forceTimer) clearTimeout(forceTimer);
+      if (error) reject(error);
+      else resolve({ forced });
+    });
+  });
+  httpServer.closeIdleConnections();
+  if (!closed) {
+    forceTimer = setTimeout(() => {
+      forced = true;
+      httpServer.closeAllConnections();
+    }, graceMs);
+    forceTimer.unref();
+  }
+  return closing;
+}
+
+export async function listenWithCleanup<T>(
+  listen: () => T,
+  waitForStartup: (server: T) => Promise<void>,
+  cleanup: () => void,
+): Promise<T> {
+  try {
+    const server = listen();
+    await waitForStartup(server);
+    return server;
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+}
+
+type HttpServerStartupEmitter = {
+  on: (event: 'error', listener: (error: Error) => void) => unknown;
+  once: (event: 'listening', listener: () => void) => unknown;
+};
+
+export function waitForHttpServerStartup(
+  httpServer: HttpServerStartupEmitter,
+  logEvent: (event: string, details: Record<string, unknown>) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let startupPending = true;
+    httpServer.on('error', (error) => {
+      logEvent('http_server_error', { error: serializeError(error) });
+      if (startupPending) {
+        startupPending = false;
+        reject(error);
+      }
+    });
+    httpServer.once('listening', () => {
+      if (!startupPending) return;
+      startupPending = false;
+      resolve();
+    });
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -132,6 +221,19 @@ export async function startHttpServer(
   const log = (message: string) => {
     process.stderr.write(message);
   };
+  const logEvent = (event: string, details: Record<string, unknown> = {}) => {
+    log(
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event,
+        pod: process.env.HOSTNAME,
+        revision:
+          process.env.PORTER_TAG ?? process.env.GIT_SHA ?? process.env.K_REVISION ?? 'unknown',
+        ...details,
+      })}\n`,
+    );
+  };
+  const requestMetrics = new HttpRequestMetrics();
 
   const app = express();
   app.set('trust proxy', 1);
@@ -156,11 +258,35 @@ export async function startHttpServer(
     }),
   );
 
-  // Request logging
+  // Structured request logging. Aggregate counters are also emitted in runtime heartbeats.
   app.use((req, res, next) => {
-    res.on('finish', () => {
-      log(`${req.method} ${req.url.split('?')[0]} → ${res.statusCode}\n`);
-    });
+    const requestId = createRequestId(req.headers['x-request-id']);
+    res.locals.requestId = requestId;
+    res.setHeader('x-request-id', requestId);
+    const startedAt = performance.now();
+    const finishMetrics = requestMetrics.start();
+    let recorded = false;
+    const record = (aborted: boolean) => {
+      if (recorded) return;
+      recorded = true;
+      const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+      finishMetrics({
+        statusCode: res.statusCode,
+        aborted,
+        responseDelivered: res.writableFinished,
+        durationMs,
+      });
+      logEvent('http_request', {
+        requestId,
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs,
+        aborted,
+      });
+    };
+    res.once('finish', () => record(false));
+    res.once('close', () => record(!res.writableFinished));
     next();
   });
 
@@ -211,7 +337,11 @@ export async function startHttpServer(
       if (contentType) res.setHeader('Content-Type', contentType);
       res.status(upstream.status).send(await upstream.text());
     } catch (error) {
-      log(`OAuth ${path} proxy error: ${error instanceof Error ? error.stack : error}\n`);
+      logEvent('oauth_proxy_error', {
+        requestId: res.locals.requestId,
+        oauthPath: path,
+        error: serializeError(error),
+      });
       if (!res.headersSent) {
         res.status(502).json({ error: 'OAuth upstream request failed' });
       }
@@ -267,33 +397,68 @@ export async function startHttpServer(
     maxSessions: sessionRuntimeConfig.maxSessions,
     onRemove: (sessionId) => sessionClientNames.delete(sessionId),
     onCloseError: (error) => {
-      log(`MCP session close error: ${error instanceof Error ? error.stack : error}\n`);
+      logEvent('mcp_session_close_error', { error: serializeError(error) });
     },
   });
 
+  const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
+  eventLoopDelay.enable();
   const logRuntimeTelemetry = () => {
     const memory = process.memoryUsage();
-    log(
-      `${JSON.stringify({
-        event: 'mcp_runtime',
-        pod: process.env.HOSTNAME,
-        uptimeSeconds: Math.round(process.uptime()),
-        sessions: sessions.stats(),
-        memory: {
-          rssBytes: memory.rss,
-          heapUsedBytes: memory.heapUsed,
-          heapTotalBytes: memory.heapTotal,
-          externalBytes: memory.external,
-        },
-      })}\n`,
-    );
+    const resourceUsage = process.resourceUsage();
+    const cpuUsage = process.cpuUsage();
+    const eventLoopSampleCount = Number(eventLoopDelay.count);
+    const eventLoop =
+      eventLoopSampleCount > 0
+        ? {
+            samples: eventLoopSampleCount,
+            minMs: Math.round((eventLoopDelay.min / 1e6) * 100) / 100,
+            meanMs: Math.round((eventLoopDelay.mean / 1e6) * 100) / 100,
+            p95Ms: Math.round((eventLoopDelay.percentile(95) / 1e6) * 100) / 100,
+            p99Ms: Math.round((eventLoopDelay.percentile(99) / 1e6) * 100) / 100,
+            maxMs: Math.round((eventLoopDelay.max / 1e6) * 100) / 100,
+          }
+        : { samples: 0 };
+    logEvent('mcp_runtime', {
+      pid: process.pid,
+      uptimeSeconds: Math.round(process.uptime()),
+      sessions: sessions.stats(),
+      pendingTransports: pendingTransports.size,
+      requests: requestMetrics.snapshot(),
+      memory: {
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        heapTotalBytes: memory.heapTotal,
+        externalBytes: memory.external,
+        arrayBuffersBytes: memory.arrayBuffers,
+      },
+      cpu: {
+        userMicros: cpuUsage.user,
+        systemMicros: cpuUsage.system,
+      },
+      resources: {
+        maxRssKb: resourceUsage.maxRSS,
+        voluntaryContextSwitches: resourceUsage.voluntaryContextSwitches,
+        involuntaryContextSwitches: resourceUsage.involuntaryContextSwitches,
+        fsRead: resourceUsage.fsRead,
+        fsWrite: resourceUsage.fsWrite,
+      },
+      eventLoop,
+    });
+    eventLoopDelay.reset();
   };
+
+  const runtimeTelemetryInterval = setInterval(
+    logRuntimeTelemetry,
+    sessionRuntimeConfig.telemetryIntervalMs,
+  );
+  runtimeTelemetryInterval.unref();
 
   let sweepRunning = false;
   const sessionSweepInterval = setInterval(() => {
     if (sweepRunning) return;
     sweepRunning = true;
-    void runSessionSweepSafely(sessions, logRuntimeTelemetry, log).finally(() => {
+    void runSessionSweepSafely(sessions, logEvent).finally(() => {
       sweepRunning = false;
     });
   }, sessionRuntimeConfig.sweepIntervalMs);
@@ -387,12 +552,13 @@ export async function startHttpServer(
           sessionClientNames.delete(unregisteredTransport.sessionId);
         }
         await unregisteredTransport.close().catch((closeError) => {
-          log(
-            `MCP session close error: ${closeError instanceof Error ? closeError.stack : closeError}\n`,
-          );
+          logEvent('mcp_session_close_error', { error: serializeError(closeError) });
         });
       }
-      log(`MCP handler error: ${error instanceof Error ? error.stack : error}\n`);
+      logEvent('mcp_handler_error', {
+        requestId: res.locals.requestId,
+        error: serializeError(error),
+      });
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
       }
@@ -402,24 +568,75 @@ export async function startHttpServer(
     }
   });
 
-  const httpServer = app.listen(config.port, () => {
-    log(`Sync MCP server listening on http://localhost:${config.port}\n`);
-    log(`OAuth issuer: ${issuerUrl.toString()}\n`);
-    log(`API base URL: ${config.baseUrl}\n`);
-    log(
-      `MCP session limits: ttl=${sessionRuntimeConfig.idleTtlMs}ms max=${sessionRuntimeConfig.maxSessions}\n`,
-    );
-    logRuntimeTelemetry();
+  const onUncaughtException = (error: Error, origin: NodeJS.UncaughtExceptionOrigin) => {
+    logEvent('process_uncaught_exception', { origin, error: serializeError(error) });
+  };
+  const onWarning = (warning: Error) => {
+    logEvent('process_warning', { error: serializeError(warning) });
+  };
+  const onExit = (code: number) => {
+    logEvent('process_exit', {
+      code,
+      uptimeSeconds: Math.round(process.uptime()),
+      sessions: sessions.stats(),
+      requests: requestMetrics.snapshot(),
+    });
+  };
+  process.on('uncaughtExceptionMonitor', onUncaughtException);
+  process.on('warning', onWarning);
+  process.once('exit', onExit);
+
+  logEvent('process_start', {
+    pid: process.pid,
+    nodeVersion: process.version,
+    sessionConfig: sessionRuntimeConfig,
   });
 
-  const shutdown = async () => {
+  const cleanupRuntimeResources = () => {
+    clearInterval(sessionSweepInterval);
+    clearInterval(runtimeTelemetryInterval);
+    eventLoopDelay.disable();
+    process.off('uncaughtExceptionMonitor', onUncaughtException);
+    process.off('warning', onWarning);
+    process.off('exit', onExit);
+  };
+  const httpServer = await listenWithCleanup(
+    () => app.listen(config.port),
+    async (server) => {
+      server.on('close', () => {
+        logEvent('http_server_closed');
+      });
+      await waitForHttpServerStartup(server, logEvent);
+    },
+    cleanupRuntimeResources,
+  );
+  logEvent('server_listening', {
+    port: config.port,
+    issuer: issuerUrl.origin,
+    apiBaseUrl: sanitizeDiagnosticUrl(config.baseUrl),
+    toolCount: serverFactory.toolCount,
+  });
+  logRuntimeTelemetry();
+
+  const shutdown = async (reason: 'SIGTERM' | 'SIGINT') => {
     if (shuttingDown) return;
     shuttingDown = true;
+    logEvent('shutdown_started', {
+      reason,
+      sessions: sessions.stats(),
+      pendingTransports: pendingTransports.size,
+      requests: requestMetrics.snapshot(),
+    });
+    logRuntimeTelemetry();
     clearInterval(sessionSweepInterval);
+    clearInterval(runtimeTelemetryInterval);
+    eventLoopDelay.disable();
 
     // Stop admission first, then let requests and initializations already in progress drain.
-    httpServer.close();
-    httpServer.closeIdleConnections();
+    const httpServerClosing = closeHttpServerWithGrace(
+      httpServer,
+      sessionRuntimeConfig.shutdownGraceMs,
+    );
     const deadline = Date.now() + sessionRuntimeConfig.shutdownGraceMs;
     let runtimeStats = sessions.stats();
     while ((runtimeStats.pending > 0 || runtimeStats.inFlight > 0) && Date.now() < deadline) {
@@ -427,9 +644,7 @@ export async function startHttpServer(
       runtimeStats = sessions.stats();
     }
     if (runtimeStats.pending > 0 || runtimeStats.inFlight > 0) {
-      log(
-        `MCP shutdown grace expired: pending=${runtimeStats.pending} inFlight=${runtimeStats.inFlight}\n`,
-      );
+      logEvent('shutdown_grace_expired', { sessions: runtimeStats });
     }
 
     // Freeze reservations before taking final snapshots so late initialization cannot escape cleanup.
@@ -437,7 +652,20 @@ export async function startHttpServer(
     await Promise.allSettled([...pendingTransports].map((transport) => transport.close()));
     pendingTransports.clear();
     await sessions.closeAll();
+    const httpServerClose = await httpServerClosing;
+    logEvent('shutdown_completed', {
+      reason,
+      forcedHttpConnectionsClosed: httpServerClose.forced,
+      sessions: sessions.stats(),
+      requests: requestMetrics.snapshot(),
+    });
   };
-  process.once('SIGTERM', () => void shutdown());
-  process.once('SIGINT', () => void shutdown());
+  const requestShutdown = (reason: 'SIGTERM' | 'SIGINT') => {
+    void shutdown(reason).catch((error) => {
+      logEvent('shutdown_error', { reason, error: serializeError(error) });
+      process.exitCode = 1;
+    });
+  };
+  process.once('SIGTERM', () => requestShutdown('SIGTERM'));
+  process.once('SIGINT', () => requestShutdown('SIGINT'));
 }

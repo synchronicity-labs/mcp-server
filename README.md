@@ -173,10 +173,13 @@ Options:
 | `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
 | `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `1800000` (30 min) |
 | `MCP_MAX_SESSIONS` | Maximum active and initializing HTTP sessions | `1000` |
-| `MCP_SESSION_SWEEP_INTERVAL_MS` | Interval for idle-session cleanup and runtime telemetry | `60000` (1 min) |
+| `MCP_SESSION_SWEEP_INTERVAL_MS` | Interval for idle-session cleanup | `60000` (1 min) |
 | `MCP_SHUTDOWN_GRACE_MS` | Time to drain active requests before forced shutdown cleanup | `10000` (10 sec) |
+| `MCP_RUNTIME_TELEMETRY_INTERVAL_MS` | Interval for structured memory, CPU, event-loop, session, and request telemetry | `15000` (15 sec) |
 
 HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. When capacity is exhausted, new session initialization returns `503` with `Retry-After`; existing sessions continue normally.
+
+The HTTP server writes newline-delimited JSON diagnostics to stderr. Lifecycle events distinguish graceful pod termination from abrupt process loss, request logs include latency and abort state, and `mcp_runtime` heartbeats include memory, CPU, event-loop delay, session totals, pending transports, and aggregate HTTP status counts.
 
 ## How It Works
 
