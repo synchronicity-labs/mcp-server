@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runWithAuth } from '../auth/async-context.js';
 import type { HttpClient } from '../http-client.js';
 import { createAppTools } from './app-tools.js';
 
@@ -85,8 +86,8 @@ describe('createAppTools — create-lipsync', () => {
   it('declares openai/fileParams for video, image + audio and is an open-world write', () => {
     const { tool } = setup();
     expect(tool.title).toBe('Create lipsync');
-    expect(tool.description).toContain('prefer calling upload-media first');
-    expect(tool.description).toContain('direct `audio`/`video`/`image` file params are supported');
+    expect(tool.description).toContain('exactly one visual input');
+    expect(tool.description).toContain('supported host file objects');
     expect(tool.meta?.['openai/fileParams']).toEqual(['video', 'image', 'audio']);
     expect(tool.outputSchema).toMatchObject({
       id: expect.any(Object),
@@ -96,7 +97,7 @@ describe('createAppTools — create-lipsync', () => {
     });
     expect(tool.annotations?.openWorldHint).toBe(true);
     expect(tool.annotations?.readOnlyHint).toBe(false);
-    expect(tool.annotations?.destructiveHint).toBe(false);
+    expect(tool.annotations?.destructiveHint).toBe(true);
   });
 
   it('declares upload-media as a file-param asset staging tool', () => {
@@ -112,7 +113,7 @@ describe('createAppTools — create-lipsync', () => {
     });
     expect(uploadTool.annotations?.openWorldHint).toBe(true);
     expect(uploadTool.annotations?.readOnlyHint).toBe(false);
-    expect(uploadTool.annotations?.destructiveHint).toBe(false);
+    expect(uploadTool.annotations?.destructiveHint).toBe(true);
   });
 
   it('uploads a ChatGPT file to a durable Sync asset', async () => {
@@ -192,6 +193,25 @@ describe('createAppTools — create-lipsync', () => {
       body: { name: 'ChatGPT generations' },
     });
     expect(lastGenerateBody(request).projectId).toBe('project-created');
+  });
+
+  it('uses a Claude-specific default project for Claude clients', async () => {
+    const { tool, request } = setup({
+      projects: [{ id: 'project-claude', name: 'Claude generations' }],
+    });
+
+    await runWithAuth('token', 'claude-ai', () =>
+      tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' }),
+    );
+
+    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
+      query: {
+        searchQuery: 'Claude generations',
+        sortBy: 'name',
+        limit: '100',
+      },
+    });
+    expect(lastGenerateBody(request).projectId).toBe('project-claude');
   });
 
   it('reuses a user-requested project name instead of the ChatGPT default', async () => {

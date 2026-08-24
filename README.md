@@ -245,6 +245,7 @@ To test the HTTP transport (OAuth flow) locally:
 
 ## Learn More
 
+- [Claude directory readiness](docs/claude-directory-readiness.md) — Review checklist and remaining submission work
 - [Sync Documentation](https://sync.so/docs) — Full API reference and guides
 - [Sync API Reference](https://sync.so/docs/api-reference) — Endpoint documentation
 - [MCP Protocol](https://modelcontextprotocol.io) — Learn about the Model Context Protocol

@@ -99,18 +99,18 @@ describe('createJsonToolResult', () => {
 });
 
 describe('SERVER_INSTRUCTIONS', () => {
-  it('defaults ChatGPT lipsync generations to sync-3 and a reusable project', () => {
-    expect(SERVER_INSTRUCTIONS).toContain('defaults both image and video generations to sync-3');
-    expect(SERVER_INSTRUCTIONS).toContain('unless the user explicitly requests one');
-    expect(SERVER_INSTRUCTIONS).toContain('reuses or creates that named project');
-    expect(SERVER_INSTRUCTIONS).toContain('ChatGPT generations');
+  it('documents the concise lipsync input contract and defaults', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('exactly one visual input');
+    expect(SERVER_INSTRUCTIONS).toContain('one driver');
+    expect(SERVER_INSTRUCTIONS).toContain('defaults to sync-3');
+    expect(SERVER_INSTRUCTIONS).toContain('integration-specific project');
   });
 
-  it('forbids routing local video through the upload widget', () => {
-    expect(SERVER_INSTRUCTIONS).toContain('open-upload-widget is image/audio only');
-    expect(SERVER_INSTRUCTIONS).toContain('Never call, recommend, or describe open-upload-widget');
-    expect(SERVER_INSTRUCTIONS).toContain('Never mention requestedMediaType: "video"');
-    expect(SERVER_INSTRUCTIONS).toContain('attaching the video to the ChatGPT composer');
+  it('states the upload widget limits without coercive tool instructions', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('accepts local images and audio in ChatGPT');
+    expect(SERVER_INSTRUCTIONS).toContain('but not video');
+    expect(SERVER_INSTRUCTIONS).not.toContain('Never');
+    expect(SERVER_INSTRUCTIONS).not.toContain('Do not call');
   });
 });
 

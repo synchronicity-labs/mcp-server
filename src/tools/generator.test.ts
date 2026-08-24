@@ -17,7 +17,7 @@ describe('deriveAnnotations', () => {
     });
     expect(deriveAnnotations('post')).toEqual({
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       openWorldHint: true,
     });
   });
