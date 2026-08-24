@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runWithAuth } from '../auth/async-context.js';
-import type { HttpClient } from '../http-client.js';
+import { type HttpClient, setStaticClientName } from '../http-client.js';
 import { createAppTools } from './app-tools.js';
 
 describe('createAppTools — create-lipsync', () => {
@@ -60,6 +60,7 @@ describe('createAppTools — create-lipsync', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    setStaticClientName(undefined);
   });
 
   function lastGenerateBody(request: ReturnType<typeof setup>['request']) {
@@ -203,6 +204,24 @@ describe('createAppTools — create-lipsync', () => {
     await runWithAuth('token', 'claude-ai', () =>
       tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' }),
     );
+
+    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
+      query: {
+        searchQuery: 'Claude generations',
+        sortBy: 'name',
+        limit: '100',
+      },
+    });
+    expect(lastGenerateBody(request).projectId).toBe('project-claude');
+  });
+
+  it('uses a Claude-specific default project for Claude stdio clients', async () => {
+    const { tool, request } = setup({
+      projects: [{ id: 'project-claude', name: 'Claude generations' }],
+    });
+    setStaticClientName('claude');
+
+    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
 
     expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
       query: {

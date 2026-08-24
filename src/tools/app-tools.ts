@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { getClientName } from '../auth/async-context.js';
-import type { HttpClient } from '../http-client.js';
+import { getEffectiveClientName, type HttpClient } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 
@@ -173,7 +172,7 @@ function normalizedProjectName(name: string): string {
 }
 
 function defaultProjectName(): string {
-  const clientName = getClientName()?.toLocaleLowerCase();
+  const clientName = getEffectiveClientName()?.toLocaleLowerCase();
   return clientName?.includes('claude')
     ? DEFAULT_CLAUDE_PROJECT_NAME
     : DEFAULT_CHATGPT_PROJECT_NAME;

@@ -3,8 +3,12 @@ import { getAuthToken, getClientName } from './auth/async-context.js';
 // Fallback client name for stdio transport (single session, no AsyncLocalStorage)
 let staticClientName: string | undefined;
 
-export function setStaticClientName(name: string): void {
+export function setStaticClientName(name: string | undefined): void {
   staticClientName = name;
+}
+
+export function getEffectiveClientName(): string | undefined {
+  return getClientName() ?? staticClientName;
 }
 
 /**
@@ -69,7 +73,7 @@ export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders
         ? { Authorization: `Bearer ${perRequestToken}` }
         : { ...staticAuthHeaders };
 
-      const clientName = getClientName() ?? staticClientName;
+      const clientName = getEffectiveClientName();
       const syncSource = resolveSyncSource(clientName);
 
       const headers: Record<string, string> = {
