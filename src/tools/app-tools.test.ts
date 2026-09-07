@@ -1,11 +1,26 @@
+import { readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../http-client.js';
+import { UploadRuntime } from '../upload-runtime.js';
 import { createAppTools } from './app-tools.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, rm: vi.fn(actual.rm) };
+});
 
 describe('createAppTools — create-lipsync', () => {
   // Mock the asset pipeline + generation endpoints. /v2/assets returns a fresh
   // id per call so re-hosted inputs are distinguishable in the generate body.
-  function setup({ projects = [{ id: 'project-chatgpt', name: 'ChatGPT generations' }] } = {}) {
+  function setup({
+    projects = [{ id: 'project-chatgpt', name: 'ChatGPT generations' }],
+    runtime,
+  }: {
+    projects?: Array<{ id: string; name: string | null }>;
+    runtime?: UploadRuntime;
+  } = {}) {
     let assetSeq = 0;
     const request = vi.fn(
       async (
@@ -31,7 +46,7 @@ describe('createAppTools — create-lipsync', () => {
       },
     );
     const httpClient: HttpClient = { request };
-    const tools = createAppTools(httpClient);
+    const tools = createAppTools(httpClient, runtime);
     const uploadTool = tools.find((t) => t.name === 'upload-media');
     const tool = tools.find((t) => t.name === 'create-lipsync');
     if (!uploadTool) throw new Error('upload-media tool not found');
@@ -43,15 +58,22 @@ describe('createAppTools — create-lipsync', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_url: string, init?: { method?: string }) => {
+      vi.fn(async (_url: string, init?: { method?: string; body?: AsyncIterable<Uint8Array> }) => {
         if (init?.method === 'PUT') {
+          if (init.body) {
+            for await (const _chunk of init.body) {
+              // Drain the streamed upload like a real fetch implementation.
+            }
+          }
           return { ok: true, status: 200 };
         }
         return {
           ok: true,
           status: 200,
-          headers: { get: () => 'video/mp4' },
-          arrayBuffer: async () => new ArrayBuffer(8),
+          headers: {
+            get: (name: string) => (name === 'content-length' ? '8' : 'video/mp4'),
+          },
+          body: Readable.toWeb(Readable.from([new Uint8Array(8)])),
         };
       }),
     );
@@ -125,9 +147,12 @@ describe('createAppTools — create-lipsync', () => {
       }),
     });
 
-    expect(fetch).toHaveBeenNthCalledWith(1, 'https://files.oai/face.png');
+    expect(fetch).toHaveBeenNthCalledWith(1, 'https://files.oai/face.png', {
+      signal: expect.any(Object),
+    });
     expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
       body: { url: 'https://cdn.sync.so/stored.bin', type: 'IMAGE' },
+      signal: expect.any(Object),
     });
     expect(result).toEqual({
       assetId: 'asset-1',
@@ -135,6 +160,310 @@ describe('createAppTools — create-lipsync', () => {
       assetType: 'IMAGE',
       input: { type: 'image', assetId: 'asset-1' },
     });
+  });
+
+  it.each([
+    false,
+    true,
+  ])('preserves the primary upload outcome when cleanup fails (upload fails: %s)', async (uploadFails) => {
+    const runtime = new UploadRuntime();
+    const { uploadTool, request } = setup({ runtime });
+    const primaryError = new Error('asset registration failed');
+    if (uploadFails) {
+      request.mockResolvedValueOnce({
+        uploadUrl: 'https://s3.example/put',
+        url: 'https://cdn.sync.so/stored.bin',
+      });
+      request.mockRejectedValueOnce(primaryError);
+    }
+    const remove = vi.mocked(rm);
+    remove.mockClear();
+    remove.mockRejectedValueOnce(new Error('sensitive cleanup path must not be logged'));
+    try {
+      const result = uploadTool.handler({
+        mediaType: 'video',
+        file: chatGptFile('https://files.oai/video.mp4'),
+      });
+      if (uploadFails) {
+        await expect(result).rejects.toBe(primaryError);
+      } else {
+        await expect(result).resolves.toMatchObject({ assetId: 'asset-1' });
+      }
+      expect(remove).toHaveBeenCalledExactlyOnceWith(expect.any(String), {
+        recursive: true,
+        force: true,
+      });
+      expect(runtime.snapshot()).toMatchObject({
+        active: 0,
+        completed: uploadFails ? 0 : 1,
+        failed: uploadFails ? 1 : 0,
+        cleanupFailures: 1,
+      });
+    } finally {
+      const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+      for (const [path, options] of remove.mock.calls) await actual.rm(path, options);
+      remove.mockReset();
+      remove.mockImplementation(actual.rm);
+    }
+  });
+
+  it('streams a large upload without buffering it through arrayBuffer', async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    let uploadedBytes = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: { method?: string; body?: AsyncIterable<Uint8Array> }) => {
+        if (init?.method === 'PUT') {
+          if (!init.body) throw new Error('missing upload body');
+          for await (const value of init.body) {
+            uploadedBytes += value.byteLength;
+          }
+          return { ok: true, status: 200 };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) =>
+              name === 'content-length' ? `${chunk.byteLength * 3}` : 'video/mp4',
+          },
+          body: Readable.toWeb(Readable.from([chunk, chunk, chunk])),
+        };
+      }),
+    );
+    const { uploadTool, request } = setup();
+
+    await uploadTool.handler({
+      mediaType: 'video',
+      file: chatGptFile('https://files.oai/large.mp4'),
+    });
+
+    expect(uploadedBytes).toBe(chunk.byteLength * 3);
+    expect(request).toHaveBeenCalledWith('post', '/v2/assets/upload', {
+      body: {
+        fileName: 'chatgpt-upload-video',
+        contentType: 'video/mp4',
+        size: chunk.byteLength * 3,
+      },
+      signal: expect.any(Object),
+    });
+  });
+
+  it('streams an upload with unknown content length and measures its actual size', async () => {
+    const chunks = [new Uint8Array(3), new Uint8Array(5)];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: { method?: string; body?: AsyncIterable<Uint8Array> }) => {
+        if (init?.method === 'PUT') {
+          if (init.body) for await (const _chunk of init.body) void _chunk;
+          return { ok: true, status: 200 };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (name: string) => (name === 'content-type' ? 'audio/wav' : null) },
+          body: Readable.toWeb(Readable.from(chunks)),
+        };
+      }),
+    );
+    const { uploadTool, request } = setup();
+
+    await uploadTool.handler({
+      mediaType: 'audio',
+      file: chatGptFile('https://files.oai/voice.wav'),
+    });
+
+    expect(request).toHaveBeenCalledWith('post', '/v2/assets/upload', {
+      body: { fileName: 'chatgpt-upload-audio', contentType: 'audio/wav', size: 8 },
+      signal: expect.any(Object),
+    });
+  });
+
+  it('rejects an oversized declared content length before reading the body', async () => {
+    let bodyRead = false;
+    const runtime = new UploadRuntime({
+      maxBytes: 8,
+      maxConcurrent: 1,
+      maxQueued: 0,
+      retryAfterMs: 1_000,
+      timeoutMs: 10_000,
+    });
+    const source = Readable.from(
+      (async function* () {
+        bodyRead = true;
+        yield new Uint8Array(9);
+      })(),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: (name: string) => (name === 'content-length' ? '9' : 'video/mp4') },
+        body: Readable.toWeb(source),
+      })),
+    );
+    const { uploadTool, request } = setup({ runtime });
+
+    await expect(
+      uploadTool.handler({
+        mediaType: 'video',
+        file: chatGptFile('https://files.oai/oversized.mp4'),
+      }),
+    ).rejects.toThrow(/too large/);
+
+    expect(bodyRead).toBe(false);
+    expect(source.destroyed).toBe(true);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized streamed body and removes its temporary file', async () => {
+    const before = new Set(
+      (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-')),
+    );
+    const runtime = new UploadRuntime({
+      maxBytes: 8,
+      maxConcurrent: 1,
+      maxQueued: 0,
+      retryAfterMs: 1_000,
+      timeoutMs: 10_000,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        body: Readable.toWeb(Readable.from([new Uint8Array(6), new Uint8Array(6)])),
+      })),
+    );
+    const { uploadTool, request } = setup({ runtime });
+
+    await expect(
+      uploadTool.handler({
+        mediaType: 'video',
+        file: chatGptFile('https://files.oai/unknown-size.mp4'),
+      }),
+    ).rejects.toThrow(/too large/);
+
+    const after = (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-'));
+    expect(after.filter((entry) => !before.has(entry))).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('rejects a streamed body that does not match its declared size', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: (name: string) => (name === 'content-length' ? '8' : 'image/png') },
+        body: Readable.toWeb(Readable.from([new Uint8Array(7)])),
+      })),
+    );
+    const { uploadTool, request } = setup();
+
+    await expect(
+      uploadTool.handler({
+        mediaType: 'image',
+        file: chatGptFile('https://files.oai/truncated.png'),
+      }),
+    ).rejects.toThrow(/expected 8, received 7/);
+
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'gzip',
+    'x-gzip',
+    'gzip, br',
+  ])('accepts decoded %s content whose encoded Content-Length differs', async (contentEncoding: string) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: { method?: string; body?: AsyncIterable<Uint8Array> }) => {
+        if (init?.method === 'PUT') {
+          if (init.body) for await (const _chunk of init.body) void _chunk;
+          return new Response(null, { status: 200 });
+        }
+        return new Response(new Uint8Array(100), {
+          headers: { 'content-encoding': contentEncoding, 'content-length': '24' },
+        });
+      }),
+    );
+    const { uploadTool, request } = setup();
+
+    await expect(
+      uploadTool.handler({
+        mediaType: 'image',
+        file: chatGptFile('https://files.oai/compressed.png'),
+      }),
+    ).resolves.toMatchObject({ assetId: 'asset-1' });
+    expect(request).toHaveBeenCalledWith('post', '/v2/assets/upload', {
+      body: expect.objectContaining({ size: 100 }),
+      signal: expect.any(Object),
+    });
+  });
+
+  it('disposes an early rejected storage response before releasing capacity', async () => {
+    let responseCancelled = false;
+    let putBody: Readable | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: { method?: string; body?: AsyncIterable<Uint8Array> }) => {
+        if (init?.method === 'PUT') {
+          putBody = init.body as Readable;
+          return new Response(
+            new ReadableStream({
+              cancel() {
+                responseCancelled = true;
+              },
+            }),
+            { status: 403 },
+          );
+        }
+        return new Response(new Uint8Array(8), { headers: { 'content-length': '8' } });
+      }),
+    );
+    const { uploadTool } = setup();
+
+    await expect(
+      uploadTool.handler({
+        mediaType: 'image',
+        file: chatGptFile('https://files.oai/rejected.png'),
+      }),
+    ).rejects.toThrow(/HTTP 403/);
+
+    expect(responseCancelled).toBe(true);
+    expect(putBody?.destroyed).toBe(true);
+  });
+
+  it('removes its temporary file when the storage upload fails', async () => {
+    const before = new Set(
+      (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-')),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: { method?: string }) => {
+        if (init?.method === 'PUT') throw new Error('storage connection reset');
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (name: string) => (name === 'content-length' ? '4' : 'image/png') },
+          body: Readable.toWeb(Readable.from([new Uint8Array(4)])),
+        };
+      }),
+    );
+    const { uploadTool } = setup();
+
+    await expect(
+      uploadTool.handler({
+        mediaType: 'image',
+        file: chatGptFile('https://files.oai/face.png'),
+      }),
+    ).rejects.toThrow(/storage connection reset/);
+
+    const after = (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-'));
+    expect(after.filter((entry) => !before.has(entry))).toEqual([]);
   });
 
   it('rejects a URL string passed to upload-media file with a clear message', async () => {
@@ -234,6 +563,7 @@ describe('createAppTools — create-lipsync', () => {
     // The uploaded image is re-hosted; the tts URL is used verbatim.
     expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
       body: { url: 'https://cdn.sync.so/stored.bin', type: 'IMAGE' },
+      signal: expect.any(Object),
     });
     const body = lastGenerateBody(request);
     expect(body.model).toBe('sync-3');
@@ -332,12 +662,15 @@ describe('createAppTools — create-lipsync', () => {
     // upload-url requested with the byte size, then registered as the right type
     expect(request).toHaveBeenCalledWith('post', '/v2/assets/upload', {
       body: { fileName: 'chatgpt-upload-video', contentType: 'video/mp4', size: 8 },
+      signal: expect.any(Object),
     });
     expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
       body: { url: 'https://cdn.sync.so/stored.bin', type: 'VIDEO' },
+      signal: expect.any(Object),
     });
     expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
       body: { url: 'https://cdn.sync.so/stored.bin', type: 'AUDIO' },
+      signal: expect.any(Object),
     });
 
     const body = lastGenerateBody(request);

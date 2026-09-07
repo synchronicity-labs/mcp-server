@@ -40,6 +40,7 @@ export type HttpClient = {
       query?: Record<string, string>;
       body?: unknown;
       headers?: Record<string, string>;
+      signal?: AbortSignal;
     },
   ) => Promise<unknown>;
 };
@@ -86,6 +87,7 @@ export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders
         method: method.toUpperCase(),
         headers,
         body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: options.signal,
       });
 
       const text = await response.text();
