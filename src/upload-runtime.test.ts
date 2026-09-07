@@ -60,6 +60,7 @@ describe('upload runtime', () => {
       rejected: 1,
       completed: 2,
       failed: 0,
+      cleanupFailures: 0,
       downloadedBytes: 0,
       uploadedBytes: 0,
     });

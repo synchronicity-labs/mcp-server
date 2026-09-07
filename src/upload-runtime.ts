@@ -12,6 +12,7 @@ export type UploadRuntimeStats = {
   rejected: number;
   completed: number;
   failed: number;
+  cleanupFailures: number;
   downloadedBytes: number;
   uploadedBytes: number;
 };
@@ -80,6 +81,7 @@ export class UploadRuntime {
     rejected: 0,
     completed: 0,
     failed: 0,
+    cleanupFailures: 0,
     downloadedBytes: 0,
     uploadedBytes: 0,
   };
@@ -126,6 +128,10 @@ export class UploadRuntime {
 
   recordUploadedBytes(bytes: number): void {
     this.#stats.uploadedBytes += bytes;
+  }
+
+  recordCleanupFailure(): void {
+    this.#stats.cleanupFailures += 1;
   }
 
   snapshot(): UploadRuntimeStats {

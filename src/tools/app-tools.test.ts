@@ -1,10 +1,15 @@
-import { readdir } from 'node:fs/promises';
+import { readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../http-client.js';
 import { UploadRuntime } from '../upload-runtime.js';
 import { createAppTools } from './app-tools.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, rm: vi.fn(actual.rm) };
+});
 
 describe('createAppTools — create-lipsync', () => {
   // Mock the asset pipeline + generation endpoints. /v2/assets returns a fresh
@@ -155,6 +160,51 @@ describe('createAppTools — create-lipsync', () => {
       assetType: 'IMAGE',
       input: { type: 'image', assetId: 'asset-1' },
     });
+  });
+
+  it.each([
+    false,
+    true,
+  ])('preserves the primary upload outcome when cleanup fails (upload fails: %s)', async (uploadFails) => {
+    const runtime = new UploadRuntime();
+    const { uploadTool, request } = setup({ runtime });
+    const primaryError = new Error('asset registration failed');
+    if (uploadFails) {
+      request.mockResolvedValueOnce({
+        uploadUrl: 'https://s3.example/put',
+        url: 'https://cdn.sync.so/stored.bin',
+      });
+      request.mockRejectedValueOnce(primaryError);
+    }
+    const remove = vi.mocked(rm);
+    remove.mockClear();
+    remove.mockRejectedValueOnce(new Error('sensitive cleanup path must not be logged'));
+    try {
+      const result = uploadTool.handler({
+        mediaType: 'video',
+        file: chatGptFile('https://files.oai/video.mp4'),
+      });
+      if (uploadFails) {
+        await expect(result).rejects.toBe(primaryError);
+      } else {
+        await expect(result).resolves.toMatchObject({ assetId: 'asset-1' });
+      }
+      expect(remove).toHaveBeenCalledExactlyOnceWith(expect.any(String), {
+        recursive: true,
+        force: true,
+      });
+      expect(runtime.snapshot()).toMatchObject({
+        active: 0,
+        completed: uploadFails ? 0 : 1,
+        failed: uploadFails ? 1 : 0,
+        cleanupFailures: 1,
+      });
+    } finally {
+      const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+      for (const [path, options] of remove.mock.calls) await actual.rm(path, options);
+      remove.mockReset();
+      remove.mockImplementation(actual.rm);
+    }
   });
 
   it('streams a large upload without buffering it through arrayBuffer', async () => {

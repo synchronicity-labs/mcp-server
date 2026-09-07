@@ -227,7 +227,15 @@ async function rehostUpload(
     uploadBody?.destroy();
     if (put) await cancelResponseBody(put);
     if (!downloadPipelineStarted) await cancelResponseBody(download);
-    if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true });
+    if (tempDirectory) {
+      try {
+        await rm(tempDirectory, { recursive: true, force: true });
+      } catch {
+        // Cleanup must not replace a durable asset ID or the primary upload error.
+        // Count failures without exposing local paths or sensitive error details.
+        runtime.recordCleanupFailure();
+      }
+    }
   }
 }
 
