@@ -64,15 +64,42 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
           const result = await tool.handler((args ?? {}) as Record<string, unknown>);
           return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return {
-            content: [{ type: 'text' as const, text: `Error: ${message}` }],
-            isError: true,
-          };
+          return createToolErrorResult(error);
         }
       },
     );
   }
+}
+
+export function createToolErrorResult(error: unknown): CallToolResult {
+  const message = error instanceof Error ? error.message : String(error);
+  const retryableError =
+    error && typeof error === 'object'
+      ? (error as { code?: unknown; retryable?: unknown; retryAfterMs?: unknown })
+      : {};
+  if (
+    typeof retryableError.code === 'string' &&
+    retryableError.retryable === true &&
+    typeof retryableError.retryAfterMs === 'number'
+  ) {
+    const structuredContent = {
+      error: {
+        message,
+        code: retryableError.code,
+        retryable: true,
+        retryAfterMs: retryableError.retryAfterMs,
+      },
+    };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(structuredContent, null, 2) }],
+      structuredContent,
+      isError: true,
+    };
+  }
+  return {
+    content: [{ type: 'text', text: `Error: ${message}` }],
+    isError: true,
+  };
 }
 
 export function createJsonToolResult(
