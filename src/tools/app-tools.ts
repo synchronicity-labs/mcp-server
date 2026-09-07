@@ -199,6 +199,8 @@ async function rehostUpload(
         headers: { 'Content-Type': contentType, 'Content-Length': String(actualSize) },
         body: uploadBody,
         duplex: 'half',
+        // Redirect replay tees the stream and retains a full upload in memory.
+        redirect: 'error',
         signal,
       });
     } catch (err) {
