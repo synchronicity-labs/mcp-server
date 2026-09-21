@@ -16,14 +16,16 @@ type McpToolBaseDefinition = {
   meta?: Record<string, unknown>;
 };
 
+export type ToolRequestContext = { signal?: AbortSignal };
+
 type JsonMcpToolDefinition = McpToolBaseDefinition & {
   resultFormat?: 'json';
-  handler: (args: Record<string, unknown>) => Promise<unknown>;
+  handler: (args: Record<string, unknown>, context?: ToolRequestContext) => Promise<unknown>;
 };
 
 type RawMcpToolDefinition = McpToolBaseDefinition & {
   resultFormat: 'mcp';
-  handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
+  handler: (args: Record<string, unknown>, context?: ToolRequestContext) => Promise<CallToolResult>;
 };
 
 export type McpToolDefinition = JsonMcpToolDefinition | RawMcpToolDefinition;
@@ -66,12 +68,12 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     inputSchema,
     outputSchema: override?.outputSchema,
     annotations: deriveAnnotations(operation.method),
-    handler: async (args: Record<string, unknown>) => {
+    handler: async (args, context) => {
       const path = buildPath(operation.path, args);
       const query = buildQuery(operation.parameters, args);
       const body = buildBody(operation, args);
 
-      return httpClient.request(operation.method, path, { query, body });
+      return httpClient.request(operation.method, path, { query, body, signal: context?.signal });
     },
   };
 }

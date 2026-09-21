@@ -93,7 +93,7 @@ export class UploadRuntime {
 
   async run<T>(
     operation: (signal: AbortSignal) => Promise<T>,
-    options: { timeoutMs?: number } = {},
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<T> {
     const timeoutMs = options.timeoutMs ?? this.config.timeoutMs;
     const controller = new AbortController();
@@ -101,16 +101,20 @@ export class UploadRuntime {
       controller.abort(new UploadTimeoutError(timeoutMs, this.config.retryAfterMs));
     }, timeoutMs);
     timeout.unref();
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, controller.signal])
+      : controller.signal;
     let release: () => void;
     try {
-      release = await this.#acquire(controller.signal);
+      release = await this.#acquire(signal);
     } catch (error) {
       clearTimeout(timeout);
       throw error;
     }
 
     try {
-      const result = await operation(controller.signal);
+      signal.throwIfAborted();
+      const result = await operation(signal);
       this.#stats.completed += 1;
       return result;
     } catch (error) {

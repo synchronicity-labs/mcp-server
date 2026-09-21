@@ -30,6 +30,9 @@ export function resolveSyncSource(clientName?: string): string {
   return FIRST_CLASS_SOURCE_BY_CLIENT[clientName.toLowerCase()] ?? `mcp:${clientName}`;
 }
 
+// Allow a 55-second generation long poll plus response overhead. No write retries.
+export const UPSTREAM_REQUEST_TIMEOUT_MS = 65_000;
+
 type AuthHeaders = Record<string, string>;
 
 export type HttpClient = {
@@ -55,6 +58,9 @@ export type HttpClient = {
 export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders = {}): HttpClient {
   return {
     async request(method, path, options = {}) {
+      const deadline = AbortSignal.timeout(UPSTREAM_REQUEST_TIMEOUT_MS);
+      const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+      signal.throwIfAborted();
       const url = new URL(path, baseUrl);
       if (options.query) {
         for (const [key, value] of Object.entries(options.query)) {
@@ -87,7 +93,7 @@ export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders
         method: method.toUpperCase(),
         headers,
         body: options.body ? JSON.stringify(options.body) : undefined,
-        signal: options.signal,
+        signal,
       });
 
       const text = await response.text();
