@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   createJsonToolResult,
   createToolDescriptorMeta,
+  createToolErrorResult,
   SERVER_INSTRUCTIONS,
   selectHostedHttpTools,
 } from './server.js';
 import type { McpToolDefinition } from './tools/index.js';
+import { UploadOverloadedError } from './upload-runtime.js';
 
 function tool(name: string): McpToolDefinition {
   return {
@@ -15,6 +17,28 @@ function tool(name: string): McpToolDefinition {
     handler: async () => ({}),
   };
 }
+
+describe('createToolErrorResult', () => {
+  it('preserves retry metadata in client-visible upload errors', () => {
+    expect(createToolErrorResult(new UploadOverloadedError(2_500))).toMatchObject({
+      isError: true,
+      structuredContent: {
+        error: {
+          code: 'UPLOAD_CAPACITY_EXCEEDED',
+          retryable: true,
+          retryAfterMs: 2_500,
+        },
+      },
+    });
+  });
+
+  it.each([null, undefined])('handles a nullish thrown value: %s', (error: null | undefined) => {
+    expect(createToolErrorResult(error)).toEqual({
+      content: [{ type: 'text', text: `Error: ${String(error)}` }],
+      isError: true,
+    });
+  });
+});
 
 describe('createToolDescriptorMeta', () => {
   it('adds OAuth security schemes for ChatGPT tool descriptors', () => {

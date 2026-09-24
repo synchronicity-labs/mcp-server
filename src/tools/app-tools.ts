@@ -1,5 +1,12 @@
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable, Transform } from 'node:stream';
+import { finished, pipeline } from 'node:stream/promises';
 import { z } from 'zod';
 import { getEffectiveClientName, type HttpClient } from '../http-client.js';
+import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import type { McpToolDefinition } from './generator.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 
@@ -54,6 +61,14 @@ function reason(err: unknown): string {
   return String(err);
 }
 
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Preserve the actionable validation or upstream error that caused cancellation.
+  }
+}
+
 function validatedUploadUrl(file: FileInput, kind: MediaKind): string {
   const src = file.download_url;
   if (!src) {
@@ -86,6 +101,8 @@ async function rehostUpload(
   httpClient: HttpClient,
   file: FileInput,
   kind: MediaKind,
+  runtime: UploadRuntime,
+  signal: AbortSignal,
 ): Promise<string> {
   // A real upload is an http(s) URL we can fetch. A sandbox/local reference
   // (e.g. "sandbox:/mnt/data/...") can't be re-hosted — tell the caller to pass
@@ -95,46 +112,134 @@ async function rehostUpload(
   // 1. Download the bytes from ChatGPT's temporary URL.
   let download: Response;
   try {
-    download = await fetch(src);
+    download = await fetch(src, { signal });
   } catch (err) {
+    if (signal.aborted) throw signal.reason;
     throw new Error(`Could not reach the uploaded ${kind} at ${hostOf(src)}: ${reason(err)}.`);
   }
   if (!download.ok) {
+    await cancelResponseBody(download);
     throw new Error(`The uploaded ${kind} URL returned HTTP ${download.status}.`);
   }
-  const bytes = await download.arrayBuffer();
   const contentType =
     download.headers.get('content-type') ?? file.mime_type ?? DEFAULT_CONTENT_TYPE[kind];
   const fileName = file.file_name ?? `chatgpt-upload-${kind}`;
 
-  // 2. Ask Sync for a presigned upload URL.
-  const { uploadUrl, url } = (await httpClient.request('post', '/v2/assets/upload', {
-    body: { fileName, contentType, size: bytes.byteLength },
-  })) as { uploadUrl: string; url: string };
-
-  // 3. Upload the bytes to Sync storage.
-  let put: Response;
-  try {
-    put = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': contentType },
-      body: bytes,
-    });
-  } catch (err) {
+  const declaredSizeHeader = download.headers.get('content-length');
+  const declaredSize = declaredSizeHeader === null ? undefined : Number(declaredSizeHeader);
+  const encodings = (download.headers.get('content-encoding') ?? '')
+    .split(',')
+    .map((encoding: string) => encoding.trim().toLowerCase());
+  const compressedEncodings = new Set(['gzip', 'x-gzip', 'deflate', 'br', 'zstd']);
+  const hasEncodedBody = encodings.some((encoding: string) => compressedEncodings.has(encoding));
+  if (declaredSize !== undefined && (!Number.isSafeInteger(declaredSize) || declaredSize < 0)) {
+    await cancelResponseBody(download);
+    throw new Error(`The uploaded ${kind} has an invalid Content-Length header.`);
+  }
+  if (declaredSize !== undefined && declaredSize > runtime.config.maxBytes) {
+    await cancelResponseBody(download);
     throw new Error(
-      `Could not upload the ${kind} to Sync storage at ${hostOf(uploadUrl)}: ${reason(err)}.`,
+      `The uploaded ${kind} is too large (${declaredSize} bytes; limit ${runtime.config.maxBytes} bytes).`,
     );
   }
-  if (!put.ok) {
-    throw new Error(`Sync storage rejected the ${kind} upload (HTTP ${put.status}).`);
+  if (!download.body) {
+    await cancelResponseBody(download);
+    throw new Error(`The uploaded ${kind} response did not include a body.`);
   }
 
-  // 4. Register the uploaded object as an asset.
-  const asset = (await httpClient.request('post', '/v2/assets', {
-    body: { url, type: ASSET_TYPE_BY_KIND[kind] },
-  })) as { id: string };
+  let tempDirectory: string | undefined;
+  let tempPath: string | undefined;
+  let uploadBody: ReturnType<typeof createReadStream> | undefined;
+  let put: Response | undefined;
+  let downloadPipelineStarted = false;
+  let actualSize = 0;
 
-  return asset.id;
+  try {
+    tempDirectory = await mkdtemp(join(tmpdir(), 'sync-mcp-upload-'));
+    tempPath = join(tempDirectory, 'upload');
+    const validateSize = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        actualSize += chunk.byteLength;
+        runtime.recordDownloadedBytes(chunk.byteLength);
+        if (actualSize > runtime.config.maxBytes) {
+          callback(
+            new Error(
+              `The uploaded ${kind} is too large (limit ${runtime.config.maxBytes} bytes).`,
+            ),
+          );
+          return;
+        }
+        callback(null, chunk);
+      },
+    });
+    downloadPipelineStarted = true;
+    await pipeline(
+      Readable.fromWeb(download.body),
+      validateSize,
+      createWriteStream(tempPath, { flags: 'wx' }),
+      { signal },
+    );
+
+    if (declaredSize !== undefined && !hasEncodedBody && actualSize !== declaredSize) {
+      throw new Error(
+        `The uploaded ${kind} size did not match Content-Length (expected ${declaredSize}, received ${actualSize}).`,
+      );
+    }
+
+    // 2. Ask Sync for a presigned upload URL after the bounded stream has been measured.
+    const { uploadUrl, url } = (await httpClient.request('post', '/v2/assets/upload', {
+      body: { fileName, contentType, size: actualSize },
+      signal,
+    })) as { uploadUrl: string; url: string };
+
+    // 3. Upload from disk so large and unknown-length inputs never occupy one large buffer.
+    uploadBody = createReadStream(tempPath);
+    try {
+      put = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType, 'Content-Length': String(actualSize) },
+        body: uploadBody,
+        duplex: 'half',
+        // Redirect replay tees the stream and retains a full upload in memory.
+        redirect: 'error',
+        signal,
+      });
+    } catch (err) {
+      uploadBody.destroy();
+      throw new Error(
+        `Could not upload the ${kind} to Sync storage at ${hostOf(uploadUrl)}: ${reason(err)}.`,
+      );
+    }
+    if (!put.ok) {
+      throw new Error(`Sync storage rejected the ${kind} upload (HTTP ${put.status}).`);
+    }
+    await finished(uploadBody, { signal });
+    runtime.recordUploadedBytes(actualSize);
+
+    // 4. Register the uploaded object as an asset.
+    const asset = (await httpClient.request('post', '/v2/assets', {
+      body: { url, type: ASSET_TYPE_BY_KIND[kind] },
+      signal,
+    })) as { id: string };
+
+    return asset.id;
+  } catch (error) {
+    if (signal.aborted) throw signal.reason;
+    throw error;
+  } finally {
+    uploadBody?.destroy();
+    if (put) await cancelResponseBody(put);
+    if (!downloadPipelineStarted) await cancelResponseBody(download);
+    if (tempDirectory) {
+      try {
+        await rm(tempDirectory, { recursive: true, force: true });
+      } catch {
+        // Cleanup must not replace a durable asset ID or the primary upload error.
+        // Count failures without exposing local paths or sensitive error details.
+        runtime.recordCleanupFailure();
+      }
+    }
+  }
 }
 
 // A media slot can be filled by an explicit `*Url`, a Sync asset id, or by the
@@ -240,8 +345,9 @@ async function uploadMediaAsset(
   httpClient: HttpClient,
   kind: MediaKind,
   fileParam: FileInput,
+  runtime: UploadRuntime,
 ): Promise<string> {
-  return rehostUpload(httpClient, fileParam, kind);
+  return runtime.run((signal) => rehostUpload(httpClient, fileParam, kind, runtime, signal));
 }
 
 async function resolveMedia(
@@ -250,6 +356,7 @@ async function resolveMedia(
   urlParam: string | undefined,
   assetIdParam: string | undefined,
   fileParam: MediaParam,
+  runtime: UploadRuntime,
 ): Promise<ResolvedMedia> {
   if (assetIdParam) return { type: kind, assetId: assetIdParam };
 
@@ -259,7 +366,7 @@ async function resolveMedia(
   assertValidFileParam(kind, fileParam);
 
   if (fileParam) {
-    return { type: kind, assetId: await rehostUpload(httpClient, fileParam, kind) };
+    return { type: kind, assetId: await uploadMediaAsset(httpClient, kind, fileParam, runtime) };
   }
 
   // Unreachable — callers validate presence first.
@@ -291,7 +398,10 @@ async function resolveMedia(
  * `audio`) or text (`script` + `voiceId`). Text is sent directly to POST
  * /v2/generate as a text input, avoiding a separate tts_create call.
  */
-export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
+export function createAppTools(
+  httpClient: HttpClient,
+  runtime: UploadRuntime = uploadRuntime,
+): McpToolDefinition[] {
   return [
     {
       name: 'upload-media',
@@ -336,7 +446,7 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
           );
         }
 
-        const assetId = await uploadMediaAsset(httpClient, mediaType, file);
+        const assetId = await uploadMediaAsset(httpClient, mediaType, file, runtime);
         return {
           assetId,
           mediaType,
@@ -528,10 +638,10 @@ export function createAppTools(httpClient: HttpClient): McpToolDefinition[] {
                 ...(similarityBoost === undefined ? {} : { similarityBoost }),
               },
             }
-          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio);
+          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio, runtime);
         const visual = hasImage
-          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image)
-          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video);
+          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image, runtime)
+          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video, runtime);
 
         const resolvedModel = model ?? 'sync-3';
 

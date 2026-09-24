@@ -15,6 +15,7 @@ import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry } from './session-registry.js';
+import { uploadRuntime } from './upload-runtime.js';
 
 const OAUTH_FORM_FIELDS = [
   'grant_type',
@@ -449,6 +450,7 @@ export async function startHttpServer(
       sessions: sessions.stats(),
       pendingTransports: pendingTransports.size,
       requests: requestMetrics.snapshot(),
+      uploads: uploadRuntime.snapshot(),
       memory: {
         rssBytes: memory.rss,
         heapUsedBytes: memory.heapUsed,
