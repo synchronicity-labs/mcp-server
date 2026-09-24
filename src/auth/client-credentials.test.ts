@@ -49,3 +49,17 @@ it.each([
 ])('rejects ambiguous credential shapes %j', (body) => {
   expect(() => mergeBasicClientCredentials(body, undefined)).toThrow();
 });
+it.each([1000, 16000, 1000000])('rejects long malformed padding (%i characters)', (length) => {
+  expect(() => mergeBasicClientCredentials({}, `Basic YTpi${'='.repeat(length)}!`)).toThrow(
+    'Invalid client authentication',
+  );
+});
+it.each([
+  'YTpi',
+  'YTpiYw==',
+  'YTpiYw',
+  'YTpiY2Q=',
+  'YTpiY2Q',
+])('retains canonical or unpadded Basic %s', (value) => {
+  expect(mergeBasicClientCredentials({}, `Basic ${value}`)).toMatchObject({ client_id: 'a' });
+});
