@@ -10,6 +10,7 @@ let upstream: Server;
 let hosted: Server;
 let url: string;
 let upstreamStatus = 200;
+let userinfoStatus = 200;
 const calls: Array<{ path: string; body: URLSearchParams; authorization: string | undefined }> = [];
 const logs: string[] = [];
 const events = ['SIGINT', 'SIGTERM', 'uncaughtExceptionMonitor', 'warning', 'exit'] as const;
@@ -31,6 +32,12 @@ beforeAll(async () => {
       authorization: req.headers.authorization,
     });
     res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/v2/oauth/userinfo') {
+      res.statusCode = userinfoStatus;
+      res.setHeader('Retry-After', '9');
+      res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
+      return;
+    }
     if (req.url?.startsWith('/v2/oauth/register/')) {
       res.end(
         JSON.stringify({
@@ -272,4 +279,39 @@ it.each(['post', 'basic'])('preserves refresh-token credentials for %s clients',
   expect(response.status).toBe(200);
   expect(calls.at(-1)?.body.get('refresh_token')).toBe('fake-refresh');
   expect(calls.at(-1)?.body.get('client_secret')).toBe('fake-secret');
+});
+it.each([
+  200, 401, 403, 429, 503,
+])('combined actual /mcp route preserves userinfo %s semantics', async (status) => {
+  userinfoStatus = status;
+  try {
+    const response = await fetch(`${url}/mcp`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer fake-token',
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'auth-fixture', version: '1' },
+        },
+      }),
+    });
+    expect(response.status).toBe(status === 403 ? 401 : status);
+    if (status === 429 || status === 503) {
+      expect(response.headers.get('retry-after')).toBe('9');
+      expect(response.headers.get('www-authenticate')).toBeNull();
+      expect(await response.json()).toMatchObject({ error: 'temporarily_unavailable' });
+    } else {
+      await response.text();
+    }
+  } finally {
+    userinfoStatus = 200;
+  }
 });
