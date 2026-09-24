@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
-import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import { InvalidRequestError, OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import {
   createOAuthMetadata,
   mcpAuthRouter,
@@ -11,11 +11,26 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
+import { requireBearerAuth } from './auth/bearer-auth.js';
+import {
+  BASIC_CHALLENGE,
+  CLIENT_AUTH_METHODS,
+  ClientAuthenticationError,
+  mergeBasicClientCredentials,
+} from './auth/client-credentials.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
-import { SessionRegistry } from './session-registry.js';
+import { SessionRegistry, sessionOwner } from './session-registry.js';
 import { uploadRuntime } from './upload-runtime.js';
+
+export {
+  extractBasicClientCredentials,
+  mergeBasicClientCredentials,
+} from './auth/client-credentials.js';
+
+// Bound the entire credential exchange, including a stalled response body.
+export const OAUTH_PROXY_TIMEOUT_MS = 10_000;
 
 const OAUTH_FORM_FIELDS = [
   'grant_type',
@@ -165,43 +180,31 @@ export function waitForHttpServerStartup(
   });
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
-}
+const TRUSTED_MCP_HOSTS = ['claude.ai', 'claude.com', 'chatgpt.com'] as const;
+const TRUSTED_LOCAL_MCP_ORIGINS = new Set(['http://localhost:3000', 'http://localhost:5173']);
 
-export function extractBasicClientCredentials(
-  authorization: string | undefined,
-): { clientId: string; clientSecret?: string } | undefined {
-  if (!authorization?.startsWith('Basic ')) return undefined;
+/**
+ * Validate browser origins before an HTTP request reaches the MCP transport.
+ * Non-browser MCP clients normally omit Origin, so an absent header is valid.
+ */
+export function isAllowedMcpOrigin(origin: string | undefined): boolean {
+  if (origin === undefined) return true;
+  if (TRUSTED_LOCAL_MCP_ORIGINS.has(origin)) return true;
 
   try {
-    const decoded = Buffer.from(authorization.slice(6), 'base64').toString();
-    const separatorIndex = decoded.indexOf(':');
-    if (separatorIndex === -1) return undefined;
+    const url = new URL(origin);
+    if (url.origin !== origin || url.protocol !== 'https:' || url.port) return false;
 
-    const clientId = decodeURIComponent(decoded.slice(0, separatorIndex));
-    const encodedSecret = decoded.slice(separatorIndex + 1);
-    const clientSecret = encodedSecret ? decodeURIComponent(encodedSecret) : undefined;
-    return clientId ? { clientId, clientSecret } : undefined;
+    return TRUSTED_MCP_HOSTS.some(
+      (trustedHost) => url.hostname === trustedHost || url.hostname.endsWith(`.${trustedHost}`),
+    );
   } catch {
-    return undefined;
+    return false;
   }
 }
 
-export function mergeBasicClientCredentials(
-  body: Record<string, unknown>,
-  authorization: string | undefined,
-): Record<string, unknown> {
-  if (typeof body.client_id === 'string' && body.client_id) return body;
-
-  const credentials = extractBasicClientCredentials(authorization);
-  if (!credentials) return body;
-
-  return {
-    ...body,
-    client_id: credentials.clientId,
-    ...(credentials.clientSecret ? { client_secret: credentials.clientSecret } : {}),
-  };
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
 export function encodeOAuthFormBody(body: Record<string, unknown>): string {
@@ -239,22 +242,23 @@ export async function startHttpServer(
   const app = express();
   app.set('trust proxy', 1);
 
+  // Streamable HTTP servers must reject untrusted browser origins. Put this
+  // before CORS so invalid preflight requests are rejected too.
+  app.use('/mcp', (req, res, next) => {
+    if (!isAllowedMcpOrigin(req.headers.origin)) {
+      res.status(403).json({ error: 'Origin not allowed' });
+      return;
+    }
+    next();
+  });
+
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
   const oauthProvider = createOAuthProvider(config.baseUrl);
 
   // CORS for browser-based MCP clients
   app.use(
     cors({
-      origin: [
-        'https://claude.ai',
-        /^https:\/\/.*\.claude\.ai$/,
-        'https://claude.com',
-        /^https:\/\/.*\.claude\.com$/,
-        'https://chatgpt.com',
-        /^https:\/\/.*\.chatgpt\.com$/,
-        'http://localhost:3000',
-        'http://localhost:5173',
-      ],
+      origin: (origin, callback) => callback(null, isAllowedMcpOrigin(origin)),
       credentials: true,
     }),
   );
@@ -317,10 +321,7 @@ export async function startHttpServer(
   // server restart, the SDK can recover registered client metadata but not the
   // raw client_secret. Proxy token/revoke requests with the incoming secret and
   // let the Sync API validate the confidential client.
-  app.use(['/token', '/revoke'], express.urlencoded({ extended: false }), (req, _res, next) => {
-    req.body = mergeBasicClientCredentials(asRecord(req.body), req.headers.authorization);
-    next();
-  });
+  app.use(['/token', '/revoke'], express.urlencoded({ extended: false }));
 
   const oauthProxyRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
   const proxyOAuthFormRequest = async (
@@ -328,24 +329,78 @@ export async function startHttpServer(
     req: express.Request,
     res: express.Response,
   ) => {
+    // Token responses must never be cached, including upstream error responses.
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    const usesAuthorization = req.headers.authorization !== undefined;
+    const controller = new AbortController();
+    let timedOut = false;
+    const cancel = () => controller.abort();
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      cancel();
+    }, OAUTH_PROXY_TIMEOUT_MS);
+    timeout.unref();
+    req.once('aborted', cancel);
+    res.once('close', cancel);
+    if (req.aborted || res.destroyed) cancel();
     try {
+      const authorizationCount = req.rawHeaders.filter(
+        (header, index) => index % 2 === 0 && header.toLowerCase() === 'authorization',
+      ).length;
+      if (authorizationCount > 1)
+        throw new InvalidRequestError('Multiple Authorization headers are not allowed');
+      const body = asRecord(req.body);
+      for (const field of OAUTH_FORM_FIELDS) {
+        if (Object.hasOwn(body, field) && typeof body[field] !== 'string') {
+          throw new InvalidRequestError('OAuth parameters must be single strings');
+        }
+      }
+      const credentials = mergeBasicClientCredentials(body, req.headers.authorization);
+      controller.signal.throwIfAborted();
       const upstream = await fetch(new URL(`/v2/oauth/${path}`, config.baseUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: encodeOAuthFormBody(asRecord(req.body)),
+        body: encodeOAuthFormBody(credentials),
+        redirect: 'error',
+        signal: controller.signal,
       });
+      const responseBody = await upstream.text();
+      if (controller.signal.aborted || res.destroyed) return;
+      if (upstream.status === 401 && usesAuthorization) {
+        res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
+      }
       const contentType = upstream.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
-      res.status(upstream.status).send(await upstream.text());
+      res.status(upstream.status).send(responseBody);
     } catch (error) {
+      if (res.destroyed) return;
+      if (timedOut) {
+        res.status(504).json({
+          error: 'temporarily_unavailable',
+          error_description: 'OAuth upstream request timed out',
+        });
+        return;
+      }
+      if (error instanceof OAuthError) {
+        const status = error instanceof ClientAuthenticationError ? error.status : 400;
+        if (status === 401) res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(status).json(error.toResponseObject());
+        return;
+      }
       logEvent('oauth_proxy_error', {
         requestId: res.locals.requestId,
         oauthPath: path,
-        error: serializeError(error),
+        error: { message: 'OAuth upstream request failed' },
       });
       if (!res.headersSent) {
         res.status(502).json({ error: 'OAuth upstream request failed' });
       }
+    } finally {
+      clearTimeout(timeout);
+      req.off('aborted', cancel);
+      res.off('close', cancel);
     }
   };
 
@@ -370,7 +425,8 @@ export async function startHttpServer(
     issuerUrl,
     serviceDocumentationUrl,
   });
-  confidentialOAuthMetadata.token_endpoint_auth_methods_supported = ['client_secret_post'];
+  confidentialOAuthMetadata.token_endpoint_auth_methods_supported = CLIENT_AUTH_METHODS;
+  confidentialOAuthMetadata.revocation_endpoint_auth_methods_supported = CLIENT_AUTH_METHODS;
 
   app.get('/.well-known/oauth-authorization-server', (_req, res) => {
     res.json(confidentialOAuthMetadata);
@@ -476,6 +532,11 @@ export async function startHttpServer(
       res.status(401).json({ error: 'Missing auth token' });
       return;
     }
+    const owner = sessionOwner(req.auth);
+    if (!owner) {
+      res.status(403).json({ error: 'Verified session identity required' });
+      return;
+    }
     if (shuttingDown) {
       res.setHeader('Retry-After', '10');
       res.status(503).json({ error: 'MCP server is shutting down' });
@@ -492,7 +553,7 @@ export async function startHttpServer(
       let transport: StreamableHTTPServerTransport;
 
       if (sessionId) {
-        lease = sessions.acquire(sessionId);
+        lease = sessions.acquire(sessionId, owner);
         if (!lease) {
           res.status(404).json({ error: 'Session not found' });
           return;
@@ -512,7 +573,7 @@ export async function startHttpServer(
             if (!reservation) {
               throw new Error('MCP session initialized without a capacity reservation');
             }
-            lease = reservation.commit(sessionId, transport);
+            lease = reservation.commit(sessionId, transport, owner);
             reservation = undefined;
             pendingTransports.delete(transport);
             unregisteredTransport = undefined;
@@ -528,7 +589,9 @@ export async function startHttpServer(
           }
         };
         const sessionServer = serverFactory.createServer();
+        const onInitialized = sessionServer.server.oninitialized;
         sessionServer.server.oninitialized = () => {
+          onInitialized?.();
           const clientVersion = sessionServer.server.getClientVersion();
           if (clientVersion?.name && transport.sessionId) {
             sessionClientNames.set(transport.sessionId, clientVersion.name);
@@ -616,7 +679,7 @@ export async function startHttpServer(
     port: config.port,
     issuer: issuerUrl.origin,
     apiBaseUrl: sanitizeDiagnosticUrl(config.baseUrl),
-    toolCount: serverFactory.toolCount,
+    registeredToolCount: serverFactory.toolCount,
   });
   logRuntimeTelemetry();
 

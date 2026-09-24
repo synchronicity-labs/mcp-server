@@ -6,8 +6,8 @@ import {
   encodeOAuthFormBody,
   extractBasicClientCredentials,
   getSessionRuntimeConfig,
+  isAllowedMcpOrigin,
   listenWithCleanup,
-  mergeBasicClientCredentials,
   runSessionSweepSafely,
   sanitizeDiagnosticUrl,
   waitForHttpServerStartup,
@@ -103,6 +103,41 @@ describe('HTTP request IDs', () => {
   });
 });
 
+describe('MCP Origin validation', () => {
+  it.each([
+    undefined,
+    'https://claude.ai',
+    'https://artifacts.claude.ai',
+    'https://claude.com',
+    'https://connectors.claude.com',
+    'https://chatgpt.com',
+    'https://widgets.chatgpt.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+  ])('allows trusted origin %s', (origin) => {
+    expect(isAllowedMcpOrigin(origin)).toBe(true);
+  });
+
+  it.each([
+    '',
+    'null',
+    'https://evil.example',
+    'https://meta.ai',
+    'https://muse.meta.com',
+    'https://user@chatgpt.com',
+    'https://chatgpt.com:443',
+    'https://claude.ai.evil.example',
+    'https://evilclaude.ai',
+    'http://claude.ai',
+    'https://claude.ai:444',
+    'https://claude.ai/path',
+    'https://claude.ai?query=true',
+    'http://localhost:3001',
+  ])('rejects untrusted origin %s', (origin) => {
+    expect(isAllowedMcpOrigin(origin)).toBe(false);
+  });
+});
+
 describe('OAuth HTTP helpers', () => {
   it('extracts percent-encoded Basic client credentials', () => {
     const authorization = `Basic ${Buffer.from('client%3Aone:secret%3Atwo').toString('base64')}`;
@@ -111,15 +146,6 @@ describe('OAuth HTTP helpers', () => {
       clientId: 'client:one',
       clientSecret: 'secret:two',
     });
-  });
-
-  it('does not overwrite an explicit client_id body field', () => {
-    expect(
-      mergeBasicClientCredentials(
-        { client_id: 'body-client' },
-        `Basic ${Buffer.from('basic-client:secret').toString('base64')}`,
-      ),
-    ).toEqual({ client_id: 'body-client' });
   });
 
   it('encodes only OAuth form fields for upstream proxying', () => {

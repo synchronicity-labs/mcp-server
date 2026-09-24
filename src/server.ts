@@ -1,24 +1,35 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import {
+  type CallToolResult,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
+  type Resource,
+  type Tool,
+} from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { loadToken } from './auth/token-store.js';
+import {
+  type ClientProfile,
+  resolveClientProfile,
+  UNSUPPORTED_UPLOAD_MESSAGE,
+} from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
-import { createHttpClient, type HttpClient, setStaticClientName } from './http-client.js';
+import { createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAppTools } from './tools/app-tools.js';
-import { generateTools } from './tools/generator.js';
+import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
 const SERVER_DESCRIPTION =
   'Sync is an AI video platform for lipsync and visual dubbing. ' +
-  'Create lipsync videos by providing a video URL and audio URL — Sync generates a video with perfectly synchronized lip movements. ' +
-  'Typical workflow: generate_create-generation → poll generate_get-generation until COMPLETED → return output URL.';
+  'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
 
 export const SERVER_INSTRUCTIONS =
-  'For lipsync requests, prefer create-lipsync. Omit its model unless the user explicitly requests one; create-lipsync defaults both image and video generations to sync-3. Omit projectName unless the user asks for a specific project; create-lipsync reuses or creates that named project and otherwise attaches the generation to "ChatGPT generations". If the user asks an image or video to say text, call voices_get-voices, then create-lipsync with script + voiceId and the image/video URL or Sync assetId. Do not call tts_create for that flow. In ChatGPT, if the user already attached media in chat, use upload-media or direct create-lipsync file params and then call generate_get-generation once with wait: true and timeout: 55. If the user wants to upload or choose a local image or audio file and has not attached it yet, call open-upload-widget by default with requestedMediaType: "image" or "audio". For image-to-speech requests with no attached image, call open-upload-widget with requestedMediaType: "image" and tell the user to enter the exact requested text in the widget Script field. Critical video rule: open-upload-widget is image/audio only. Never call, recommend, or describe open-upload-widget for local video or MP4 requests, even if the user says widget. Never mention requestedMediaType: "video"; it is invalid. For any local MP4/video, the first step is attaching the video to the ChatGPT composer. After it is attached, use upload-media or direct create-lipsync file params. If the user provides a public media URL, pass it directly as imageUrl, videoUrl, or audioUrl. After generate_get-generation returns COMPLETED, copy the exact structuredContent.outputUrl string verbatim; never reconstruct, shorten, or edit signed result URLs.';
+  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, upload in authenticated Sync and use Copy ID (or Copy URL). The tool defaults to sync-3 and an integration-specific project unless projectName is supplied. Create once, then poll generate_get-generation by the returned id with wait: true and timeout: 55; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
@@ -44,7 +55,7 @@ export function createToolDescriptorMeta(
   };
 }
 
-function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
+export function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
     server.registerTool(
       tool.name,
@@ -56,12 +67,12 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
-      async (args): Promise<CallToolResult> => {
+      async (args, context): Promise<CallToolResult> => {
         try {
           if (tool.resultFormat === 'mcp') {
-            return tool.handler((args ?? {}) as Record<string, unknown>);
+            return await tool.handler((args ?? {}) as Record<string, unknown>, context);
           }
-          const result = await tool.handler((args ?? {}) as Record<string, unknown>);
+          const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
           return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
           return createToolErrorResult(error);
@@ -143,10 +154,17 @@ function isStructuredContent(result: unknown): result is Record<string, unknown>
   return result !== null && typeof result === 'object' && !Array.isArray(result);
 }
 
-export function selectHostedHttpTools(tools: McpToolDefinition[]): McpToolDefinition[] {
+export function selectHostedHttpTools(
+  tools: McpToolDefinition[],
+  profile: ClientProfile = resolveClientProfile(),
+): McpToolDefinition[] {
   return tools
     .filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-    .map((tool) => (WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool));
+    .filter(
+      (tool) =>
+        profile.supportsUploads || !['upload-media', 'open-upload-widget'].includes(tool.name),
+    )
+    .map((tool) => presentTool(tool, profile));
 }
 
 function exposeToolToWidget(tool: McpToolDefinition): McpToolDefinition {
@@ -172,92 +190,163 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-/**
- * Creates a single MCP server instance for stdio transport.
- */
-export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpServer> {
-  const log = (message: string) => {
-    process.stderr.write(message);
-  };
-
-  let httpClient: HttpClient;
-
-  if (config.transport === 'http') {
-    log('HTTP transport: auth will be resolved per-request via OAuth\n');
-    httpClient = createHttpClient(config.baseUrl);
-  } else {
-    const authHeaders = await resolveAuth(config, log);
-    httpClient = createHttpClient(config.baseUrl, authHeaders);
+/** Session-local descriptors and presentation. Authentication remains request-scoped. */
+function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
+  if (profile.supportsUploads)
+    return WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool;
+  const inputSchema = { ...tool.inputSchema };
+  let description = tool.description;
+  if (tool.name === 'create-lipsync') {
+    for (const key of ['video', 'image', 'audio']) delete inputSchema[key];
+    description =
+      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; explicit projectName overrides the client default. Poll the returned id with generate_get-generation.';
+    for (const key of ['videoAssetId', 'imageAssetId', 'audioAssetId']) {
+      inputSchema[key] = z
+        .string()
+        .optional()
+        .describe(
+          'Existing Sync asset ID in the same organization. Upload in authenticated Sync and use Copy ID.',
+        );
+    }
+    inputSchema.videoUrl = z
+      .string()
+      .optional()
+      .describe('Public or Sync-hosted video URL. Supply exactly one visual input.');
   }
+  const meta = Object.fromEntries(
+    Object.entries(tool.meta ?? {}).filter(([key]) => !key.startsWith('openai/') && key !== 'ui'),
+  );
+  return { ...tool, inputSchema, description, meta };
+}
 
-  log(`Fetching OpenAPI spec from ${config.baseUrl}...\n`);
-  const spec = await fetchSpec(config.baseUrl);
-  const operations = parseSpec(spec);
-  log(`Discovered ${operations.length} API operations\n`);
-
-  const tools = [
+function createProfiledServer(
+  config: SyncMcpConfig,
+  operations: ReturnType<typeof parseSpec>,
+  authHeaders: Record<string, string> = {},
+): McpServer {
+  let profile: ClientProfile | undefined;
+  let clientName: string | undefined;
+  const getProfile = () => profile ?? resolveClientProfile();
+  const httpClient = createHttpClient(
+    config.baseUrl,
+    authHeaders,
+    config.transport === 'stdio' ? () => clientName : undefined,
+  );
+  const allTools = [
     createUploadWidgetTool(),
-    ...createAppTools(httpClient),
+    ...createAppTools(httpClient, undefined, getProfile),
     ...generateTools(operations, httpClient),
   ];
+  const tools =
+    config.transport === 'http'
+      ? allTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
+      : allTools;
   const server = new McpServer(
     { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
     { instructions: SERVER_INSTRUCTIONS },
   );
-  registerUploadWidgetResource(server);
-  registerTools(server, tools);
-  log(`Registered ${tools.length} MCP tools\n`);
-
+  // Keep the SDK's input/output validation and execution. Hidden upload tools remain
+  // callable only to return an actionable error; they cannot perform any upload.
+  registerTools(
+    server,
+    tools.map(
+      (tool) =>
+        ({
+          ...tool,
+          handler: async (...parameters: Parameters<typeof tool.handler>) => {
+            const [args] = parameters;
+            if (!profile) throw new Error('Complete MCP initialization before calling tools.');
+            if (
+              !profile.supportsUploads &&
+              (['upload-media', 'open-upload-widget'].includes(tool.name) ||
+                (tool.name === 'create-lipsync' &&
+                  ['video', 'image', 'audio'].some((key) => args[key] !== undefined)))
+            ) {
+              throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
+            }
+            return tool.handler.apply(undefined, parameters);
+          },
+        }) as McpToolDefinition,
+    ),
+  );
+  const resources: Resource[] = [];
+  registerUploadWidgetResource({
+    registerResource: (name, uri, metadata, read) => {
+      resources.push({ name, uri, ...metadata });
+      return server.registerResource(name, uri, metadata, async (url, extra) => {
+        if (!getProfile().supportsUploads) throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
+        return read(url, extra);
+      });
+    },
+  });
+  let descriptors: Tool[] = [];
+  server.server.setRequestHandler(ListToolsRequestSchema, () => {
+    if (!profile) throw new Error('Complete MCP initialization before listing tools.');
+    return { tools: descriptors };
+  });
+  server.server.setRequestHandler(ListResourcesRequestSchema, () => ({
+    resources: getProfile().supportsUploads ? resources : [],
+  }));
+  const onInitialized = server.server.oninitialized;
   server.server.oninitialized = () => {
-    const clientVersion = server.server.getClientVersion();
-    if (clientVersion?.name) {
-      setStaticClientName(clientVersion.name);
+    if (!profile) {
+      clientName = server.server.getClientVersion()?.name;
+      const initializedProfile = resolveClientProfile(clientName);
+      profile = initializedProfile;
+      const visible =
+        config.transport === 'http'
+          ? selectHostedHttpTools(tools, initializedProfile)
+          : tools
+              .filter(
+                (tool) =>
+                  initializedProfile.supportsUploads ||
+                  !['upload-media', 'open-upload-widget'].includes(tool.name),
+              )
+              .map((tool) => presentTool(tool, initializedProfile));
+      descriptors = visible.map((tool) => ({
+        name: tool.name,
+        title: tool.title,
+        description: tool.description,
+        inputSchema: z.toJSONSchema(z.object(tool.inputSchema)) as Tool['inputSchema'],
+        ...(tool.outputSchema
+          ? { outputSchema: z.toJSONSchema(z.object(tool.outputSchema)) as Tool['outputSchema'] }
+          : {}),
+        annotations: tool.annotations,
+        _meta: createToolDescriptorMeta(tool.meta),
+      }));
     }
+    onInitialized?.();
   };
-
   return server;
 }
 
-/**
- * Creates a factory that produces new McpServer instances.
- * Used by HTTP transport where each session needs its own server instance.
- */
-export async function createMcpServerFactory(
-  config: SyncMcpConfig,
-): Promise<{ createServer: () => McpServer; toolCount: number }> {
+export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpServer> {
   const log = (message: string) => {
     process.stderr.write(message);
   };
+  const authHeaders = config.transport === 'http' ? {} : await resolveAuth(config, log);
+  const operations = parseSpec(await fetchSpec(config.baseUrl));
+  return createProfiledServer(config, operations, authHeaders);
+}
 
-  log('HTTP transport: auth will be resolved per-request via OAuth\n');
-  const httpClient = createHttpClient(config.baseUrl);
-
-  log(`Fetching OpenAPI spec from ${config.baseUrl}...\n`);
-  const spec = await fetchSpec(config.baseUrl);
-  const operations = parseSpec(spec);
-  log(`Discovered ${operations.length} API operations\n`);
-
-  const tools = selectHostedHttpTools([
-    createUploadWidgetTool(),
-    ...createAppTools(httpClient),
-    ...generateTools(operations, httpClient),
+export async function createMcpServerFactory(
+  config: SyncMcpConfig,
+): Promise<{ createServer: () => McpServer; toolCount: number }> {
+  // Filter once before constructing per-session schemas. Handlers and profile
+  // state remain session-local, but excluded API operations do no session work.
+  const operations = parseSpec(await fetchSpec(config.baseUrl)).filter((operation) =>
+    HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)),
+  );
+  const registeredNames = new Set([
+    'open-upload-widget',
+    'upload-media',
+    'create-lipsync',
+    ...operations.map((operation) => operationIdToToolName(operation.operationId)),
   ]);
-
   return {
-    toolCount: tools.length,
-    createServer: () => {
-      const server = new McpServer(
-        {
-          name: 'sync',
-          version: '0.1.0',
-          description: SERVER_DESCRIPTION,
-        },
-        { instructions: SERVER_INSTRUCTIONS },
-      );
-      registerUploadWidgetResource(server);
-      registerTools(server, tools);
-      return server;
-    },
+    // Number registered across hosted profiles, not each client's visible catalog.
+    toolCount: registeredNames.size,
+    createServer: () => createProfiledServer(config, operations),
   };
 }
 

@@ -252,6 +252,7 @@ To test the HTTP transport (OAuth flow) locally:
 
 ## Learn More
 
+- [Claude directory readiness](docs/claude-directory-readiness.md) — Review checklist and remaining submission work
 - [Sync Documentation](https://sync.so/docs) — Full API reference and guides
 - [Sync API Reference](https://sync.so/docs/api-reference) — Endpoint documentation
 - [MCP Protocol](https://modelcontextprotocol.io) — Learn about the Model Context Protocol
@@ -260,3 +261,47 @@ To test the HTTP transport (OAuth flow) locally:
 ## License
 
 MIT
+
+### Hosted client compatibility
+
+Hosted sessions select one immutable presentation profile after MCP initialization.
+Exact ChatGPT aliases retain the upload widget, file metadata and optional file arguments.
+Claude and unknown clients expose `create-lipsync`, `voices_get-voices`, and
+`generate_get-generation` for public/Sync-hosted URLs and existing Sync asset IDs.
+Upload local media in authenticated Sync and use **Copy ID** in the same organization,
+or **Copy URL**. Unsupported file/widget calls return this guidance without uploading.
+
+Defaults are `ChatGPT generations`, `Claude generations`, or `Sync generations` for
+unknown clients; explicit `projectName` wins. Muse remains an unknown client until its
+actual handshake alias is verified. Client names affect presentation only, never
+organization access or credit permissions. No Muse origin or attachment contract is assumed.
+
+### Request cancellation
+
+Explicit MCP request cancellation propagates to project lookup, upload admission,
+file transfer, asset registration, generation submission, and generated API tools.
+The server checks cancellation before starting another write. Tool API calls have
+a 65-second deadline, allowing the supported 55-second generation long poll;
+upload queueing and transfer retain their configured upload deadline.
+
+Cancellation cannot undo a write already accepted by Sync. If submission times
+out or is cancelled while in flight, acceptance may be unknown: do not blindly
+retry a generation. Retrieve a known generation ID to check its status. Closing a
+connection is not a promise that an accepted generation was cancelled, and this
+server does not automatically send a generation-cancellation or refund request.
+
+### OAuth proxy lifecycle and release verification
+
+Token exchange and revocation responses are marked `Cache-Control: no-store` and
+`Pragma: no-cache`. Their upstream requests have a ten-second deadline covering
+headers and body consumption, return a sanitized 504 on timeout, and are aborted
+when the caller disconnects. No exchange is automatically retried. Access-token
+verification separately retains its five-second deadline.
+
+Startup reports `registeredToolCount`, the number of available tools registered
+across hosted profiles; each client's visible catalog can be smaller. Hosted API
+operations are filtered once before per-session schema construction.
+
+See [release verification](docs/release-verification.md) for reproducible checks,
+component provenance, and the distinction between controlled tests and live Muse
+review readiness.
