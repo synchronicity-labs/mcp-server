@@ -29,6 +29,9 @@ export {
   mergeBasicClientCredentials,
 } from './auth/client-credentials.js';
 
+// Bound the entire credential exchange, including a stalled response body.
+export const OAUTH_PROXY_TIMEOUT_MS = 10_000;
+
 const OAUTH_FORM_FIELDS = [
   'grant_type',
   'code',
@@ -326,7 +329,21 @@ export async function startHttpServer(
     req: express.Request,
     res: express.Response,
   ) => {
+    // Token responses must never be cached, including upstream error responses.
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
     const usesAuthorization = req.headers.authorization !== undefined;
+    const controller = new AbortController();
+    let timedOut = false;
+    const cancel = () => controller.abort();
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      cancel();
+    }, OAUTH_PROXY_TIMEOUT_MS);
+    timeout.unref();
+    req.once('aborted', cancel);
+    res.once('close', cancel);
+    if (req.aborted || res.destroyed) cancel();
     try {
       const authorizationCount = req.rawHeaders.filter(
         (header, index) => index % 2 === 0 && header.toLowerCase() === 'authorization',
@@ -340,19 +357,31 @@ export async function startHttpServer(
         }
       }
       const credentials = mergeBasicClientCredentials(body, req.headers.authorization);
+      controller.signal.throwIfAborted();
       const upstream = await fetch(new URL(`/v2/oauth/${path}`, config.baseUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: encodeOAuthFormBody(credentials),
         redirect: 'error',
+        signal: controller.signal,
       });
+      const responseBody = await upstream.text();
+      if (controller.signal.aborted || res.destroyed) return;
       if (upstream.status === 401 && usesAuthorization) {
         res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
       }
       const contentType = upstream.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
-      res.status(upstream.status).send(await upstream.text());
+      res.status(upstream.status).send(responseBody);
     } catch (error) {
+      if (res.destroyed) return;
+      if (timedOut) {
+        res.status(504).json({
+          error: 'temporarily_unavailable',
+          error_description: 'OAuth upstream request timed out',
+        });
+        return;
+      }
       if (error instanceof OAuthError) {
         const status = error instanceof ClientAuthenticationError ? error.status : 400;
         if (status === 401) res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
@@ -363,11 +392,15 @@ export async function startHttpServer(
       logEvent('oauth_proxy_error', {
         requestId: res.locals.requestId,
         oauthPath: path,
-        error: serializeError(error),
+        error: { message: 'OAuth upstream request failed' },
       });
       if (!res.headersSent) {
         res.status(502).json({ error: 'OAuth upstream request failed' });
       }
+    } finally {
+      clearTimeout(timeout);
+      req.off('aborted', cancel);
+      res.off('close', cancel);
     }
   };
 
@@ -646,7 +679,7 @@ export async function startHttpServer(
     port: config.port,
     issuer: issuerUrl.origin,
     apiBaseUrl: sanitizeDiagnosticUrl(config.baseUrl),
-    toolCount: serverFactory.toolCount,
+    registeredToolCount: serverFactory.toolCount,
   });
   logRuntimeTelemetry();
 

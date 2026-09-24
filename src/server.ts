@@ -20,7 +20,7 @@ import { createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAppTools } from './tools/app-tools.js';
-import { generateTools } from './tools/generator.js';
+import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
@@ -332,9 +332,20 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
 export async function createMcpServerFactory(
   config: SyncMcpConfig,
 ): Promise<{ createServer: () => McpServer; toolCount: number }> {
-  const operations = parseSpec(await fetchSpec(config.baseUrl));
+  // Filter once before constructing per-session schemas. Handlers and profile
+  // state remain session-local, but excluded API operations do no session work.
+  const operations = parseSpec(await fetchSpec(config.baseUrl)).filter((operation) =>
+    HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)),
+  );
+  const registeredNames = new Set([
+    'open-upload-widget',
+    'upload-media',
+    'create-lipsync',
+    ...operations.map((operation) => operationIdToToolName(operation.operationId)),
+  ]);
   return {
-    toolCount: HOSTED_HTTP_TOOL_ALLOWLIST.size,
+    // Number registered across hosted profiles, not each client's visible catalog.
+    toolCount: registeredNames.size,
     createServer: () => createProfiledServer(config, operations),
   };
 }

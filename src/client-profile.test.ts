@@ -384,3 +384,29 @@ describe('immutable client profiles', () => {
     });
   });
 });
+
+it.each([
+  0, 1, 2,
+])('reports available registered tools with %i generated hosted operations', async (count) => {
+  const paths = Object.fromEntries(Object.entries(spec.paths).slice(0, count));
+  // Excluded operations must not inflate diagnostics or client catalogs.
+  const excluded = Object.fromEntries(
+    Array.from({ length: 50 }, (_, index) => [
+      `/v2/projects/unused-${index}`,
+      { get: { operationId: `Projects_unused${index}`, tags: ['projects'] } },
+    ]),
+  );
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
+  );
+  const factory = await createMcpServerFactory(config);
+  expect(factory.toolCount).toBe(3 + count);
+  const chatgpt = await connect(factory, 'chatgpt');
+  const claude = await connect(factory, 'claude');
+  const chatTools = (await chatgpt.client.listTools()).tools;
+  const claudeTools = (await claude.client.listTools()).tools;
+  expect(chatTools).toHaveLength(3 + count);
+  expect(claudeTools).toHaveLength(1 + count);
+  expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
+});
