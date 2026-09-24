@@ -115,13 +115,16 @@ export class UploadRuntime {
       throw error;
     }
 
+    let started = false;
     try {
       signal.throwIfAborted();
+      started = true;
       const result = await operation(signal);
       this.#stats.completed += 1;
       return result;
     } catch (error) {
-      this.#stats.failed += 1;
+      // Admission cancellation is not a failed transfer: no operation ran.
+      if (started) this.#stats.failed += 1;
       throw error;
     } finally {
       clearTimeout(timeout);
