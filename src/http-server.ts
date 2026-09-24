@@ -21,7 +21,7 @@ import {
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
-import { SessionRegistry } from './session-registry.js';
+import { SessionRegistry, sessionOwner } from './session-registry.js';
 import { uploadRuntime } from './upload-runtime.js';
 
 export {
@@ -499,6 +499,11 @@ export async function startHttpServer(
       res.status(401).json({ error: 'Missing auth token' });
       return;
     }
+    const owner = sessionOwner(req.auth);
+    if (!owner) {
+      res.status(403).json({ error: 'Verified session identity required' });
+      return;
+    }
     if (shuttingDown) {
       res.setHeader('Retry-After', '10');
       res.status(503).json({ error: 'MCP server is shutting down' });
@@ -515,7 +520,7 @@ export async function startHttpServer(
       let transport: StreamableHTTPServerTransport;
 
       if (sessionId) {
-        lease = sessions.acquire(sessionId);
+        lease = sessions.acquire(sessionId, owner);
         if (!lease) {
           res.status(404).json({ error: 'Session not found' });
           return;
@@ -535,7 +540,7 @@ export async function startHttpServer(
             if (!reservation) {
               throw new Error('MCP session initialized without a capacity reservation');
             }
-            lease = reservation.commit(sessionId, transport);
+            lease = reservation.commit(sessionId, transport, owner);
             reservation = undefined;
             pendingTransports.delete(transport);
             unregisteredTransport = undefined;
