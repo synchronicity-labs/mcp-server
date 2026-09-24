@@ -5,6 +5,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { resolveClientProfile } from './client-profile.js';
@@ -80,6 +81,7 @@ async function connect(
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: randomUUID });
     await server.connect(transport);
     const app = express();
+    app.use(rateLimit({ windowMs: 60_000, limit: 1000 }));
     app.use(express.json());
     app.all('/mcp', async (req, res) => {
       await runWithAuth(`token-${name}`, name, () => transport.handleRequest(req, res, req.body));
