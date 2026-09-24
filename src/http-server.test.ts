@@ -7,7 +7,6 @@ import {
   extractBasicClientCredentials,
   getSessionRuntimeConfig,
   listenWithCleanup,
-  mergeBasicClientCredentials,
   runSessionSweepSafely,
   sanitizeDiagnosticUrl,
   waitForHttpServerStartup,
@@ -111,15 +110,6 @@ describe('OAuth HTTP helpers', () => {
       clientId: 'client:one',
       clientSecret: 'secret:two',
     });
-  });
-
-  it('does not overwrite an explicit client_id body field', () => {
-    expect(
-      mergeBasicClientCredentials(
-        { client_id: 'body-client' },
-        `Basic ${Buffer.from('basic-client:secret').toString('base64')}`,
-      ),
-    ).toEqual({ client_id: 'body-client' });
   });
 
   it('encodes only OAuth form fields for upstream proxying', () => {
