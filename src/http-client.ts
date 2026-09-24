@@ -1,12 +1,5 @@
 import { getAuthToken, getClientName } from './auth/async-context.js';
 
-// Fallback client name for stdio transport (single session, no AsyncLocalStorage)
-let staticClientName: string | undefined;
-
-export function setStaticClientName(name: string): void {
-  staticClientName = name;
-}
-
 /**
  * Flagship assistant surfaces are first-class `x-sync-source` values in Sync
  * analytics; every other MCP client rides the `mcp:<client>` namespace (which
@@ -52,7 +45,11 @@ export type HttpClient = {
  * 1. Per-request token from AsyncLocalStorage (set by OAuth middleware in HTTP transport)
  * 2. Static auth headers (API key or device auth token, set at startup for stdio transport)
  */
-export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders = {}): HttpClient {
+export function createHttpClient(
+  baseUrl: string,
+  staticAuthHeaders: AuthHeaders = {},
+  stdioClientName?: () => string | undefined,
+): HttpClient {
   return {
     async request(method, path, options = {}) {
       const url = new URL(path, baseUrl);
@@ -70,7 +67,7 @@ export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders
         ? { Authorization: `Bearer ${perRequestToken}` }
         : { ...staticAuthHeaders };
 
-      const clientName = getClientName() ?? staticClientName;
+      const clientName = getClientName() ?? stdioClientName?.();
       const syncSource = resolveSyncSource(clientName);
 
       const headers: Record<string, string> = {

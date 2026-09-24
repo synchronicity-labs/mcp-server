@@ -165,6 +165,29 @@ export function waitForHttpServerStartup(
   });
 }
 
+const TRUSTED_MCP_HOSTS = ['claude.ai', 'claude.com', 'chatgpt.com'] as const;
+const TRUSTED_LOCAL_MCP_ORIGINS = new Set(['http://localhost:3000', 'http://localhost:5173']);
+
+/**
+ * Validate browser origins before an HTTP request reaches the MCP transport.
+ * Non-browser MCP clients normally omit Origin, so an absent header is valid.
+ */
+export function isAllowedMcpOrigin(origin: string | undefined): boolean {
+  if (origin === undefined) return true;
+  if (TRUSTED_LOCAL_MCP_ORIGINS.has(origin)) return true;
+
+  try {
+    const url = new URL(origin);
+    if (url.origin !== origin || url.protocol !== 'https:' || url.port) return false;
+
+    return TRUSTED_MCP_HOSTS.some(
+      (trustedHost) => url.hostname === trustedHost || url.hostname.endsWith(`.${trustedHost}`),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
@@ -239,22 +262,23 @@ export async function startHttpServer(
   const app = express();
   app.set('trust proxy', 1);
 
+  // Streamable HTTP servers must reject untrusted browser origins. Put this
+  // before CORS so invalid preflight requests are rejected too.
+  app.use('/mcp', (req, res, next) => {
+    if (!isAllowedMcpOrigin(req.headers.origin)) {
+      res.status(403).json({ error: 'Origin not allowed' });
+      return;
+    }
+    next();
+  });
+
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
   const oauthProvider = createOAuthProvider(config.baseUrl);
 
   // CORS for browser-based MCP clients
   app.use(
     cors({
-      origin: [
-        'https://claude.ai',
-        /^https:\/\/.*\.claude\.ai$/,
-        'https://claude.com',
-        /^https:\/\/.*\.claude\.com$/,
-        'https://chatgpt.com',
-        /^https:\/\/.*\.chatgpt\.com$/,
-        'http://localhost:3000',
-        'http://localhost:5173',
-      ],
+      origin: (origin, callback) => callback(null, isAllowedMcpOrigin(origin)),
       credentials: true,
     }),
   );
@@ -528,7 +552,9 @@ export async function startHttpServer(
           }
         };
         const sessionServer = serverFactory.createServer();
+        const onInitialized = sessionServer.server.oninitialized;
         sessionServer.server.oninitialized = () => {
+          onInitialized?.();
           const clientVersion = sessionServer.server.getClientVersion();
           if (clientVersion?.name && transport.sessionId) {
             sessionClientNames.set(transport.sessionId, clientVersion.name);

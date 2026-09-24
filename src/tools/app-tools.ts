@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { finished, pipeline } from 'node:stream/promises';
 import { z } from 'zod';
+import { type ClientProfile, resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import type { McpToolDefinition } from './generator.js';
@@ -33,8 +34,6 @@ const DEFAULT_CONTENT_TYPE: Record<MediaKind, string> = {
   image: 'image/png',
   audio: 'audio/mpeg',
 };
-
-const DEFAULT_CHATGPT_PROJECT_NAME = 'ChatGPT generations';
 
 type ProjectSummary = { id: string; name: string | null };
 type ProjectsPage = { items: ProjectSummary[]; nextCursor?: string };
@@ -317,9 +316,10 @@ async function findProjectIdByName(
 
 async function getOrCreateProjectId(
   httpClient: HttpClient,
-  requestedProjectName?: string,
+  requestedProjectName: string | undefined,
+  defaultName: string,
 ): Promise<string> {
-  const projectName = requestedProjectName?.trim() || DEFAULT_CHATGPT_PROJECT_NAME;
+  const projectName = requestedProjectName?.trim() || defaultName;
   const existingProjectId = await findProjectIdByName(httpClient, projectName);
   if (existingProjectId) return existingProjectId;
 
@@ -393,16 +393,16 @@ async function resolveMedia(
 export function createAppTools(
   httpClient: HttpClient,
   runtime: UploadRuntime = uploadRuntime,
+  getProfile: () => ClientProfile = () => resolveClientProfile(),
 ): McpToolDefinition[] {
   return [
     {
       name: 'upload-media',
       title: 'Upload media',
       description:
-        'Upload a user-provided image, video, or audio file to Sync asset storage and return a durable assetId. ' +
-        'Use this when the user uploaded media in chat and a later Sync tool call should reference it by assetId. ' +
-        'The file field must be the uploaded ChatGPT file object. For public URLs, use assets_create or pass the URL directly to create-lipsync. ' +
-        'This tool only stores the media; it does not create a lipsync generation. After it returns, pass the assetId to create-lipsync as imageAssetId, videoAssetId, or audioAssetId.',
+        'Stage an image, video, or audio file in Sync asset storage and return a durable assetId. ' +
+        'The file must be a host-provided object with a temporary HTTP download URL. Public URL strings are not accepted. ' +
+        'This creates a media asset but does not start a lipsync generation.',
       inputSchema: {
         mediaType: z
           .enum(['video', 'image', 'audio'])
@@ -412,7 +412,12 @@ export function createAppTools(
           .describe('Uploaded media file from ChatGPT. Do not pass URL strings here.'),
       },
       outputSchema: uploadMediaOutputSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       meta: {
         ui: { visibility: ['model', 'app'] },
         'openai/fileParams': ['file'],
@@ -452,15 +457,10 @@ export function createAppTools(
       name: 'create-lipsync',
       title: 'Create lipsync',
       description:
-        'Create a lipsync video from audio + EITHER a video or a still image (an image drives sync-3 image-to-video). ' +
-        'Defaults to sync-3 unless the user explicitly requests another model. ' +
-        `Generations are attached to an existing project with the requested projectName, or to "${DEFAULT_CHATGPT_PROJECT_NAME}" by default; if no matching project exists, it is created first. ` +
-        'For "make this image/video say X" requests, pass `script` with a `voiceId` from voices_get-voices; do not call tts_create first. ' +
-        'Pass URLs whenever you have them — set `audioUrl` to any public audio URL, and `videoUrl`/`imageUrl` to a hosted media URL. ' +
-        'If media was uploaded to Sync first, pass `audioAssetId`, `videoAssetId`, or `imageAssetId`. ' +
-        'For files the user uploaded in chat, prefer calling upload-media first and pass the returned assetId here; direct `audio`/`video`/`image` file params are supported only when a host invokes this tool with file params directly. If the user wants to choose a local image/audio file that is not attached yet, use open-upload-widget first. ' +
-        'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — call generate_get-generation once with wait: true and timeout: 55, then read outputUrl. Copy signed outputUrl values exactly from the tool result; never reconstruct or shorten them. ' +
-        'For advanced options (segments, speaker selection), use generate_create-generation.',
+        'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
+        'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
+        'The model defaults to sync-3. The generation is attached to a named project or an integration-specific default project; a missing project is created. ' +
+        'This starts an asynchronous generation and returns its id and status.',
       inputSchema: {
         videoUrl: z
           .string()
@@ -494,12 +494,7 @@ export function createAppTools(
           .string()
           .describe('Sync asset id for audio, returned by upload-media or assets_create.')
           .optional(),
-        script: z
-          .string()
-          .describe(
-            'Text for the image or video to say. For "make this say X", pass X here directly instead of calling tts_create.',
-          )
-          .optional(),
+        script: z.string().describe('Text for the image or video to say.').optional(),
         voiceId: z
           .string()
           .describe('Voice id from voices_get-voices. Required when script is provided.')
@@ -530,21 +525,24 @@ export function createAppTools(
           .optional(),
         model: z
           .string()
-          .describe(
-            'Set only when the user explicitly requests a model override. Otherwise omit it; image and video inputs default to sync-3.',
-          )
+          .describe('Optional model override. Image and video inputs default to sync-3.')
           .optional(),
         projectName: z
           .string()
           .trim()
           .min(1)
           .describe(
-            `Project to attach the generation to. Set this only when the user requests a specific project name; otherwise omit it to use "${DEFAULT_CHATGPT_PROJECT_NAME}". An existing project with the same name is reused, or a new one is created.`,
+            'Project to attach the generation to. When omitted, the tool uses an integration-specific default. An existing project with the same name is reused, or a new one is created.',
           )
           .optional(),
       },
       outputSchema: generationOutputSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       meta: {
         'openai/fileParams': ['video', 'image', 'audio'],
         'openai/toolInvocation/invoking': 'Creating your lipsync video…',
@@ -629,7 +627,11 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
-        const projectId = await getOrCreateProjectId(httpClient, projectName);
+        const projectId = await getOrCreateProjectId(
+          httpClient,
+          projectName,
+          getProfile().defaultProjectName,
+        );
 
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript

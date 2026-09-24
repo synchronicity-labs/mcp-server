@@ -38,18 +38,21 @@ export function generateTools(
 /**
  * Behaviour hints required by the ChatGPT and Claude app/connector directories
  * (missing/incorrect annotations are a top review-rejection cause). Derived
- * from the HTTP verb: reads are read-only; deletes are destructive; every write
- * touches external Sync systems, so it is open-world.
+ * from the HTTP verb: reads are read-only; writes modify external Sync state,
+ * so they are destructive and open-world.
  */
-export function deriveAnnotations(method: string): ToolAnnotations {
-  if (method === 'get') {
+export function deriveAnnotations(method: string, toolName?: string): ToolAnnotations {
+  if (
+    method === 'get' ||
+    ['generate_estimate-cost', 'generations_estimate-cost'].includes(toolName ?? '')
+  ) {
     return { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   }
   if (method === 'delete') {
     return { readOnlyHint: false, destructiveHint: true, openWorldHint: true };
   }
-  // post / patch / put — create/update operations against the Sync API
-  return { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
+  // No idempotency contract for generation or other create/update operations.
+  return { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
 }
 
 function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpToolDefinition {
@@ -65,7 +68,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     description,
     inputSchema,
     outputSchema: override?.outputSchema,
-    annotations: deriveAnnotations(operation.method),
+    annotations: deriveAnnotations(operation.method, name),
     handler: async (args: Record<string, unknown>) => {
       const path = buildPath(operation.path, args);
       const query = buildQuery(operation.parameters, args);

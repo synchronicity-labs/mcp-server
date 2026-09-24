@@ -19,7 +19,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'voices_get-voices': {
     description:
-      'List available voices — premade ElevenLabs voices plus voices your org has cloned. For "make this image/video say X", use a returned voice `id` as `voiceId` in create-lipsync with `script` directly. Use tts_create only when the user explicitly asks for standalone audio.',
+      'List available voices — premade ElevenLabs voices plus voices your org has cloned. For "make this image/video say X", use a returned voice `id` as `voiceId` in create-lipsync with `script` directly.',
   },
 
   // --- Assets (upload + manage reusable media) ---
@@ -68,7 +68,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generate_get-generation': {
     description:
-      'Get a generation by id. In ChatGPT, pass `wait: true` and `timeout: 55` for generation results instead of making repeated manual polls. When status is COMPLETED, copy the exact `structuredContent.outputUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited.',
+      'Get a generation by id. Pass `wait: true` and `timeout: 55` for generation results instead of making repeated manual polls. When status is COMPLETED, copy the exact `structuredContent.outputUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited.',
     outputSchema: generationOutputSchema,
   },
   'generate_get-generations': {

@@ -17,9 +17,8 @@ describe('createUploadWidgetTool', () => {
 
     expect(tool.name).toBe('open-upload-widget');
     expect(tool.title).toBe('Open image/audio upload widget');
-    expect(tool.description).toContain('cannot accept video or MP4');
-    expect(tool.description).toContain('Never use, recommend, or describe this tool');
-    expect(tool.description).toContain('never use requestedMediaType: "video"');
+    expect(tool.description).toContain('does not accept video files');
+    expect(tool.description).not.toContain('Never');
     expect(tool.resultFormat).toBe('mcp');
     expect(tool.outputSchema).toMatchObject({
       requestedMediaType: expect.any(Object),
