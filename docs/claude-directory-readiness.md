@@ -18,7 +18,7 @@ Hosted endpoint: `https://mcp.sync.so/mcp`
 ## Before Submission
 
 - [ ] Receive Anthropic's written exception for AI video generation under section 4.B of the Software Directory Policy
-- [ ] Decide whether to hide the ChatGPT-only upload widget from Claude or migrate it to the MCP Apps SDK
+- [x] Hide ChatGPT-only upload tools/resources/file metadata from Claude and unknown clients
 - [ ] Add public privacy, support, and service documentation URLs for the listing
 - [ ] Create a reviewer account with enough credits and sample media to run every tool
 - [ ] Test every hosted tool through MCP Inspector and a new Claude custom connector
@@ -27,7 +27,17 @@ Hosted endpoint: `https://mcp.sync.so/mcp`
 
 ## Upload Widget Note
 
-The current upload widget uses the ChatGPT `window.openai` bridge. It is not yet a Claude MCP App. The official MCP Apps migration guide states that ChatGPT file upload and download URL APIs do not have direct MCP Apps equivalents. Do not present this widget as Claude-compatible until the file flow is redesigned or the tool is hidden for Claude clients.
+The upload widget uses the ChatGPT `window.openai` bridge and is exposed only to exact known ChatGPT aliases. Claude and unknown clients use public/Sync-hosted URLs or existing asset IDs. For local media, use authenticated Sync upload → Copy ID in the same organization; Copy URL is also accepted. Direct unsupported tool/resource/file calls explain this path.
+
+## Local validation and release dependencies (2026-09-24)
+
+Profiles are immutable per initialized session; HTTP initialization composes the profile callback with session identity tracking. HTTP identities never use a process-global stdio fallback. Handshake names affect presentation/default projects only and do not confer authentication, organization or credit permissions. Existing source attribution is not promoted to trusted attribution.
+
+Known aliases: `chatgpt`, `openai`, `openai-chatgpt`; `claude`, `claude-ai` (case-insensitive exact matches). Muse aliases and origins remain unverified: unknown clients use `Sync generations`, and no Meta wildcard origins or native attachment adapter have been added. Existing allowed origins and absent-Origin server-to-server access remain supported.
+
+Local tests exercise concurrent HTTP sessions, discovery/resources, unsupported calls, all image/video × audio/script combinations via URLs and asset IDs, voice selection, explicit project overrides and exact signed results. They use fake organizations/media/API responses, not live Muse/Claude acceptance or a real Sync Copy ID/Copy URL export.
+
+PR56 owns cancellation. Validate PR54 + PR56 together before release, forwarding request context through the session-profile wrapper as well as registered handlers. CRAFT-5991/5992 authentication fixes remain separately owned and must be recovered/published before a complete release candidate can be verified. CRAFT-6168 owns combined verification. Live testing requires a designated organization/account, approved fixtures and an explicit budget; deployment and real-client evidence are still pending. Do not infer directory/release acceptance from local tests.
 
 ## References
 

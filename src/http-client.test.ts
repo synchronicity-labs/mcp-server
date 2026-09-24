@@ -1,24 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { runWithAuth } from './auth/async-context.js';
-import { getEffectiveClientName, resolveSyncSource, setStaticClientName } from './http-client.js';
-
-afterEach(() => {
-  setStaticClientName(undefined);
-});
-
-describe('getEffectiveClientName', () => {
-  it('uses the stdio client identity when there is no request context', () => {
-    setStaticClientName('claude');
-
-    expect(getEffectiveClientName()).toBe('claude');
-  });
-
-  it('prefers the request-scoped HTTP client identity', () => {
-    setStaticClientName('claude');
-
-    expect(runWithAuth('token', 'chatgpt', () => getEffectiveClientName())).toBe('chatgpt');
-  });
-});
+import { describe, expect, it } from 'vitest';
+import { resolveSyncSource } from './http-client.js';
 
 describe('resolveSyncSource', () => {
   it('maps flagship assistant clients to first-class sources', () => {

@@ -261,3 +261,17 @@ To test the HTTP transport (OAuth flow) locally:
 ## License
 
 MIT
+
+### Hosted client compatibility
+
+Hosted sessions select one immutable presentation profile after MCP initialization.
+Exact ChatGPT aliases retain the upload widget, file metadata and optional file arguments.
+Claude and unknown clients expose `create-lipsync`, `voices_get-voices`, and
+`generate_get-generation` for public/Sync-hosted URLs and existing Sync asset IDs.
+Upload local media in authenticated Sync and use **Copy ID** in the same organization,
+or **Copy URL**. Unsupported file/widget calls return this guidance without uploading.
+
+Defaults are `ChatGPT generations`, `Claude generations`, or `Sync generations` for
+unknown clients; explicit `projectName` wins. Muse remains an unknown client until its
+actual handshake alias is verified. Client names affect presentation only, never
+organization access or credit permissions. No Muse origin or attachment contract is assumed.

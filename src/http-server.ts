@@ -552,7 +552,9 @@ export async function startHttpServer(
           }
         };
         const sessionServer = serverFactory.createServer();
+        const onInitialized = sessionServer.server.oninitialized;
         sessionServer.server.oninitialized = () => {
+          onInitialized?.();
           const clientVersion = sessionServer.server.getClientVersion();
           if (clientVersion?.name && transport.sessionId) {
             sessionClientNames.set(transport.sessionId, clientVersion.name);

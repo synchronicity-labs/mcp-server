@@ -4,6 +4,11 @@ import type { ParsedOperation } from '../openapi/types.js';
 import { deriveAnnotations, generateTools, operationIdToToolName } from './generator.js';
 
 describe('deriveAnnotations', () => {
+  it('treats cost estimation as a read despite its POST method', () => {
+    expect(deriveAnnotations('post', 'generate_estimate-cost').readOnlyHint).toBe(true);
+    expect(deriveAnnotations('post', 'generations_estimate-cost').destructiveHint).toBe(false);
+    expect(deriveAnnotations('post', 'generate_create-generation').idempotentHint).toBe(false);
+  });
   it('marks reads read-only, deletes destructive, and writes open-world', () => {
     expect(deriveAnnotations('get')).toEqual({
       readOnlyHint: true,
@@ -16,6 +21,7 @@ describe('deriveAnnotations', () => {
       openWorldHint: true,
     });
     expect(deriveAnnotations('post')).toEqual({
+      idempotentHint: false,
       readOnlyHint: false,
       destructiveHint: true,
       openWorldHint: true,

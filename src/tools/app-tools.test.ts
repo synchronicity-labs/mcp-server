@@ -2,8 +2,8 @@ import { readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runWithAuth } from '../auth/async-context.js';
-import { type HttpClient, setStaticClientName } from '../http-client.js';
+import { resolveClientProfile } from '../client-profile.js';
+import type { HttpClient } from '../http-client.js';
 import { UploadRuntime } from '../upload-runtime.js';
 import { createAppTools } from './app-tools.js';
 
@@ -18,7 +18,9 @@ describe('createAppTools — create-lipsync', () => {
   function setup({
     projects = [{ id: 'project-chatgpt', name: 'ChatGPT generations' }],
     runtime,
+    clientName = 'chatgpt',
   }: {
+    clientName?: string;
     projects?: Array<{ id: string; name: string | null }>;
     runtime?: UploadRuntime;
   } = {}) {
@@ -47,7 +49,7 @@ describe('createAppTools — create-lipsync', () => {
       },
     );
     const httpClient: HttpClient = { request };
-    const tools = createAppTools(httpClient, runtime);
+    const tools = createAppTools(httpClient, runtime, () => resolveClientProfile(clientName));
     const uploadTool = tools.find((t) => t.name === 'upload-media');
     const tool = tools.find((t) => t.name === 'create-lipsync');
     if (!uploadTool) throw new Error('upload-media tool not found');
@@ -82,7 +84,6 @@ describe('createAppTools — create-lipsync', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    setStaticClientName(undefined);
   });
 
   function lastGenerateBody(request: ReturnType<typeof setup>['request']) {
@@ -527,12 +528,11 @@ describe('createAppTools — create-lipsync', () => {
 
   it('uses a Claude-specific default project for Claude clients', async () => {
     const { tool, request } = setup({
+      clientName: 'claude-ai',
       projects: [{ id: 'project-claude', name: 'Claude generations' }],
     });
 
-    await runWithAuth('token', 'claude-ai', () =>
-      tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' }),
-    );
+    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
 
     expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
       query: {
@@ -546,9 +546,9 @@ describe('createAppTools — create-lipsync', () => {
 
   it('uses a Claude-specific default project for Claude stdio clients', async () => {
     const { tool, request } = setup({
+      clientName: 'claude-ai',
       projects: [{ id: 'project-claude', name: 'Claude generations' }],
     });
-    setStaticClientName('claude');
 
     await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
 

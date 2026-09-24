@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { finished, pipeline } from 'node:stream/promises';
 import { z } from 'zod';
-import { getEffectiveClientName, type HttpClient } from '../http-client.js';
+import { type ClientProfile, resolveClientProfile } from '../client-profile.js';
+import type { HttpClient } from '../http-client.js';
 import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import type { McpToolDefinition } from './generator.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
@@ -33,9 +34,6 @@ const DEFAULT_CONTENT_TYPE: Record<MediaKind, string> = {
   image: 'image/png',
   audio: 'audio/mpeg',
 };
-
-const DEFAULT_CHATGPT_PROJECT_NAME = 'ChatGPT generations';
-const DEFAULT_CLAUDE_PROJECT_NAME = 'Claude generations';
 
 type ProjectSummary = { id: string; name: string | null };
 type ProjectsPage = { items: ProjectSummary[]; nextCursor?: string };
@@ -276,13 +274,6 @@ function normalizedProjectName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
-function defaultProjectName(): string {
-  const clientName = getEffectiveClientName()?.toLocaleLowerCase();
-  return clientName?.includes('claude')
-    ? DEFAULT_CLAUDE_PROJECT_NAME
-    : DEFAULT_CHATGPT_PROJECT_NAME;
-}
-
 async function findProjectIdByName(
   httpClient: HttpClient,
   projectName: string,
@@ -325,9 +316,10 @@ async function findProjectIdByName(
 
 async function getOrCreateProjectId(
   httpClient: HttpClient,
-  requestedProjectName?: string,
+  requestedProjectName: string | undefined,
+  defaultName: string,
 ): Promise<string> {
-  const projectName = requestedProjectName?.trim() || defaultProjectName();
+  const projectName = requestedProjectName?.trim() || defaultName;
   const existingProjectId = await findProjectIdByName(httpClient, projectName);
   if (existingProjectId) return existingProjectId;
 
@@ -401,6 +393,7 @@ async function resolveMedia(
 export function createAppTools(
   httpClient: HttpClient,
   runtime: UploadRuntime = uploadRuntime,
+  getProfile: () => ClientProfile = () => resolveClientProfile(),
 ): McpToolDefinition[] {
   return [
     {
@@ -419,7 +412,12 @@ export function createAppTools(
           .describe('Uploaded media file from ChatGPT. Do not pass URL strings here.'),
       },
       outputSchema: uploadMediaOutputSchema,
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       meta: {
         ui: { visibility: ['model', 'app'] },
         'openai/fileParams': ['file'],
@@ -539,7 +537,12 @@ export function createAppTools(
           .optional(),
       },
       outputSchema: generationOutputSchema,
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       meta: {
         'openai/fileParams': ['video', 'image', 'audio'],
         'openai/toolInvocation/invoking': 'Creating your lipsync video…',
@@ -624,7 +627,11 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
-        const projectId = await getOrCreateProjectId(httpClient, projectName);
+        const projectId = await getOrCreateProjectId(
+          httpClient,
+          projectName,
+          getProfile().defaultProjectName,
+        );
 
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript

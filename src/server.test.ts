@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolveClientProfile } from './client-profile.js';
 import {
   createJsonToolResult,
   createToolDescriptorMeta,
@@ -130,11 +131,12 @@ describe('SERVER_INSTRUCTIONS', () => {
     expect(SERVER_INSTRUCTIONS).toContain('integration-specific project');
   });
 
-  it('states the upload widget limits without coercive tool instructions', () => {
-    expect(SERVER_INSTRUCTIONS).toContain('accepts local images and audio in ChatGPT');
-    expect(SERVER_INSTRUCTIONS).toContain('but not video');
-    expect(SERVER_INSTRUCTIONS).not.toContain('Never');
-    expect(SERVER_INSTRUCTIONS).not.toContain('Do not call');
+  it('describes only tools available to every profile and exact result handling', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('voices_get-voices');
+    expect(SERVER_INSTRUCTIONS).toContain('Create once');
+    expect(SERVER_INSTRUCTIONS).toContain('exact structuredContent.outputUrl');
+    expect(SERVER_INSTRUCTIONS).not.toContain('open-upload-widget');
+    expect(SERVER_INSTRUCTIONS).not.toContain('tts_create');
   });
 });
 
@@ -151,7 +153,9 @@ describe('selectHostedHttpTools', () => {
       tool('projects_get-all'),
     ];
 
-    expect(selectHostedHttpTools(tools).map((t) => t.name)).toEqual([
+    expect(
+      selectHostedHttpTools(tools, resolveClientProfile('chatgpt')).map((t) => t.name),
+    ).toEqual([
       'open-upload-widget',
       'upload-media',
       'create-lipsync',
@@ -169,7 +173,7 @@ describe('selectHostedHttpTools', () => {
       tool('generate_get-generation'),
     ];
 
-    const selected = selectHostedHttpTools(tools);
+    const selected = selectHostedHttpTools(tools, resolveClientProfile('chatgpt'));
     const widgetCallableTools = selected.filter((t) => t.name !== 'open-upload-widget');
 
     expect(widgetCallableTools.map((t) => t.name)).toEqual([
