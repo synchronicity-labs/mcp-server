@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
-import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import {
   createOAuthMetadata,
   mcpAuthRouter,
@@ -11,6 +10,7 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
+import { requireBearerAuth } from './auth/bearer-auth.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
