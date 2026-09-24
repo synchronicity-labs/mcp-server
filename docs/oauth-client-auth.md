@@ -44,3 +44,17 @@ Run `npm test -- --no-file-parallelism`, `npm run lint`, `npm run typecheck`,
 upload tests' shared temporary-directory snapshot race. Preserve the separate
 5991 local bearer-auth import when integrating `http-server.ts`. Client profiles,
 widgets and Origin behavior are outside both fixes.
+
+## Review follow-up
+
+The flagged unanchored trailing-padding replacement has been removed. The parser
+compares the validated input with canonical and unpadded base64 using index/slice
+operations; no repeated-suffix regex scans remain. Canonical padded/unpadded inputs
+remain accepted, malformed padding rejected, including million-character fixtures.
+
+Fixture teardown guards absent/non-listening hosted servers, closes every created
+server even after partial startup, and always restores process listeners/mocks in
+finally blocks. Regression cases cover failure before upstream creation, before
+hosted creation, after hosted creation, and after both servers start, preserving
+the original error and supporting repeated cleanup. No runtime session enforcement
+or shared http-server.ts edits are included in this follow-up.

@@ -30,6 +30,10 @@ const userInfoSchema = z.object({
   sub: z.string().refine((value) => value.trim().length > 0),
   client_id: z.string().refine((value) => value.trim().length > 0),
   expires_at: z.number().int().positive().optional(),
+  organization_id: z
+    .string()
+    .refine((value) => value.trim().length > 0)
+    .optional(),
 });
 
 export async function verifySyncAccessToken(
@@ -75,6 +79,14 @@ export async function verifySyncAccessToken(
         return {
           token,
           clientId: parsed.data.client_id,
+          // Stable verified identity for A's session ownership checks. Never use
+          // token bytes/expiry or copy arbitrary upstream fields into this object.
+          extra: {
+            sub: parsed.data.sub,
+            ...(parsed.data.organization_id === undefined
+              ? {}
+              : { organizationId: parsed.data.organization_id }),
+          },
           scopes: [],
           // Preserve the existing fallback; verification is never cached.
           expiresAt: parsed.data.expires_at ?? Math.floor(Date.now() / 1000) + 3600,

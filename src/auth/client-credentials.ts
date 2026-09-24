@@ -22,12 +22,12 @@ export function extractBasicClientCredentials(
   if (!match?.[1]) throw new ClientAuthenticationError(401);
   try {
     const bytes = Buffer.from(match[1], 'base64');
-    // Buffer's base64 decoder otherwise silently ignores malformed input.
-    if (
-      bytes.toString('base64').replace(/=+$/, '') !== match[1].replace(/=+$/, '') ||
-      (match[1].includes('=') && bytes.toString('base64') !== match[1])
-    )
-      throw new Error();
+    // Buffer's decoder otherwise ignores malformed input. Anchored parsing allows
+    // at most two padding characters; index/slice comparisons are linear.
+    const canonical = bytes.toString('base64');
+    const padding = canonical.indexOf('=');
+    const unpadded = padding < 0 ? canonical : canonical.slice(0, padding);
+    if (match[1] !== canonical && match[1] !== unpadded) throw new Error();
     const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     const colon = decoded.indexOf(':');
     if (colon < 0) throw new Error();
