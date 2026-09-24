@@ -1,9 +1,34 @@
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+
+export type SessionOwner = Readonly<{
+  sub: string;
+  clientId: string;
+  organizationId: string | null;
+}>;
+
+// Only verified userinfo claims participate; token rotation does not change ownership.
+export function sessionOwner(auth: AuthInfo | undefined): SessionOwner | undefined {
+  const sub = auth?.extra?.sub;
+  const clientId = auth?.clientId;
+  const organizationId = auth?.extra?.organizationId;
+  const nonempty = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+  if (
+    !nonempty(sub) ||
+    !nonempty(clientId) ||
+    (organizationId !== undefined && !nonempty(organizationId))
+  )
+    return undefined;
+  return { sub, clientId, organizationId: organizationId ?? null };
+}
+
 type ClosableTransport = {
   close: () => Promise<void>;
 };
 
 type SessionEntry<T extends ClosableTransport> = {
   transport: T;
+  owner: SessionOwner;
   lastSeenAt: number;
   inFlight: number;
 };
@@ -65,7 +90,7 @@ export class SessionRegistry<T extends ClosableTransport> {
 
   reserve():
     | {
-        commit: (sessionId: string, transport: T) => SessionLease<T>;
+        commit: (sessionId: string, transport: T, owner: SessionOwner) => SessionLease<T>;
         release: () => void;
       }
     | undefined {
@@ -84,7 +109,7 @@ export class SessionRegistry<T extends ClosableTransport> {
     };
 
     return {
-      commit: (sessionId, transport) => {
+      commit: (sessionId, transport, owner) => {
         if (!active) throw new Error('Session reservation has already been released');
         if (!this.#accepting) {
           release();
@@ -93,6 +118,7 @@ export class SessionRegistry<T extends ClosableTransport> {
         release();
         const entry = {
           transport,
+          owner: { ...owner },
           lastSeenAt: this.#now(),
           inFlight: 0,
         };
@@ -104,9 +130,17 @@ export class SessionRegistry<T extends ClosableTransport> {
     };
   }
 
-  acquire(sessionId: string): SessionLease<T> | undefined {
+  acquire(sessionId: string, owner: SessionOwner): SessionLease<T> | undefined {
     const entry = this.#entries.get(sessionId);
-    return entry ? this.#createLease(entry) : undefined;
+    // Deny before touching activity or handing the transport to HTTP dispatch.
+    if (
+      !entry ||
+      entry.owner.sub !== owner.sub ||
+      entry.owner.clientId !== owner.clientId ||
+      entry.owner.organizationId !== owner.organizationId
+    )
+      return undefined;
+    return this.#createLease(entry);
   }
 
   #createLease(entry: SessionEntry<T>): SessionLease<T> {
