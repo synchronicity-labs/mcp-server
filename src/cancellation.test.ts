@@ -102,7 +102,7 @@ describe('explicit MCP cancellation', () => {
     const rejected = expect(queued).rejects.toThrow('cancelled');
     cancelled.abort(new Error('cancelled'));
     await rejected;
-    expect(uploads.snapshot()).toMatchObject({ active: 1, queued: 0 });
+    expect(uploads.snapshot()).toMatchObject({ active: 1, queued: 0, failed: 0 });
     gate.resolve();
     await active;
     expect(operation).not.toHaveBeenCalled();
@@ -117,7 +117,7 @@ describe('explicit MCP cancellation', () => {
     cancel.abort(new Error('cancelled'));
     await expect(pending).rejects.toThrow('cancelled');
     expect(operation).not.toHaveBeenCalled();
-    expect(uploads.snapshot().active).toBe(0);
+    expect(uploads.snapshot()).toMatchObject({ active: 0, queued: 0, completed: 0, failed: 0 });
   });
 
   it('passes cancellation through a generated long-poll read without changing query parameters', async () => {
