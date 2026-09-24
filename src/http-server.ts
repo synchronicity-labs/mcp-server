@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
-import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import { InvalidRequestError, OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import {
   createOAuthMetadata,
   mcpAuthRouter,
@@ -11,11 +11,23 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { runWithAuth } from './auth/async-context.js';
+import { requireBearerAuth } from './auth/bearer-auth.js';
+import {
+  BASIC_CHALLENGE,
+  CLIENT_AUTH_METHODS,
+  ClientAuthenticationError,
+  mergeBasicClientCredentials,
+} from './auth/client-credentials.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry } from './session-registry.js';
 import { uploadRuntime } from './upload-runtime.js';
+
+export {
+  extractBasicClientCredentials,
+  mergeBasicClientCredentials,
+} from './auth/client-credentials.js';
 
 const OAUTH_FORM_FIELDS = [
   'grant_type',
@@ -192,41 +204,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
-export function extractBasicClientCredentials(
-  authorization: string | undefined,
-): { clientId: string; clientSecret?: string } | undefined {
-  if (!authorization?.startsWith('Basic ')) return undefined;
-
-  try {
-    const decoded = Buffer.from(authorization.slice(6), 'base64').toString();
-    const separatorIndex = decoded.indexOf(':');
-    if (separatorIndex === -1) return undefined;
-
-    const clientId = decodeURIComponent(decoded.slice(0, separatorIndex));
-    const encodedSecret = decoded.slice(separatorIndex + 1);
-    const clientSecret = encodedSecret ? decodeURIComponent(encodedSecret) : undefined;
-    return clientId ? { clientId, clientSecret } : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export function mergeBasicClientCredentials(
-  body: Record<string, unknown>,
-  authorization: string | undefined,
-): Record<string, unknown> {
-  if (typeof body.client_id === 'string' && body.client_id) return body;
-
-  const credentials = extractBasicClientCredentials(authorization);
-  if (!credentials) return body;
-
-  return {
-    ...body,
-    client_id: credentials.clientId,
-    ...(credentials.clientSecret ? { client_secret: credentials.clientSecret } : {}),
-  };
-}
-
 export function encodeOAuthFormBody(body: Record<string, unknown>): string {
   const params = new URLSearchParams();
   for (const field of OAUTH_FORM_FIELDS) {
@@ -341,10 +318,7 @@ export async function startHttpServer(
   // server restart, the SDK can recover registered client metadata but not the
   // raw client_secret. Proxy token/revoke requests with the incoming secret and
   // let the Sync API validate the confidential client.
-  app.use(['/token', '/revoke'], express.urlencoded({ extended: false }), (req, _res, next) => {
-    req.body = mergeBasicClientCredentials(asRecord(req.body), req.headers.authorization);
-    next();
-  });
+  app.use(['/token', '/revoke'], express.urlencoded({ extended: false }));
 
   const oauthProxyRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
   const proxyOAuthFormRequest = async (
@@ -352,16 +326,40 @@ export async function startHttpServer(
     req: express.Request,
     res: express.Response,
   ) => {
+    const usesAuthorization = req.headers.authorization !== undefined;
     try {
+      const authorizationCount = req.rawHeaders.filter(
+        (header, index) => index % 2 === 0 && header.toLowerCase() === 'authorization',
+      ).length;
+      if (authorizationCount > 1)
+        throw new InvalidRequestError('Multiple Authorization headers are not allowed');
+      const body = asRecord(req.body);
+      for (const field of OAUTH_FORM_FIELDS) {
+        if (Object.hasOwn(body, field) && typeof body[field] !== 'string') {
+          throw new InvalidRequestError('OAuth parameters must be single strings');
+        }
+      }
+      const credentials = mergeBasicClientCredentials(body, req.headers.authorization);
       const upstream = await fetch(new URL(`/v2/oauth/${path}`, config.baseUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: encodeOAuthFormBody(asRecord(req.body)),
+        body: encodeOAuthFormBody(credentials),
+        redirect: 'error',
       });
+      if (upstream.status === 401 && usesAuthorization) {
+        res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
+      }
       const contentType = upstream.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
       res.status(upstream.status).send(await upstream.text());
     } catch (error) {
+      if (error instanceof OAuthError) {
+        const status = error instanceof ClientAuthenticationError ? error.status : 400;
+        if (status === 401) res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(status).json(error.toResponseObject());
+        return;
+      }
       logEvent('oauth_proxy_error', {
         requestId: res.locals.requestId,
         oauthPath: path,
@@ -394,7 +392,8 @@ export async function startHttpServer(
     issuerUrl,
     serviceDocumentationUrl,
   });
-  confidentialOAuthMetadata.token_endpoint_auth_methods_supported = ['client_secret_post'];
+  confidentialOAuthMetadata.token_endpoint_auth_methods_supported = CLIENT_AUTH_METHODS;
+  confidentialOAuthMetadata.revocation_endpoint_auth_methods_supported = CLIENT_AUTH_METHODS;
 
   app.get('/.well-known/oauth-authorization-server', (_req, res) => {
     res.json(confidentialOAuthMetadata);
