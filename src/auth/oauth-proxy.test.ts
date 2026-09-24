@@ -5,9 +5,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { startHttpServer } from '../http-server.js';
+import { closeFixtureServers } from './fixture-cleanup.js';
 
-let upstream: Server;
-let hosted: Server;
+let upstream: Server | undefined;
+let hosted: Server | undefined;
 let url: string;
 let upstreamStatus = 200;
 const calls: Array<{ path: string; body: URLSearchParams; authorization: string | undefined }> = [];
@@ -65,20 +66,30 @@ beforeAll(async () => {
       port: 0,
     },
   );
+  if (!hosted) throw new Error('Hosted fixture did not start');
   url = `http://127.0.0.1:${(hosted.address() as AddressInfo).port}`;
 });
 afterAll(async () => {
-  const closed = once(hosted, 'close');
-  for (const listener of emitter.listeners('SIGTERM'))
-    if (!previous.get('SIGTERM')?.includes(listener)) listener('SIGTERM');
-  await closed;
-  upstream.closeAllConnections();
-  await new Promise<void>((resolve) => upstream.close(() => resolve()));
-  for (const event of events)
-    for (const listener of emitter.listeners(event))
-      if (!previous.get(event)?.includes(listener))
-        emitter.removeListener(event, listener as (...args: unknown[]) => void);
-  vi.restoreAllMocks();
+  try {
+    const shutdown = emitter
+      .listeners('SIGTERM')
+      .filter((listener) => !previous.get('SIGTERM')?.includes(listener));
+    if (hosted?.listening && shutdown.length > 0) {
+      const closed = once(hosted, 'close');
+      for (const listener of shutdown) listener('SIGTERM');
+      await closed;
+    }
+  } finally {
+    try {
+      await closeFixtureServers(hosted, upstream);
+    } finally {
+      for (const event of events)
+        for (const listener of emitter.listeners(event))
+          if (!previous.get(event)?.includes(listener))
+            emitter.removeListener(event, listener as (...args: unknown[]) => void);
+      vi.restoreAllMocks();
+    }
+  }
 });
 const basic = (value = 'client:fake-secret') => `Basic ${Buffer.from(value).toString('base64')}`;
 async function post(path: string, body: string, authorization?: string) {
