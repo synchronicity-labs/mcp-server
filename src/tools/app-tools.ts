@@ -106,6 +106,7 @@ async function rehostUpload(
   // A real upload is an http(s) URL we can fetch. A sandbox/local reference
   // (e.g. "sandbox:/mnt/data/...") can't be re-hosted — tell the caller to pass
   // a public URL instead, and echo the value so the cause is visible.
+  signal.throwIfAborted();
   const src = validatedUploadUrl(file, kind);
 
   // 1. Download the bytes from ChatGPT's temporary URL.
@@ -186,12 +187,14 @@ async function rehostUpload(
     }
 
     // 2. Ask Sync for a presigned upload URL after the bounded stream has been measured.
+    signal.throwIfAborted();
     const { uploadUrl, url } = (await httpClient.request('post', '/v2/assets/upload', {
       body: { fileName, contentType, size: actualSize },
       signal,
     })) as { uploadUrl: string; url: string };
 
     // 3. Upload from disk so large and unknown-length inputs never occupy one large buffer.
+    signal.throwIfAborted();
     uploadBody = createReadStream(tempPath);
     try {
       put = await fetch(uploadUrl, {
@@ -216,6 +219,7 @@ async function rehostUpload(
     runtime.recordUploadedBytes(actualSize);
 
     // 4. Register the uploaded object as an asset.
+    signal.throwIfAborted();
     const asset = (await httpClient.request('post', '/v2/assets', {
       body: { url, type: ASSET_TYPE_BY_KIND[kind] },
       signal,
@@ -278,12 +282,15 @@ function normalizedProjectName(name: string): string {
 async function findProjectIdByName(
   httpClient: HttpClient,
   projectName: string,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
   let cursor: string | undefined;
   const seenCursors = new Set<string>();
 
   do {
+    signal?.throwIfAborted();
     const result = (await httpClient.request('get', '/v2/projects', {
+      signal,
       query: {
         searchQuery: projectName,
         sortBy: 'name',
@@ -318,12 +325,15 @@ async function findProjectIdByName(
 async function getOrCreateProjectId(
   httpClient: HttpClient,
   requestedProjectName?: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const projectName = requestedProjectName?.trim() || DEFAULT_CHATGPT_PROJECT_NAME;
-  const existingProjectId = await findProjectIdByName(httpClient, projectName);
+  const existingProjectId = await findProjectIdByName(httpClient, projectName, signal);
   if (existingProjectId) return existingProjectId;
 
+  signal?.throwIfAborted();
   const created = (await httpClient.request('post', '/v2/projects', {
+    signal,
     body: { name: projectName },
   })) as { id?: unknown };
   if (typeof created?.id !== 'string') {
@@ -338,8 +348,12 @@ async function uploadMediaAsset(
   kind: MediaKind,
   fileParam: FileInput,
   runtime: UploadRuntime,
+  signal?: AbortSignal,
 ): Promise<string> {
-  return runtime.run((signal) => rehostUpload(httpClient, fileParam, kind, runtime, signal));
+  return runtime.run(
+    (uploadSignal) => rehostUpload(httpClient, fileParam, kind, runtime, uploadSignal),
+    { signal },
+  );
 }
 
 async function resolveMedia(
@@ -349,7 +363,9 @@ async function resolveMedia(
   assetIdParam: string | undefined,
   fileParam: MediaParam,
   runtime: UploadRuntime,
+  signal?: AbortSignal,
 ): Promise<ResolvedMedia> {
+  signal?.throwIfAborted();
   if (assetIdParam) return { type: kind, assetId: assetIdParam };
 
   // An explicit URL the model already holds (tts output, public/asset URL) wins.
@@ -358,7 +374,10 @@ async function resolveMedia(
   assertValidFileParam(kind, fileParam);
 
   if (fileParam) {
-    return { type: kind, assetId: await uploadMediaAsset(httpClient, kind, fileParam, runtime) };
+    return {
+      type: kind,
+      assetId: await uploadMediaAsset(httpClient, kind, fileParam, runtime, signal),
+    };
   }
 
   // Unreachable — callers validate presence first.
@@ -420,7 +439,9 @@ export function createAppTools(
         'openai/toolInvocation/invoking': 'Uploading media to Sync…',
         'openai/toolInvocation/invoked': 'Media uploaded to Sync.',
       },
-      handler: async (args) => {
+      handler: async (args, context) => {
+        const signal = context?.signal;
+        signal?.throwIfAborted();
         const { mediaType, file } = args as {
           mediaType?: MediaKind;
           file?: MediaParam;
@@ -439,7 +460,7 @@ export function createAppTools(
           );
         }
 
-        const assetId = await uploadMediaAsset(httpClient, mediaType, file, runtime);
+        const assetId = await uploadMediaAsset(httpClient, mediaType, file, runtime, signal);
         return {
           assetId,
           mediaType,
@@ -550,7 +571,9 @@ export function createAppTools(
         'openai/toolInvocation/invoking': 'Creating your lipsync video…',
         'openai/toolInvocation/invoked': 'Lipsync generation started.',
       },
-      handler: async (args) => {
+      handler: async (args, context) => {
+        const signal = context?.signal;
+        signal?.throwIfAborted();
         const {
           videoUrl,
           videoAssetId,
@@ -629,7 +652,7 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
-        const projectId = await getOrCreateProjectId(httpClient, projectName);
+        const projectId = await getOrCreateProjectId(httpClient, projectName, signal);
 
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript
@@ -643,14 +666,16 @@ export function createAppTools(
                 ...(similarityBoost === undefined ? {} : { similarityBoost }),
               },
             }
-          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio, runtime);
+          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio, runtime, signal);
         const visual = hasImage
-          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image, runtime)
-          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video, runtime);
+          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image, runtime, signal)
+          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video, runtime, signal);
 
         const resolvedModel = model ?? 'sync-3';
 
+        signal?.throwIfAborted();
         return httpClient.request('post', '/v2/generate', {
+          signal,
           body: {
             model: resolvedModel,
             input: [visual, driver],
