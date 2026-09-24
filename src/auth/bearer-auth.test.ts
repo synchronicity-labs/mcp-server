@@ -2,6 +2,7 @@ import { once } from 'node:events';
 import { createServer, request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { afterEach, expect, it, vi } from 'vitest';
 import { requireBearerAuth } from './bearer-auth.js';
 import { createOAuthProvider } from './oauth-provider.js';
@@ -9,8 +10,12 @@ import { parseRetryAfter, verifySyncAccessToken } from './token-verification.js'
 
 const nativeFetch = globalThis.fetch;
 afterEach(() => vi.unstubAllGlobals());
-async function withProtectedRoute(run: (url: string, reached: () => number) => Promise<void>) {
+async function withProtectedRoute(
+  run: (url: string, reached: () => number) => Promise<void>,
+  limit = 100,
+) {
   const app = express();
+  app.use(rateLimit({ windowMs: 60_000, limit }));
   let reached = 0;
   app.use(
     requireBearerAuth({
@@ -141,6 +146,7 @@ it.each([
 ])('drops malformed Retry-After %s', (value) => expect(parseRetryAfter(value)).toBeUndefined());
 it('retains SDK scope enforcement', async () => {
   const app = express();
+  app.use(rateLimit({ windowMs: 60_000, limit: 100 }));
   app.use(
     requireBearerAuth({
       requiredScopes: ['write'],
@@ -164,6 +170,61 @@ it('retains SDK scope enforcement', async () => {
     );
     expect(response.status).toBe(403);
     expect(response.headers.get('www-authenticate')).toContain('insufficient_scope');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it('rate-limits the fixture before verification', async () => {
+  const verify = vi.fn(async () =>
+    Response.json({ sub: 'user', client_id: 'client', expires_at: 4000000000 }),
+  );
+  vi.stubGlobal('fetch', verify);
+  await withProtectedRoute(async (url, reached) => {
+    expect((await nativeFetch(url, { headers: { Authorization: 'Bearer fake' } })).status).toBe(
+      200,
+    );
+    expect((await nativeFetch(url, { headers: { Authorization: 'Bearer fake' } })).status).toBe(
+      429,
+    );
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(reached()).toBe(1);
+  }, 1);
+});
+it('retains only verified ownership fields through the SDK adapter', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        sub: 'user',
+        client_id: 'client',
+        organization_id: 'org',
+        expires_at: 4000000000,
+        email: 'ignored@example.invalid',
+        extra: { sub: 'spoofed' },
+      }),
+    ),
+  );
+  const app = express();
+  app.use(rateLimit({ windowMs: 60_000, limit: 100 }));
+  app.use(requireBearerAuth({ verifier: createOAuthProvider('https://fixture.invalid') }));
+  app.get('/', (req, res) => res.json({ clientId: req.auth?.clientId, extra: req.auth?.extra }));
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const res = await nativeFetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, {
+      headers: {
+        Authorization: 'Bearer fake-token',
+        'x-user-id': 'spoofed',
+        'x-organization-id': 'spoofed',
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      clientId: 'client',
+      extra: { sub: 'user', organizationId: 'org' },
+    });
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

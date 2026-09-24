@@ -34,3 +34,27 @@ Evidence is local/mock only. Real ChatGPT/Claude/Muse acceptance and deployment
 remain with integration/release owners. This reconstructs the unavailable
 historical implementation under the user's explicit continuation instruction;
 it does not claim equivalence to those unpublished commits or their review.
+
+## Verified identity contract for E1
+
+Session A owns session enforcement. The verifier retains only validated upstream
+identity in `AuthInfo.extra.sub` (required) and `AuthInfo.extra.organizationId`
+(optional), alongside the existing verified `AuthInfo.clientId`. The source of
+organization context is userinfo `organization_id`; no header, MCP clientInfo,
+request argument, raw token or arbitrary upstream extra object supplies identity.
+Malformed provided organization IDs fail closed with sanitized 502; legacy
+responses that omit the organization remain supported. Strings are not trimmed,
+case-normalized, or otherwise transformed after nonblank validation.
+
+Within the configured issuer, the ownership tuple is `(sub, clientId,
+organizationId ?? null)`. Refreshed access tokens and changed expiry with the same
+tuple are the same owner. Different subjects, clients or organizations, including
+present-to-absent organization changes, are different owners. Absent organization
+is not a wildcard. A must reject missing subject/client identity, and check the
+tuple before lookup/touch/transport dispatch, including notifications/cancellation,
+GET and DELETE. B exposes identity only; it does not enforce session policy.
+
+The PR57 fixture rate-limit findings are fixed with explicit rateLimit middleware
+before verification, plus a regression proving a rejected request does not verify.
+Existing full-body deadline, cancellation, retryable errors and SDK adapter tests
+remain required on every revised head.
