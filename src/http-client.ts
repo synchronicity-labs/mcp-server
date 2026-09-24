@@ -1,3 +1,4 @@
+import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
 
 // Fallback client name for stdio transport (single session, no AsyncLocalStorage)
@@ -59,63 +60,69 @@ export function createHttpClient(baseUrl: string, staticAuthHeaders: AuthHeaders
   return {
     async request(method, path, options = {}) {
       const deadline = AbortSignal.timeout(UPSTREAM_REQUEST_TIMEOUT_MS);
-      const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-      signal.throwIfAborted();
-      const url = new URL(path, baseUrl);
-      if (options.query) {
-        for (const [key, value] of Object.entries(options.query)) {
-          if (value !== undefined && value !== '') {
-            url.searchParams.set(key, value);
+      const { signal, dispose } = combineSignals(
+        options.signal ? [options.signal, deadline] : [deadline],
+      );
+      try {
+        signal.throwIfAborted();
+        const url = new URL(path, baseUrl);
+        if (options.query) {
+          for (const [key, value] of Object.entries(options.query)) {
+            if (value !== undefined && value !== '') {
+              url.searchParams.set(key, value);
+            }
           }
         }
+
+        // Per-request OAuth token takes priority over static headers
+        const perRequestToken = getAuthToken();
+        const authHeaders: Record<string, string> = perRequestToken
+          ? { Authorization: `Bearer ${perRequestToken}` }
+          : { ...staticAuthHeaders };
+
+        const clientName = getClientName() ?? staticClientName;
+        const syncSource = resolveSyncSource(clientName);
+
+        const headers: Record<string, string> = {
+          ...authHeaders,
+          'x-sync-source': syncSource,
+          ...options.headers,
+        };
+
+        if (options.body && method !== 'get') {
+          headers['Content-Type'] = 'application/json';
+        }
+
+        const response = await fetch(url.toString(), {
+          method: method.toUpperCase(),
+          headers,
+          body: options.body ? JSON.stringify(options.body) : undefined,
+          signal,
+        });
+
+        const text = await response.text();
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = text;
+        }
+
+        if (!response.ok) {
+          const message =
+            typeof parsed === 'object' && parsed !== null && 'message' in parsed
+              ? (parsed as { message: string }).message
+              : text;
+          throw new Error(
+            `API request failed: ${response.status} ${response.statusText} - ${message}`,
+          );
+        }
+
+        return parsed;
+      } finally {
+        dispose();
       }
-
-      // Per-request OAuth token takes priority over static headers
-      const perRequestToken = getAuthToken();
-      const authHeaders: Record<string, string> = perRequestToken
-        ? { Authorization: `Bearer ${perRequestToken}` }
-        : { ...staticAuthHeaders };
-
-      const clientName = getClientName() ?? staticClientName;
-      const syncSource = resolveSyncSource(clientName);
-
-      const headers: Record<string, string> = {
-        ...authHeaders,
-        'x-sync-source': syncSource,
-        ...options.headers,
-      };
-
-      if (options.body && method !== 'get') {
-        headers['Content-Type'] = 'application/json';
-      }
-
-      const response = await fetch(url.toString(), {
-        method: method.toUpperCase(),
-        headers,
-        body: options.body ? JSON.stringify(options.body) : undefined,
-        signal,
-      });
-
-      const text = await response.text();
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = text;
-      }
-
-      if (!response.ok) {
-        const message =
-          typeof parsed === 'object' && parsed !== null && 'message' in parsed
-            ? (parsed as { message: string }).message
-            : text;
-        throw new Error(
-          `API request failed: ${response.status} ${response.statusText} - ${message}`,
-        );
-      }
-
-      return parsed;
     },
   };
 }

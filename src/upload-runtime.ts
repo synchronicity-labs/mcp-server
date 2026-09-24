@@ -1,3 +1,5 @@
+import { combineSignals } from './abort-signals.js';
+
 export type UploadRuntimeConfig = {
   maxBytes: number;
   maxConcurrent: number;
@@ -101,14 +103,15 @@ export class UploadRuntime {
       controller.abort(new UploadTimeoutError(timeoutMs, this.config.retryAfterMs));
     }, timeoutMs);
     timeout.unref();
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, controller.signal])
-      : controller.signal;
+    const { signal, dispose } = combineSignals(
+      options.signal ? [options.signal, controller.signal] : [controller.signal],
+    );
     let release: () => void;
     try {
       release = await this.#acquire(signal);
     } catch (error) {
       clearTimeout(timeout);
+      dispose();
       throw error;
     }
 
@@ -122,6 +125,7 @@ export class UploadRuntime {
       throw error;
     } finally {
       clearTimeout(timeout);
+      dispose();
       release();
     }
   }
