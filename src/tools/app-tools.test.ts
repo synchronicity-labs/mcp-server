@@ -1,5 +1,4 @@
-import { readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveClientProfile } from '../client-profile.js';
@@ -9,7 +8,7 @@ import { createAppTools } from './app-tools.js';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, rm: vi.fn(actual.rm) };
+  return { ...actual, mkdtemp: vi.fn(actual.mkdtemp), rm: vi.fn(actual.rm) };
 });
 
 describe('createAppTools — create-lipsync', () => {
@@ -321,9 +320,7 @@ describe('createAppTools — create-lipsync', () => {
   });
 
   it('rejects an oversized streamed body and removes its temporary file', async () => {
-    const before = new Set(
-      (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-')),
-    );
+    const before = vi.mocked(mkdtemp).mock.results.length;
     const runtime = new UploadRuntime({
       maxBytes: 8,
       maxConcurrent: 1,
@@ -349,8 +346,11 @@ describe('createAppTools — create-lipsync', () => {
       }),
     ).rejects.toThrow(/too large/);
 
-    const after = (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-'));
-    expect(after.filter((entry) => !before.has(entry))).toEqual([]);
+    const created = vi.mocked(mkdtemp).mock.results.slice(before);
+    expect(created).toHaveLength(1);
+    for (const result of created) {
+      await expect(access(await result.value)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -441,9 +441,7 @@ describe('createAppTools — create-lipsync', () => {
   });
 
   it('removes its temporary file when the storage upload fails', async () => {
-    const before = new Set(
-      (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-')),
-    );
+    const before = vi.mocked(mkdtemp).mock.results.length;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url: string, init?: { method?: string }) => {
@@ -465,8 +463,11 @@ describe('createAppTools — create-lipsync', () => {
       }),
     ).rejects.toThrow(/storage connection reset/);
 
-    const after = (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-'));
-    expect(after.filter((entry) => !before.has(entry))).toEqual([]);
+    const created = vi.mocked(mkdtemp).mock.results.slice(before);
+    expect(created).toHaveLength(1);
+    for (const result of created) {
+      await expect(access(await result.value)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
   });
 
   it('rejects a URL string passed to upload-media file with a clear message', async () => {

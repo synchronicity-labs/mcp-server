@@ -55,7 +55,7 @@ export function createToolDescriptorMeta(
   };
 }
 
-function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
+export function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
     server.registerTool(
       tool.name,
@@ -67,12 +67,12 @@ function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
-      async (args): Promise<CallToolResult> => {
+      async (args, context): Promise<CallToolResult> => {
         try {
           if (tool.resultFormat === 'mcp') {
-            return tool.handler((args ?? {}) as Record<string, unknown>);
+            return await tool.handler((args ?? {}) as Record<string, unknown>, context);
           }
-          const result = await tool.handler((args ?? {}) as Record<string, unknown>);
+          const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
           return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
           return createToolErrorResult(error);

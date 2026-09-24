@@ -275,3 +275,17 @@ Defaults are `ChatGPT generations`, `Claude generations`, or `Sync generations` 
 unknown clients; explicit `projectName` wins. Muse remains an unknown client until its
 actual handshake alias is verified. Client names affect presentation only, never
 organization access or credit permissions. No Muse origin or attachment contract is assumed.
+
+### Request cancellation
+
+Explicit MCP request cancellation propagates to project lookup, upload admission,
+file transfer, asset registration, generation submission, and generated API tools.
+The server checks cancellation before starting another write. Sync API calls have
+a 65-second deadline, allowing the supported 55-second generation long poll;
+upload queueing and transfer retain their configured upload deadline.
+
+Cancellation cannot undo a write already accepted by Sync. If submission times
+out or is cancelled while in flight, acceptance may be unknown: do not blindly
+retry a generation. Retrieve a known generation ID to check its status. Closing a
+connection is not a promise that an accepted generation was cancelled, and this
+server does not automatically send a generation-cancellation or refund request.

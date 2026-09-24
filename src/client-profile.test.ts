@@ -130,6 +130,61 @@ describe('immutable client profiles', () => {
     expect(Object.isFrozen(resolveClientProfile(name))).toBe(true);
   });
 
+  it.each([
+    'chatgpt',
+    'claude',
+    'unknown',
+  ])('retains SDK cancellation through the profile wrapper for %s', async (name) => {
+    const calls = fakeApi();
+    const fetchApi = globalThis.fetch;
+    let started!: (signal: AbortSignal) => void;
+    const projectStarted = new Promise<AbortSignal>((resolve) => {
+      started = resolve;
+    });
+    let stopped!: () => void;
+    const projectStopped = new Promise<void>((resolve) => {
+      stopped = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, options?: RequestInit) => {
+        if (new URL(url).pathname === '/v2/projects') {
+          const signal = options?.signal;
+          if (!signal) throw new Error('Profile wrapper dropped cancellation');
+          started(signal);
+          return new Promise<Response>((_resolve, reject) => {
+            signal.addEventListener(
+              'abort',
+              () => {
+                reject(signal.reason);
+                stopped();
+              },
+              { once: true },
+            );
+          });
+        }
+        return fetchApi(url, options);
+      }),
+    );
+    const { client } = await connect(await createMcpServerFactory(config), name, true);
+    const cancel = new AbortController();
+    const call = client.callTool(
+      {
+        name: 'create-lipsync',
+        arguments: { imageAssetId: 'image', script: 'Hello', voiceId: 'real-voice' },
+      },
+      undefined,
+      { signal: cancel.signal },
+    );
+    const rejected = expect(call).rejects.toThrow();
+    const upstreamSignal = await projectStarted;
+    cancel.abort(new Error('user cancelled'));
+    await rejected;
+    await projectStopped;
+    expect(upstreamSignal.aborted).toBe(true);
+    expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(0);
+  });
+
   it('configures concurrent real HTTP sessions before discovery', async () => {
     const calls = fakeApi();
     const factory = await createMcpServerFactory(config);
