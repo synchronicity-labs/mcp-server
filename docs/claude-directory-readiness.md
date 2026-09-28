@@ -47,3 +47,5 @@ PR56 owns cancellation. Validate compatibility, cancellation, OAuth and session 
 - [Anthropic Software Directory Policy](https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy)
 - [MCP Streamable HTTP transport requirements](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
 - [MCP Apps migration guide](https://github.com/modelcontextprotocol/ext-apps/blob/main/docs/migrate_from_openai_apps.md)
+
+ChatGPT upload transport compatibility: keep `openai-mcp` as `x-sync-source: mcp:openai-mcp`, even though its presentation profile is ChatGPT. The deployed dev API only selects bearer authentication for supported source values, including `mcp` and `mcp:*`; promoting this header to `chatgpt` returned 401 before upload signing. Native file download succeeded in the live test, but storage upload and asset registration still require a successful live retest.

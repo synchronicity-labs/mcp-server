@@ -9,11 +9,12 @@ import { getAuthToken, getClientName } from './auth/async-context.js';
  * against a real connection when onboarding a new host (see the publishing
  * runbook) and add it here.
  */
+// Keep openai-mcp namespaced: the deployed API selects bearer auth for mcp/mcp:*
+// sources. Its ChatGPT presentation profile is independent of this transport header.
 const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
   chatgpt: 'chatgpt',
   openai: 'chatgpt',
   'openai-chatgpt': 'chatgpt',
-  'openai-mcp': 'chatgpt',
   claude: 'claude',
   'claude-ai': 'claude',
   gemini: 'gemini',
