@@ -20,6 +20,7 @@ import {
 } from './auth/client-credentials.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
+import { readOAuthResponseText } from './oauth-response.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry, sessionOwner } from './session-registry.js';
 import { uploadRuntime } from './upload-runtime.js';
@@ -365,7 +366,7 @@ export async function startHttpServer(
         redirect: 'error',
         signal: controller.signal,
       });
-      const responseBody = await upstream.text();
+      const responseBody = await readOAuthResponseText(upstream, controller.signal);
       if (controller.signal.aborted || res.destroyed) return;
       if (upstream.status === 401 && usesAuthorization) {
         res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);

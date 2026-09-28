@@ -281,7 +281,7 @@ organization access or credit permissions. No Muse origin or attachment contract
 Explicit MCP request cancellation propagates to project lookup, upload admission,
 file transfer, asset registration, generation submission, and generated API tools.
 The server checks cancellation before starting another write. Tool API calls have
-a 65-second deadline, allowing the supported 55-second generation long poll;
+a 65-second transport deadline; generation polling uses the API default wait window;
 upload queueing and transfer retain their configured upload deadline.
 
 Cancellation cannot undo a write already accepted by Sync. If submission times

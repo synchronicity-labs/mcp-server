@@ -17,7 +17,12 @@ const clients: Client[] = [];
 const events = ['SIGINT', 'SIGTERM', 'uncaughtExceptionMonitor', 'warning', 'exit'] as const;
 const emitter: EventEmitter = process;
 const previous = new Map<string, ReturnType<EventEmitter['listeners']>>();
-const calls: Array<{ path: string; token?: string; body: Record<string, unknown> }> = [];
+const calls: Array<{
+  path: string;
+  token?: string;
+  body: Record<string, unknown>;
+  query: Record<string, string>;
+}> = [];
 const signedUrl = 'https://fixture.invalid/result.mp4?Signature=a%2Fb%2Bc&Expires=123';
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -40,7 +45,7 @@ const spec = {
         parameters: [
           { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
           { name: 'wait', in: 'query', schema: { type: 'boolean' } },
-          { name: 'timeout', in: 'query', schema: { type: 'number' } },
+          { name: 'timeout', in: 'query', schema: { type: 'number', minimum: 1, maximum: 10 } },
         ],
       },
     },
@@ -51,12 +56,13 @@ beforeAll(async () => {
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   upstream = createServer(async (req, res) => {
-    const path = new URL(req.url ?? '/', 'http://fixture.invalid').pathname;
+    const requestUrl = new URL(req.url ?? '/', 'http://fixture.invalid');
+    const path = requestUrl.pathname;
     let raw = '';
     for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : {};
     const token = req.headers.authorization;
-    calls.push({ path, token, body });
+    calls.push({ path, token, body, query: Object.fromEntries(requestUrl.searchParams) });
     res.setHeader('Content-Type', 'application/json');
     if (path === '/api-json') {
       res.end(JSON.stringify(spec));
@@ -104,6 +110,21 @@ beforeAll(async () => {
       return;
     }
     if (path === '/v2/generate/generation') {
+      const timeout = requestUrl.searchParams.get('timeout');
+      if (timeout !== null && Number(timeout) > 10) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ message: 'timeout must not be greater than 10' }));
+        return;
+      }
+      if (requestUrl.searchParams.get('wait') !== 'true') {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ message: 'Expected wait=true for this polling fixture' }));
+        return;
+      }
+      if (calls.filter((call) => call.path === path && call.token === token).length === 1) {
+        res.end(JSON.stringify({ id: 'generation', status: 'PENDING' }));
+        return;
+      }
       res.end(JSON.stringify({ id: 'generation', status: 'COMPLETED', outputUrl: signedUrl }));
       return;
     }
@@ -188,11 +209,23 @@ it('preserves profiles, authenticated writes and signed results across concurren
       expect(posted?.body.projectId).toBe(
         `project:${['ChatGPT generations', 'Claude generations', 'Sync generations'][index]}`,
       );
+      const pending = await client.callTool({
+        name: 'generate_get-generation',
+        arguments: { id: 'generation', wait: true },
+      });
+      expect(pending.structuredContent).toMatchObject({ id: 'generation', status: 'PENDING' });
       const result = await client.callTool({
         name: 'generate_get-generation',
-        arguments: { id: 'generation', wait: true, timeout: 55 },
+        arguments: { id: 'generation', wait: true },
       });
       expect(result.structuredContent).toMatchObject({ outputUrl: signedUrl });
+      const polls = calls.filter(
+        (call) => call.path === '/v2/generate/generation' && call.token === `Bearer ${name}`,
+      );
+      expect(polls.map((call) => call.query)).toEqual([{ wait: 'true' }, { wait: 'true' }]);
+      expect(
+        calls.filter((call) => call.path === '/v2/generate' && call.token === `Bearer ${name}`),
+      ).toHaveLength(1);
     }),
   );
 });
