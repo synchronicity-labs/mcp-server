@@ -63,12 +63,12 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // --- Generate + poll ---
   'generate_create-generation': {
     description:
-      'Create a lipsync video. Provide a video input (or an image for sync-3) and an audio input, each by `url` or `assetId`. Returns a generation `id` — call generate_get-generation once with `wait: true` and `timeout: 55`, then read `outputUrl`. To choose which face to sync in a multi-person video, pass `options.active_speaker_detection` (auto_detect, or coordinates + frame_number).',
+      'Create a lipsync video. Provide a video input (or an image for sync-3) and an audio input, each by `url` or `assetId`. Returns a generation `id` — call generate_get-generation with `wait: true` and omit `timeout` to use the API default. If still pending, poll the same id; when completed, read `outputUrl`. To choose which face to sync in a multi-person video, pass `options.active_speaker_detection` (auto_detect, or coordinates + frame_number).',
     outputSchema: generationOutputSchema,
   },
   'generate_get-generation': {
     description:
-      'Get a generation by id. Pass `wait: true` and `timeout: 55` for generation results instead of making repeated manual polls. When status is COMPLETED, copy the exact `structuredContent.outputUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited.',
+      'Get a generation by id. Pass `wait: true` and omit `timeout` to use the API default. If still pending, poll the same generation id again; never resubmit the generation. When status is COMPLETED, copy the exact `structuredContent.outputUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited.',
     outputSchema: generationOutputSchema,
   },
   'generate_get-generations': {

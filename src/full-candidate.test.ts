@@ -40,7 +40,7 @@ const spec = {
         parameters: [
           { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
           { name: 'wait', in: 'query', schema: { type: 'boolean' } },
-          { name: 'timeout', in: 'query', schema: { type: 'number' } },
+          { name: 'timeout', in: 'query', schema: { type: 'number', minimum: 1, maximum: 10 } },
         ],
       },
     },
@@ -104,6 +104,12 @@ beforeAll(async () => {
       return;
     }
     if (path === '/v2/generate/generation') {
+      const timeout = new URL(req.url ?? '/', 'http://fixture.invalid').searchParams.get('timeout');
+      if (timeout !== null && Number(timeout) > 10) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ message: 'timeout must not be greater than 10' }));
+        return;
+      }
       res.end(JSON.stringify({ id: 'generation', status: 'COMPLETED', outputUrl: signedUrl }));
       return;
     }
@@ -190,7 +196,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
       );
       const result = await client.callTool({
         name: 'generate_get-generation',
-        arguments: { id: 'generation', wait: true, timeout: 55 },
+        arguments: { id: 'generation', wait: true },
       });
       expect(result.structuredContent).toMatchObject({ outputUrl: signedUrl });
     }),

@@ -24,7 +24,7 @@ export function resolveSyncSource(clientName?: string): string {
   return FIRST_CLASS_SOURCE_BY_CLIENT[clientName.toLowerCase()] ?? `mcp:${clientName}`;
 }
 
-// Allow a 55-second generation long poll plus response overhead. No write retries.
+// Bound upstream calls independently of the API-defined polling window. No write retries.
 export const UPSTREAM_REQUEST_TIMEOUT_MS = 65_000;
 
 type AuthHeaders = Record<string, string>;
