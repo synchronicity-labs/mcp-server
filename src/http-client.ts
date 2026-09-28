@@ -13,6 +13,7 @@ const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
   chatgpt: 'chatgpt',
   openai: 'chatgpt',
   'openai-chatgpt': 'chatgpt',
+  'openai-mcp': 'chatgpt',
   claude: 'claude',
   'claude-ai': 'claude',
   gemini: 'gemini',

@@ -113,6 +113,8 @@ describe('immutable client profiles', () => {
     'chatgpt',
     'openai',
     'openai-chatgpt',
+    'openai-mcp',
+    'OpenAI-MCP',
     'ChatGPT',
   ])('recognizes exact ChatGPT alias %s', (name) => {
     expect(resolveClientProfile(name).name).toBe('chatgpt');
@@ -124,6 +126,8 @@ describe('immutable client profiles', () => {
     'not-claude',
     'claude-desktop-unverified',
     'chatgpt.evil',
+    'openai-mcp.evil',
+    'not-openai-mcp',
     'muse',
     'Meta Muse',
     undefined,
@@ -190,12 +194,23 @@ describe('immutable client profiles', () => {
   it('configures concurrent real HTTP sessions before discovery', async () => {
     const calls = fakeApi();
     const factory = await createMcpServerFactory(config);
-    const names = ['chatgpt', 'claude', 'unknown'];
+    const names = ['chatgpt', 'openai-mcp', 'claude', 'unknown'];
     const sessions = await Promise.all(names.map((name) => connect(factory, name, true)));
     await Promise.all(
       sessions.map(async ({ client }, index) => {
-        expect((await client.listTools()).tools.length).toBe(index === 0 ? 5 : 3);
-        expect((await client.listResources()).resources.length > 0).toBe(index === 0);
+        const supportsUploads = index < 2;
+        const { tools } = await client.listTools();
+        expect(tools.length).toBe(supportsUploads ? 5 : 3);
+        expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
+        expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
+        const create = tools.find((tool) => tool.name === 'create-lipsync')!;
+        expect(create._meta?.['openai/fileParams']).toEqual(
+          supportsUploads ? ['video', 'image', 'audio'] : undefined,
+        );
+        for (const field of ['video', 'image', 'audio']) {
+          expect(Boolean(create.inputSchema.properties?.[field])).toBe(supportsUploads);
+        }
+        expect((await client.listResources()).resources.length > 0).toBe(supportsUploads);
         expect(
           (
             await client.callTool({
@@ -206,7 +221,12 @@ describe('immutable client profiles', () => {
         ).not.toBe(true);
       }),
     );
-    const projects = ['ChatGPT generations', 'Claude generations', 'Sync generations'];
+    const projects = [
+      'ChatGPT generations',
+      'ChatGPT generations',
+      'Claude generations',
+      'Sync generations',
+    ];
     for (const [index, name] of names.entries()) {
       expect(
         calls.find(

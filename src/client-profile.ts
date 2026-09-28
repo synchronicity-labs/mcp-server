@@ -26,6 +26,7 @@ export function resolveClientProfile(name?: string): ClientProfile {
     case 'chatgpt':
     case 'openai':
     case 'openai-chatgpt':
+    case 'openai-mcp':
       return CHATGPT;
     case 'claude':
     case 'claude-ai':

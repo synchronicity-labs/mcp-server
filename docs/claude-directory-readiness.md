@@ -33,7 +33,7 @@ The upload widget uses the ChatGPT `window.openai` bridge and is exposed only to
 
 Profiles are immutable per initialized session; HTTP initialization composes the profile callback with session identity tracking. HTTP identities never use a process-global stdio fallback. Handshake names affect presentation/default projects only and do not confer authentication, organization or credit permissions. Existing source attribution is not promoted to trusted attribution.
 
-Known aliases: `chatgpt`, `openai`, `openai-chatgpt`; `claude`, `claude-ai` (case-insensitive exact matches). Muse aliases and origins remain unverified: unknown clients use `Sync generations`, and no Meta wildcard origins or native attachment adapter have been added. Existing allowed origins and absent-Origin server-to-server access remain supported.
+Known aliases: `chatgpt`, `openai`, `openai-chatgpt`, `openai-mcp`; `claude`, `claude-ai` (case-insensitive exact matches). `openai-mcp` version `1.0.0` was observed during ChatGPT dev-preview tool refresh on 2026-09-28. Without this alias, ChatGPT receives the generic three-tool catalog with no file inputs or upload widget. Muse aliases and origins remain unverified: unknown clients use `Sync generations`, and no Meta wildcard origins or native attachment adapter have been added. Existing allowed origins and absent-Origin server-to-server access remain supported.
 
 Local tests exercise concurrent HTTP sessions, discovery/resources, unsupported calls, all image/video × audio/script combinations via URLs and asset IDs, voice selection, explicit project overrides and exact signed results. They use fake organizations/media/API responses, not live Muse/Claude acceptance or a real Sync Copy ID/Copy URL export.
 
