@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { finished, pipeline } from 'node:stream/promises';
 import { z } from 'zod';
+import { type ClientProfile, resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import type { McpToolDefinition } from './generator.js';
@@ -33,8 +34,6 @@ const DEFAULT_CONTENT_TYPE: Record<MediaKind, string> = {
   image: 'image/png',
   audio: 'audio/mpeg',
 };
-
-const DEFAULT_CHATGPT_PROJECT_NAME = 'ChatGPT generations';
 
 type ProjectSummary = { id: string; name: string | null };
 type ProjectsPage = { items: ProjectSummary[]; nextCursor?: string };
@@ -106,6 +105,7 @@ async function rehostUpload(
   // A real upload is an http(s) URL we can fetch. A sandbox/local reference
   // (e.g. "sandbox:/mnt/data/...") can't be re-hosted — tell the caller to pass
   // a public URL instead, and echo the value so the cause is visible.
+  signal.throwIfAborted();
   const src = validatedUploadUrl(file, kind);
 
   // 1. Download the bytes from ChatGPT's temporary URL.
@@ -186,12 +186,14 @@ async function rehostUpload(
     }
 
     // 2. Ask Sync for a presigned upload URL after the bounded stream has been measured.
+    signal.throwIfAborted();
     const { uploadUrl, url } = (await httpClient.request('post', '/v2/assets/upload', {
       body: { fileName, contentType, size: actualSize },
       signal,
     })) as { uploadUrl: string; url: string };
 
     // 3. Upload from disk so large and unknown-length inputs never occupy one large buffer.
+    signal.throwIfAborted();
     uploadBody = createReadStream(tempPath);
     try {
       put = await fetch(uploadUrl, {
@@ -216,6 +218,7 @@ async function rehostUpload(
     runtime.recordUploadedBytes(actualSize);
 
     // 4. Register the uploaded object as an asset.
+    signal.throwIfAborted();
     const asset = (await httpClient.request('post', '/v2/assets', {
       body: { url, type: ASSET_TYPE_BY_KIND[kind] },
       signal,
@@ -278,12 +281,15 @@ function normalizedProjectName(name: string): string {
 async function findProjectIdByName(
   httpClient: HttpClient,
   projectName: string,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
   let cursor: string | undefined;
   const seenCursors = new Set<string>();
 
   do {
+    signal?.throwIfAborted();
     const result = (await httpClient.request('get', '/v2/projects', {
+      signal,
       query: {
         searchQuery: projectName,
         sortBy: 'name',
@@ -317,13 +323,17 @@ async function findProjectIdByName(
 
 async function getOrCreateProjectId(
   httpClient: HttpClient,
-  requestedProjectName?: string,
+  requestedProjectName: string | undefined,
+  defaultName: string,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const projectName = requestedProjectName?.trim() || DEFAULT_CHATGPT_PROJECT_NAME;
-  const existingProjectId = await findProjectIdByName(httpClient, projectName);
+  const projectName = requestedProjectName?.trim() || defaultName;
+  const existingProjectId = await findProjectIdByName(httpClient, projectName, signal);
   if (existingProjectId) return existingProjectId;
 
+  signal?.throwIfAborted();
   const created = (await httpClient.request('post', '/v2/projects', {
+    signal,
     body: { name: projectName },
   })) as { id?: unknown };
   if (typeof created?.id !== 'string') {
@@ -338,8 +348,12 @@ async function uploadMediaAsset(
   kind: MediaKind,
   fileParam: FileInput,
   runtime: UploadRuntime,
+  signal?: AbortSignal,
 ): Promise<string> {
-  return runtime.run((signal) => rehostUpload(httpClient, fileParam, kind, runtime, signal));
+  return runtime.run(
+    (uploadSignal) => rehostUpload(httpClient, fileParam, kind, runtime, uploadSignal),
+    { signal },
+  );
 }
 
 async function resolveMedia(
@@ -349,7 +363,9 @@ async function resolveMedia(
   assetIdParam: string | undefined,
   fileParam: MediaParam,
   runtime: UploadRuntime,
+  signal?: AbortSignal,
 ): Promise<ResolvedMedia> {
+  signal?.throwIfAborted();
   if (assetIdParam) return { type: kind, assetId: assetIdParam };
 
   // An explicit URL the model already holds (tts output, public/asset URL) wins.
@@ -358,7 +374,10 @@ async function resolveMedia(
   assertValidFileParam(kind, fileParam);
 
   if (fileParam) {
-    return { type: kind, assetId: await uploadMediaAsset(httpClient, kind, fileParam, runtime) };
+    return {
+      type: kind,
+      assetId: await uploadMediaAsset(httpClient, kind, fileParam, runtime, signal),
+    };
   }
 
   // Unreachable — callers validate presence first.
@@ -393,16 +412,16 @@ async function resolveMedia(
 export function createAppTools(
   httpClient: HttpClient,
   runtime: UploadRuntime = uploadRuntime,
+  getProfile: () => ClientProfile = () => resolveClientProfile(),
 ): McpToolDefinition[] {
   return [
     {
       name: 'upload-media',
       title: 'Upload media',
       description:
-        'Upload a user-provided image, video, or audio file to Sync asset storage and return a durable assetId. ' +
-        'Use this when the user uploaded media in chat and a later Sync tool call should reference it by assetId. ' +
-        'The file field must be the uploaded ChatGPT file object. For public URLs, use assets_create or pass the URL directly to create-lipsync. ' +
-        'This tool only stores the media; it does not create a lipsync generation. After it returns, pass the assetId to create-lipsync as imageAssetId, videoAssetId, or audioAssetId.',
+        'Stage an image, video, or audio file in Sync asset storage and return a durable assetId. ' +
+        'The file must be a host-provided object with a temporary HTTP download URL. Public URL strings are not accepted. ' +
+        'This creates a media asset but does not start a lipsync generation.',
       inputSchema: {
         mediaType: z
           .enum(['video', 'image', 'audio'])
@@ -412,7 +431,12 @@ export function createAppTools(
           .describe('Uploaded media file from ChatGPT. Do not pass URL strings here.'),
       },
       outputSchema: uploadMediaOutputSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       meta: {
         ui: { visibility: ['model', 'app'] },
         'openai/fileParams': ['file'],
@@ -420,7 +444,9 @@ export function createAppTools(
         'openai/toolInvocation/invoking': 'Uploading media to Sync…',
         'openai/toolInvocation/invoked': 'Media uploaded to Sync.',
       },
-      handler: async (args) => {
+      handler: async (args, context) => {
+        const signal = context?.signal;
+        signal?.throwIfAborted();
         const { mediaType, file } = args as {
           mediaType?: MediaKind;
           file?: MediaParam;
@@ -439,7 +465,7 @@ export function createAppTools(
           );
         }
 
-        const assetId = await uploadMediaAsset(httpClient, mediaType, file, runtime);
+        const assetId = await uploadMediaAsset(httpClient, mediaType, file, runtime, signal);
         return {
           assetId,
           mediaType,
@@ -452,15 +478,10 @@ export function createAppTools(
       name: 'create-lipsync',
       title: 'Create lipsync',
       description:
-        'Create a lipsync video from audio + EITHER a video or a still image (an image drives sync-3 image-to-video). ' +
-        'Defaults to sync-3 unless the user explicitly requests another model. ' +
-        `Generations are attached to an existing project with the requested projectName, or to "${DEFAULT_CHATGPT_PROJECT_NAME}" by default; if no matching project exists, it is created first. ` +
-        'For "make this image/video say X" requests, pass `script` with a `voiceId` from voices_get-voices; do not call tts_create first. ' +
-        'Pass URLs whenever you have them — set `audioUrl` to any public audio URL, and `videoUrl`/`imageUrl` to a hosted media URL. ' +
-        'If media was uploaded to Sync first, pass `audioAssetId`, `videoAssetId`, or `imageAssetId`. ' +
-        'For files the user uploaded in chat, prefer calling upload-media first and pass the returned assetId here; direct `audio`/`video`/`image` file params are supported only when a host invokes this tool with file params directly. If the user wants to choose a local image/audio file that is not attached yet, use open-upload-widget first. ' +
-        'Provide exactly one visual input (video or image) and exactly one driver input (audio or script). Returns a generation id — call generate_get-generation once with wait: true and timeout: 55, then read outputUrl. Copy signed outputUrl values exactly from the tool result; never reconstruct or shorten them. ' +
-        'For advanced options (segments, speaker selection), use generate_create-generation.',
+        'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
+        'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
+        'The model defaults to sync-3. The generation is attached to a named project or an integration-specific default project; a missing project is created. ' +
+        'This starts an asynchronous generation and returns its id and status.',
       inputSchema: {
         videoUrl: z
           .string()
@@ -494,12 +515,7 @@ export function createAppTools(
           .string()
           .describe('Sync asset id for audio, returned by upload-media or assets_create.')
           .optional(),
-        script: z
-          .string()
-          .describe(
-            'Text for the image or video to say. For "make this say X", pass X here directly instead of calling tts_create.',
-          )
-          .optional(),
+        script: z.string().describe('Text for the image or video to say.').optional(),
         voiceId: z
           .string()
           .describe('Voice id from voices_get-voices. Required when script is provided.')
@@ -530,27 +546,32 @@ export function createAppTools(
           .optional(),
         model: z
           .string()
-          .describe(
-            'Set only when the user explicitly requests a model override. Otherwise omit it; image and video inputs default to sync-3.',
-          )
+          .describe('Optional model override. Image and video inputs default to sync-3.')
           .optional(),
         projectName: z
           .string()
           .trim()
           .min(1)
           .describe(
-            `Project to attach the generation to. Set this only when the user requests a specific project name; otherwise omit it to use "${DEFAULT_CHATGPT_PROJECT_NAME}". An existing project with the same name is reused, or a new one is created.`,
+            'Project to attach the generation to. When omitted, the tool uses an integration-specific default. An existing project with the same name is reused, or a new one is created.',
           )
           .optional(),
       },
       outputSchema: generationOutputSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       meta: {
         'openai/fileParams': ['video', 'image', 'audio'],
         'openai/toolInvocation/invoking': 'Creating your lipsync video…',
         'openai/toolInvocation/invoked': 'Lipsync generation started.',
       },
-      handler: async (args) => {
+      handler: async (args, context) => {
+        const signal = context?.signal;
+        signal?.throwIfAborted();
         const {
           videoUrl,
           videoAssetId,
@@ -629,7 +650,12 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
-        const projectId = await getOrCreateProjectId(httpClient, projectName);
+        const projectId = await getOrCreateProjectId(
+          httpClient,
+          projectName,
+          getProfile().defaultProjectName,
+          signal,
+        );
 
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript
@@ -643,14 +669,16 @@ export function createAppTools(
                 ...(similarityBoost === undefined ? {} : { similarityBoost }),
               },
             }
-          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio, runtime);
+          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio, runtime, signal);
         const visual = hasImage
-          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image, runtime)
-          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video, runtime);
+          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image, runtime, signal)
+          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video, runtime, signal);
 
         const resolvedModel = model ?? 'sync-3';
 
+        signal?.throwIfAborted();
         return httpClient.request('post', '/v2/generate', {
+          signal,
           body: {
             model: resolvedModel,
             input: [visual, driver],

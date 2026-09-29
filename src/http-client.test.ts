@@ -12,8 +12,11 @@ describe('resolveSyncSource', () => {
   });
 
   it('namespaces every other MCP client under mcp:<client>', () => {
+    expect(resolveSyncSource('openai-mcp')).toBe('mcp:openai-mcp');
+    expect(resolveSyncSource('OpenAI-MCP')).toBe('mcp:OpenAI-MCP');
     expect(resolveSyncSource('cursor')).toBe('mcp:cursor');
     expect(resolveSyncSource('zed')).toBe('mcp:zed');
+    expect(resolveSyncSource('openai-mcp.evil')).toBe('mcp:openai-mcp.evil');
   });
 
   it('falls back to bare mcp when no client name is known', () => {

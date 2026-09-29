@@ -1,14 +1,14 @@
-import { readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import { UploadRuntime } from '../upload-runtime.js';
 import { createAppTools } from './app-tools.js';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, rm: vi.fn(actual.rm) };
+  return { ...actual, mkdtemp: vi.fn(actual.mkdtemp), rm: vi.fn(actual.rm) };
 });
 
 describe('createAppTools — create-lipsync', () => {
@@ -17,7 +17,9 @@ describe('createAppTools — create-lipsync', () => {
   function setup({
     projects = [{ id: 'project-chatgpt', name: 'ChatGPT generations' }],
     runtime,
+    clientName = 'chatgpt',
   }: {
+    clientName?: string;
     projects?: Array<{ id: string; name: string | null }>;
     runtime?: UploadRuntime;
   } = {}) {
@@ -46,7 +48,7 @@ describe('createAppTools — create-lipsync', () => {
       },
     );
     const httpClient: HttpClient = { request };
-    const tools = createAppTools(httpClient, runtime);
+    const tools = createAppTools(httpClient, runtime, () => resolveClientProfile(clientName));
     const uploadTool = tools.find((t) => t.name === 'upload-media');
     const tool = tools.find((t) => t.name === 'create-lipsync');
     if (!uploadTool) throw new Error('upload-media tool not found');
@@ -107,8 +109,8 @@ describe('createAppTools — create-lipsync', () => {
   it('declares openai/fileParams for video, image + audio and is an open-world write', () => {
     const { tool } = setup();
     expect(tool.title).toBe('Create lipsync');
-    expect(tool.description).toContain('prefer calling upload-media first');
-    expect(tool.description).toContain('direct `audio`/`video`/`image` file params are supported');
+    expect(tool.description).toContain('exactly one visual input');
+    expect(tool.description).toContain('supported host file objects');
     expect(tool.meta?.['openai/fileParams']).toEqual(['video', 'image', 'audio']);
     expect(tool.outputSchema).toMatchObject({
       id: expect.any(Object),
@@ -118,7 +120,7 @@ describe('createAppTools — create-lipsync', () => {
     });
     expect(tool.annotations?.openWorldHint).toBe(true);
     expect(tool.annotations?.readOnlyHint).toBe(false);
-    expect(tool.annotations?.destructiveHint).toBe(false);
+    expect(tool.annotations?.destructiveHint).toBe(true);
   });
 
   it('declares upload-media as a file-param asset staging tool', () => {
@@ -134,7 +136,7 @@ describe('createAppTools — create-lipsync', () => {
     });
     expect(uploadTool.annotations?.openWorldHint).toBe(true);
     expect(uploadTool.annotations?.readOnlyHint).toBe(false);
-    expect(uploadTool.annotations?.destructiveHint).toBe(false);
+    expect(uploadTool.annotations?.destructiveHint).toBe(true);
   });
 
   it('uploads a ChatGPT file to a durable Sync asset', async () => {
@@ -318,9 +320,7 @@ describe('createAppTools — create-lipsync', () => {
   });
 
   it('rejects an oversized streamed body and removes its temporary file', async () => {
-    const before = new Set(
-      (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-')),
-    );
+    const before = vi.mocked(mkdtemp).mock.results.length;
     const runtime = new UploadRuntime({
       maxBytes: 8,
       maxConcurrent: 1,
@@ -346,8 +346,11 @@ describe('createAppTools — create-lipsync', () => {
       }),
     ).rejects.toThrow(/too large/);
 
-    const after = (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-'));
-    expect(after.filter((entry) => !before.has(entry))).toEqual([]);
+    const created = vi.mocked(mkdtemp).mock.results.slice(before);
+    expect(created).toHaveLength(1);
+    for (const result of created) {
+      await expect(access(await result.value)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -438,9 +441,7 @@ describe('createAppTools — create-lipsync', () => {
   });
 
   it('removes its temporary file when the storage upload fails', async () => {
-    const before = new Set(
-      (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-')),
-    );
+    const before = vi.mocked(mkdtemp).mock.results.length;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url: string, init?: { method?: string }) => {
@@ -462,8 +463,11 @@ describe('createAppTools — create-lipsync', () => {
       }),
     ).rejects.toThrow(/storage connection reset/);
 
-    const after = (await readdir(tmpdir())).filter((entry) => entry.startsWith('sync-mcp-upload-'));
-    expect(after.filter((entry) => !before.has(entry))).toEqual([]);
+    const created = vi.mocked(mkdtemp).mock.results.slice(before);
+    expect(created).toHaveLength(1);
+    for (const result of created) {
+      await expect(access(await result.value)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
   });
 
   it('rejects a URL string passed to upload-media file with a clear message', async () => {
@@ -521,6 +525,42 @@ describe('createAppTools — create-lipsync', () => {
       body: { name: 'ChatGPT generations' },
     });
     expect(lastGenerateBody(request).projectId).toBe('project-created');
+  });
+
+  it('uses a Claude-specific default project for Claude clients', async () => {
+    const { tool, request } = setup({
+      clientName: 'claude-ai',
+      projects: [{ id: 'project-claude', name: 'Claude generations' }],
+    });
+
+    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
+
+    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
+      query: {
+        searchQuery: 'Claude generations',
+        sortBy: 'name',
+        limit: '100',
+      },
+    });
+    expect(lastGenerateBody(request).projectId).toBe('project-claude');
+  });
+
+  it('uses a Claude-specific default project for Claude stdio clients', async () => {
+    const { tool, request } = setup({
+      clientName: 'claude-ai',
+      projects: [{ id: 'project-claude', name: 'Claude generations' }],
+    });
+
+    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
+
+    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
+      query: {
+        searchQuery: 'Claude generations',
+        sortBy: 'name',
+        limit: '100',
+      },
+    });
+    expect(lastGenerateBody(request).projectId).toBe('project-claude');
   });
 
   it('reuses a user-requested project name instead of the ChatGPT default', async () => {

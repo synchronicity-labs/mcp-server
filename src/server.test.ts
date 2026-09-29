@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolveClientProfile } from './client-profile.js';
 import {
   createJsonToolResult,
   createToolDescriptorMeta,
@@ -123,18 +124,19 @@ describe('createJsonToolResult', () => {
 });
 
 describe('SERVER_INSTRUCTIONS', () => {
-  it('defaults ChatGPT lipsync generations to sync-3 and a reusable project', () => {
-    expect(SERVER_INSTRUCTIONS).toContain('defaults both image and video generations to sync-3');
-    expect(SERVER_INSTRUCTIONS).toContain('unless the user explicitly requests one');
-    expect(SERVER_INSTRUCTIONS).toContain('reuses or creates that named project');
-    expect(SERVER_INSTRUCTIONS).toContain('ChatGPT generations');
+  it('documents the concise lipsync input contract and defaults', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('exactly one visual input');
+    expect(SERVER_INSTRUCTIONS).toContain('one driver');
+    expect(SERVER_INSTRUCTIONS).toContain('defaults to sync-3');
+    expect(SERVER_INSTRUCTIONS).toContain('integration-specific project');
   });
 
-  it('forbids routing local video through the upload widget', () => {
-    expect(SERVER_INSTRUCTIONS).toContain('open-upload-widget is image/audio only');
-    expect(SERVER_INSTRUCTIONS).toContain('Never call, recommend, or describe open-upload-widget');
-    expect(SERVER_INSTRUCTIONS).toContain('Never mention requestedMediaType: "video"');
-    expect(SERVER_INSTRUCTIONS).toContain('attaching the video to the ChatGPT composer');
+  it('describes only tools available to every profile and exact result handling', () => {
+    expect(SERVER_INSTRUCTIONS).toContain('voices_get-voices');
+    expect(SERVER_INSTRUCTIONS).toContain('Create once');
+    expect(SERVER_INSTRUCTIONS).toContain('exact structuredContent.outputUrl');
+    expect(SERVER_INSTRUCTIONS).not.toContain('open-upload-widget');
+    expect(SERVER_INSTRUCTIONS).not.toContain('tts_create');
   });
 });
 
@@ -151,7 +153,9 @@ describe('selectHostedHttpTools', () => {
       tool('projects_get-all'),
     ];
 
-    expect(selectHostedHttpTools(tools).map((t) => t.name)).toEqual([
+    expect(
+      selectHostedHttpTools(tools, resolveClientProfile('chatgpt')).map((t) => t.name),
+    ).toEqual([
       'open-upload-widget',
       'upload-media',
       'create-lipsync',
@@ -169,7 +173,7 @@ describe('selectHostedHttpTools', () => {
       tool('generate_get-generation'),
     ];
 
-    const selected = selectHostedHttpTools(tools);
+    const selected = selectHostedHttpTools(tools, resolveClientProfile('chatgpt'));
     const widgetCallableTools = selected.filter((t) => t.name !== 'open-upload-widget');
 
     expect(widgetCallableTools.map((t) => t.name)).toEqual([

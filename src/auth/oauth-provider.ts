@@ -1,7 +1,8 @@
-import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+
+import { verifySyncAccessToken } from './token-verification.js';
 
 const CONFIDENTIAL_CLIENT_AUTH_METHOD = 'client_secret_post';
 const NON_EXPIRING_CLIENT_SECRET = 0;
@@ -33,7 +34,9 @@ function asConfidentialClient(client: OAuthClientInformationFull): OAuthClientIn
  * the API (RFC 7592) — otherwise every redeploy would invalidate every
  * already-connected client with `invalid_client`.
  */
-export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvider {
+export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvider & {
+  verifyAccessToken(token: string, signal?: AbortSignal): Promise<AuthInfo>;
+} {
   const clientCache = new Map<string, OAuthClientInformationFull>();
   const registrationSecret = process.env.OAUTH_REGISTRATION_SECRET;
 
@@ -87,26 +90,7 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
       registrationUrl,
     },
 
-    verifyAccessToken: async (token: string): Promise<AuthInfo> => {
-      const res = await fetch(`${apiBaseUrl}/v2/oauth/userinfo`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        throw new InvalidTokenError('Invalid or expired token');
-      }
-      const info = (await res.json()) as {
-        sub: string;
-        client_id: string;
-        expires_at?: number;
-      };
-      const expiresAt = info.expires_at ?? Math.floor(Date.now() / 1000) + 3600;
-      return {
-        token,
-        clientId: info.client_id,
-        scopes: [],
-        expiresAt,
-      };
-    },
+    verifyAccessToken: (token) => verifySyncAccessToken(apiBaseUrl, token),
 
     getClient: resolveClient,
 
@@ -143,5 +127,8 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
     },
   });
 
-  return provider;
+  return Object.assign(provider, {
+    verifyAccessToken: (token: string, signal?: AbortSignal) =>
+      verifySyncAccessToken(apiBaseUrl, token, signal),
+  });
 }
