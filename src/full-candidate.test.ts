@@ -37,6 +37,56 @@ const projectRelease = deferred<void>();
 const spec = {
   openapi: '3.0.0',
   paths: {
+    '/v2/models': { get: { operationId: 'ModelsController_get', tags: ['models'] } },
+    '/v2/assets': {
+      get: {
+        operationId: 'AssetsController_getAll',
+        tags: ['assets'],
+        parameters: [
+          { name: 'projectId', in: 'query', schema: { type: 'string' } },
+          { name: 'cursor', in: 'query', schema: { type: 'string' } },
+        ],
+      },
+    },
+    '/v2/assets/{id}': {
+      get: {
+        operationId: 'AssetsController_get',
+        tags: ['assets'],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      },
+    },
+    '/v2/generations': {
+      get: {
+        operationId: 'GenerateController_getGenerations',
+        tags: ['generate'],
+        parameters: [
+          { name: 'status', in: 'query', schema: { type: 'string' } },
+          { name: 'cursor', in: 'query', schema: { type: 'string' } },
+        ],
+      },
+    },
+    '/v2/generate/estimate-cost': {
+      post: {
+        operationId: 'GenerateController_estimateCost',
+        tags: ['generate'],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['model', 'duration'],
+                properties: {
+                  model: { type: 'string' },
+                  duration: { type: 'number' },
+                  fps: { type: 'number' },
+                  reasoningEnabled: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     '/v2/projects': {
       get: {
         operationId: 'ProjectsController_getAll',
@@ -103,6 +153,18 @@ beforeAll(async () => {
           expires_at: 4000000000,
         }),
       );
+      return;
+    }
+    if (
+      [
+        '/v2/models',
+        '/v2/assets',
+        '/v2/assets/asset-1',
+        '/v2/generations',
+        '/v2/generate/estimate-cost',
+      ].includes(path)
+    ) {
+      res.end(JSON.stringify({ path, query: Object.fromEntries(requestUrl.searchParams), body }));
       return;
     }
     if (path === '/v2/projects/selected-project') {
@@ -214,7 +276,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = (await client.listTools()).tools;
-      expect(tools.length).toBe(index === 0 ? 7 : 5);
+      expect(tools.length).toBe(index === 0 ? 12 : 10);
       const create = tools.find((tool) => tool.name === 'create-lipsync')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
       expect((await client.listResources()).resources.length > 0).toBe(index === 0);
@@ -369,4 +431,47 @@ it('does not submit a generation or create a fallback for a denied project', asy
   expect(attemptedPaths).toContain('/v2/projects/denied-project');
   expect(attemptedPaths).not.toContain('/v2/projects');
   expect(attemptedPaths).not.toContain('/v2/generate');
+});
+
+it.each([
+  { name: 'models_get', path: '/v2/models', args: {}, query: {}, body: {} },
+  {
+    name: 'assets_get-all',
+    path: '/v2/assets',
+    args: { projectId: 'selected-project', cursor: 'next-asset' },
+    query: { projectId: 'selected-project', cursor: 'next-asset' },
+    body: {},
+  },
+  { name: 'assets_get', path: '/v2/assets/asset-1', args: { id: 'asset-1' }, query: {}, body: {} },
+  {
+    name: 'generate_get-generations',
+    path: '/v2/generations',
+    args: { status: 'COMPLETED', cursor: 'next-generation' },
+    query: { status: 'COMPLETED', cursor: 'next-generation' },
+    body: {},
+  },
+  {
+    name: 'generate_estimate-cost',
+    path: '/v2/generate/estimate-cost',
+    args: { model: 'sync-3', duration: 12, fps: 24, reasoningEnabled: false },
+    query: {},
+    body: { model: 'sync-3', duration: 12, fps: 24, reasoningEnabled: false },
+  },
+])('calls $name with authenticated generated contracts through hosted MCP', async ({
+  name,
+  path,
+  args,
+  query,
+  body,
+}) => {
+  const client = await connect('chatgpt', `catalog-${name}`);
+  const descriptor = (await client.listTools()).tools.find((tool) => tool.name === name);
+  expect(descriptor?.annotations?.readOnlyHint).toBe(true);
+  expect(descriptor?._meta?.ui).toEqual({ visibility: ['model', 'app'] });
+  const result = await client.callTool({ name, arguments: args });
+  expect(result.isError).not.toBe(true);
+  expect(result.structuredContent).toEqual({ path, query, body });
+  expect(
+    calls.find((call) => call.token === `Bearer catalog-${name}` && call.path === path),
+  ).toMatchObject({ query, body });
 });

@@ -15,7 +15,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // --- Discovery ---
   models_get: {
     description:
-      'List the current lipsync models and their capabilities from Sync. Use a returned model id as the model in create-lipsync; do not invent model names.',
+      'List the current lipsync models and their capabilities from Sync. Use a returned model name as the model in create-lipsync; do not invent model names.',
   },
   'voices_get-voices': {
     description:
