@@ -316,3 +316,19 @@ operations are filtered once before per-session schema construction.
 See [release verification](docs/release-verification.md) for reproducible checks,
 component provenance, and the distinction between controlled tests and live Muse
 review readiness.
+
+
+### Recovering a generation submission
+
+`create-lipsync` accepts an optional `idempotencyKey` and forwards it as the
+existing Sync API's `Idempotency-Key` header. Clients should persist a key for
+one intentional generation action and reuse the same key and payload after an
+ambiguous response. A new intentional generation uses a new key. The backend
+owns replay, conflict detection and credit accounting; MCP does not retry writes.
+
+Use the explicit canonical `projectId` and durable asset IDs or stable URLs for
+keyed submissions. Stage ChatGPT files with `upload-media` first, then use the
+returned asset IDs. Re-transferring transient file inputs can produce different
+asset IDs and a changed-payload conflict. Keys accept 1-128 ASCII letters,
+digits, periods, underscores, tildes and hyphens. Omitting the key preserves
+existing behavior.

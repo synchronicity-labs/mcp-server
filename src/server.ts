@@ -16,7 +16,7 @@ import {
   UNSUPPORTED_UPLOAD_MESSAGE,
 } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
-import { createHttpClient } from './http-client.js';
+import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAppTools } from './tools/app-tools.js';
@@ -98,6 +98,21 @@ export function registerTools(server: McpServer, tools: McpToolDefinition[]): vo
 
 export function createToolErrorResult(error: unknown): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof ApiRequestError) {
+    const structuredContent = {
+      error: {
+        message,
+        status: error.status,
+        ...(error.code ? { code: error.code } : {}),
+        ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+      },
+    };
+    return {
+      content: [{ type: 'text', text: `Error: ${message}` }],
+      structuredContent,
+      isError: true,
+    };
+  }
   const retryableError =
     error && typeof error === 'object'
       ? (error as { code?: unknown; retryable?: unknown; retryAfterMs?: unknown })

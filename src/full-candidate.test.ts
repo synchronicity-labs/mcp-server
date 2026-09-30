@@ -20,6 +20,7 @@ const previous = new Map<string, ReturnType<EventEmitter['listeners']>>();
 const calls: Array<{
   path: string;
   token?: string;
+  idempotencyKey?: string | string[];
   body: Record<string, unknown>;
   query: Record<string, string>;
 }> = [];
@@ -129,8 +130,30 @@ beforeAll(async () => {
     for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : {};
     const token = req.headers.authorization;
-    calls.push({ path, token, body, query: Object.fromEntries(requestUrl.searchParams) });
+    calls.push({
+      path,
+      token,
+      idempotencyKey: req.headers['idempotency-key'],
+      body,
+      query: Object.fromEntries(requestUrl.searchParams),
+    });
     res.setHeader('Content-Type', 'application/json');
+    if (
+      path === '/v2/generate' &&
+      ['Bearer preparing', 'Bearer changed-payload'].includes(token ?? '')
+    ) {
+      res.statusCode = 409;
+      const preparing = token === 'Bearer preparing';
+      if (preparing) res.setHeader('Retry-After', '2');
+      res.end(
+        JSON.stringify({
+          message: preparing ? 'Still preparing' : 'Payload changed',
+          errorCode: preparing ? 'IDEMPOTENCY_IN_PROGRESS' : 'IDEMPOTENCY_KEY_CONFLICT',
+          internalDetail: 'do-not-forward',
+        }),
+      );
+      return;
+    }
     if (path === '/api-json') {
       res.end(JSON.stringify(spec));
       return;
@@ -474,4 +497,81 @@ it.each([
   expect(
     calls.find((call) => call.token === `Bearer catalog-${name}` && call.path === path),
   ).toMatchObject({ query, body });
+});
+
+it('forwards a caller-owned submission key through hosted MCP as an API header', async () => {
+  const client = await connect('chatgpt', 'submission-key');
+  const args = {
+    videoAssetId: 'existing-video',
+    audioAssetId: 'existing-audio',
+    projectId: 'selected-project',
+    idempotencyKey: 'action_A._~-09',
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await client.callTool({ name: 'create-lipsync', arguments: args });
+    expect(result.isError).not.toBe(true);
+  }
+  const submissions = calls.filter(
+    (call) => call.token === 'Bearer submission-key' && call.path === '/v2/generate',
+  );
+  expect(submissions).toHaveLength(2);
+  for (const submission of submissions) {
+    expect(submission.idempotencyKey).toBe('action_A._~-09');
+    expect(submission.body).not.toHaveProperty('idempotencyKey');
+    expect(submission.body.projectId).toBe('selected-project');
+  }
+});
+
+it.each([
+  '',
+  'contains space',
+  'comma,key',
+  'a'.repeat(129),
+])('rejects invalid submission key %j before project lookup or transfer', async (idempotencyKey) => {
+  const client = await connect('chatgpt', 'invalid-submission-key');
+  const before = calls.length;
+  const result = await client.callTool({
+    name: 'create-lipsync',
+    arguments: {
+      videoAssetId: 'existing-video',
+      audioAssetId: 'existing-audio',
+      projectId: 'selected-project',
+      idempotencyKey,
+    },
+  });
+  expect(result.isError).toBe(true);
+  expect(calls.slice(before).filter((call) => call.path !== '/v2/oauth/userinfo')).toEqual([]);
+});
+
+it.each([
+  { token: 'preparing', code: 'IDEMPOTENCY_IN_PROGRESS', retryAfterMs: 2000 },
+  { token: 'changed-payload', code: 'IDEMPOTENCY_KEY_CONFLICT', retryAfterMs: undefined },
+])('preserves $code for submission recovery without leaking the upstream body', async ({
+  token,
+  code,
+  retryAfterMs,
+}) => {
+  const client = await connect('chatgpt', token);
+  const result = await client.callTool({
+    name: 'create-lipsync',
+    arguments: {
+      videoAssetId: 'existing-video',
+      audioAssetId: 'existing-audio',
+      projectId: 'selected-project',
+      idempotencyKey: 'same-action',
+    },
+  });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toEqual({
+    error: {
+      status: 409,
+      code,
+      message: expect.any(String),
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+    },
+  });
+  expect(JSON.stringify(result)).not.toContain('do-not-forward');
+  expect(
+    calls.filter((call) => call.token === `Bearer ${token}` && call.path === '/v2/generate'),
+  ).toHaveLength(1);
 });

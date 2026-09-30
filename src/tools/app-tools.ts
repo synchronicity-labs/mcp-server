@@ -548,6 +548,13 @@ export function createAppTools(
           .string()
           .describe('Optional model override. Image and video inputs default to sync-3.')
           .optional(),
+        idempotencyKey: z
+          .string()
+          .regex(/^[A-Za-z0-9._~-]{1,128}$/)
+          .describe(
+            'Unique key for one generation action. Persist and reuse the same key, projectId, model, and inputs when retrying after a lost response. Use durable asset IDs or stable URLs; upload files before starting the keyed action. A new intentional generation needs a new key. Passed as the Sync API Idempotency-Key header.',
+          )
+          .optional(),
         projectId: z
           .string()
           .trim()
@@ -598,6 +605,7 @@ export function createAppTools(
           model,
           projectName,
           projectId: requestedProjectId,
+          idempotencyKey,
         } = args as {
           videoUrl?: string;
           videoAssetId?: string;
@@ -616,6 +624,7 @@ export function createAppTools(
           model?: string;
           projectName?: string;
           projectId?: string;
+          idempotencyKey?: string;
         };
 
         // Validate the shape up front, before re-hosting any bytes.
@@ -703,6 +712,7 @@ export function createAppTools(
         signal?.throwIfAborted();
         return httpClient.request('post', '/v2/generate', {
           signal,
+          ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
           body: {
             model: resolvedModel,
             input: [visual, driver],
