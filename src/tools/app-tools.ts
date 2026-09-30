@@ -480,7 +480,7 @@ export function createAppTools(
       description:
         'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
         'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
-        'The model defaults to sync-3. The generation is attached to a named project or an integration-specific default project; a missing project is created. ' +
+        'The model defaults to sync-3. Supply projectId to use an existing project, or projectName to find or create one. When neither is supplied, an integration-specific default project is used. ' +
         'This starts an asynchronous generation and returns its id and status.',
       inputSchema: {
         videoUrl: z
@@ -548,12 +548,20 @@ export function createAppTools(
           .string()
           .describe('Optional model override. Image and video inputs default to sync-3.')
           .optional(),
+        projectId: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            'Existing Sync project ID returned by projects_get-all or projects_get. Use this to select the same project as the web app. Cannot be combined with projectName.',
+          )
+          .optional(),
         projectName: z
           .string()
           .trim()
           .min(1)
           .describe(
-            'Project to attach the generation to. When omitted, the tool uses an integration-specific default. An existing project with the same name is reused, or a new one is created.',
+            'Project name to find or create. Cannot be combined with projectId. When both are omitted, the tool uses an integration-specific default. An existing project with the same name is reused, or a new one is created.',
           )
           .optional(),
       },
@@ -589,6 +597,7 @@ export function createAppTools(
           audio,
           model,
           projectName,
+          projectId: requestedProjectId,
         } = args as {
           videoUrl?: string;
           videoAssetId?: string;
@@ -606,6 +615,7 @@ export function createAppTools(
           audio?: MediaParam;
           model?: string;
           projectName?: string;
+          projectId?: string;
         };
 
         // Validate the shape up front, before re-hosting any bytes.
@@ -641,6 +651,12 @@ export function createAppTools(
           throw new Error('Provide either a video or an image, not both.');
         }
 
+        if (requestedProjectId !== undefined && !requestedProjectId.trim()) {
+          throw new Error('projectId must not be empty.');
+        }
+        if (requestedProjectId !== undefined && projectName !== undefined) {
+          throw new Error('Provide either projectId or projectName, not both.');
+        }
         if (projectName !== undefined && !projectName.trim()) {
           throw new Error('projectName must not be empty.');
         }
@@ -650,12 +666,20 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
-        const projectId = await getOrCreateProjectId(
-          httpClient,
-          projectName,
-          getProfile().defaultProjectName,
-          signal,
-        );
+        const projectId =
+          requestedProjectId?.trim() ??
+          (await getOrCreateProjectId(
+            httpClient,
+            projectName,
+            getProfile().defaultProjectName,
+            signal,
+          ));
+        if (requestedProjectId !== undefined) {
+          // Check access before transferring files. Generation admission checks it again.
+          await httpClient.request('get', `/v2/projects/${encodeURIComponent(projectId)}`, {
+            signal,
+          });
+        }
 
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript

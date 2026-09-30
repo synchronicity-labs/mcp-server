@@ -29,7 +29,7 @@ const SERVER_DESCRIPTION =
   'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
 
 export const SERVER_INSTRUCTIONS =
-  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, upload in authenticated Sync and use Copy ID (or Copy URL). The tool defaults to sync-3 and an integration-specific project unless projectName is supplied. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
+  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, upload in authenticated Sync and use Copy ID (or Copy URL). The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
@@ -38,12 +38,26 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'create-lipsync',
   'voices_get-voices',
   'generate_get-generation',
+  'models_get',
+  'projects_get-all',
+  'projects_get',
+  'assets_get-all',
+  'assets_get',
+  'generate_get-generations',
+  'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'upload-media',
   'create-lipsync',
   'voices_get-voices',
   'generate_get-generation',
+  'models_get',
+  'projects_get-all',
+  'projects_get',
+  'assets_get-all',
+  'assets_get',
+  'generate_get-generations',
+  'generate_estimate-cost',
 ]);
 
 export function createToolDescriptorMeta(
@@ -199,7 +213,7 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
   if (tool.name === 'create-lipsync') {
     for (const key of ['video', 'image', 'audio']) delete inputSchema[key];
     description =
-      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; explicit projectName overrides the client default. Poll the returned id with generate_get-generation.';
+      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; supply projectId for an existing project or projectName to find or create one; otherwise the client default is used. Poll the returned id with generate_get-generation.';
     for (const key of ['videoAssetId', 'imageAssetId', 'audioAssetId']) {
       inputSchema[key] = z
         .string()

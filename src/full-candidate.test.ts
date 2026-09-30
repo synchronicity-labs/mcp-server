@@ -37,6 +37,23 @@ const projectRelease = deferred<void>();
 const spec = {
   openapi: '3.0.0',
   paths: {
+    '/v2/projects': {
+      get: {
+        operationId: 'ProjectsController_getAll',
+        tags: ['projects'],
+        parameters: [
+          { name: 'searchQuery', in: 'query', schema: { type: 'string' } },
+          { name: 'cursor', in: 'query', schema: { type: 'string' } },
+        ],
+      },
+    },
+    '/v2/projects/{id}': {
+      get: {
+        operationId: 'ProjectsController_get',
+        tags: ['projects'],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      },
+    },
     '/v2/voices': { get: { operationId: 'Voices_getVoices', tags: ['voices'] } },
     '/v2/generate/{id}': {
       get: {
@@ -86,6 +103,15 @@ beforeAll(async () => {
           expires_at: 4000000000,
         }),
       );
+      return;
+    }
+    if (path === '/v2/projects/selected-project') {
+      res.end(JSON.stringify({ id: 'selected-project', name: 'Web app project' }));
+      return;
+    }
+    if (path === '/v2/projects/denied-project') {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ message: 'Project not found or you do not have permission' }));
       return;
     }
     if (path === '/v2/projects') {
@@ -188,7 +214,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = (await client.listTools()).tools;
-      expect(tools.length).toBe(index === 0 ? 5 : 3);
+      expect(tools.length).toBe(index === 0 ? 7 : 5);
       const create = tools.find((tool) => tool.name === 'create-lipsync')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
       expect((await client.listResources()).resources.length > 0).toBe(index === 0);
@@ -287,4 +313,60 @@ it('propagates explicit cancellation through bearer auth, sessions and the profi
   expect(
     calls.filter((call) => call.token === 'Bearer cancelled' && call.path === '/v2/projects'),
   ).toHaveLength(1);
+});
+
+it('uses authenticated project browsing and canonical selection through the hosted transport', async () => {
+  const client = await connect('chatgpt', 'project-picker');
+  const tools = (await client.listTools()).tools;
+  const list = tools.find((tool) => tool.name === 'projects_get-all');
+  expect(list?.annotations?.readOnlyHint).toBe(true);
+  expect(list?._meta?.ui).toEqual({ visibility: ['model', 'app'] });
+  const page = await client.callTool({
+    name: 'projects_get-all',
+    arguments: {
+      searchQuery: 'Web app',
+      cursor: 'next-page',
+    },
+  });
+  expect(page.structuredContent).toEqual({ items: [] });
+  expect(
+    calls.find((call) => call.token === 'Bearer project-picker' && call.path === '/v2/projects'),
+  ).toMatchObject({
+    query: { searchQuery: 'Web app', cursor: 'next-page' },
+  });
+  const result = await client.callTool({
+    name: 'create-lipsync',
+    arguments: {
+      videoAssetId: 'existing-video',
+      audioAssetId: 'existing-audio',
+      projectId: 'selected-project',
+    },
+  });
+  expect(result.isError).not.toBe(true);
+  expect(
+    calls.find((call) => call.token === 'Bearer project-picker' && call.path === '/v2/generate')
+      ?.body.projectId,
+  ).toBe('selected-project');
+  expect(
+    calls.filter((call) => call.token === 'Bearer project-picker' && call.path === '/v2/projects'),
+  ).toHaveLength(1);
+});
+
+it('does not submit a generation or create a fallback for a denied project', async () => {
+  const client = await connect('chatgpt', 'denied-project-picker');
+  const result = await client.callTool({
+    name: 'create-lipsync',
+    arguments: {
+      videoAssetId: 'existing-video',
+      audioAssetId: 'existing-audio',
+      projectId: 'denied-project',
+    },
+  });
+  expect(result.isError).toBe(true);
+  const attemptedPaths = calls
+    .filter((call) => call.token === 'Bearer denied-project-picker')
+    .map((call) => call.path);
+  expect(attemptedPaths).toContain('/v2/projects/denied-project');
+  expect(attemptedPaths).not.toContain('/v2/projects');
+  expect(attemptedPaths).not.toContain('/v2/generate');
 });

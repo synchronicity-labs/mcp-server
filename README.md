@@ -266,13 +266,24 @@ MIT
 
 Hosted sessions select one immutable presentation profile after MCP initialization.
 Exact ChatGPT aliases retain the upload widget, file metadata and optional file arguments.
-Claude and unknown clients expose `create-lipsync`, `voices_get-voices`, and
+All hosted clients can discover models (`models_get`), search/list and read projects
+(`projects_get-all`, `projects_get`), search/list and read assets (`assets_get-all`,
+`assets_get`), list organization generation history (`generate_get-generations`),
+and estimate cost (`generate_estimate-cost`). These tools use the API's OpenAPI
+contracts and the caller's existing Sync permissions. Lists retain the API cursor
+parameters; organization generation history does not currently accept a project filter.
+ChatGPT can also call these tools from its UI.
+
+Claude and unknown clients also expose `create-lipsync`, `voices_get-voices`, and
 `generate_get-generation` for public/Sync-hosted URLs and existing Sync asset IDs.
 Upload local media in authenticated Sync and use **Copy ID** in the same organization,
 or **Copy URL**. Unsupported file/widget calls return this guidance without uploading.
 
 Defaults are `ChatGPT generations`, `Claude generations`, or `Sync generations` for
-unknown clients; explicit `projectName` wins. Muse remains an unknown client until its
+unknown clients. Supply `projectId` to select an existing project by its canonical ID,
+or `projectName` to find or create a named project. These fields are mutually exclusive.
+An explicit project ID is checked for access before any file transfer; an inaccessible
+or deleted project fails without falling back to a new project. Muse remains an unknown client until its
 actual handshake alias is verified. Client names affect presentation only, never
 organization access or credit permissions. No Muse origin or attachment contract is assumed.
 

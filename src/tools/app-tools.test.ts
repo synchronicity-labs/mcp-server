@@ -500,6 +500,50 @@ describe('createAppTools — create-lipsync', () => {
     });
   });
 
+  it('uses the selected project ID without searching or creating projects', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      videoAssetId: 'video-existing',
+      audioAssetId: 'audio-existing',
+      projectId: 'selected-project',
+    });
+    expect(request.mock.calls.map(([method, path]) => [method, path])).toEqual([
+      ['get', '/v2/projects/selected-project'],
+      ['post', '/v2/generate'],
+    ]);
+    expect(lastGenerateBody(request).projectId).toBe('selected-project');
+  });
+
+  it('does not upload or generate when the selected project is inaccessible', async () => {
+    const { tool, request } = setup();
+    request.mockRejectedValueOnce(new Error('Project not found or you do not have permission'));
+    await expect(
+      tool.handler({
+        video: chatGptFile('https://files.oai/video.mp4'),
+        audioAssetId: 'audio-existing',
+        projectId: 'other-organization-project',
+      }),
+    ).rejects.toThrow('Project not found');
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { projectId: '' },
+    { projectId: '   ' },
+    { projectId: 'selected-project', projectName: 'Another project' },
+  ])('rejects invalid project selection before making requests: %j', async (selection) => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({
+        videoAssetId: 'video-existing',
+        audioAssetId: 'audio-existing',
+        ...selection,
+      }),
+    ).rejects.toThrow(/projectId/);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('reuses the default ChatGPT project when it already exists', async () => {
     const { tool, request } = setup();
     await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });

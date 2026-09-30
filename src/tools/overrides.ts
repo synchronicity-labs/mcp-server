@@ -15,7 +15,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // --- Discovery ---
   models_get: {
     description:
-      'List the lipsync models available to you (e.g. lipsync-2, lipsync-2-pro, sync-3, react-1). Use a returned model id as the `model` in generate_create-generation.',
+      'List the current lipsync models and their capabilities from Sync. Use a returned model id as the model in create-lipsync; do not invent model names.',
   },
   'voices_get-voices': {
     description:
@@ -77,7 +77,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generate_estimate-cost': {
     description:
-      'Estimate the credit cost of a generation before creating it. Takes the same body as generate_create-generation.',
+      'Estimate the credit cost before creating a generation. Supply model and duration in seconds, with optional fps and reasoningEnabled. This does not submit a generation.',
   },
   'generations_get-by-id': {
     description:
@@ -99,7 +99,8 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
       'Create a project to group related generations and assets. Pass the returned `id` as `projectId` on generate_create-generation or assets_create so they show up together in Studio.',
   },
   'projects_get-all': {
-    description: 'List the projects in your organization.',
+    description:
+      'Search and paginate your accessible Sync projects. Use the returned id as projectId in create-lipsync to work in the same project as the Sync web app.',
   },
   projects_get: {
     description: 'Get a project by id.',
