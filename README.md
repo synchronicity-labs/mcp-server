@@ -169,6 +169,9 @@ Options:
 |----------|-------------|---------|
 | `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
 | `SYNC_BASE_URL` | API base URL | `https://api.sync.so` |
+| `SYNC_CHATGPT_APP_DIR` | Directory containing the approved frontend's `app.html` and `manifest.json`; unset keeps the new app unavailable | unset |
+| `SYNC_CHATGPT_APP_DOMAIN` | Exact HTTPS widget origin for the configured app | required when app is configured |
+| `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
 | `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
 | `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
 | `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `1800000` (30 min) |
@@ -332,3 +335,41 @@ returned asset IDs. Re-transferring transient file inputs can produce different
 asset IDs and a changed-payload conflict. Keys accept 1-128 ASCII letters,
 digits, periods, underscores, tildes and hyphens. Omitting the key preserves
 existing behavior.
+
+An `IDEMPOTENCY_OUTCOME_UNKNOWN` error may contain a UUID `generationId`.
+MCP preserves that ID in `structuredContent.error`; clients should retain it
+and use `generate_get-generation` for status reads instead of creating again.
+
+### Embedded Sync app
+
+Build `@sync/chatgpt` in the Sync monorepo and supply its `app.html` and
+`manifest.json` together in `SYNC_CHATGPT_APP_DIR`. The server verifies the
+manifest format, HTML SHA256, UTF-8 and size (8 MiB maximum) at factory startup.
+Each session serves those same loaded bytes under a content-addressed resource
+URI. Invalid configured artifacts fail startup rather than silently serving a
+different interface. These checks establish artifact consistency; deployment
+must still obtain the bundle from the approved frontend build.
+
+The `open-sync-app` tool exposes the resource through the standard MCP Apps UI
+metadata and declares ChatGPT global/sidebar and thread/panel entrypoints.
+Opening it is read-only. Existing uploads and tool-only clients are preserved;
+the new tool and resource are only presented to the ChatGPT client profile.
+HTTP authentication still applies to the MCP connection.
+
+Set the widget origin and the exact media origins for the target environment.
+Browser API connections are not allowed by this UI resource's CSP; backend
+operations go through the authenticated MCP bridge. The frontend remains
+disabled unless its directory is explicitly configured. The current container
+does not include the frontend artifact: the release pipeline must package or
+mount the approved bundle before enabling this configuration. Cross-repository
+artifact delivery and retaining older published UI versions across deployments
+remain release requirements, along with real ChatGPT/account acceptance.
+
+Local example after building the frontend and this server:
+
+```sh
+SYNC_CHATGPT_APP_DIR=/absolute/path/to/sync-api-v2/apps/chatgpt/dist \
+SYNC_CHATGPT_APP_DOMAIN=https://your-verified-widget-origin.example \
+SYNC_CHATGPT_APP_RESOURCE_DOMAINS='["https://your-media-origin.example"]' \
+node dist/cli.js --transport http --port 3002
+```

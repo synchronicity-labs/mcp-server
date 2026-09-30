@@ -138,6 +138,18 @@ beforeAll(async () => {
       query: Object.fromEntries(requestUrl.searchParams),
     });
     res.setHeader('Content-Type', 'application/json');
+    if (path === '/v2/generate' && token === 'Bearer known-id') {
+      res.statusCode = 503;
+      res.end(
+        JSON.stringify({
+          message: 'Submission acceptance is being reconciled',
+          errorCode: 'IDEMPOTENCY_OUTCOME_UNKNOWN',
+          generationId: '00000000-0000-4000-8000-000000000005',
+          internalDetail: 'do-not-forward',
+        }),
+      );
+      return;
+    }
     if (
       path === '/v2/generate' &&
       ['Bearer preparing', 'Bearer changed-payload'].includes(token ?? '')
@@ -544,12 +556,33 @@ it.each([
 });
 
 it.each([
-  { token: 'preparing', code: 'IDEMPOTENCY_IN_PROGRESS', retryAfterMs: 2000 },
-  { token: 'changed-payload', code: 'IDEMPOTENCY_KEY_CONFLICT', retryAfterMs: undefined },
+  {
+    token: 'preparing',
+    status: 409,
+    code: 'IDEMPOTENCY_IN_PROGRESS',
+    retryAfterMs: 2000,
+    generationId: undefined,
+  },
+  {
+    token: 'changed-payload',
+    status: 409,
+    code: 'IDEMPOTENCY_KEY_CONFLICT',
+    retryAfterMs: undefined,
+    generationId: undefined,
+  },
+  {
+    token: 'known-id',
+    status: 503,
+    code: 'IDEMPOTENCY_OUTCOME_UNKNOWN',
+    retryAfterMs: undefined,
+    generationId: '00000000-0000-4000-8000-000000000005',
+  },
 ])('preserves $code for submission recovery without leaking the upstream body', async ({
   token,
+  status,
   code,
   retryAfterMs,
+  generationId,
 }) => {
   const client = await connect('chatgpt', token);
   const result = await client.callTool({
@@ -564,10 +597,11 @@ it.each([
   expect(result.isError).toBe(true);
   expect(result.structuredContent).toEqual({
     error: {
-      status: 409,
+      status,
       code,
       message: expect.any(String),
       ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      ...(generationId === undefined ? {} : { generationId }),
     },
   });
   expect(JSON.stringify(result)).not.toContain('do-not-forward');

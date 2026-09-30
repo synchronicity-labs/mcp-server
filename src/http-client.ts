@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
 
@@ -35,6 +36,7 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly retryAfterMs?: number,
+    readonly generationId?: string,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -139,11 +141,19 @@ export function createHttpClient(
           const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
           const retryAfterMs =
             Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+          const knownId = z
+            .uuid()
+            .safeParse(
+              parsed && typeof parsed === 'object' && 'generationId' in parsed
+                ? parsed.generationId
+                : undefined,
+            );
           throw new ApiRequestError(
             `API request failed: ${response.status} ${response.statusText} - ${message}`,
             response.status,
             code,
             retryAfterMs,
+            knownId.success ? knownId.data : undefined,
           );
         }
 

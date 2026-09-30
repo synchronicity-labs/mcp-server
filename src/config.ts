@@ -3,6 +3,11 @@ export type SyncMcpConfig = {
   baseUrl: string;
   transport: 'stdio' | 'http';
   port: number;
+  chatgptApp?: {
+    directory: string;
+    domain: string;
+    resourceDomains: string[];
+  };
 };
 
 export const DEFAULT_CONFIG: SyncMcpConfig = {
@@ -17,5 +22,14 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
     baseUrl: overrides.baseUrl ?? process.env.SYNC_BASE_URL ?? DEFAULT_CONFIG.baseUrl,
     transport: overrides.transport ?? DEFAULT_CONFIG.transport,
     port: overrides.port ?? DEFAULT_CONFIG.port,
+    chatgptApp:
+      overrides.chatgptApp ??
+      (process.env.SYNC_CHATGPT_APP_DIR
+        ? {
+            directory: process.env.SYNC_CHATGPT_APP_DIR,
+            domain: process.env.SYNC_CHATGPT_APP_DOMAIN ?? '',
+            resourceDomains: JSON.parse(process.env.SYNC_CHATGPT_APP_RESOURCE_DOMAINS ?? '[]'),
+          }
+        : undefined),
   };
 }

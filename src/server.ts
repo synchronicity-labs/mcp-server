@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { loadToken } from './auth/token-store.js';
+import { type ChatgptApp, createOpenSyncAppTool, loadChatgptApp } from './chatgpt-app.js';
 import {
   type ClientProfile,
   resolveClientProfile,
@@ -33,6 +34,7 @@ export const SERVER_INSTRUCTIONS =
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'open-sync-app',
   'open-upload-widget',
   'upload-media',
   'create-lipsync',
@@ -105,6 +107,7 @@ export function createToolErrorResult(error: unknown): CallToolResult {
         status: error.status,
         ...(error.code ? { code: error.code } : {}),
         ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+        ...(error.generationId ? { generationId: error.generationId } : {}),
       },
     };
     return {
@@ -191,7 +194,8 @@ export function selectHostedHttpTools(
     .filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
     .filter(
       (tool) =>
-        profile.supportsUploads || !['upload-media', 'open-upload-widget'].includes(tool.name),
+        profile.supportsUploads ||
+        !['upload-media', 'open-upload-widget', 'open-sync-app'].includes(tool.name),
     )
     .map((tool) => presentTool(tool, profile));
 }
@@ -252,6 +256,7 @@ function createProfiledServer(
   config: SyncMcpConfig,
   operations: ReturnType<typeof parseSpec>,
   authHeaders: Record<string, string> = {},
+  chatgptApp?: ChatgptApp,
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined;
@@ -262,6 +267,7 @@ function createProfiledServer(
     config.transport === 'stdio' ? () => clientName : undefined,
   );
   const allTools = [
+    ...(chatgptApp ? [createOpenSyncAppTool(chatgptApp)] : []),
     createUploadWidgetTool(),
     ...createAppTools(httpClient, undefined, getProfile),
     ...generateTools(operations, httpClient),
@@ -285,6 +291,10 @@ function createProfiledServer(
           handler: async (...parameters: Parameters<typeof tool.handler>) => {
             const [args] = parameters;
             if (!profile) throw new Error('Complete MCP initialization before calling tools.');
+            if (tool.name === 'open-sync-app' && profile.name !== 'chatgpt')
+              throw new Error(
+                'Open the Sync app in ChatGPT, or use the Sync tools in this client.',
+              );
             if (
               !profile.supportsUploads &&
               (['upload-media', 'open-upload-widget'].includes(tool.name) ||
@@ -308,6 +318,22 @@ function createProfiledServer(
       });
     },
   });
+  if (chatgptApp) {
+    resources.push({ name: 'sync-app', uri: chatgptApp.uri, ...chatgptApp.metadata });
+    server.registerResource('sync-app', chatgptApp.uri, chatgptApp.metadata, async () => {
+      if (getProfile().name !== 'chatgpt') throw new Error('This interface requires ChatGPT.');
+      return {
+        contents: [
+          {
+            uri: chatgptApp.uri,
+            mimeType: chatgptApp.metadata.mimeType,
+            text: chatgptApp.html,
+            _meta: chatgptApp.metadata._meta,
+          },
+        ],
+      };
+    });
+  }
   let descriptors: Tool[] = [];
   server.server.setRequestHandler(ListToolsRequestSchema, () => {
     if (!profile) throw new Error('Complete MCP initialization before listing tools.');
@@ -329,7 +355,7 @@ function createProfiledServer(
               .filter(
                 (tool) =>
                   initializedProfile.supportsUploads ||
-                  !['upload-media', 'open-upload-widget'].includes(tool.name),
+                  !['upload-media', 'open-upload-widget', 'open-sync-app'].includes(tool.name),
               )
               .map((tool) => presentTool(tool, initializedProfile));
       descriptors = visible.map((tool) => ({
@@ -355,18 +381,25 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   };
   const authHeaders = config.transport === 'http' ? {} : await resolveAuth(config, log);
   const operations = parseSpec(await fetchSpec(config.baseUrl));
-  return createProfiledServer(config, operations, authHeaders);
+  return createProfiledServer(
+    config,
+    operations,
+    authHeaders,
+    await loadChatgptApp(config.chatgptApp),
+  );
 }
 
 export async function createMcpServerFactory(
   config: SyncMcpConfig,
 ): Promise<{ createServer: () => McpServer; toolCount: number }> {
+  const chatgptApp = await loadChatgptApp(config.chatgptApp);
   // Filter once before constructing per-session schemas. Handlers and profile
   // state remain session-local, but excluded API operations do no session work.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter((operation) =>
     HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)),
   );
   const registeredNames = new Set([
+    ...(chatgptApp ? ['open-sync-app'] : []),
     'open-upload-widget',
     'upload-media',
     'create-lipsync',
@@ -375,7 +408,7 @@ export async function createMcpServerFactory(
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: registeredNames.size,
-    createServer: () => createProfiledServer(config, operations),
+    createServer: () => createProfiledServer(config, operations, {}, chatgptApp),
   };
 }
 
