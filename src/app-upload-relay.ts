@@ -2,10 +2,21 @@ import { randomBytes } from 'node:crypto';
 import { request } from 'node:https';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import cors from 'cors';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import type { McpToolDefinition } from './tools/generator.js';
 import { uploadRuntime } from './upload-runtime.js';
+
+/** Browser origins are configured separately from storage destinations. Tickets remain required. */
+export function createAppUploadCors(origins: string[]) {
+  return cors({
+    origin: origins,
+    credentials: false,
+    methods: ['PUT'],
+    allowedHeaders: ['content-type'],
+  });
+}
 
 const grantSchema = z.object({
   uploadUrl: z.url(),

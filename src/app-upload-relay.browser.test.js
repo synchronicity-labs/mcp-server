@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import express from 'express';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { appUploadHandler, relayUploadTool } from './app-upload-relay.js';
+import { appUploadHandler, createAppUploadCors, relayUploadTool } from './app-upload-relay.js';
 
 const upstreamAddress = vi.hoisted(() => ({ port: 0 }));
 vi.mock('node:https', async () => {
@@ -16,7 +16,6 @@ afterEach(() => vi.restoreAllMocks());
 
 it('transfers a local 11 MB File from a sandboxed browser across CORS through the real relay', async () => {
   const { chromium } = await import('@playwright/test');
-  const cors = (await import('cors')).default;
   const expectedSize = 11 * 1024 * 1024;
   let received = 0;
   let wrongByte = false;
@@ -32,11 +31,8 @@ it('transfers a local 11 MB File from a sandboxed browser across CORS through th
   await new Promise((r) => storage.listen(0, '127.0.0.1', r));
   upstreamAddress.port = storage.address().port;
   const app = express();
-  app.options(
-    '/app-upload',
-    cors({ origin: '*', methods: ['PUT'], allowedHeaders: ['content-type'] }),
-  );
-  app.put('/app-upload', cors({ origin: '*' }), appUploadHandler);
+  app.use('/app-upload', createAppUploadCors(['null']));
+  app.put('/app-upload', appUploadHandler);
   const listener = app.listen(0, '127.0.0.1');
   await new Promise((r) => listener.once('listening', r));
   const origin = `http://127.0.0.1:${listener.address().port}`;
@@ -59,6 +55,15 @@ it('transfers a local 11 MB File from a sandboxed browser across CORS through th
     .parse(await tool.handler({ size: expectedSize, contentType: 'video/mp4' }));
   const browser = await chromium.launch();
   try {
+    const deniedPreflight = await fetch(`${origin}/app-upload`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://untrusted.fixture.invalid',
+        'Access-Control-Request-Method': 'PUT',
+      },
+    });
+    expect(deniedPreflight.headers.get('access-control-allow-origin')).toBeNull();
+    expect(deniedPreflight.headers.get('access-control-allow-credentials')).toBeNull();
     const page = await browser.newPage();
     // Opaque-origin iframe mirrors an embedded app rather than a same-origin browser fetch.
     await page.setContent(

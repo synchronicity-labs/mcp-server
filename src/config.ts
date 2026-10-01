@@ -10,6 +10,7 @@ export type SyncMcpConfig = {
     resourceDomains: string[];
     connectDomains?: string[];
     uploadStorageOrigin?: string;
+    uploadOrigins?: string[];
   };
 };
 
@@ -33,6 +34,9 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
             previousDirectories: JSON.parse(process.env.SYNC_CHATGPT_APP_PREVIOUS_DIRS ?? '[]'),
             domain: process.env.SYNC_CHATGPT_APP_DOMAIN ?? '',
             uploadStorageOrigin: process.env.SYNC_APP_UPLOAD_STORAGE_ORIGIN,
+            uploadOrigins: process.env.SYNC_APP_UPLOAD_ORIGINS
+              ? JSON.parse(process.env.SYNC_APP_UPLOAD_ORIGINS)
+              : undefined,
             connectDomains: JSON.parse(process.env.SYNC_CHATGPT_APP_CONNECT_DOMAINS ?? '[]'),
             resourceDomains: JSON.parse(process.env.SYNC_CHATGPT_APP_RESOURCE_DOMAINS ?? '[]'),
           }

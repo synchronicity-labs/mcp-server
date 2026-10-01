@@ -10,7 +10,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { appUploadHandler } from './app-upload-relay.js';
+import { appUploadHandler, createAppUploadCors } from './app-upload-relay.js';
 import { runWithAuth } from './auth/async-context.js';
 import { requireBearerAuth } from './auth/bearer-auth.js';
 import {
@@ -265,18 +265,21 @@ export async function startHttpServer(
   const oauthProvider = createOAuthProvider(config.baseUrl);
 
   if (config.chatgptApp?.uploadStorageOrigin) {
-    app.options(
+    app.use(
       '/app-upload',
-      cors({ origin: '*', methods: ['PUT'], allowedHeaders: ['content-type'] }),
+      createAppUploadCors(
+        config.chatgptApp.uploadOrigins ?? [
+          config.chatgptApp.domain,
+          'https://web-sandbox.oaiusercontent.com',
+        ],
+      ),
     );
   }
-  // CORS for browser-based MCP clients
-  app.use(
-    cors({
-      origin: (origin, callback) => callback(null, isAllowedMcpOrigin(origin)),
-      credentials: true,
-    }),
-  );
+  const mcpCors = cors({
+    origin: (origin, callback) => callback(null, isAllowedMcpOrigin(origin)),
+    credentials: true,
+  });
+  app.use((req, res, next) => (req.path === '/app-upload' ? next() : mcpCors(req, res, next)));
 
   // Structured request logging. Aggregate counters are also emitted in runtime heartbeats.
   app.use((req, res, next) => {
@@ -314,7 +317,7 @@ export async function startHttpServer(
   if (config.chatgptApp?.uploadStorageOrigin) {
     // No user bearer token enters the browser. The single-use ticket is issued only
     // after the authenticated assets/upload call has checked the account's limits.
-    app.put('/app-upload', cors({ origin: '*' }), appUploadHandler);
+    app.put('/app-upload', appUploadHandler);
   }
 
   // Health check (unauthenticated)

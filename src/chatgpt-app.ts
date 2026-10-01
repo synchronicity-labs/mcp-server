@@ -18,6 +18,7 @@ const configSchema = z.object({
   domain: originSchema,
   resourceDomains: originSchema.array(),
   connectDomains: originSchema.array().default([]),
+  uploadOrigins: originSchema.array().optional(),
 });
 const manifestSchema = z.object({
   version: z.literal(1),
