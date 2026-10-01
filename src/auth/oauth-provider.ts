@@ -2,7 +2,7 @@ import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 
-import { verifySyncAccessToken } from './token-verification.js';
+import { createTokenVerifier } from './verification-cache.js';
 
 const CONFIDENTIAL_CLIENT_AUTH_METHOD = 'client_secret_post';
 const NON_EXPIRING_CLIENT_SECRET = 0;
@@ -36,7 +36,9 @@ function asConfidentialClient(client: OAuthClientInformationFull): OAuthClientIn
  */
 export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvider & {
   verifyAccessToken(token: string, signal?: AbortSignal): Promise<AuthInfo>;
+  clearVerificationCache(): void;
 } {
+  const verifier = createTokenVerifier(apiBaseUrl);
   const clientCache = new Map<string, OAuthClientInformationFull>();
   const registrationSecret = process.env.OAUTH_REGISTRATION_SECRET;
 
@@ -90,7 +92,7 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
       registrationUrl,
     },
 
-    verifyAccessToken: (token) => verifySyncAccessToken(apiBaseUrl, token),
+    verifyAccessToken: verifier.verify,
 
     getClient: resolveClient,
 
@@ -128,7 +130,7 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
   });
 
   return Object.assign(provider, {
-    verifyAccessToken: (token: string, signal?: AbortSignal) =>
-      verifySyncAccessToken(apiBaseUrl, token, signal),
+    verifyAccessToken: verifier.verify,
+    clearVerificationCache: verifier.clear,
   });
 }

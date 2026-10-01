@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import express from 'express';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { startHttpServer } from './http-server.js';
 import { createMcpServerFactory } from './server.js';
 
@@ -32,9 +32,9 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-const projectStarted = deferred<void>();
-const projectAborted = deferred<void>();
-const projectRelease = deferred<void>();
+let projectStarted = deferred<void>();
+let projectAborted = deferred<void>();
+let projectRelease = deferred<void>();
 const spec = {
   openapi: '3.0.0',
   paths: {
@@ -120,7 +120,12 @@ const spec = {
   },
 };
 
-beforeAll(async () => {
+beforeEach(async () => {
+  projectStarted = deferred<void>();
+  projectAborted = deferred<void>();
+  projectRelease = deferred<void>();
+  calls.length = 0;
+  clients.length = 0;
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   upstream = createServer(async (req, res) => {
@@ -273,7 +278,7 @@ beforeAll(async () => {
   if (!hosted) throw new Error('Hosted fixture did not start');
   url = `http://127.0.0.1:${(hosted.address() as AddressInfo).port}/mcp`;
 });
-afterAll(async () => {
+afterEach(async () => {
   projectRelease.resolve();
   try {
     await Promise.allSettled(clients.map((client) => client.close()));

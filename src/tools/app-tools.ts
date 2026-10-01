@@ -11,6 +11,17 @@ import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import type { McpToolDefinition } from './generator.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 
+// Public model controls accepted by the generation API. Do not expose service-only options.
+const modelOptionsSchema = z
+  .object({
+    temperature: z.number().min(0).max(1).nullable().optional(),
+    active_speaker_detection: z.boolean().optional(),
+    occlusion_detection_enabled: z.boolean().optional(),
+    reasoning_enabled: z.boolean().optional(),
+    model_mode: z.enum(['lips', 'face', 'head']).optional(),
+  })
+  .strict();
+
 // A file as ChatGPT delivers it for an `openai/fileParams` field.
 const fileInput = z.object({
   download_url: z.string(),
@@ -548,6 +559,11 @@ export function createAppTools(
           .string()
           .describe('Optional model override. Image and video inputs default to sync-3.')
           .optional(),
+        options: modelOptionsSchema
+          .optional()
+          .describe(
+            'Model-specific generation preferences. Keep unchanged when retrying the same idempotency key.',
+          ),
         idempotencyKey: z
           .string()
           .regex(/^[A-Za-z0-9._~-]{1,128}$/)
@@ -626,6 +642,8 @@ export function createAppTools(
           projectId?: string;
           idempotencyKey?: string;
         };
+
+        const options = modelOptionsSchema.optional().parse(args.options);
 
         // Validate the shape up front, before re-hosting any bytes.
         const audioSourceCount = providedCount(audioUrl, audioAssetId, audio);
@@ -715,6 +733,7 @@ export function createAppTools(
           ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
           body: {
             model: resolvedModel,
+            ...(options === undefined ? {} : { options }),
             input: [visual, driver],
             projectId,
           },

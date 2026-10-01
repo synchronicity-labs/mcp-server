@@ -1,21 +1,31 @@
 export type ClientProfile = Readonly<{
-  name: 'chatgpt' | 'claude' | 'generic';
+  name: 'chatgpt' | 'codex' | 'claude' | 'generic';
+  supportsAppUi: boolean;
   supportsUploads: boolean;
   defaultProjectName: string;
 }>;
 
 const GENERIC: ClientProfile = Object.freeze({
   name: 'generic',
+  supportsAppUi: false,
   supportsUploads: false,
   defaultProjectName: 'Sync generations',
 });
 const CHATGPT: ClientProfile = Object.freeze({
   name: 'chatgpt',
+  supportsAppUi: true,
   supportsUploads: true,
   defaultProjectName: 'ChatGPT generations',
 });
+const CODEX: ClientProfile = Object.freeze({
+  name: 'codex',
+  supportsAppUi: true,
+  supportsUploads: false,
+  defaultProjectName: 'Sync generations',
+});
 const CLAUDE: ClientProfile = Object.freeze({
   name: 'claude',
+  supportsAppUi: false,
   supportsUploads: false,
   defaultProjectName: 'Claude generations',
 });
@@ -28,6 +38,8 @@ export function resolveClientProfile(name?: string): ClientProfile {
     case 'openai-chatgpt':
     case 'openai-mcp':
       return CHATGPT;
+    case 'openai-mcp (codex)':
+      return CODEX;
     case 'claude':
     case 'claude-ai':
       return CLAUDE;

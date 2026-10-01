@@ -56,6 +56,52 @@ describe('createAppTools — create-lipsync', () => {
     return { tool, uploadTool, request };
   }
 
+  it('forwards public model settings without changing the idempotency key', async () => {
+    const { tool, request } = setup();
+    const options = {
+      temperature: 0.7,
+      active_speaker_detection: true,
+      occlusion_detection_enabled: true,
+      reasoning_enabled: true,
+    };
+    await tool.handler({
+      model: 'lipsync-2-pro',
+      projectId: 'project-1',
+      videoAssetId: 'video-1',
+      audioAssetId: 'audio-1',
+      idempotencyKey: 'settings-action',
+      options,
+    });
+    expect(request).toHaveBeenCalledWith(
+      'post',
+      '/v2/generate',
+      expect.objectContaining({
+        headers: { 'Idempotency-Key': 'settings-action' },
+        body: {
+          model: 'lipsync-2-pro',
+          projectId: 'project-1',
+          input: [
+            { type: 'video', assetId: 'video-1' },
+            { type: 'audio', assetId: 'audio-1' },
+          ],
+          options,
+        },
+      }),
+    );
+  });
+
+  it.each([
+    { temperature: 1.1 },
+    { reasoning_enabled: 'true' },
+    { output_bucket_name: 'untrusted' },
+  ])('rejects invalid model options before any upstream requests: %j', async (options) => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({ videoAssetId: 'video-1', audioAssetId: 'audio-1', options }),
+    ).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   // Default fetch mock: a GET reads the upload bytes, a PUT stores them.
   beforeEach(() => {
     vi.stubGlobal(

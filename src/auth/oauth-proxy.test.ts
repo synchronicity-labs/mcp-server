@@ -294,6 +294,10 @@ it.each(['post', 'basic'])('preserves refresh-token credentials for %s clients',
 it.each([
   200, 401, 403, 429, 503,
 ])('combined actual /mcp route preserves userinfo %s semantics', async (status) => {
+  // Each scenario starts after explicit revocation, outside the success cache.
+  expect(
+    (await post('/revoke', 'token=fake-token&client_id=client&client_secret=fake-secret')).status,
+  ).toBe(200);
   userinfoStatus = status;
   try {
     const response = await fetch(`${url}/mcp`, {

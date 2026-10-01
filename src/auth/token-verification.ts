@@ -88,7 +88,7 @@ export async function verifySyncAccessToken(
               : { organizationId: parsed.data.organization_id }),
           },
           scopes: [],
-          // Preserve the existing fallback; verification is never cached.
+          // Preserve the legacy expiry fallback; the provider bounds reuse to 15 seconds.
           expiresAt: parsed.data.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
         };
       })(),

@@ -17,6 +17,7 @@ const configSchema = z.object({
   directory: z.string().min(1),
   domain: originSchema,
   resourceDomains: originSchema.array(),
+  connectDomains: originSchema.array().default([]),
 });
 const manifestSchema = z.object({
   version: z.literal(1),
@@ -43,7 +44,7 @@ export async function loadChatgptApp(
   config: SyncMcpConfig['chatgptApp'],
 ): Promise<ChatgptApp | undefined> {
   if (!config) return undefined;
-  const { directory, domain, resourceDomains } = configSchema.parse(config);
+  const { directory, domain, resourceDomains, connectDomains } = configSchema.parse(config);
   const manifest = manifestSchema.parse(
     JSON.parse((await readBounded(join(directory, 'manifest.json'), 4096)).toString('utf8')),
   );
@@ -57,9 +58,36 @@ export async function loadChatgptApp(
       title: 'Sync',
       description: 'Browse your Sync projects and create videos using your existing assets.',
       mimeType: MCP_APP_RESOURCE_MIME_TYPE,
-      _meta: { ui: { domain, prefersBorder: true, csp: { connectDomains: [], resourceDomains } } },
+      _meta: {
+        ui: { domain, prefersBorder: true, csp: { connectDomains, resourceDomains } },
+        'openai/widgetDomain': domain,
+        'openai/widgetCSP': { connect_domains: connectDomains, resource_domains: resourceDomains },
+        'openai/widgetPrefersBorder': true,
+        'openai/widgetDescription':
+          'Sync projects and video creation interface. A successful open request does not confirm that the interface has rendered.',
+        'openai/ui': { availableDisplayModes: ['inline'] },
+      },
     },
   };
+}
+
+/** Retain immutable releases so cached tool descriptors remain readable after upgrades. */
+export async function loadChatgptAppReleases(
+  config: SyncMcpConfig['chatgptApp'],
+): Promise<ChatgptApp[]> {
+  if (!config) return [];
+  const previous = z
+    .array(z.string().min(1))
+    .max(8)
+    .parse(config.previousDirectories ?? []);
+  const apps = await Promise.all(
+    [config.directory, ...previous].map((directory) => loadChatgptApp({ ...config, directory })),
+  );
+  return [
+    ...new Map(
+      apps.filter((app): app is ChatgptApp => !!app).map((app) => [app.uri, app]),
+    ).values(),
+  ];
 }
 
 export function createOpenSyncAppTool(app: ChatgptApp): McpToolDefinition {
@@ -67,9 +95,9 @@ export function createOpenSyncAppTool(app: ChatgptApp): McpToolDefinition {
     name: 'open-sync-app',
     title: 'Open Sync',
     description:
-      'Open Sync to browse existing projects, choose media and configure a video generation. Opening the interface does not start a generation or spend credits.',
+      'Open Sync to browse existing projects, choose media and configure a video generation. Requesting the interface does not start a generation or spend credits. The result only confirms the request; do not claim the interface rendered unless the user confirms it.',
     inputSchema: {},
-    outputSchema: { opened: z.boolean() },
+    outputSchema: { requested: z.boolean(), renderStatus: z.literal('awaiting_client') },
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -78,8 +106,11 @@ export function createOpenSyncAppTool(app: ChatgptApp): McpToolDefinition {
     },
     meta: {
       ui: { resourceUri: app.uri },
+      'openai/outputTemplate': app.uri,
+      'openai/toolInvocation/invoking': 'Preparing Sync',
+      'openai/toolInvocation/invoked': 'Sync interface requested',
       'openai/ui': { entrypoints: [{ type: 'global' }, { type: 'thread' }] },
     },
-    handler: async () => ({ opened: true }),
+    handler: async () => ({ requested: true, renderStatus: 'awaiting_client' }),
   };
 }

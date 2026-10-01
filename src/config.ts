@@ -5,8 +5,11 @@ export type SyncMcpConfig = {
   port: number;
   chatgptApp?: {
     directory: string;
+    previousDirectories?: string[];
     domain: string;
     resourceDomains: string[];
+    connectDomains?: string[];
+    uploadStorageOrigin?: string;
   };
 };
 
@@ -27,7 +30,10 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
       (process.env.SYNC_CHATGPT_APP_DIR
         ? {
             directory: process.env.SYNC_CHATGPT_APP_DIR,
+            previousDirectories: JSON.parse(process.env.SYNC_CHATGPT_APP_PREVIOUS_DIRS ?? '[]'),
             domain: process.env.SYNC_CHATGPT_APP_DOMAIN ?? '',
+            uploadStorageOrigin: process.env.SYNC_APP_UPLOAD_STORAGE_ORIGIN,
+            connectDomains: JSON.parse(process.env.SYNC_CHATGPT_APP_CONNECT_DOMAINS ?? '[]'),
             resourceDomains: JSON.parse(process.env.SYNC_CHATGPT_APP_RESOURCE_DOMAINS ?? '[]'),
           }
         : undefined),

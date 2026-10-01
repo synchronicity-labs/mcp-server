@@ -170,6 +170,9 @@ Options:
 | `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
 | `SYNC_BASE_URL` | API base URL | `https://api.sync.so` |
 | `SYNC_CHATGPT_APP_DIR` | Directory containing the approved frontend's `app.html` and `manifest.json`; unset keeps the new app unavailable | unset |
+| `SYNC_CHATGPT_APP_PREVIOUS_DIRS` | JSON array of up to eight retained immutable frontend directories for cached clients | `[]` |
+| `SYNC_CHATGPT_APP_CONNECT_DOMAINS` | JSON array of exact HTTPS origins for uploads and media extraction | `[]` |
+| `SYNC_APP_UPLOAD_STORAGE_ORIGIN` | Exact HTTPS storage origin allowed for the one-use upload relay; unset uses direct presigned uploads | unset |
 | `SYNC_CHATGPT_APP_DOMAIN` | Exact HTTPS widget origin for the configured app | required when app is configured |
 | `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
 | `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
@@ -373,3 +376,22 @@ SYNC_CHATGPT_APP_DOMAIN=https://your-verified-widget-origin.example \
 SYNC_CHATGPT_APP_RESOURCE_DOMAINS='["https://your-media-origin.example"]' \
 node dist/cli.js --transport http --port 3002
 ```
+
+### Embedded upload and authentication behavior
+
+The optional upload relay issues a random, single-use ticket only after an authenticated
+presign request. It checks exact content type and size, expires after at most five minutes,
+and streams only to the configured HTTPS storage origin under the existing upload runtime
+limits. Tickets are process-local: the MCP session and its upload must reach the same instance.
+A restart invalidates outstanding tickets; the client can request a new upload. Multi-instance
+release routing must account for this before enabling the relay in production. The widget
+origin must also route `/app-upload` to that instance and appear in connect domains.
+
+OAuth verification reuses successful results for at most 15 seconds and never beyond
+token expiry. Concurrent checks are deduplicated; successful revocation clears this
+provider's cache. Revocation elsewhere can take up to 15 seconds to affect this cache.
+Userinfo rate limits trigger bounded retry backoff rather than an invalid-token response.
+
+`npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
+storage. Install Chromium with `npx playwright install chromium` first. This does not
+prove live authenticated storage delivery or authorize a production rollout.

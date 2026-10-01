@@ -57,14 +57,14 @@ it('preserves valid token identity and expiration', async () => {
     scopes: [],
   });
 });
-it('retains the uncached legacy expiry fallback', async () => {
+it('retains the legacy expiry fallback with bounded verification reuse', async () => {
   const fetchMock = vi.fn(async () => Response.json({ sub: 'user', client_id: 'client' }));
   vi.stubGlobal('fetch', fetchMock);
   const provider = createOAuthProvider('https://fixture.invalid');
   const info = await provider.verifyAccessToken('fake-token');
   expect(info.expiresAt).toBeGreaterThan(Date.now() / 1000 + 3598);
   await provider.verifyAccessToken('fake-token');
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 it.each(['network', 'json'])('sanitizes %s errors', async (kind) => {
   vi.stubGlobal(
