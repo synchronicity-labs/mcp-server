@@ -278,8 +278,16 @@ All hosted clients can discover models (`models_get`), search/list and read proj
 `assets_get`), list organization generation history (`generate_get-generations`),
 and estimate cost (`generate_estimate-cost`). These tools use the API's OpenAPI
 contracts and the caller's existing Sync permissions. Lists retain the API cursor
-parameters; organization generation history does not currently accept a project filter.
-ChatGPT can also call these tools from its UI.
+parameters. ChatGPT can also call these tools from its UI.
+
+When the backend advertises project filtering, `projects_get-generations` provides
+history for one required canonical `projectId`, with the same cursor and limit
+parameters as the public API. It verifies project access before reading history
+and rejects responses containing another project's records, including responses
+from an older API instance during a rolling deployment. The organization-feed
+tool remains available on older backends. Deploy the compatible backend to every
+instance, then restart MCP to refresh its OpenAPI catalog before enabling project
+history in the app. This does not create a second plugin or a mirrored database.
 
 Claude and unknown clients also expose `create-lipsync`, `voices_get-voices`, and
 `generate_get-generation` for public/Sync-hosted URLs and existing Sync asset IDs.
