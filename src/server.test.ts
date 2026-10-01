@@ -8,6 +8,7 @@ import {
   selectHostedHttpTools,
 } from './server.js';
 import type { McpToolDefinition } from './tools/index.js';
+import { generationOutputSchema } from './tools/output-schemas.js';
 import { UploadOverloadedError } from './upload-runtime.js';
 
 function tool(name: string): McpToolDefinition {
@@ -89,6 +90,28 @@ describe('createJsonToolResult', () => {
           text: JSON.stringify(result, null, 2),
         },
       ],
+    });
+  });
+
+  // The browser cannot render the backend ETA if the MCP public projection strips it.
+  it('forwards server generation estimates without exposing private inputs', () => {
+    const generationEstimate = {
+      serverTime: '2026-10-01T12:00:00Z',
+      estimatedFinishAt: '2026-10-01T12:00:40Z',
+    };
+    const result = createJsonToolResult(
+      {
+        id: 'gen-123',
+        status: 'PROCESSING',
+        generationEstimate,
+        input: [{ url: 'https://private.example/input.mp4' }],
+      },
+      generationOutputSchema,
+    );
+    expect(result.structuredContent).toEqual({
+      id: 'gen-123',
+      status: 'PROCESSING',
+      generationEstimate,
     });
   });
 
