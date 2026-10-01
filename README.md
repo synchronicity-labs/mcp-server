@@ -169,6 +169,13 @@ Options:
 |----------|-------------|---------|
 | `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
 | `SYNC_BASE_URL` | API base URL | `https://api.sync.so` |
+| `SYNC_CHATGPT_APP_DIR` | Directory containing the approved frontend's `app.html` and `manifest.json`; unset keeps the new app unavailable | unset |
+| `SYNC_CHATGPT_APP_PREVIOUS_DIRS` | JSON array of up to eight retained immutable frontend directories for cached clients | `[]` |
+| `SYNC_CHATGPT_APP_CONNECT_DOMAINS` | JSON array of exact HTTPS origins for uploads and media extraction | `[]` |
+| `SYNC_APP_UPLOAD_ORIGINS` | JSON array of exact HTTPS browser origins allowed to upload | widget domain and `https://web-sandbox.oaiusercontent.com` |
+| `SYNC_APP_UPLOAD_STORAGE_ORIGIN` | Exact HTTPS storage origin allowed for the one-use upload relay; unset uses direct presigned uploads | unset |
+| `SYNC_CHATGPT_APP_DOMAIN` | Exact HTTPS widget origin for the configured app | required when app is configured |
+| `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
 | `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
 | `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
 | `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `1800000` (30 min) |
@@ -266,13 +273,24 @@ MIT
 
 Hosted sessions select one immutable presentation profile after MCP initialization.
 Exact ChatGPT aliases retain the upload widget, file metadata and optional file arguments.
-Claude and unknown clients expose `create-lipsync`, `voices_get-voices`, and
+All hosted clients can discover models (`models_get`), search/list and read projects
+(`projects_get-all`, `projects_get`), search/list and read assets (`assets_get-all`,
+`assets_get`), list organization generation history (`generate_get-generations`),
+and estimate cost (`generate_estimate-cost`). These tools use the API's OpenAPI
+contracts and the caller's existing Sync permissions. Lists retain the API cursor
+parameters; organization generation history does not currently accept a project filter.
+ChatGPT can also call these tools from its UI.
+
+Claude and unknown clients also expose `create-lipsync`, `voices_get-voices`, and
 `generate_get-generation` for public/Sync-hosted URLs and existing Sync asset IDs.
 Upload local media in authenticated Sync and use **Copy ID** in the same organization,
 or **Copy URL**. Unsupported file/widget calls return this guidance without uploading.
 
 Defaults are `ChatGPT generations`, `Claude generations`, or `Sync generations` for
-unknown clients; explicit `projectName` wins. Muse remains an unknown client until its
+unknown clients. Supply `projectId` to select an existing project by its canonical ID,
+or `projectName` to find or create a named project. These fields are mutually exclusive.
+An explicit project ID is checked for access before any file transfer; an inaccessible
+or deleted project fails without falling back to a new project. Muse remains an unknown client until its
 actual handshake alias is verified. Client names affect presentation only, never
 organization access or credit permissions. No Muse origin or attachment contract is assumed.
 
@@ -305,3 +323,80 @@ operations are filtered once before per-session schema construction.
 See [release verification](docs/release-verification.md) for reproducible checks,
 component provenance, and the distinction between controlled tests and live Muse
 review readiness.
+
+
+### Recovering a generation submission
+
+`create-lipsync` accepts an optional `idempotencyKey` and forwards it as the
+existing Sync API's `Idempotency-Key` header. Clients should persist a key for
+one intentional generation action and reuse the same key and payload after an
+ambiguous response. A new intentional generation uses a new key. The backend
+owns replay, conflict detection and credit accounting; MCP does not retry writes.
+
+Use the explicit canonical `projectId` and durable asset IDs or stable URLs for
+keyed submissions. Stage ChatGPT files with `upload-media` first, then use the
+returned asset IDs. Re-transferring transient file inputs can produce different
+asset IDs and a changed-payload conflict. Keys accept 1-128 ASCII letters,
+digits, periods, underscores, tildes and hyphens. Omitting the key preserves
+existing behavior.
+
+An `IDEMPOTENCY_OUTCOME_UNKNOWN` error may contain a UUID `generationId`.
+MCP preserves that ID in `structuredContent.error`; clients should retain it
+and use `generate_get-generation` for status reads instead of creating again.
+
+### Embedded Sync app
+
+Build `@sync/chatgpt` in the Sync monorepo and supply its `app.html` and
+`manifest.json` together in `SYNC_CHATGPT_APP_DIR`. The server verifies the
+manifest format, HTML SHA256, UTF-8 and size (8 MiB maximum) at factory startup.
+Each session serves those same loaded bytes under a content-addressed resource
+URI. Invalid configured artifacts fail startup rather than silently serving a
+different interface. These checks establish artifact consistency; deployment
+must still obtain the bundle from the approved frontend build.
+
+The `open-sync-app` tool exposes the resource through the standard MCP Apps UI
+metadata and declares ChatGPT global/sidebar and thread/panel entrypoints.
+Opening it is read-only. Existing uploads and tool-only clients are preserved;
+the new tool and resource are only presented to the ChatGPT client profile.
+HTTP authentication still applies to the MCP connection.
+
+Set the widget origin and the exact media origins for the target environment.
+Browser API connections are not allowed by this UI resource's CSP; backend
+operations go through the authenticated MCP bridge. The frontend remains
+disabled unless its directory is explicitly configured. The current container
+does not include the frontend artifact: the release pipeline must package or
+mount the approved bundle before enabling this configuration. Cross-repository
+artifact delivery and retaining older published UI versions across deployments
+remain release requirements, along with real ChatGPT/account acceptance.
+
+Local example after building the frontend and this server:
+
+```sh
+SYNC_CHATGPT_APP_DIR=/absolute/path/to/sync-api-v2/apps/chatgpt/dist \
+SYNC_CHATGPT_APP_DOMAIN=https://your-verified-widget-origin.example \
+SYNC_CHATGPT_APP_RESOURCE_DOMAINS='["https://your-media-origin.example"]' \
+node dist/cli.js --transport http --port 3002
+```
+
+### Embedded upload and authentication behavior
+
+The optional upload relay issues a random, single-use ticket only after an authenticated
+presign request. It checks exact content type and size, expires after at most five minutes,
+and streams only to the configured HTTPS storage origin under the existing upload runtime
+concurrency and timeout limits. Browser relay uploads support the API single-PUT
+maximum of 5 GiB; the 512 MiB download limit still applies to rehosting ChatGPT
+attachments. Legacy presign responses without an expiry receive a five-minute ticket.
+Tickets are process-local: the MCP session and its upload must reach the same instance.
+A restart invalidates outstanding tickets; the client can request a new upload. Multi-instance
+release routing must account for this before enabling the relay in production. The widget
+origin must also route `/app-upload` to that instance and appear in connect domains.
+
+OAuth verification reuses successful results for at most 15 seconds and never beyond
+token expiry. Concurrent checks are deduplicated; successful revocation clears this
+provider's cache. Revocation elsewhere can take up to 15 seconds to affect this cache.
+Userinfo rate limits trigger token-specific backoff capped at 15 seconds, rather
+than blocking unrelated accounts or treating temporary errors as invalid tokens.
+
+`npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
+storage. Install Chromium with `npx playwright install chromium` first. This does not
+prove live authenticated storage delivery or authorize a production rollout.

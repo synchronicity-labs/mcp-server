@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
 
@@ -28,6 +29,19 @@ export function resolveSyncSource(clientName?: string): string {
 
 // Bound upstream calls independently of the API-defined polling window. No write retries.
 export const UPSTREAM_REQUEST_TIMEOUT_MS = 65_000;
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly retryAfterMs?: number,
+    readonly generationId?: string,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
 
 type AuthHeaders = Record<string, string>;
 
@@ -110,11 +124,36 @@ export function createHttpClient(
 
         if (!response.ok) {
           const message =
-            typeof parsed === 'object' && parsed !== null && 'message' in parsed
-              ? (parsed as { message: string }).message
+            typeof parsed === 'object' &&
+            parsed !== null &&
+            'message' in parsed &&
+            typeof parsed.message === 'string'
+              ? parsed.message
               : text;
-          throw new Error(
+          const code =
+            typeof parsed === 'object' &&
+            parsed !== null &&
+            'errorCode' in parsed &&
+            typeof parsed.errorCode === 'string'
+              ? parsed.errorCode
+              : undefined;
+          const retryAfter = response.headers.get('Retry-After');
+          const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
+          const retryAfterMs =
+            Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+          const knownId = z
+            .uuid()
+            .safeParse(
+              parsed && typeof parsed === 'object' && 'generationId' in parsed
+                ? parsed.generationId
+                : undefined,
+            );
+          throw new ApiRequestError(
             `API request failed: ${response.status} ${response.statusText} - ${message}`,
+            response.status,
+            code,
+            retryAfterMs,
+            knownId.success ? knownId.data : undefined,
           );
         }
 

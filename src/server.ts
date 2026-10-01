@@ -7,16 +7,18 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { relayUploadTool } from './app-upload-relay.js';
 import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { loadToken } from './auth/token-store.js';
+import { type ChatgptApp, createOpenSyncAppTool, loadChatgptAppReleases } from './chatgpt-app.js';
 import {
   type ClientProfile,
   resolveClientProfile,
   UNSUPPORTED_UPLOAD_MESSAGE,
 } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
-import { createHttpClient } from './http-client.js';
+import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAppTools } from './tools/app-tools.js';
@@ -29,21 +31,42 @@ const SERVER_DESCRIPTION =
   'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
 
 export const SERVER_INSTRUCTIONS =
-  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, upload in authenticated Sync and use Copy ID (or Copy URL). The tool defaults to sync-3 and an integration-specific project unless projectName is supplied. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
+  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'open-sync-app',
   'open-upload-widget',
   'upload-media',
   'create-lipsync',
   'voices_get-voices',
   'generate_get-generation',
+  'models_get',
+  'projects_get-all',
+  'projects_get',
+  'assets_get-all',
+  'assets_get',
+  'assets_create-upload-url',
+  'assets_create',
+  'projects_create',
+  'generate_get-generations',
+  'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'upload-media',
   'create-lipsync',
   'voices_get-voices',
   'generate_get-generation',
+  'models_get',
+  'projects_get-all',
+  'projects_get',
+  'assets_get-all',
+  'assets_get',
+  'assets_create-upload-url',
+  'assets_create',
+  'projects_create',
+  'generate_get-generations',
+  'generate_estimate-cost',
 ]);
 
 export function createToolDescriptorMeta(
@@ -84,6 +107,22 @@ export function registerTools(server: McpServer, tools: McpToolDefinition[]): vo
 
 export function createToolErrorResult(error: unknown): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof ApiRequestError) {
+    const structuredContent = {
+      error: {
+        message,
+        status: error.status,
+        ...(error.code ? { code: error.code } : {}),
+        ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+        ...(error.generationId ? { generationId: error.generationId } : {}),
+      },
+    };
+    return {
+      content: [{ type: 'text', text: `Error: ${message}` }],
+      structuredContent,
+      isError: true,
+    };
+  }
   const retryableError =
     error && typeof error === 'object'
       ? (error as { code?: unknown; retryable?: unknown; retryAfterMs?: unknown })
@@ -154,16 +193,19 @@ function isStructuredContent(result: unknown): result is Record<string, unknown>
   return result !== null && typeof result === 'object' && !Array.isArray(result);
 }
 
+function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
+  if (tool.name === 'open-sync-app') return profile.supportsAppUi;
+  if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
+  return true;
+}
+
 export function selectHostedHttpTools(
   tools: McpToolDefinition[],
   profile: ClientProfile = resolveClientProfile(),
 ): McpToolDefinition[] {
   return tools
     .filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-    .filter(
-      (tool) =>
-        profile.supportsUploads || !['upload-media', 'open-upload-widget'].includes(tool.name),
-    )
+    .filter((tool) => isToolVisible(tool, profile))
     .map((tool) => presentTool(tool, profile));
 }
 
@@ -199,7 +241,7 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
   if (tool.name === 'create-lipsync') {
     for (const key of ['video', 'image', 'audio']) delete inputSchema[key];
     description =
-      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; explicit projectName overrides the client default. Poll the returned id with generate_get-generation.';
+      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; supply projectId for an existing project or projectName to find or create one; otherwise the client default is used. Poll the returned id with generate_get-generation.';
     for (const key of ['videoAssetId', 'imageAssetId', 'audioAssetId']) {
       inputSchema[key] = z
         .string()
@@ -213,16 +255,25 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
       .optional()
       .describe('Public or Sync-hosted video URL. Supply exactly one visual input.');
   }
-  const meta = Object.fromEntries(
-    Object.entries(tool.meta ?? {}).filter(([key]) => !key.startsWith('openai/') && key !== 'ui'),
-  );
-  return { ...tool, inputSchema, description, meta };
+  const meta = profile.supportsAppUi
+    ? tool.meta
+    : Object.fromEntries(
+        Object.entries(tool.meta ?? {}).filter(
+          ([key]) => !key.startsWith('openai/') && key !== 'ui',
+        ),
+      );
+  const presented = { ...tool, inputSchema, description, meta };
+  return profile.supportsAppUi && WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name)
+    ? exposeToolToWidget(presented)
+    : presented;
 }
 
 function createProfiledServer(
   config: SyncMcpConfig,
   operations: ReturnType<typeof parseSpec>,
   authHeaders: Record<string, string> = {},
+  chatgptApp?: ChatgptApp,
+  previousApps: ChatgptApp[] = [],
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined;
@@ -233,9 +284,14 @@ function createProfiledServer(
     config.transport === 'stdio' ? () => clientName : undefined,
   );
   const allTools = [
+    ...(chatgptApp ? [createOpenSyncAppTool(chatgptApp)] : []),
     createUploadWidgetTool(),
     ...createAppTools(httpClient, undefined, getProfile),
-    ...generateTools(operations, httpClient),
+    ...generateTools(operations, httpClient).map((tool) =>
+      config.chatgptApp?.uploadStorageOrigin
+        ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
+        : tool,
+    ),
   ];
   const tools =
     config.transport === 'http'
@@ -256,6 +312,10 @@ function createProfiledServer(
           handler: async (...parameters: Parameters<typeof tool.handler>) => {
             const [args] = parameters;
             if (!profile) throw new Error('Complete MCP initialization before calling tools.');
+            if (tool.name === 'open-sync-app' && !profile.supportsAppUi)
+              throw new Error(
+                'Open the Sync app in ChatGPT, or use the Sync tools in this client.',
+              );
             if (
               !profile.supportsUploads &&
               (['upload-media', 'open-upload-widget'].includes(tool.name) ||
@@ -279,13 +339,40 @@ function createProfiledServer(
       });
     },
   });
+  for (const [index, app] of (chatgptApp ? [chatgptApp, ...previousApps] : []).entries()) {
+    if (index === 0) resources.push({ name: 'sync-app', uri: app.uri, ...app.metadata });
+    server.registerResource(
+      index === 0 ? 'sync-app' : `sync-app-previous-${index}`,
+      app.uri,
+      app.metadata,
+      async () => {
+        if (!getProfile().supportsAppUi)
+          throw new Error('This interface requires an app-compatible client.');
+        process.stderr.write(
+          `${JSON.stringify({ event: 'app_resource_served', timestamp: new Date().toISOString(), clientName, resource: app.uri, bytes: Buffer.byteLength(app.html) })}\n`,
+        );
+        return {
+          contents: [
+            {
+              uri: app.uri,
+              mimeType: app.metadata.mimeType,
+              text: app.html,
+              _meta: app.metadata._meta,
+            },
+          ],
+        };
+      },
+    );
+  }
   let descriptors: Tool[] = [];
   server.server.setRequestHandler(ListToolsRequestSchema, () => {
     if (!profile) throw new Error('Complete MCP initialization before listing tools.');
     return { tools: descriptors };
   });
   server.server.setRequestHandler(ListResourcesRequestSchema, () => ({
-    resources: getProfile().supportsUploads ? resources : [],
+    resources: resources.filter((resource) =>
+      resource.name === 'sync-app' ? getProfile().supportsAppUi : getProfile().supportsUploads,
+    ),
   }));
   const onInitialized = server.server.oninitialized;
   server.server.oninitialized = () => {
@@ -297,11 +384,7 @@ function createProfiledServer(
         config.transport === 'http'
           ? selectHostedHttpTools(tools, initializedProfile)
           : tools
-              .filter(
-                (tool) =>
-                  initializedProfile.supportsUploads ||
-                  !['upload-media', 'open-upload-widget'].includes(tool.name),
-              )
+              .filter((tool) => isToolVisible(tool, initializedProfile))
               .map((tool) => presentTool(tool, initializedProfile));
       descriptors = visible.map((tool) => ({
         name: tool.name,
@@ -326,18 +409,21 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   };
   const authHeaders = config.transport === 'http' ? {} : await resolveAuth(config, log);
   const operations = parseSpec(await fetchSpec(config.baseUrl));
-  return createProfiledServer(config, operations, authHeaders);
+  const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
+  return createProfiledServer(config, operations, authHeaders, chatgptApp, previousApps);
 }
 
 export async function createMcpServerFactory(
   config: SyncMcpConfig,
 ): Promise<{ createServer: () => McpServer; toolCount: number }> {
+  const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
   // Filter once before constructing per-session schemas. Handlers and profile
   // state remain session-local, but excluded API operations do no session work.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter((operation) =>
     HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)),
   );
   const registeredNames = new Set([
+    ...(chatgptApp ? ['open-sync-app'] : []),
     'open-upload-widget',
     'upload-media',
     'create-lipsync',
@@ -346,7 +432,7 @@ export async function createMcpServerFactory(
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: registeredNames.size,
-    createServer: () => createProfiledServer(config, operations),
+    createServer: () => createProfiledServer(config, operations, {}, chatgptApp, previousApps),
   };
 }
 

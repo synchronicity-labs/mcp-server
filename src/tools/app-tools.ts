@@ -11,6 +11,31 @@ import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import type { McpToolDefinition } from './generator.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 
+// Public model controls accepted by the generation API. Do not expose service-only options.
+const modelOptionsSchema = z
+  .object({
+    temperature: z.number().min(0).max(1).nullable().optional(),
+    active_speaker_detection: z
+      .union([
+        z.boolean(),
+        z
+          .object({
+            auto_detect: z.boolean().optional(),
+            use_v2: z.boolean().optional(),
+            v3: z.boolean().optional(),
+            face_image: z.string().optional(),
+            frame_number: z.number().int().nonnegative().optional(),
+            coordinates: z.tuple([z.number(), z.number()]).optional(),
+          })
+          .strict(),
+      ])
+      .optional(),
+    occlusion_detection_enabled: z.boolean().optional(),
+    reasoning_enabled: z.boolean().optional(),
+    model_mode: z.enum(['lips', 'face', 'head']).optional(),
+  })
+  .strict();
+
 // A file as ChatGPT delivers it for an `openai/fileParams` field.
 const fileInput = z.object({
   download_url: z.string(),
@@ -480,7 +505,7 @@ export function createAppTools(
       description:
         'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
         'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
-        'The model defaults to sync-3. The generation is attached to a named project or an integration-specific default project; a missing project is created. ' +
+        'The model defaults to sync-3. Supply projectId to use an existing project, or projectName to find or create one. When neither is supplied, an integration-specific default project is used. ' +
         'This starts an asynchronous generation and returns its id and status.',
       inputSchema: {
         videoUrl: z
@@ -548,12 +573,32 @@ export function createAppTools(
           .string()
           .describe('Optional model override. Image and video inputs default to sync-3.')
           .optional(),
+        options: modelOptionsSchema
+          .optional()
+          .describe(
+            'Model-specific generation preferences. Keep unchanged when retrying the same idempotency key.',
+          ),
+        idempotencyKey: z
+          .string()
+          .regex(/^[A-Za-z0-9._~-]{1,128}$/)
+          .describe(
+            'Unique key for one generation action. Persist and reuse the same key, projectId, model, and inputs when retrying after a lost response. Use durable asset IDs or stable URLs; upload files before starting the keyed action. A new intentional generation needs a new key. Passed as the Sync API Idempotency-Key header.',
+          )
+          .optional(),
+        projectId: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            'Existing Sync project ID returned by projects_get-all or projects_get. Use this to select the same project as the web app. Cannot be combined with projectName.',
+          )
+          .optional(),
         projectName: z
           .string()
           .trim()
           .min(1)
           .describe(
-            'Project to attach the generation to. When omitted, the tool uses an integration-specific default. An existing project with the same name is reused, or a new one is created.',
+            'Project name to find or create. Cannot be combined with projectId. When both are omitted, the tool uses an integration-specific default. An existing project with the same name is reused, or a new one is created.',
           )
           .optional(),
       },
@@ -589,6 +634,8 @@ export function createAppTools(
           audio,
           model,
           projectName,
+          projectId: requestedProjectId,
+          idempotencyKey,
         } = args as {
           videoUrl?: string;
           videoAssetId?: string;
@@ -606,7 +653,14 @@ export function createAppTools(
           audio?: MediaParam;
           model?: string;
           projectName?: string;
+          projectId?: string;
+          idempotencyKey?: string;
         };
+
+        const options = modelOptionsSchema.optional().parse(args.options);
+        if (typeof options?.active_speaker_detection === 'boolean') {
+          options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
+        }
 
         // Validate the shape up front, before re-hosting any bytes.
         const audioSourceCount = providedCount(audioUrl, audioAssetId, audio);
@@ -641,6 +695,12 @@ export function createAppTools(
           throw new Error('Provide either a video or an image, not both.');
         }
 
+        if (requestedProjectId !== undefined && !requestedProjectId.trim()) {
+          throw new Error('projectId must not be empty.');
+        }
+        if (requestedProjectId !== undefined && projectName !== undefined) {
+          throw new Error('Provide either projectId or projectName, not both.');
+        }
         if (projectName !== undefined && !projectName.trim()) {
           throw new Error('projectName must not be empty.');
         }
@@ -650,12 +710,20 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
-        const projectId = await getOrCreateProjectId(
-          httpClient,
-          projectName,
-          getProfile().defaultProjectName,
-          signal,
-        );
+        const projectId =
+          requestedProjectId?.trim() ??
+          (await getOrCreateProjectId(
+            httpClient,
+            projectName,
+            getProfile().defaultProjectName,
+            signal,
+          ));
+        if (requestedProjectId !== undefined) {
+          // Check access before transferring files. Generation admission checks it again.
+          await httpClient.request('get', `/v2/projects/${encodeURIComponent(projectId)}`, {
+            signal,
+          });
+        }
 
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript
@@ -679,8 +747,10 @@ export function createAppTools(
         signal?.throwIfAborted();
         return httpClient.request('post', '/v2/generate', {
           signal,
+          ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
           body: {
             model: resolvedModel,
+            ...(options === undefined ? {} : { options }),
             input: [visual, driver],
             projectId,
           },

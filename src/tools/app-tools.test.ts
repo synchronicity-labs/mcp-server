@@ -56,6 +56,68 @@ describe('createAppTools — create-lipsync', () => {
     return { tool, uploadTool, request };
   }
 
+  it.each([
+    true,
+    false,
+    { auto_detect: true },
+    {
+      auto_detect: false,
+      frame_number: 12,
+      coordinates: [150, 75],
+      v3: true,
+      face_image: 'data:image/webp;base64,fixture',
+    },
+  ])('forwards public model settings and speaker selection %j without changing the idempotency key', async (speaker) => {
+    const { tool, request } = setup();
+    const options = {
+      temperature: 0.7,
+      active_speaker_detection: speaker,
+      occlusion_detection_enabled: true,
+      reasoning_enabled: true,
+    };
+    await tool.handler({
+      model: 'lipsync-2-pro',
+      projectId: 'project-1',
+      videoAssetId: 'video-1',
+      audioAssetId: 'audio-1',
+      idempotencyKey: 'settings-action',
+      options,
+    });
+    expect(request).toHaveBeenCalledWith(
+      'post',
+      '/v2/generate',
+      expect.objectContaining({
+        headers: { 'Idempotency-Key': 'settings-action' },
+        body: {
+          model: 'lipsync-2-pro',
+          projectId: 'project-1',
+          input: [
+            { type: 'video', assetId: 'video-1' },
+            { type: 'audio', assetId: 'audio-1' },
+          ],
+          options: {
+            ...options,
+            active_speaker_detection:
+              typeof speaker === 'boolean' ? { auto_detect: speaker } : speaker,
+          },
+        },
+      }),
+    );
+  });
+
+  it.each([
+    { temperature: 1.1 },
+    { reasoning_enabled: 'true' },
+    { output_bucket_name: 'untrusted' },
+    { active_speaker_detection: { coordinates: [1] } },
+  ])('rejects invalid model options before any upstream requests: %j', async (options) => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({ videoAssetId: 'video-1', audioAssetId: 'audio-1', options }),
+    ).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   // Default fetch mock: a GET reads the upload bytes, a PUT stores them.
   beforeEach(() => {
     vi.stubGlobal(
@@ -498,6 +560,50 @@ describe('createAppTools — create-lipsync', () => {
         projectId: 'project-chatgpt',
       },
     });
+  });
+
+  it('uses the selected project ID without searching or creating projects', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      videoAssetId: 'video-existing',
+      audioAssetId: 'audio-existing',
+      projectId: 'selected-project',
+    });
+    expect(request.mock.calls.map(([method, path]) => [method, path])).toEqual([
+      ['get', '/v2/projects/selected-project'],
+      ['post', '/v2/generate'],
+    ]);
+    expect(lastGenerateBody(request).projectId).toBe('selected-project');
+  });
+
+  it('does not upload or generate when the selected project is inaccessible', async () => {
+    const { tool, request } = setup();
+    request.mockRejectedValueOnce(new Error('Project not found or you do not have permission'));
+    await expect(
+      tool.handler({
+        video: chatGptFile('https://files.oai/video.mp4'),
+        audioAssetId: 'audio-existing',
+        projectId: 'other-organization-project',
+      }),
+    ).rejects.toThrow('Project not found');
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { projectId: '' },
+    { projectId: '   ' },
+    { projectId: 'selected-project', projectName: 'Another project' },
+  ])('rejects invalid project selection before making requests: %j', async (selection) => {
+    const { tool, request } = setup();
+    await expect(
+      tool.handler({
+        videoAssetId: 'video-existing',
+        audioAssetId: 'audio-existing',
+        ...selection,
+      }),
+    ).rejects.toThrow(/projectId/);
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('reuses the default ChatGPT project when it already exists', async () => {

@@ -28,6 +28,8 @@ jobs:
       - run: npm run build
       - run: npm test -- --no-file-parallelism
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
       - run: npm audit
       - run: npm audit --omit=dev
       - run: git diff --exit-code

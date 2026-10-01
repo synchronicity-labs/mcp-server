@@ -141,9 +141,11 @@ describe('SERVER_INSTRUCTIONS', () => {
 });
 
 describe('selectHostedHttpTools', () => {
-  it('keeps only the lean ChatGPT lipsync flow tools in original order', () => {
+  it('exposes app discovery and generation tools without exposing unrelated writes', () => {
     const tools = [
       tool('assets_create'),
+      tool('assets_create-upload-url'),
+      tool('projects_create'),
       tool('open-upload-widget'),
       tool('upload-media'),
       tool('create-lipsync'),
@@ -151,16 +153,23 @@ describe('selectHostedHttpTools', () => {
       tool('voices_get-voices'),
       tool('generate_get-generation'),
       tool('projects_get-all'),
+      tool('projects_delete'),
+      tool('assets_delete'),
     ];
 
     expect(
       selectHostedHttpTools(tools, resolveClientProfile('chatgpt')).map((t) => t.name),
     ).toEqual([
+      'assets_create',
+      'assets_create-upload-url',
+      'projects_create',
       'open-upload-widget',
       'upload-media',
       'create-lipsync',
+      'models_get',
       'voices_get-voices',
       'generate_get-generation',
+      'projects_get-all',
     ]);
   });
 

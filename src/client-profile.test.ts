@@ -109,6 +109,13 @@ async function connect(
 }
 
 describe('immutable client profiles', () => {
+  it('supports the observed Codex app client without enabling its file bridge', () => {
+    expect(resolveClientProfile('openai-mcp (Codex)')).toMatchObject({
+      name: 'codex',
+      supportsAppUi: true,
+      supportsUploads: false,
+    });
+  });
   it.each([
     'chatgpt',
     'openai',

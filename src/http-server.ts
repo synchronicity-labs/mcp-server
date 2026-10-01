@@ -10,6 +10,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { appUploadHandler, createAppUploadCors } from './app-upload-relay.js';
 import { runWithAuth } from './auth/async-context.js';
 import { requireBearerAuth } from './auth/bearer-auth.js';
 import {
@@ -219,6 +220,13 @@ export function encodeOAuthFormBody(body: Record<string, unknown>): string {
   return params.toString();
 }
 
+/** Complete each POST with a JSON response, including large HTML resources. */
+export function createHttpMcpTransport(
+  options: ConstructorParameters<typeof StreamableHTTPServerTransport>[0],
+): StreamableHTTPServerTransport {
+  return new StreamableHTTPServerTransport({ ...options, enableJsonResponse: true });
+}
+
 export async function startHttpServer(
   serverFactory: { createServer: () => McpServer; toolCount: number },
   config: SyncMcpConfig,
@@ -256,13 +264,22 @@ export async function startHttpServer(
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
   const oauthProvider = createOAuthProvider(config.baseUrl);
 
-  // CORS for browser-based MCP clients
-  app.use(
-    cors({
-      origin: (origin, callback) => callback(null, isAllowedMcpOrigin(origin)),
-      credentials: true,
-    }),
-  );
+  if (config.chatgptApp?.uploadStorageOrigin) {
+    app.use(
+      '/app-upload',
+      createAppUploadCors(
+        config.chatgptApp.uploadOrigins ?? [
+          config.chatgptApp.domain,
+          'https://web-sandbox.oaiusercontent.com',
+        ],
+      ),
+    );
+  }
+  const mcpCors = cors({
+    origin: (origin, callback) => callback(null, isAllowedMcpOrigin(origin)),
+    credentials: true,
+  });
+  app.use((req, res, next) => (req.path === '/app-upload' ? next() : mcpCors(req, res, next)));
 
   // Structured request logging. Aggregate counters are also emitted in runtime heartbeats.
   app.use((req, res, next) => {
@@ -287,6 +304,7 @@ export async function startHttpServer(
         method: req.method,
         path: req.path,
         statusCode: res.statusCode,
+        contentType: res.getHeader('content-type'),
         durationMs,
         aborted,
       });
@@ -295,6 +313,12 @@ export async function startHttpServer(
     res.once('close', () => record(!res.writableFinished));
     next();
   });
+
+  if (config.chatgptApp?.uploadStorageOrigin) {
+    // No user bearer token enters the browser. The single-use ticket is issued only
+    // after the authenticated assets/upload call has checked the account's limits.
+    app.put('/app-upload', appUploadHandler);
+  }
 
   // Health check (unauthenticated)
   app.get('/health', (_req, res) => {
@@ -373,6 +397,8 @@ export async function startHttpServer(
       }
       const contentType = upstream.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
+      // Revoking a refresh token can invalidate its entire access-token family.
+      if (path === 'revoke' && upstream.ok) oauthProvider.clearVerificationCache();
       res.status(upstream.status).send(responseBody);
     } catch (error) {
       if (res.destroyed) return;
@@ -568,7 +594,7 @@ export async function startHttpServer(
           return;
         }
 
-        transport = new StreamableHTTPServerTransport({
+        transport = createHttpMcpTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sessionId) => {
             if (!reservation) {
@@ -581,6 +607,16 @@ export async function startHttpServer(
             initializedSessionId = sessionId;
           },
         });
+        const send = transport.send.bind(transport);
+        transport.send = async (message, options) => {
+          if ('error' in message) {
+            logEvent('mcp_rpc_error', {
+              code: message.error.code,
+              category: /not found/i.test(message.error.message) ? 'not_found' : 'protocol_error',
+            });
+          }
+          return send(message, options);
+        };
         pendingTransports.add(transport);
         unregisteredTransport = transport;
         transport.onclose = () => {
@@ -594,6 +630,12 @@ export async function startHttpServer(
         sessionServer.server.oninitialized = () => {
           onInitialized?.();
           const clientVersion = sessionServer.server.getClientVersion();
+          // Identify host compatibility without logging credentials.
+          logEvent('mcp_client_initialized', {
+            clientName: clientVersion?.name?.slice(0, 160),
+            clientVersion: clientVersion?.version?.slice(0, 80),
+            capabilityNames: Object.keys(sessionServer.server.getClientCapabilities() ?? {}),
+          });
           if (clientVersion?.name && transport.sessionId) {
             sessionClientNames.set(transport.sessionId, clientVersion.name);
           }
@@ -604,6 +646,31 @@ export async function startHttpServer(
       const clientName = transport.sessionId
         ? sessionClientNames.get(transport.sessionId)
         : undefined;
+      const rpcBody = asRecord(req.body);
+      const rpcParams = asRecord(rpcBody.params);
+      if (typeof rpcBody.method === 'string') {
+        logEvent('mcp_rpc_request', {
+          method: rpcBody.method.slice(0, 80),
+          clientName,
+          ...(rpcBody.method === 'resources/read'
+            ? {
+                resource:
+                  typeof rpcParams.uri === 'string' &&
+                  /^ui:\/\/sync\/[a-zA-Z0-9.-]+$/.test(rpcParams.uri)
+                    ? rpcParams.uri
+                    : '<other resource>',
+              }
+            : {}),
+          ...(rpcBody.method === 'tools/call'
+            ? {
+                tool:
+                  typeof rpcParams.name === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(rpcParams.name)
+                    ? rpcParams.name
+                    : '<other tool>',
+              }
+            : {}),
+        });
+      }
       await runWithAuth(token, clientName, () => transport.handleRequest(req, res, req.body));
 
       if (reservation) {
