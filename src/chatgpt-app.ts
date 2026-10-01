@@ -46,6 +46,9 @@ export async function loadChatgptApp(
 ): Promise<ChatgptApp | undefined> {
   if (!config) return undefined;
   const { directory, domain, resourceDomains, connectDomains } = configSchema.parse(config);
+  // Recording review uses a local object URL before the user accepts/upload the take.
+  // This is a resource source only; backend connection origins remain exact HTTPS.
+  const resourceSources = [...resourceDomains, 'blob:'];
   const manifest = manifestSchema.parse(
     JSON.parse((await readBounded(join(directory, 'manifest.json'), 4096)).toString('utf8')),
   );
@@ -63,11 +66,11 @@ export async function loadChatgptApp(
         ui: {
           domain,
           prefersBorder: true,
-          csp: { connectDomains, resourceDomains },
+          csp: { connectDomains, resourceDomains: resourceSources },
           permissions: { camera: {}, microphone: {} },
         },
         'openai/widgetDomain': domain,
-        'openai/widgetCSP': { connect_domains: connectDomains, resource_domains: resourceDomains },
+        'openai/widgetCSP': { connect_domains: connectDomains, resource_domains: resourceSources },
         'openai/widgetPrefersBorder': true,
         'openai/widgetDescription':
           'Sync projects and video creation interface. A successful open request does not confirm that the interface has rendered.',

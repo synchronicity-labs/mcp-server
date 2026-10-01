@@ -372,6 +372,9 @@ The resource requests camera and microphone access through MCP Apps
 `ui.permissions` for user-initiated recording. The host must delegate those
 permissions and the user must grant browser access. A declaration alone does
 not prove capture works in ChatGPT; verify with the paired recording UI release.
+Both CSP metadata formats include `blob:` for local recording review before upload.
+Configured network resource and connection origins still require exact HTTPS
+origins; the local scheme is not added to connection or frame permissions.
 
 Set the widget origin and the exact media origins for the target environment.
 Browser API connections are not allowed by this UI resource's CSP; backend
