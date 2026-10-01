@@ -383,7 +383,10 @@ node dist/cli.js --transport http --port 3002
 The optional upload relay issues a random, single-use ticket only after an authenticated
 presign request. It checks exact content type and size, expires after at most five minutes,
 and streams only to the configured HTTPS storage origin under the existing upload runtime
-limits. Tickets are process-local: the MCP session and its upload must reach the same instance.
+concurrency and timeout limits. Browser relay uploads support the API single-PUT
+maximum of 5 GiB; the 512 MiB download limit still applies to rehosting ChatGPT
+attachments. Legacy presign responses without an expiry receive a five-minute ticket.
+Tickets are process-local: the MCP session and its upload must reach the same instance.
 A restart invalidates outstanding tickets; the client can request a new upload. Multi-instance
 release routing must account for this before enabling the relay in production. The widget
 origin must also route `/app-upload` to that instance and appear in connect domains.
@@ -391,7 +394,8 @@ origin must also route `/app-upload` to that instance and appear in connect doma
 OAuth verification reuses successful results for at most 15 seconds and never beyond
 token expiry. Concurrent checks are deduplicated; successful revocation clears this
 provider's cache. Revocation elsewhere can take up to 15 seconds to affect this cache.
-Userinfo rate limits trigger bounded retry backoff rather than an invalid-token response.
+Userinfo rate limits trigger token-specific backoff capped at 15 seconds, rather
+than blocking unrelated accounts or treating temporary errors as invalid tokens.
 
 `npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
 storage. Install Chromium with `npx playwright install chromium` first. This does not

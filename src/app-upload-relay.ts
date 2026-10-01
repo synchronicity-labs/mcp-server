@@ -21,7 +21,7 @@ export function createAppUploadCors(origins: string[]) {
 const grantSchema = z.object({
   uploadUrl: z.url(),
   url: z.url(),
-  expiresIn: z.number().positive(),
+  expiresIn: z.number().positive().optional(),
 });
 const inputSchema = z.object({
   contentType: z.string().regex(/^(video|audio|image)\/[\w.+-]+$/),
@@ -41,10 +41,8 @@ export function relayUploadTool(
     ...tool,
     handler: async (args, context) => {
       const input = inputSchema.parse(args);
-      if (input.size > uploadRuntime.config.maxBytes)
-        throw new Error(
-          `This server supports uploads up to ${Math.floor(uploadRuntime.config.maxBytes / 1024 / 1024)} MB.`,
-        );
+      if (input.size > 5 * 1024 ** 3)
+        throw new Error(`This server supports uploads up to ${5 * 1024} MB.`);
       for (const [key, ticket] of tickets) if (ticket.expiresAt <= Date.now()) tickets.delete(key);
       if (tickets.size >= 128) throw new Error('Upload capacity is full. Try again shortly.');
       const signed = grantSchema.parse(await tool.handler(args, context));
@@ -57,7 +55,7 @@ export function relayUploadTool(
       )
         throw new Error('Unexpected storage upload destination.');
       const token = randomBytes(32).toString('hex');
-      const expiresIn = Math.min(signed.expiresIn, 300);
+      const expiresIn = Math.min(signed.expiresIn ?? 300, 300);
       process.stderr.write(
         JSON.stringify({
           event: 'app_upload_grant',

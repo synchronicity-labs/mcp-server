@@ -59,23 +59,26 @@ it('clears verified tokens following revocation and bounds the successful cache'
   expect(fetchMock).toHaveBeenCalledTimes(515);
 });
 
-it('honors upstream backoff without accepting an unverified token', async () => {
+it('isolates rate-limited tokens and caps extreme upstream retry deadlines', async () => {
   vi.useFakeTimers();
   const fetchMock = vi
     .fn()
-    .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '3' } }))
-    .mockResolvedValueOnce(Response.json(valid));
+    .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '86400' } }))
+    .mockImplementation(async () => Response.json(valid));
   vi.stubGlobal('fetch', fetchMock);
   const provider = createOAuthProvider('https://fixture.invalid');
-  await expect(provider.verifyAccessToken('one')).rejects.toMatchObject({ status: 429 });
-  await expect(provider.verifyAccessToken('two')).rejects.toMatchObject({
+  await expect(provider.verifyAccessToken('limited')).rejects.toMatchObject({ status: 429 });
+  await expect(provider.verifyAccessToken('limited')).rejects.toMatchObject({
     status: 429,
-    retryAfter: '3',
+    retryAfter: '15',
   });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(3000);
-  await provider.verifyAccessToken('two');
+  await expect(provider.verifyAccessToken('unrelated')).resolves.toMatchObject({
+    extra: { sub: 'user' },
+  });
   expect(fetchMock).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(15000);
+  await provider.verifyAccessToken('limited');
+  expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
 it('cancels individual waiters independently and aborts upstream when none remain', async () => {

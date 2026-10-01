@@ -15,7 +15,21 @@ import { generationOutputSchema, uploadMediaOutputSchema } from './output-schema
 const modelOptionsSchema = z
   .object({
     temperature: z.number().min(0).max(1).nullable().optional(),
-    active_speaker_detection: z.boolean().optional(),
+    active_speaker_detection: z
+      .union([
+        z.boolean(),
+        z
+          .object({
+            auto_detect: z.boolean().optional(),
+            use_v2: z.boolean().optional(),
+            v3: z.boolean().optional(),
+            face_image: z.string().optional(),
+            frame_number: z.number().int().nonnegative().optional(),
+            coordinates: z.tuple([z.number(), z.number()]).optional(),
+          })
+          .strict(),
+      ])
+      .optional(),
     occlusion_detection_enabled: z.boolean().optional(),
     reasoning_enabled: z.boolean().optional(),
     model_mode: z.enum(['lips', 'face', 'head']).optional(),
@@ -644,6 +658,9 @@ export function createAppTools(
         };
 
         const options = modelOptionsSchema.optional().parse(args.options);
+        if (typeof options?.active_speaker_detection === 'boolean') {
+          options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
+        }
 
         // Validate the shape up front, before re-hosting any bytes.
         const audioSourceCount = providedCount(audioUrl, audioAssetId, audio);

@@ -114,3 +114,31 @@ it('refuses unexpected destinations and files above the bounded relay limit', as
   );
   expect(handler).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  { size: 5, expiresIn: undefined },
+  { size: 600 * 1024 ** 2, expiresIn: 60 },
+])('preserves presign compatibility for %j', async ({ size, expiresIn }) => {
+  const tool = relayUploadTool(
+    {
+      name: 'assets_create-upload-url',
+      description: '',
+      inputSchema: {},
+      handler: async () => ({
+        uploadUrl: 'https://storage.fixture.invalid/signed',
+        url: 'https://cdn.fixture.invalid/file',
+        ...(expiresIn === undefined ? {} : { expiresIn }),
+      }),
+    },
+    'https://app.fixture.invalid',
+    'https://storage.fixture.invalid',
+  );
+  const grant = z
+    .object({ uploadUrl: z.url(), url: z.url(), expiresIn: z.number() })
+    .parse(await tool.handler({ size, contentType: 'video/mp4' }));
+  expect(grant.url).toBe('https://cdn.fixture.invalid/file');
+  expect(grant.uploadUrl).toMatch(
+    /^https:\/\/app\.fixture\.invalid\/app-upload\?ticket=[a-f0-9]{64}$/,
+  );
+  expect(grant.expiresIn).toBe(expiresIn ?? 300);
+});

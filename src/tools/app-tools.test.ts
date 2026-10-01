@@ -56,11 +56,22 @@ describe('createAppTools — create-lipsync', () => {
     return { tool, uploadTool, request };
   }
 
-  it('forwards public model settings without changing the idempotency key', async () => {
+  it.each([
+    true,
+    false,
+    { auto_detect: true },
+    {
+      auto_detect: false,
+      frame_number: 12,
+      coordinates: [150, 75],
+      v3: true,
+      face_image: 'data:image/webp;base64,fixture',
+    },
+  ])('forwards public model settings and speaker selection %j without changing the idempotency key', async (speaker) => {
     const { tool, request } = setup();
     const options = {
       temperature: 0.7,
-      active_speaker_detection: true,
+      active_speaker_detection: speaker,
       occlusion_detection_enabled: true,
       reasoning_enabled: true,
     };
@@ -84,7 +95,11 @@ describe('createAppTools — create-lipsync', () => {
             { type: 'video', assetId: 'video-1' },
             { type: 'audio', assetId: 'audio-1' },
           ],
-          options,
+          options: {
+            ...options,
+            active_speaker_detection:
+              typeof speaker === 'boolean' ? { auto_detect: speaker } : speaker,
+          },
         },
       }),
     );
@@ -94,6 +109,7 @@ describe('createAppTools — create-lipsync', () => {
     { temperature: 1.1 },
     { reasoning_enabled: 'true' },
     { output_bucket_name: 'untrusted' },
+    { active_speaker_detection: { coordinates: [1] } },
   ])('rejects invalid model options before any upstream requests: %j', async (options) => {
     const { tool, request } = setup();
     await expect(

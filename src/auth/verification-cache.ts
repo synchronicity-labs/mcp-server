@@ -12,12 +12,12 @@ export function createTokenVerifier(apiBaseUrl: string) {
   const cache = new Map<string, { info: AuthInfo; until: number }>();
   const pending = new Map<string, Pending>();
   let epoch = 0;
-  let cooldownUntil = 0;
+  const cooldowns = new Map<string, number>();
 
   function clear() {
     epoch++;
     cache.clear();
-    cooldownUntil = 0;
+    cooldowns.clear();
     for (const entry of pending.values()) entry.controller.abort();
     pending.clear();
   }
@@ -33,8 +33,10 @@ export function createTokenVerifier(apiBaseUrl: string) {
       return structuredClone(cached.info);
     }
     cache.delete(key);
+    const cooldownUntil = cooldowns.get(key) ?? 0;
     if (cooldownUntil > now)
       throw new VerificationUnavailableError(429, String(Math.ceil((cooldownUntil - now) / 1000)));
+    cooldowns.delete(key);
     let entry = pending.get(key);
     if (!entry) {
       if (pending.size >= MAX_PENDING) throw new VerificationUnavailableError(503, '1');
@@ -60,7 +62,13 @@ export function createTokenVerifier(apiBaseUrl: string) {
                 ? Number(error.retryAfter) * 1000
                 : Date.parse(error.retryAfter) - Date.now()
               : 1000;
-            cooldownUntil = Math.max(cooldownUntil, Date.now() + Math.max(1000, delay));
+            for (const [cooldownKey, until] of cooldowns)
+              if (until <= Date.now()) cooldowns.delete(cooldownKey);
+            if (cooldowns.size >= MAX_ENTRIES) cooldowns.delete(cooldowns.keys().next().value!);
+            const boundedDelay = Number.isFinite(delay)
+              ? Math.min(VERIFICATION_CACHE_MS, Math.max(1000, delay))
+              : 1000;
+            if (epoch === startedEpoch) cooldowns.set(key, Date.now() + boundedDelay);
           }
           throw error;
         })
