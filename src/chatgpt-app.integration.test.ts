@@ -99,6 +99,7 @@ it.each([
           ui: {
             domain: 'https://sync.fixture.invalid',
             prefersBorder: true,
+            permissions: { camera: {}, microphone: {} },
             csp: {
               connectDomains: ['https://uploads.fixture.invalid'],
               resourceDomains: ['https://media.fixture.invalid'],

@@ -60,7 +60,12 @@ export async function loadChatgptApp(
       description: 'Browse your Sync projects and create videos using your existing assets.',
       mimeType: MCP_APP_RESOURCE_MIME_TYPE,
       _meta: {
-        ui: { domain, prefersBorder: true, csp: { connectDomains, resourceDomains } },
+        ui: {
+          domain,
+          prefersBorder: true,
+          csp: { connectDomains, resourceDomains },
+          permissions: { camera: {}, microphone: {} },
+        },
         'openai/widgetDomain': domain,
         'openai/widgetCSP': { connect_domains: connectDomains, resource_domains: resourceDomains },
         'openai/widgetPrefersBorder': true,

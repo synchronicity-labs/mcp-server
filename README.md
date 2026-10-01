@@ -360,6 +360,11 @@ Opening it is read-only. Existing uploads and tool-only clients are preserved;
 the new tool and resource are only presented to the ChatGPT client profile.
 HTTP authentication still applies to the MCP connection.
 
+The resource requests camera and microphone access through MCP Apps
+`ui.permissions` for user-initiated recording. The host must delegate those
+permissions and the user must grant browser access. A declaration alone does
+not prove capture works in ChatGPT; verify with the paired recording UI release.
+
 Set the widget origin and the exact media origins for the target environment.
 Browser API connections are not allowed by this UI resource's CSP; backend
 operations go through the authenticated MCP bridge. The frontend remains
