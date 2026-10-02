@@ -43,8 +43,11 @@ the UI, verify the production settings and keep the previous image/config for ro
    media redirect destinations, not staging storage or ngrok origins. Recording
    blob playback and camera/microphone permissions are declared by the server.
 3. If enabling the upload relay, configure `SYNC_APP_UPLOAD_ORIGINS` and
-   `SYNC_APP_UPLOAD_STORAGE_ORIGIN` and preserve instance-affine routing for
-   process-local upload tickets. Verify the deployed routing and storage settings.
+   `SYNC_APP_UPLOAD_STORAGE_ORIGIN`. Include `SYNC_CHATGPT_APP_DOMAIN` in
+   `SYNC_CHATGPT_APP_CONNECT_DOMAINS` so the widget can PUT to `/app-upload` on
+   that origin. Route that path to the MCP server and preserve instance-affine
+   routing for process-local upload tickets. Verify the deployed routing and
+   storage settings.
 4. Set `SYNC_CHATGPT_APP_PREVIOUS_DIRS` to retained published bundle directories
    already included in the new image (at most eight). If production currently
    serves an externally mounted bundle, retain that mount or add those exact bytes
