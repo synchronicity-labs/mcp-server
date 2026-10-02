@@ -26,6 +26,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run package:chatgpt
+      - run: npm run verify:chatgpt-package
       - run: npm test -- --no-file-parallelism
       - run: npm test
       - run: npx playwright install --with-deps chromium
@@ -33,3 +35,15 @@ jobs:
       - run: npm audit
       - run: npm audit --omit=dev
       - run: git diff --exit-code
+  packaged-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Build production image with approved frontend
+        run: docker build -t sync-mcp-release-candidate .
+      - name: Read packaged UI through MCP in the final image
+        run: docker run --rm -i --network none --entrypoint node sync-mcp-release-candidate --input-type=module < scripts/verify-chatgpt-package.mjs
