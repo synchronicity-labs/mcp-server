@@ -12,6 +12,7 @@ let hosted: Server | undefined;
 let url: string;
 let upstreamStatus = 200;
 let upstreamBody: string | undefined;
+let dropUpstreamResponse = false;
 let userinfoStatus = 200;
 const calls: Array<{ path: string; body: URLSearchParams; authorization: string | undefined }> = [];
 const logs: string[] = [];
@@ -33,6 +34,10 @@ beforeAll(async () => {
       body: new URLSearchParams(body),
       authorization: req.headers.authorization,
     });
+    if (dropUpstreamResponse) {
+      res.destroy();
+      return;
+    }
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/v2/oauth/userinfo') {
       res.statusCode = userinfoStatus;
@@ -302,6 +307,27 @@ it('distinguishes local credential rejection and does not echo an unrecognized g
   expect(logged).toContain('"reason":"invalid_client_authentication"');
   expect(logged).toContain('"grantType":"other"');
   expect(logged).not.toContain('secret-grant-test');
+});
+it('records the grant and source when the upstream connection fails', async () => {
+  const before = logs.length;
+  dropUpstreamResponse = true;
+  try {
+    const response = await post(
+      '/token',
+      'grant_type=refresh_token&refresh_token=secret-network-token',
+      basic(),
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'OAuth upstream request failed' });
+    const logged = logs.slice(before).join('');
+    expect(logged).toContain('"event":"oauth_exchange_rejected"');
+    expect(logged).toContain('"source":"transport"');
+    expect(logged).toContain('"grantType":"refresh_token"');
+    expect(logged).not.toContain('secret-network-token');
+    expect(logged).not.toContain('fake-secret');
+  } finally {
+    dropUpstreamResponse = false;
+  }
 });
 it('rejects duplicate Authorization headers before Node can silently select one', async () => {
   const before = calls.length;

@@ -437,6 +437,7 @@ export async function startHttpServer(
         error: { message: 'OAuth upstream request failed' },
       });
       if (!res.headersSent) {
+        logOAuthFailure('transport', 502, { error: 'server_error' });
         res.status(502).json({ error: 'OAuth upstream request failed' });
       }
     } finally {

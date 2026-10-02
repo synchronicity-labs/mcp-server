@@ -29,7 +29,7 @@ validation or token lifetime based on the HTTP status alone.
 ## Diagnostic change
 
 Failed OAuth exchanges now emit `oauth_exchange_rejected` with the same request
-ID, path, local/upstream/timeout source, status, allowlisted grant type, presence
+ID, path, local/upstream/timeout/transport source, status, allowlisted grant type, presence
 of an Authorization header, and allowlisted error/reason labels. Unknown values
 are replaced with fixed labels. Raw bodies, descriptions, client identifiers,
 secrets, authorization headers, and tokens are not included. Response status and
@@ -42,14 +42,20 @@ This change enables diagnosis; it does not by itself restore the scan.
 1. After an owner merges the diagnostic PR and the normal deployment completes,
    select Retry once in the production plugin MCP Issues panel.
 2. Match the new scan ID to `oauth_exchange_rejected.requestId` in MCP logs.
-3. For `refresh_token_invalid_revoked_or_expired` or `invalid_grant`, renew the
-   publisher's review connection using the supported Reconnect flow and retry.
+3. When `grantType` is `refresh_token` and the reason is
+   `refresh_token_invalid_revoked_or_expired` or the OAuth error is `invalid_grant`,
+   renew the publisher's review connection using the supported Reconnect flow and retry.
    If the portal still hides Reconnect, request recovery of that review connection
    from OpenAI with the scan ID and timestamp. Do not revoke customer connections,
    disable authentication, or publish an unrelated package as a workaround.
-4. For local rejection or a client/PKCE mismatch, use the specific reason to
+4. For `authorization_code` with `invalid_grant`, inspect the authorization-code
+   flow for expired/reused codes, redirect mismatch, and PKCE failure before
+   starting a fresh authorization attempt. An `invalid_grant` without a known
+   grant type does not establish a refresh-token failure. For local rejection or
+   a client/PKCE mismatch, use the specific reason to
    reproduce the request shape with synthetic credentials and prepare a targeted
-   compatibility fix before another production change.
+   compatibility fix before another production change. For `timeout` or
+   `transport`, investigate upstream reachability/response handling first.
 5. Confirm the scan actually discovers and approves `open-sync-app` and the
    workflow tools, then test opening the UI in a fresh ChatGPT conversation.
 6. Finish widget upload/recording, both workflows, playback/download, and history
