@@ -20,7 +20,9 @@ const CHATGPT: ClientProfile = Object.freeze({
 const CODEX: ClientProfile = Object.freeze({
   name: 'codex',
   supportsAppUi: true,
-  supportsUploads: false,
+  // The hosted OpenAI connector supplies validated fileParams for this client too.
+  // Keep its project default separate without rejecting those files by host name.
+  supportsUploads: true,
   defaultProjectName: 'Sync generations',
 });
 const CLAUDE: ClientProfile = Object.freeze({

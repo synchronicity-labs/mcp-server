@@ -11,6 +11,7 @@ describe('ChatGPT upload OAuth compatibility', () => {
   it.each([
     'openai-mcp',
     'OpenAI-MCP',
+    'openai-mcp (Codex)',
   ])('preserves the API-compatible source and OAuth token through an upload from %s', async (clientName) => {
     const apiHeaders: Headers[] = [];
     let uploadedBytes = 0;
