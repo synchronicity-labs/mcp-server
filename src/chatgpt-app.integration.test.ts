@@ -60,23 +60,21 @@ it.each([
     );
     const create = tools.find((entry) => entry.name === 'create-lipsync');
     expect(create?._meta).toMatchObject({ ui: { visibility: ['model', 'app'] } });
-    if (name === 'openai-mcp (Codex)') {
-      expect(tools.map((entry) => entry.name)).not.toContain('upload-media');
-      expect(tools.map((entry) => entry.name)).not.toContain('open-upload-widget');
-      for (const field of ['video', 'image', 'audio']) {
-        expect(create?.inputSchema.properties).not.toHaveProperty(field);
-      }
-      expect(
-        (await client.listResources()).resources.map((resource) => resource.uri),
-      ).not.toContain(UPLOAD_WIDGET_URI);
-      expect((await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError).toBe(
-        true,
-      );
-      await expect(client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow();
-      expect(
-        (await client.callTool({ name: 'create-lipsync', arguments: { video: {} } })).isError,
-      ).toBe(true);
+    expect(tools.map((entry) => entry.name)).toContain('upload-media');
+    expect(tools.map((entry) => entry.name)).toContain('open-upload-widget');
+    for (const field of ['video', 'image', 'audio']) {
+      expect(create?.inputSchema.properties).toHaveProperty(field);
     }
+    expect((await client.listResources()).resources.map((resource) => resource.uri)).toContain(
+      UPLOAD_WIDGET_URI,
+    );
+    expect((await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError).not.toBe(
+      true,
+    );
+    expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
+    expect(
+      (await client.callTool({ name: 'create-lipsync', arguments: { video: {} } })).isError,
+    ).toBe(true);
     expect(tool?._meta).toMatchObject({
       ui: { resourceUri: `ui://sync/app-${digest}.html` },
       'openai/outputTemplate': `ui://sync/app-${digest}.html`,

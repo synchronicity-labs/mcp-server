@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
+import { Readable } from 'node:stream';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -109,11 +110,12 @@ async function connect(
 }
 
 describe('immutable client profiles', () => {
-  it('supports the observed Codex app client without enabling its file bridge', () => {
+  it('supports the observed Codex app client and its hosted file bridge', () => {
     expect(resolveClientProfile('openai-mcp (Codex)')).toMatchObject({
       name: 'codex',
       supportsAppUi: true,
-      supportsUploads: false,
+      supportsUploads: true,
+      defaultProjectName: 'Sync generations',
     });
   });
   it.each([
@@ -201,11 +203,11 @@ describe('immutable client profiles', () => {
   it('configures concurrent real HTTP sessions before discovery', async () => {
     const calls = fakeApi();
     const factory = await createMcpServerFactory(config);
-    const names = ['chatgpt', 'openai-mcp', 'claude', 'unknown'];
+    const names = ['chatgpt', 'openai-mcp', 'openai-mcp (Codex)', 'claude', 'unknown'];
     const sessions = await Promise.all(names.map((name) => connect(factory, name, true)));
     await Promise.all(
       sessions.map(async ({ client }, index) => {
-        const supportsUploads = index < 2;
+        const supportsUploads = index < 3;
         const { tools } = await client.listTools();
         expect(tools.length).toBe(supportsUploads ? 5 : 3);
         expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
@@ -231,6 +233,7 @@ describe('immutable client profiles', () => {
     const projects = [
       'ChatGPT generations',
       'ChatGPT generations',
+      'Sync generations',
       'Claude generations',
       'Sync generations',
     ];
@@ -242,6 +245,113 @@ describe('immutable client profiles', () => {
         )?.body.projectId,
       ).toBe(`project:${projects[index]}`);
     }
+  });
+
+  it.each([
+    'openai-mcp',
+    'openai-mcp (Codex)',
+  ])('accepts hosted file uploads and direct file generation from %s over HTTP', async (clientName) => {
+    const calls = fakeApi();
+    const apiFetch = globalThis.fetch;
+    const uploaded: Buffer[] = [];
+    const bytes = Buffer.from('host-provided test media');
+    const file = {
+      file_id: 'file-test',
+      download_url: 'https://files.test/media.mp4',
+      mime_type: 'video/mp4',
+      file_name: 'media.mp4',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        if (url === file.download_url) {
+          expect(headers.has('authorization')).toBe(false);
+          return new Response(bytes, { headers: { 'content-type': file.mime_type } });
+        }
+        if (url === 'https://storage.test/upload') {
+          expect(headers.has('authorization')).toBe(false);
+          expect(init?.method).toBe('PUT');
+          if (!(init?.body instanceof Readable)) throw new Error('Expected streamed upload');
+          const chunks: Buffer[] = [];
+          for await (const chunk of init.body) chunks.push(Buffer.from(chunk));
+          uploaded.push(Buffer.concat(chunks));
+          return new Response(null, { status: 200 });
+        }
+        if (url === 'https://api.test/v2/assets/upload' || url === 'https://api.test/v2/assets') {
+          expect(headers.get('authorization')).toBe(`Bearer token-${clientName}`);
+          expect(headers.get('x-sync-source')).toBe(`mcp:${clientName}`);
+          const body = JSON.parse(String(init?.body));
+          if (url.endsWith('/upload')) {
+            expect(body).toEqual({
+              fileName: file.file_name,
+              contentType: file.mime_type,
+              size: bytes.byteLength,
+            });
+            return Response.json({
+              uploadUrl: 'https://storage.test/upload',
+              url: 'https://storage.test/media.mp4',
+            });
+          }
+          expect(body).toEqual({ url: 'https://storage.test/media.mp4', type: 'VIDEO' });
+          expect(uploaded.at(-1)).toEqual(bytes);
+          return Response.json({ id: 'uploaded-video' });
+        }
+        return apiFetch(url, init);
+      }),
+    );
+    const factory = await createMcpServerFactory(config);
+    const { client } = await connect(factory, clientName, true);
+    const { tools } = await client.listTools();
+    expect(
+      tools.find((tool) => tool.name === 'upload-media')?._meta?.['openai/fileParams'],
+    ).toEqual(['file']);
+    expect(
+      tools.find((tool) => tool.name === 'create-lipsync')?._meta?.['openai/fileParams'],
+    ).toEqual(['video', 'image', 'audio']);
+    expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
+    expect((await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError).not.toBe(
+      true,
+    );
+
+    const result = await client.callTool({
+      name: 'upload-media',
+      arguments: { mediaType: 'video', file },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      assetId: 'uploaded-video',
+      mediaType: 'video',
+    });
+    expect(uploaded).toEqual([bytes]);
+    expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
+
+    const generation = await client.callTool({
+      name: 'create-lipsync',
+      arguments: { video: file, audioAssetId: 'audio' },
+    });
+    expect(generation.isError).not.toBe(true);
+    expect(uploaded).toEqual([bytes, bytes]);
+    expect(calls.find((call) => call.path === '/v2/generate')?.body).toMatchObject({
+      input: [
+        { type: 'video', assetId: 'uploaded-video' },
+        { type: 'audio', assetId: 'audio' },
+      ],
+    });
+
+    // The client name does not bypass the SDK schema or the fetchable-URL check.
+    for (const invalid of [
+      '/tmp/media.mp4',
+      { download_url: file.download_url },
+      { ...file, download_url: 'file:///tmp/media.mp4' },
+    ]) {
+      const rejected = await client.callTool({
+        name: 'upload-media',
+        arguments: { mediaType: 'video', file: invalid },
+      });
+      expect(rejected.isError).toBe(true);
+    }
+    expect(uploaded).toHaveLength(2);
   });
 
   it('isolates concurrent discovery, resources, defaults and auth for different sessions', async () => {
