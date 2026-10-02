@@ -278,8 +278,16 @@ All hosted clients can discover models (`models_get`), search/list and read proj
 `assets_get`), list organization generation history (`generate_get-generations`),
 and estimate cost (`generate_estimate-cost`). These tools use the API's OpenAPI
 contracts and the caller's existing Sync permissions. Lists retain the API cursor
-parameters; organization generation history does not currently accept a project filter.
-ChatGPT can also call these tools from its UI.
+parameters. ChatGPT can also call these tools from its UI.
+
+When the backend advertises project filtering, `projects_get-generations` provides
+history for one required canonical `projectId`, with the same cursor and limit
+parameters as the public API. It verifies project access before reading history
+and rejects responses containing another project's records, including responses
+from an older API instance during a rolling deployment. The organization-feed
+tool remains available on older backends. Deploy the compatible backend to every
+instance, then restart MCP to refresh its OpenAPI catalog before enabling project
+history in the app. This does not create a second plugin or a mirrored database.
 
 Claude and unknown clients also expose `create-lipsync`, `voices_get-voices`, and
 `generate_get-generation` for public/Sync-hosted URLs and existing Sync asset IDs.
@@ -359,6 +367,14 @@ metadata and declares ChatGPT global/sidebar and thread/panel entrypoints.
 Opening it is read-only. Existing uploads and tool-only clients are preserved;
 the new tool and resource are only presented to the ChatGPT client profile.
 HTTP authentication still applies to the MCP connection.
+
+The resource requests camera and microphone access through MCP Apps
+`ui.permissions` for user-initiated recording. The host must delegate those
+permissions and the user must grant browser access. A declaration alone does
+not prove capture works in ChatGPT; verify with the paired recording UI release.
+Both CSP metadata formats include `blob:` for local recording review before upload.
+Configured network resource and connection origins still require exact HTTPS
+origins; the local scheme is not added to connection or frame permissions.
 
 Set the widget origin and the exact media origins for the target environment.
 Browser API connections are not allowed by this UI resource's CSP; backend

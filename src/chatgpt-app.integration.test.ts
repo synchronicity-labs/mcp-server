@@ -93,15 +93,16 @@ it.each([
         _meta: expect.objectContaining({
           'openai/widgetCSP': {
             connect_domains: ['https://uploads.fixture.invalid'],
-            resource_domains: ['https://media.fixture.invalid'],
+            resource_domains: ['https://media.fixture.invalid', 'blob:'],
           },
           'openai/widgetDomain': 'https://sync.fixture.invalid',
           ui: {
             domain: 'https://sync.fixture.invalid',
             prefersBorder: true,
+            permissions: { camera: {}, microphone: {} },
             csp: {
               connectDomains: ['https://uploads.fixture.invalid'],
-              resourceDomains: ['https://media.fixture.invalid'],
+              resourceDomains: ['https://media.fixture.invalid', 'blob:'],
             },
           },
         }),

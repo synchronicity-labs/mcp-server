@@ -24,6 +24,7 @@ import { parseSpec } from './openapi/parser.js';
 import { createAppTools } from './tools/app-tools.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
+import { createProjectHistoryTools, projectHistoryOperations } from './tools/project-history.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
 const SERVER_DESCRIPTION =
@@ -31,7 +32,7 @@ const SERVER_DESCRIPTION =
   'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
 
 export const SERVER_INSTRUCTIONS =
-  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
+  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
@@ -50,6 +51,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'assets_create',
   'projects_create',
   'generate_get-generations',
+  'projects_get-generations',
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
@@ -66,6 +68,7 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'assets_create',
   'projects_create',
   'generate_get-generations',
+  'projects_get-generations',
   'generate_estimate-cost',
 ]);
 
@@ -287,6 +290,7 @@ function createProfiledServer(
     ...(chatgptApp ? [createOpenSyncAppTool(chatgptApp)] : []),
     createUploadWidgetTool(),
     ...createAppTools(httpClient, undefined, getProfile),
+    ...createProjectHistoryTools(operations, httpClient),
     ...generateTools(operations, httpClient).map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
@@ -427,6 +431,7 @@ export async function createMcpServerFactory(
     'open-upload-widget',
     'upload-media',
     'create-lipsync',
+    ...(projectHistoryOperations(operations).length ? ['projects_get-generations'] : []),
     ...operations.map((operation) => operationIdToToolName(operation.operationId)),
   ]);
   return {

@@ -11,6 +11,13 @@ export const generationOutputSchema = {
       'Signed result URL when the generation is complete. Copy this exact string verbatim; do not reconstruct, shorten, or edit it.',
     )
     .optional(),
+  generationEstimate: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .optional()
+    .describe(
+      'Server-provided completion estimate and server clock. Use only for approximate remaining time; do not invent an estimate when absent.',
+    ),
   outputDuration: z.number().nullable().describe('Output duration in seconds.').optional(),
   error: z.unknown().optional(),
   errorCode: z.unknown().optional(),
