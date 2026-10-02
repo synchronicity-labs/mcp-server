@@ -379,11 +379,12 @@ origins; the local scheme is not added to connection or frame permissions.
 Set the widget origin and the exact media origins for the target environment.
 Browser API connections are not allowed by this UI resource's CSP; backend
 operations go through the authenticated MCP bridge. The frontend remains
-disabled unless its directory is explicitly configured. The current container
-does not include the frontend artifact: the release pipeline must package or
-mount the approved bundle before enabling this configuration. Cross-repository
-artifact delivery and retaining older published UI versions across deployments
-remain release requirements, along with real ChatGPT/account acceptance.
+disabled unless its directory is explicitly configured. The production container
+includes the pinned frontend under `/app/chatgpt-dist/<HTML SHA256>`. Docker
+verifies the bundle with the same manifest loader used by the server before
+copying it into the final image. See [frontend release packaging](docs/chatgpt-release.md)
+for provenance, activation settings, retention, and rollback. Real
+ChatGPT/account acceptance remains a separate release requirement.
 
 Local example after building the frontend and this server:
 

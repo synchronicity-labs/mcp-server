@@ -8,6 +8,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+RUN npm run package:chatgpt
 
 FROM node:22-trixie-slim
 ENV DEBIAN_FRONTEND=noninteractive
@@ -20,6 +21,7 @@ RUN apt-get update \
 COPY --from=build /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/chatgpt-dist ./chatgpt-dist
 
 # Strip tooling the runtime never uses but that AWS Inspector flags via the
 # base image. The server starts with `node dist/cli.js`, so neither is needed
