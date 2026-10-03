@@ -1,5 +1,7 @@
 import { type LookupAddress, lookup } from 'node:dns';
-import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { createServer, type RequestListener } from 'node:http';
+import { createServer as createSecureServer } from 'node:https';
 import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../http-client.js';
@@ -9,14 +11,26 @@ import { createAppTools } from './app-tools.js';
 
 vi.mock('node:dns', () => ({ lookup: vi.fn() }));
 
-const server = createServer((request, response) => {
+const serveSource: RequestListener = (request, response) => {
   reads.push(request.url ?? '');
   if (request.url === '/redirect') {
     response.writeHead(302, { Location: 'http://127.0.0.1/private' }).end();
   } else {
     response.writeHead(200, { 'Content-Type': 'video/mp4' }).end('offline uploaded bytes');
   }
-});
+};
+const server = createServer(serveSource);
+// This private key is a disposable test identity, trusted only by the fixture.
+const certificate = readFileSync(
+  new URL('../test-fixtures/certs/upload-source.pem', import.meta.url),
+);
+const secureServer = createSecureServer(
+  {
+    cert: certificate,
+    key: readFileSync(new URL('../test-fixtures/certs/upload-source.key', import.meta.url)),
+  },
+  serveSource,
+);
 const reads: string[] = [];
 const initialDispatcher = getGlobalDispatcher();
 let transport: ReturnType<typeof routeUploadSourceToFixture>;
@@ -38,13 +52,22 @@ beforeEach(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('missing fixture port');
-  transport = routeUploadSourceToFixture(address.port);
+  await new Promise<void>((resolve) => secureServer.listen(0, '127.0.0.1', resolve));
+  const secureAddress = secureServer.address();
+  if (!secureAddress || typeof secureAddress === 'string')
+    throw new Error('missing TLS fixture port');
+  transport = routeUploadSourceToFixture(address.port, {
+    port: secureAddress.port,
+    ca: certificate,
+  });
 });
 
 afterEach(async () => {
   transport.restore();
   server.closeAllConnections();
+  secureServer.closeAllConnections();
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  await new Promise<void>((resolve) => secureServer.close(() => resolve()));
   setGlobalDispatcher(initialDispatcher);
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -163,7 +186,10 @@ describe('upload source destination enforcement at the tool boundary', () => {
     expect(runtime.snapshot()).toMatchObject({ active: 0, queued: 0, downloadedBytes: 0 });
   });
 
-  it('pins a successful source connection and rejects a later rebound lookup', async () => {
+  it.each([
+    'http:',
+    'https:',
+  ])('pins a %s source connection and rejects a later rebound lookup', async (protocol) => {
     const { upload, request, runtime } = setup();
     const blockedGlobal = new MockAgent();
     blockedGlobal.disableNetConnect();
@@ -184,13 +210,13 @@ describe('upload source destination enforcement at the tool boundary', () => {
           : [{ address: '127.0.0.1', family: 4 }],
       );
     }) as typeof lookup);
-    await expect(upload('http://uploads.test/source')).resolves.toMatchObject({
+    await expect(upload(`${protocol}//uploads.test/source`)).resolves.toMatchObject({
       assetId: 'durable-asset',
     });
     expect(Buffer.concat(stored).toString()).toBe('offline uploaded bytes');
     expect(lookups).toBe(1);
     request.mockClear();
-    await expect(upload('http://uploads.test/source')).rejects.toThrow();
+    await expect(upload(`${protocol}//uploads.test/source`)).rejects.toThrow();
     expect(lookups).toBe(2);
     expect(transport.connectedAddresses).toEqual(['93.184.216.34']);
     expect(reads).toEqual(['/source']);
@@ -240,4 +266,54 @@ describe('upload source destination enforcement at the tool boundary', () => {
       downloadedBytes: 0,
     });
   }, 1_000);
+  it.each([
+    { results: [{ address: '10.0.0.1', family: 4 }] },
+    { results: [{ address: 'fc00::1', family: 6 }] },
+    {
+      results: [
+        { address: '93.184.216.34', family: 4 },
+        { address: '127.0.0.1', family: 4 },
+      ],
+    },
+  ])('rejects private or mixed DNS answers on the TLS connection: $results', async ({
+    results,
+  }) => {
+    addresses = results;
+    const { upload, request, runtime } = setup();
+    await expect(upload('https://uploads.test/source')).rejects.toThrow();
+    expect(lookups).toBe(1);
+    expect(reads).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+    expect(runtime.snapshot()).toMatchObject({ active: 0, queued: 0, downloadedBytes: 0 });
+  });
+
+  it.each([
+    { address: '93.184.216.34', family: 4 },
+    { address: '2606:4700:4700::1111', family: 6 },
+  ])('stages a checked HTTPS source with trusted hostname verification: $address', async (address) => {
+    addresses = [address];
+    const { upload, request, runtime } = setup();
+    const stored = stageStorage(request);
+    await expect(upload('https://uploads.test/source?signature=offline')).resolves.toMatchObject({
+      assetId: 'durable-asset',
+    });
+    expect(Buffer.concat(stored).toString()).toBe('offline uploaded bytes');
+    expect(transport.connectedAddresses).toEqual([address.address]);
+    expect(runtime.snapshot()).toMatchObject({
+      active: 0,
+      queued: 0,
+      completed: 1,
+      cleanupFailures: 0,
+    });
+  });
+  it('retains TLS certificate hostname verification for public sources', async () => {
+    const { upload, request, runtime } = setup();
+    await expect(upload('https://wrong-host.test/source')).rejects.toThrow(
+      /certificate|altname|hostname/,
+    );
+    expect(lookups).toBe(1);
+    expect(reads).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+    expect(runtime.snapshot()).toMatchObject({ active: 0, queued: 0, downloadedBytes: 0 });
+  });
 });
