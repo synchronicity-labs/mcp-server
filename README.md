@@ -220,6 +220,9 @@ const server = await createSyncMcpServer(config);
 
 ## Development
 
+HTTPS source tests use the local `openssl` command to create a one-day, self-signed
+test identity. Temporary certificate and key files are removed before the tests run.
+
 ```bash
 # Install dependencies
 npm install
