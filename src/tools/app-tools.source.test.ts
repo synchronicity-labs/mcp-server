@@ -55,7 +55,7 @@ const identity = (() => {
         '-extensions',
         'extensions',
       ],
-      { stdio: 'ignore', timeout: 10_000 },
+      { stdio: ['ignore', 'ignore', 'pipe'], timeout: 10_000 },
     );
     return { cert: readFileSync(certPath), key: readFileSync(keyPath) };
   } finally {
