@@ -1,10 +1,14 @@
+import { type LookupAddress, lookup } from 'node:dns';
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { createHttpClient } from '../http-client.js';
+import { routeUploadSourceToFixture } from '../test-fixtures/upload-source.js';
 import { UploadRuntime } from '../upload-runtime.js';
 import { createAppTools } from './app-tools.js';
+
+vi.mock('node:dns', () => ({ lookup: vi.fn() }));
 
 async function exerciseStorageUpload(redirectStorage = false) {
   const chunk = Buffer.alloc(64 * 1024, 97);
@@ -19,6 +23,7 @@ async function exerciseStorageUpload(redirectStorage = false) {
   };
   let copiesBeforeStorage = 0;
   let baseUrl = '';
+  let transport: ReturnType<typeof routeUploadSourceToFixture> | undefined;
   const server = createServer((request, response) => {
     void (async () => {
       if (request.url === '/source') {
@@ -77,6 +82,12 @@ async function exerciseStorageUpload(redirectStorage = false) {
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Missing HTTP fixture port');
     baseUrl = `http://127.0.0.1:${address.port}`;
+    vi.mocked(lookup).mockImplementation(((
+      _host: string,
+      _options: unknown,
+      callback: (error: Error | null, addresses: LookupAddress[]) => void,
+    ) => callback(null, [{ address: '93.184.216.34', family: 4 }])) as typeof lookup);
+    transport = routeUploadSourceToFixture(address.port);
     const runtime = new UploadRuntime({
       maxBytes: size,
       maxConcurrent: 1,
@@ -91,7 +102,7 @@ async function exerciseStorageUpload(redirectStorage = false) {
     const result = await tool
       .handler({
         mediaType: 'video',
-        file: { download_url: `${baseUrl}/source`, file_id: 'http-test' },
+        file: { download_url: 'http://uploads.test/source', file_id: 'http-test' },
       })
       .then(
         (value) => ({ value, error: undefined }),
@@ -99,6 +110,7 @@ async function exerciseStorageUpload(redirectStorage = false) {
       );
     return { ...result, observed, size, stats: runtime.snapshot() };
   } finally {
+    transport?.restore();
     tee.mockRestore();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

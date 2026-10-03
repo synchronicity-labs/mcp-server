@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { type ClientProfile, resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
+import { createUploadSourceDispatcher, validatedUploadSourceUrl } from '../upload-source.js';
 import type { McpToolDefinition } from './generator.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 
@@ -103,7 +104,7 @@ function validatedUploadUrl(file: FileInput, kind: MediaKind): string {
         `Pass a public ${kind} URL via ${kind}Url instead.`,
     );
   }
-  return src;
+  return validatedUploadSourceUrl(src);
 }
 
 /**
@@ -132,45 +133,8 @@ async function rehostUpload(
   // a public URL instead, and echo the value so the cause is visible.
   signal.throwIfAborted();
   const src = validatedUploadUrl(file, kind);
-
-  // 1. Download the bytes from ChatGPT's temporary URL.
-  let download: Response;
-  try {
-    download = await fetch(src, { signal });
-  } catch (err) {
-    if (signal.aborted) throw signal.reason;
-    throw new Error(`Could not reach the uploaded ${kind} at ${hostOf(src)}: ${reason(err)}.`);
-  }
-  if (!download.ok) {
-    await cancelResponseBody(download);
-    throw new Error(`The uploaded ${kind} URL returned HTTP ${download.status}.`);
-  }
-  const contentType =
-    download.headers.get('content-type') ?? file.mime_type ?? DEFAULT_CONTENT_TYPE[kind];
-  const fileName = file.file_name ?? `chatgpt-upload-${kind}`;
-
-  const declaredSizeHeader = download.headers.get('content-length');
-  const declaredSize = declaredSizeHeader === null ? undefined : Number(declaredSizeHeader);
-  const encodings = (download.headers.get('content-encoding') ?? '')
-    .split(',')
-    .map((encoding: string) => encoding.trim().toLowerCase());
-  const compressedEncodings = new Set(['gzip', 'x-gzip', 'deflate', 'br', 'zstd']);
-  const hasEncodedBody = encodings.some((encoding: string) => compressedEncodings.has(encoding));
-  if (declaredSize !== undefined && (!Number.isSafeInteger(declaredSize) || declaredSize < 0)) {
-    await cancelResponseBody(download);
-    throw new Error(`The uploaded ${kind} has an invalid Content-Length header.`);
-  }
-  if (declaredSize !== undefined && declaredSize > runtime.config.maxBytes) {
-    await cancelResponseBody(download);
-    throw new Error(
-      `The uploaded ${kind} is too large (${declaredSize} bytes; limit ${runtime.config.maxBytes} bytes).`,
-    );
-  }
-  if (!download.body) {
-    await cancelResponseBody(download);
-    throw new Error(`The uploaded ${kind} response did not include a body.`);
-  }
-
+  const dispatcher = createUploadSourceDispatcher(signal);
+  let download: Response | undefined;
   let tempDirectory: string | undefined;
   let tempPath: string | undefined;
   let uploadBody: ReturnType<typeof createReadStream> | undefined;
@@ -179,6 +143,43 @@ async function rehostUpload(
   let actualSize = 0;
 
   try {
+    // 1. Download the bytes from ChatGPT's temporary URL.
+    try {
+      download = await fetch(src, { signal, dispatcher, redirect: 'error' });
+    } catch (err) {
+      if (signal.aborted) throw signal.reason;
+      throw new Error(`Could not reach the uploaded ${kind} at ${hostOf(src)}: ${reason(err)}.`);
+    }
+    if (!download.ok) {
+      await cancelResponseBody(download);
+      throw new Error(`The uploaded ${kind} URL returned HTTP ${download.status}.`);
+    }
+    const contentType =
+      download.headers.get('content-type') ?? file.mime_type ?? DEFAULT_CONTENT_TYPE[kind];
+    const fileName = file.file_name ?? `chatgpt-upload-${kind}`;
+
+    const declaredSizeHeader = download.headers.get('content-length');
+    const declaredSize = declaredSizeHeader === null ? undefined : Number(declaredSizeHeader);
+    const encodings = (download.headers.get('content-encoding') ?? '')
+      .split(',')
+      .map((encoding: string) => encoding.trim().toLowerCase());
+    const compressedEncodings = new Set(['gzip', 'x-gzip', 'deflate', 'br', 'zstd']);
+    const hasEncodedBody = encodings.some((encoding: string) => compressedEncodings.has(encoding));
+    if (declaredSize !== undefined && (!Number.isSafeInteger(declaredSize) || declaredSize < 0)) {
+      await cancelResponseBody(download);
+      throw new Error(`The uploaded ${kind} has an invalid Content-Length header.`);
+    }
+    if (declaredSize !== undefined && declaredSize > runtime.config.maxBytes) {
+      await cancelResponseBody(download);
+      throw new Error(
+        `The uploaded ${kind} is too large (${declaredSize} bytes; limit ${runtime.config.maxBytes} bytes).`,
+      );
+    }
+    if (!download.body) {
+      await cancelResponseBody(download);
+      throw new Error(`The uploaded ${kind} response did not include a body.`);
+    }
+
     tempDirectory = await mkdtemp(join(tmpdir(), 'sync-mcp-upload-'));
     tempPath = join(tempDirectory, 'upload');
     const validateSize = new Transform({
@@ -256,7 +257,8 @@ async function rehostUpload(
   } finally {
     uploadBody?.destroy();
     if (put) await cancelResponseBody(put);
-    if (!downloadPipelineStarted) await cancelResponseBody(download);
+    if (download && !downloadPipelineStarted) await cancelResponseBody(download);
+    await dispatcher.destroy();
     if (tempDirectory) {
       try {
         await rm(tempDirectory, { recursive: true, force: true });
