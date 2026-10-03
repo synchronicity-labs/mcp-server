@@ -1,7 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import { type LookupAddress, lookup } from 'node:dns';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type RequestListener } from 'node:http';
 import { createServer as createSecureServer } from 'node:https';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../http-client.js';
@@ -20,17 +23,47 @@ const serveSource: RequestListener = (request, response) => {
   }
 };
 const server = createServer(serveSource);
-// This private key is a disposable test identity, trusted only by the fixture.
-const certificate = readFileSync(
-  new URL('../test-fixtures/certs/upload-source.pem', import.meta.url),
-);
-const secureServer = createSecureServer(
-  {
-    cert: certificate,
-    key: readFileSync(new URL('../test-fixtures/certs/upload-source.key', import.meta.url)),
-  },
-  serveSource,
-);
+const identity = (() => {
+  const directory = mkdtempSync(join(tmpdir(), 'sync-upload-source-tls-'));
+  const keyPath = join(directory, 'key.pem');
+  const certPath = join(directory, 'cert.pem');
+  const configPath = join(directory, 'openssl.cnf');
+  try {
+    writeFileSync(
+      configPath,
+      '[req]\ndistinguished_name = dn\n[dn]\n[extensions]\nsubjectAltName = DNS:uploads.test\n',
+    );
+    execFileSync(
+      'openssl',
+      [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-sha256',
+        '-keyout',
+        keyPath,
+        '-out',
+        certPath,
+        '-days',
+        '1',
+        '-subj',
+        '/CN=uploads.test',
+        '-config',
+        configPath,
+        '-extensions',
+        'extensions',
+      ],
+      { stdio: ['ignore', 'ignore', 'pipe'], timeout: 10_000 },
+    );
+    return { cert: readFileSync(certPath), key: readFileSync(keyPath) };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+})();
+const certificate = identity.cert;
+const secureServer = createSecureServer(identity, serveSource);
 const reads: string[] = [];
 const initialDispatcher = getGlobalDispatcher();
 let transport: ReturnType<typeof routeUploadSourceToFixture>;
