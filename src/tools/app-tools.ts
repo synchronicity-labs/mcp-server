@@ -258,7 +258,7 @@ async function rehostUpload(
     uploadBody?.destroy();
     if (put) await cancelResponseBody(put);
     if (download && !downloadPipelineStarted) await cancelResponseBody(download);
-    await dispatcher.destroy();
+    await dispatcher.destroy().catch(() => runtime.recordCleanupFailure());
     if (tempDirectory) {
       try {
         await rm(tempDirectory, { recursive: true, force: true });
