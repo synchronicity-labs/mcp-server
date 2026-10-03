@@ -11,6 +11,8 @@ let upstream: Server | undefined;
 let hosted: Server | undefined;
 let url: string;
 let upstreamStatus = 200;
+let upstreamBody: string | undefined;
+let dropUpstreamResponse = false;
 let userinfoStatus = 200;
 const calls: Array<{ path: string; body: URLSearchParams; authorization: string | undefined }> = [];
 const logs: string[] = [];
@@ -32,6 +34,10 @@ beforeAll(async () => {
       body: new URLSearchParams(body),
       authorization: req.headers.authorization,
     });
+    if (dropUpstreamResponse) {
+      res.destroy();
+      return;
+    }
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/v2/oauth/userinfo') {
       res.statusCode = userinfoStatus;
@@ -50,9 +56,10 @@ beforeAll(async () => {
     }
     res.statusCode = upstreamStatus;
     res.end(
-      upstreamStatus === 401
-        ? JSON.stringify({ error: 'invalid_client' })
-        : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' }),
+      upstreamBody ??
+        (upstreamStatus === 401
+          ? JSON.stringify({ error: 'invalid_client' })
+          : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
     );
   });
   upstream.listen(0, '127.0.0.1');
@@ -250,6 +257,77 @@ it('does not log incoming secrets, tokens, or authorization codes', () => {
   const all = logs.join('');
   for (const value of ['fake-secret', 'fake-token', 'fake-code', 'fake-verifier', basic()])
     expect(all).not.toContain(value);
+});
+it('correlates a rejected scanner refresh without changing the response or logging secrets', async () => {
+  const before = logs.length;
+  upstreamStatus = 400;
+  upstreamBody = JSON.stringify({
+    statusCode: 400,
+    message: 'Invalid, revoked, or expired refresh token',
+    error: 'Bad Request',
+    error_description: 'secret-upstream-echo',
+  });
+  try {
+    const response = await fetch(`${url}/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'x-request-id': 'wfr_scan-test',
+      },
+      body: 'grant_type=refresh_token&refresh_token=secret-refresh-test&client_id=secret-client-test&client_secret=secret-client-secret-test',
+    });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe(upstreamBody);
+    const logged = logs.slice(before).join('');
+    expect(logged).toContain('"event":"oauth_exchange_rejected"');
+    expect(logged).toContain('"requestId":"wfr_scan-test"');
+    expect(logged).toContain('"source":"upstream"');
+    expect(logged).toContain('"grantType":"refresh_token"');
+    expect(logged).toContain('"reason":"refresh_token_invalid_revoked_or_expired"');
+    for (const secret of [
+      'secret-upstream-echo',
+      'secret-refresh-test',
+      'secret-client-test',
+      'secret-client-secret-test',
+    ])
+      expect(logged).not.toContain(secret);
+  } finally {
+    upstreamStatus = 200;
+    upstreamBody = undefined;
+  }
+});
+it('distinguishes local credential rejection and does not echo an unrecognized grant', async () => {
+  const before = logs.length;
+  const response = await post('/token', 'grant_type=secret-grant-test');
+  expect(response.status).toBe(400);
+  await response.text();
+  const logged = logs.slice(before).join('');
+  expect(logged).toContain('"source":"local"');
+  expect(logged).toContain('"oauthError":"invalid_client"');
+  expect(logged).toContain('"reason":"invalid_client_authentication"');
+  expect(logged).toContain('"grantType":"other"');
+  expect(logged).not.toContain('secret-grant-test');
+});
+it('records the grant and source when the upstream connection fails', async () => {
+  const before = logs.length;
+  dropUpstreamResponse = true;
+  try {
+    const response = await post(
+      '/token',
+      'grant_type=refresh_token&refresh_token=secret-network-token',
+      basic(),
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'OAuth upstream request failed' });
+    const logged = logs.slice(before).join('');
+    expect(logged).toContain('"event":"oauth_exchange_rejected"');
+    expect(logged).toContain('"source":"transport"');
+    expect(logged).toContain('"grantType":"refresh_token"');
+    expect(logged).not.toContain('secret-network-token');
+    expect(logged).not.toContain('fake-secret');
+  } finally {
+    dropUpstreamResponse = false;
+  }
 });
 it('rejects duplicate Authorization headers before Node can silently select one', async () => {
   const before = calls.length;

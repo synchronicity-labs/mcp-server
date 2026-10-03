@@ -19,6 +19,7 @@ import {
   ClientAuthenticationError,
   mergeBasicClientCredentials,
 } from './auth/client-credentials.js';
+import { oauthFailureDiagnostics, oauthGrantType } from './auth/oauth-diagnostics.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { readOAuthResponseText } from './oauth-response.js';
@@ -358,6 +359,18 @@ export async function startHttpServer(
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
     const usesAuthorization = req.headers.authorization !== undefined;
+    const body = asRecord(req.body);
+    const logOAuthFailure = (source: string, statusCode: number, response: unknown) => {
+      logEvent('oauth_exchange_rejected', {
+        requestId: res.locals.requestId,
+        oauthPath: path,
+        source,
+        statusCode,
+        grantType: oauthGrantType(body.grant_type),
+        authorizationHeaderPresent: usesAuthorization,
+        ...oauthFailureDiagnostics(response),
+      });
+    };
     const controller = new AbortController();
     let timedOut = false;
     const cancel = () => controller.abort();
@@ -375,7 +388,6 @@ export async function startHttpServer(
       ).length;
       if (authorizationCount > 1)
         throw new InvalidRequestError('Multiple Authorization headers are not allowed');
-      const body = asRecord(req.body);
       for (const field of OAUTH_FORM_FIELDS) {
         if (Object.hasOwn(body, field) && typeof body[field] !== 'string') {
           throw new InvalidRequestError('OAuth parameters must be single strings');
@@ -392,6 +404,7 @@ export async function startHttpServer(
       });
       const responseBody = await readOAuthResponseText(upstream, controller.signal);
       if (controller.signal.aborted || res.destroyed) return;
+      if (!upstream.ok) logOAuthFailure('upstream', upstream.status, responseBody);
       if (upstream.status === 401 && usesAuthorization) {
         res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
       }
@@ -403,6 +416,7 @@ export async function startHttpServer(
     } catch (error) {
       if (res.destroyed) return;
       if (timedOut) {
+        logOAuthFailure('timeout', 504, { error: 'temporarily_unavailable' });
         res.status(504).json({
           error: 'temporarily_unavailable',
           error_description: 'OAuth upstream request timed out',
@@ -411,6 +425,7 @@ export async function startHttpServer(
       }
       if (error instanceof OAuthError) {
         const status = error instanceof ClientAuthenticationError ? error.status : 400;
+        logOAuthFailure('local', status, error.toResponseObject());
         if (status === 401) res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
         res.setHeader('Cache-Control', 'no-store');
         res.status(status).json(error.toResponseObject());
@@ -422,6 +437,7 @@ export async function startHttpServer(
         error: { message: 'OAuth upstream request failed' },
       });
       if (!res.headersSent) {
+        logOAuthFailure('transport', 502, { error: 'server_error' });
         res.status(502).json({ error: 'OAuth upstream request failed' });
       }
     } finally {
