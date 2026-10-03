@@ -191,6 +191,8 @@ Options:
 
 HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. When capacity is exhausted, new session initialization returns `503` with `Retry-After`; existing sessions continue normally.
 
+Host-provided upload source URLs must use HTTP(S) on the protocol default port, without credentials. IP literals and every DNS answer used by a source connection must be public unicast destinations. Private, loopback, link-local, reserved, mapped and transition addresses are rejected. Source redirects are rejected; hosts must provide the final download URL. Source connections use a dedicated direct dispatcher rather than an environment or global proxy.
+
 Re-hosted uploads are streamed through bounded temporary files before durable asset registration. The deployment needs writable temporary disk sized for `MCP_UPLOAD_MAX_BYTES * MCP_UPLOAD_CONCURRENCY`; a memory-backed temporary directory defeats the memory bound. When upload capacity is exhausted, excess work fails with the retryable `UPLOAD_CAPACITY_EXCEEDED` code instead of increasing process memory pressure.
 
 The HTTP server writes newline-delimited JSON diagnostics to stderr. Lifecycle events distinguish graceful pod termination from abrupt process loss, request logs include latency and abort state, and `mcp_runtime` heartbeats include memory, CPU, event-loop delay, session totals, pending transports, aggregate HTTP status counts, and upload activity, queue, rejection, and byte counters.

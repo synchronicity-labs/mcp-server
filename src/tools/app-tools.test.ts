@@ -212,6 +212,8 @@ describe('createAppTools — create-lipsync', () => {
     });
 
     expect(fetch).toHaveBeenNthCalledWith(1, 'https://files.oai/face.png', {
+      dispatcher: expect.any(Object),
+      redirect: 'error',
       signal: expect.any(Object),
     });
     expect(request).toHaveBeenCalledWith('post', '/v2/assets', {
