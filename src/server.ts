@@ -286,12 +286,20 @@ function createProfiledServer(
     authHeaders,
     config.transport === 'stdio' ? () => clientName : undefined,
   );
+  const generatedTools = generateTools(operations, httpClient);
   const allTools = [
-    ...(chatgptApp ? [createOpenSyncAppTool(chatgptApp)] : []),
+    ...(chatgptApp
+      ? [
+          createOpenSyncAppTool(
+            chatgptApp,
+            generatedTools.find((tool) => tool.name === 'projects_get-all'),
+          ),
+        ]
+      : []),
     createUploadWidgetTool(),
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
-    ...generateTools(operations, httpClient).map((tool) =>
+    ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
         : tool,

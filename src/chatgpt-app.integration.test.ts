@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, expect, it, vi } from 'vitest';
+import { runWithAuth } from './auth/async-context.js';
 import type { SyncMcpConfig } from './config.js';
 import { createMcpServerFactory } from './server.js';
 import { UPLOAD_WIDGET_URI } from './tools/upload-widget.js';
@@ -202,3 +203,122 @@ it('rejects corrupted retained bundles rather than serving different bytes at an
     }),
   ).rejects.toThrow('SHA256');
 });
+
+it('bootstraps each account privately while keeping shared HTML unchanged', async () => {
+  const config = await releaseConfig();
+  const calls: { url: string; authorization: string | null }[] = [];
+  vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+    const url = new URL(input);
+    if (url.pathname !== '/v2/projects')
+      return Response.json({
+        openapi: '3.0.0',
+        paths: {
+          '/v2/projects': {
+            get: {
+              tags: ['projects'],
+              operationId: 'ProjectsController_getAll',
+              parameters: [
+                { name: 'limit', in: 'query', schema: { type: 'integer' } },
+                { name: 'sortBy', in: 'query', schema: { type: 'string' } },
+              ],
+              responses: { '200': { description: 'Projects' } },
+            },
+          },
+        },
+      });
+    const authorization = new Headers(init?.headers).get('authorization');
+    calls.push({ url: input, authorization });
+    return Response.json({
+      items: [{ id: '00000000-0000-4000-8000-000000000001', name: authorization }],
+    });
+  });
+  const factory = await createMcpServerFactory(config);
+  for (const token of ['account-a', 'account-b']) {
+    const server = factory.createServer();
+    const client = new Client({ name: 'chatgpt', version: 'fixture' });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await server.connect(st);
+    await client.connect(ct);
+    try {
+      const result = await runWithAuth(token, 'chatgpt', () =>
+        client.callTool({ name: 'open-sync-app', arguments: {} }),
+      );
+      expect(result._meta).toMatchObject({
+        'sync/initialProjects': {
+          version: 1,
+          fetchedAt: expect.any(Number),
+          page: { items: [{ name: `Bearer ${token}` }] },
+        },
+      });
+      expect(
+        JSON.stringify({ content: result.content, structuredContent: result.structuredContent }),
+      ).not.toContain(token);
+      expect(
+        (await client.readResource({ uri: `ui://sync/app-${digest}.html` })).contents[0],
+      ).toMatchObject({ text: html });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  }
+  expect(calls.map((call) => call.authorization)).toEqual(['Bearer account-a', 'Bearer account-b']);
+  for (const call of calls) {
+    expect(Object.fromEntries(new URL(call.url).searchParams)).toEqual({
+      limit: '12',
+      sortBy: 'updatedAt',
+    });
+  }
+});
+
+it.each([
+  'unavailable',
+  'timeout',
+])('still opens the app when the optional project read is %s', async (mode) => {
+  const config = await releaseConfig();
+  let attempted = false;
+  let aborted = false;
+  vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+    if (new URL(input).pathname !== '/v2/projects')
+      return Response.json({
+        openapi: '3.0.0',
+        paths: {
+          '/v2/projects': {
+            get: {
+              tags: ['projects'],
+              operationId: 'ProjectsController_getAll',
+              responses: { '200': { description: 'Projects' } },
+            },
+          },
+        },
+      });
+    attempted = true;
+    if (mode === 'unavailable') return Response.json({ message: 'Unavailable' }, { status: 503 });
+    return new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener(
+        'abort',
+        () => {
+          aborted = true;
+          reject(init.signal?.reason);
+        },
+        { once: true },
+      );
+    });
+  });
+  const factory = await createMcpServerFactory(config);
+  const server = factory.createServer();
+  const client = new Client({ name: 'chatgpt', version: 'fixture' });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await server.connect(st);
+  await client.connect(ct);
+  try {
+    const result = await client.callTool({ name: 'open-sync-app', arguments: {} });
+    expect(attempted).toBe(true);
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ requested: true, renderStatus: 'awaiting_client' });
+    expect(result._meta).toBeUndefined();
+    if (mode === 'timeout') expect(aborted).toBe(true);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}, 2000);

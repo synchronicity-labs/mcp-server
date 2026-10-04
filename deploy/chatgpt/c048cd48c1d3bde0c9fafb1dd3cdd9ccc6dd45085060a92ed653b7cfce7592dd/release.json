@@ -1,0 +1,11 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "03d35677575c69519ffdf2137666a3fed34d053a",
+  "tree": "3b53b74aca62b1df55cbf9d98275c2d4187548f8",
+  "htmlSha256": "c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd",
+  "htmlBytes": 4232868,
+  "commands": [
+    "pnpm exec turbo run build --filter='@sync/chatgpt^...'",
+    "pnpm --filter @sync/chatgpt build"
+  ]
+}
