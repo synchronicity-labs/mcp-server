@@ -24,12 +24,14 @@ const configSchema = z.object({
 const manifestSchema = z.object({
   version: z.literal(1),
   file: z.literal('app.html'),
+  initialProjectsVersion: z.number().int().positive().optional(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
 export type ChatgptApp = {
   uri: string;
   html: string;
+  initialProjectsVersion?: number;
   metadata: ResourceMetadata;
 };
 
@@ -59,6 +61,7 @@ export async function loadChatgptApp(
   return {
     uri: `ui://sync/app-${manifest.sha256}.html`,
     html: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+    initialProjectsVersion: manifest.initialProjectsVersion,
     metadata: {
       title: 'Sync',
       description: 'Browse your Sync projects and create videos using your existing assets.',
@@ -131,7 +134,7 @@ export function createOpenSyncAppTool(
         content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
         structuredContent,
       };
-      if (!projects) return result;
+      if (!projects || app.initialProjectsVersion !== 1) return result;
       // Optional read: never make opening the UI depend on a slow project API.
       const deadline = AbortSignal.timeout(500);
       const { signal, dispose } = combineSignals(

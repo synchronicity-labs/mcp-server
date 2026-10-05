@@ -20,13 +20,18 @@ afterEach(async () => {
   );
 });
 
-async function releaseConfig() {
+async function releaseConfig(initialProjects = false) {
   const directory = await mkdtemp(join(tmpdir(), 'sync-chatgpt-release-'));
   directories.push(directory);
   await writeFile(join(directory, 'app.html'), html);
   await writeFile(
     join(directory, 'manifest.json'),
-    JSON.stringify({ version: 1, file: 'app.html', sha256: digest }),
+    JSON.stringify({
+      version: 1,
+      file: 'app.html',
+      sha256: digest,
+      ...(initialProjects ? { initialProjectsVersion: 1 } : {}),
+    }),
   );
   vi.stubGlobal('fetch', async () => Response.json({ openapi: '3.0.0', paths: {} }));
   return {
@@ -204,8 +209,11 @@ it('rejects corrupted retained bundles rather than serving different bytes at an
   ).rejects.toThrow('SHA256');
 });
 
-it('bootstraps each account privately while keeping shared HTML unchanged', async () => {
-  const config = await releaseConfig();
+it.each([
+  false,
+  true,
+])('only bootstraps capable bundles (%s), privately per account', async (initialProjects) => {
+  const config = await releaseConfig(initialProjects);
   const calls: { url: string; authorization: string | null }[] = [];
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
     const url = new URL(input);
@@ -243,13 +251,15 @@ it('bootstraps each account privately while keeping shared HTML unchanged', asyn
       const result = await runWithAuth(token, 'chatgpt', () =>
         client.callTool({ name: 'open-sync-app', arguments: {} }),
       );
-      expect(result._meta).toMatchObject({
-        'sync/initialProjects': {
-          version: 1,
-          fetchedAt: expect.any(Number),
-          page: { items: [{ name: `Bearer ${token}` }] },
-        },
-      });
+      if (initialProjects)
+        expect(result._meta).toMatchObject({
+          'sync/initialProjects': {
+            version: 1,
+            fetchedAt: expect.any(Number),
+            page: { items: [{ name: `Bearer ${token}` }] },
+          },
+        });
+      else expect(result._meta).toBeUndefined();
       expect(
         JSON.stringify({ content: result.content, structuredContent: result.structuredContent }),
       ).not.toContain(token);
@@ -261,7 +271,9 @@ it('bootstraps each account privately while keeping shared HTML unchanged', asyn
       await server.close();
     }
   }
-  expect(calls.map((call) => call.authorization)).toEqual(['Bearer account-a', 'Bearer account-b']);
+  expect(calls.map((call) => call.authorization)).toEqual(
+    initialProjects ? ['Bearer account-a', 'Bearer account-b'] : [],
+  );
   for (const call of calls) {
     expect(Object.fromEntries(new URL(call.url).searchParams)).toEqual({
       limit: '12',
@@ -274,7 +286,7 @@ it.each([
   'unavailable',
   'timeout',
 ])('still opens the app when the optional project read is %s', async (mode) => {
-  const config = await releaseConfig();
+  const config = await releaseConfig(true);
   let attempted = false;
   let aborted = false;
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
