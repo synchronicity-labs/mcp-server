@@ -169,8 +169,9 @@ Options:
 |----------|-------------|---------|
 | `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
 | `SYNC_BASE_URL` | API base URL | `https://api.sync.so` |
-| `SYNC_CHATGPT_APP_DIR` | Directory containing the approved frontend's `app.html` and `manifest.json`; unset keeps the new app unavailable | unset |
-| `SYNC_CHATGPT_APP_PREVIOUS_DIRS` | JSON array of up to eight retained immutable frontend directories for cached clients | `[]` |
+| `SYNC_CHATGPT_APP_RELEASES` | Release manifest selecting the current and retained UI bundles; set by the Docker image, no per-release Porter edit | `/app/chatgpt-dist/releases.json` in Docker; otherwise unset |
+| `SYNC_CHATGPT_APP_DIR` | Legacy/local frontend directory; packaged deployments select the release manifest instead | unset |
+| `SYNC_CHATGPT_APP_PREVIOUS_DIRS` | Legacy additional frontend directories; external mounts remain retained, packaged retention is managed by the release manifest | `[]` |
 | `SYNC_CHATGPT_APP_CONNECT_DOMAINS` | JSON array of exact HTTPS origins for uploads and media extraction | `[]` |
 | `SYNC_APP_UPLOAD_ORIGINS` | JSON array of exact HTTPS browser origins allowed to upload | widget domain and `https://web-sandbox.oaiusercontent.com` |
 | `SYNC_APP_UPLOAD_STORAGE_ORIGIN` | Exact HTTPS storage origin allowed for the one-use upload relay; unset uses direct presigned uploads | unset |
@@ -359,8 +360,10 @@ and use `generate_get-generation` for status reads instead of creating again.
 
 ### Embedded Sync app
 
-Build `@sync/chatgpt` in the Sync monorepo and supply its `app.html` and
-`manifest.json` together in `SYNC_CHATGPT_APP_DIR`. The server verifies the
+For production, package the approved `@sync/chatgpt` build and select it in
+`deploy/chatgpt/releases.json`; Docker activates that release automatically.
+For local development, supply `app.html` and `manifest.json` together in
+`SYNC_CHATGPT_APP_DIR`. The server verifies the
 manifest format, HTML SHA256, UTF-8 and size (8 MiB maximum) at factory startup.
 Each session serves those same loaded bytes under a content-addressed resource
 URI. Invalid configured artifacts fail startup rather than silently serving a
@@ -384,11 +387,11 @@ origins; the local scheme is not added to connection or frame permissions.
 Set the widget origin and the exact media origins for the target environment.
 Browser API connections are not allowed by this UI resource's CSP; backend
 operations go through the authenticated MCP bridge. The frontend remains
-disabled unless its directory is explicitly configured. The production container
+disabled unless its widget domain (packaged deployment) or local directory is configured. The production container
 includes the pinned frontend under `/app/chatgpt-dist/<HTML SHA256>`. Docker
 verifies the bundle with the same manifest loader used by the server before
 copying it into the final image. See [frontend release packaging](docs/chatgpt-release.md)
-for provenance, activation settings, retention, and rollback. Real
+for provenance, automatic release selection, retention, and rollback. Real
 ChatGPT/account acceptance remains a separate release requirement.
 
 Local example after building the frontend and this server:

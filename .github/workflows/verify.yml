@@ -46,4 +46,4 @@ jobs:
       - name: Build production image with approved frontend
         run: docker build -t sync-mcp-release-candidate .
       - name: Read packaged UI through MCP in the final image
-        run: docker run --rm -i --network none --entrypoint node sync-mcp-release-candidate --input-type=module < scripts/verify-chatgpt-package.mjs
+        run: docker run --rm -i --network none --entrypoint node sync-mcp-release-candidate --input-type=module - /app/chatgpt-dist --require-image-config < scripts/verify-chatgpt-package.mjs
