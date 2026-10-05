@@ -65,10 +65,13 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 
 The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
-The manifest also owns packaged retention, so stale environment pins cannot
-resurrect intentionally pruned directories. Legacy external directories and
-`SYNC_CHATGPT_APP_PREVIOUS_DIRS` mounts remain readable, within the eight-retained
-release limit. Keep those mounts until their published resources can be retired.
+Stale pins to absent, pruned hash directories in the image are ignored.
+Existing legacy bundles remain readable, including mounts under the packaged
+root. The eight-retained-release budget applies to the deduplicated combined
+manifest and legacy list. Configuration rejects overflow with an actionable
+error instead of silently dropping resources. Retire unused bundles explicitly
+before deploying if the combined list exceeds eight. Keep mounts until their
+published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;
 this change does not replace them. Keep `SYNC_BASE_URL=https://api.sync.so` and

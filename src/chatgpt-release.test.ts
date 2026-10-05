@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,6 +48,25 @@ describe('packaged UI selection', () => {
   it('does not resurrect a pruned image bundle from a stale legacy pin', () => {
     vi.stubEnv('SYNC_CHATGPT_APP_DIR', join(root, 'c'.repeat(64)));
     expect(resolveConfig().chatgptApp?.previousDirectories).toEqual([join(root, previous)]);
+  });
+
+  it('retains an existing hash-named legacy mount under the catalog directory', () => {
+    const mounted = join(root, 'c'.repeat(64));
+    mkdirSync(mounted);
+    vi.stubEnv('SYNC_CHATGPT_APP_DIR', mounted);
+    expect(resolveConfig().chatgptApp?.previousDirectories).toEqual([
+      join(root, previous),
+      mounted,
+    ]);
+  });
+
+  it('enforces the shared retention budget before loading any bundles', () => {
+    const hashes = Array.from({ length: 8 }, (_, i) => String(i).repeat(64));
+    writeFileSync(catalog, JSON.stringify({ current, previous: hashes }));
+    vi.stubEnv('SYNC_CHATGPT_APP_DIR', '/mounted/legacy-ui');
+    expect(() => resolveConfig()).toThrow('retention exceeds eight previous bundles');
+    writeFileSync(catalog, JSON.stringify({ current, previous: hashes.slice(0, 7) }));
+    expect(resolveConfig().chatgptApp?.previousDirectories).toHaveLength(8);
   });
 
   it('keeps API-only Docker deployments working without widget configuration', () => {

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -21,9 +21,18 @@ export function resolveChatgptRelease(catalogPath: string, legacyDirectories: st
       ...catalog.previous.map((hash) => resolve(root, hash)),
       ...legacyDirectories
         .map((path) => resolve(path))
-        // The catalog owns packaged retention, including intentionally pruned releases.
-        .filter((path) => dirname(path) !== root || !digest.safeParse(basename(path)).success),
+        // Ignore only absent old image pins; a mount at the same path must stay readable.
+        .filter(
+          (path) =>
+            dirname(path) !== root || !digest.safeParse(basename(path)).success || existsSync(path),
+        ),
     ]),
   ].filter((path) => path !== directory);
+  z.array(z.string())
+    .max(8, {
+      message:
+        'ChatGPT UI retention exceeds eight previous bundles across the release manifest and legacy settings. Retire unused releases explicitly before deploying.',
+    })
+    .parse(previousDirectories);
   return { directory, previousDirectories };
 }
