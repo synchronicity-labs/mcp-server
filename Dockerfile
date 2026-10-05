@@ -34,5 +34,8 @@ COPY --from=build /app/chatgpt-dist ./chatgpt-dist
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
   /usr/local/include/node
 
+# Select the approved UI with the image, independent of stale legacy directory settings.
+ENV SYNC_CHATGPT_APP_RELEASES=/app/chatgpt-dist/releases.json
+
 EXPOSE 3002
 CMD ["node", "dist/cli.js", "--transport", "http", "--port", "3002"]

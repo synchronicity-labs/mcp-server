@@ -2,20 +2,19 @@
 
 The MCP production image includes the approved, self-contained frontend from
 Sync's monorepo. It does not build Studio or fetch another repository at deploy
-time. Activation still requires the environment configuration below.
+time. The checked-in release manifest selects the active UI with each deployment.
+Existing production origins and OAuth settings are kept.
 
 ## Included release
 
-- Candidate source: [sync-api-v2 ff0283bf3](https://github.com/synchronicity-labs/sync-api-v2/commit/ff0283bf314e1d25341df53732dc5ca4ddb26010). Review the companion frontend PR before activating this release.
+- Active source: [sync-api-v2 ff0283bf3](https://github.com/synchronicity-labs/sync-api-v2/commit/ff0283bf314e1d25341df53732dc5ca4ddb26010).
 - HTML SHA256: `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
 - Container directory: `/app/chatgpt-dist/c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
 - Opens projects from validated private tool-result metadata and defers model
   loading until the editor. Includes the current frontend's recording/upload,
   generation playback and history behavior.
 - Retained published release: `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`
-  from `a31411b8`. Keep its directory in `SYNC_CHATGPT_APP_PREVIOUS_DIRS` when
-  selecting the candidate directory. Existing production configuration continues
-  selecting the old bundle until explicitly updated.
+  from `a31411b8`. It remains available through the release manifest for cached clients.
 
 ### Initial project data
 
@@ -46,41 +45,46 @@ CI reads each packaged resource using an actual MCP client/server handshake in
 the final production image with networking disabled. This proves artifact
 delivery and protocol wiring, not production OAuth, storage, or generation.
 
-## Activation after release approval
+## Normal production release
 
-The existing `main` push workflow deploys through Porter. Merging a packaging
-PR therefore deploys its image; this is not a preview-only merge. Before enabling
-the UI, verify the production settings and keep the previous image/config for rollback.
+1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
+   `current` selects the active HTML hash; `previous` retains up to eight older hashes.
+2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
+   and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
+   No per-release Porter edit is needed. This release automatically activates the
+   startup improvements already approved in the companion frontend PR.
+3. Verify ready replicas, the opening tool's resource URI, and reads of both the
+   active and retained resources. Refresh the plugin metadata in the publisher
+   portal when needed; automatic server activation does not bypass OpenAI's
+   metadata review or refresh process.
+4. In a fresh ChatGPT conversation, verify opening/projects, model selection,
+   upload/recording, generation playback, and history. Live generation uses the
+   reviewer's approved media and credit budget.
 
-1. Confirm the production backend supports project-filtered generation history
-   on all instances. Keep `SYNC_BASE_URL=https://api.sync.so` and the existing
-   production MCP issuer/OAuth settings for `https://mcp.sync.so/mcp`.
-2. Set `SYNC_CHATGPT_APP_DIR` to the container directory above. Configure
-   `SYNC_CHATGPT_APP_DOMAIN` using the verified production widget origin.
-   Set `SYNC_CHATGPT_APP_CONNECT_DOMAINS` and
-   `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` to exact production origins. Include all
-   media redirect destinations, not staging storage or ngrok origins. Recording
-   blob playback and camera/microphone permissions are declared by the server.
-3. If enabling the upload relay, configure `SYNC_APP_UPLOAD_ORIGINS` and
-   `SYNC_APP_UPLOAD_STORAGE_ORIGIN`. Include `SYNC_CHATGPT_APP_DOMAIN` in
-   `SYNC_CHATGPT_APP_CONNECT_DOMAINS` so the widget can PUT to `/app-upload` on
-   that origin. Route that path to the MCP server and preserve instance-affine
-   routing for process-local upload tickets. Verify the deployed routing and
-   storage settings.
-4. Set `SYNC_CHATGPT_APP_PREVIOUS_DIRS` to retained published bundle directories
-   already included in the new image (at most eight). If production currently
-   serves an externally mounted bundle, retain that mount or add those exact bytes
-   before replacing its image/config. Do not substitute an unreviewed dev preview.
-5. Deploy through the existing production workflow, verify startup and the
-   served resource hash, then rescan the existing Sync plugin in OpenAI's portal.
-   Keep published schemas and resource URIs working during review.
-6. In a fresh ChatGPT conversation, verify authentication, both workflows,
-   recording/upload, model selection, progress, playback/download, and history
-   continuity with production Studio. Live generation uses the reviewer's
-   approved account/media and credit budget.
+### Existing production configuration
 
-No production settings or deployments are changed by the local packaging command.
-The Dockerfile deliberately does not enable the app with environment defaults.
+The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
+Porter pins to packaged hash directories no longer select the active release.
+Stale pins to absent, pruned hash directories in the image are ignored.
+Existing legacy bundles remain readable, including mounts under the packaged
+root. The eight-retained-release budget applies to the deduplicated combined
+manifest and legacy list. Configuration rejects overflow with an actionable
+error instead of silently dropping resources. Retire unused bundles explicitly
+before deploying if the combined list exceeds eight. Keep mounts until their
+published resources can be retired.
+
+Production already has widget-domain, CSP origins, API, and OAuth settings;
+this change does not replace them. Keep `SYNC_BASE_URL=https://api.sync.so` and
+the production MCP issuer. Keep existing upload routing, allowed origins,
+storage configuration, and instance-affine upload-ticket routing.
+
+For a new installation, configure `SYNC_CHATGPT_APP_DOMAIN`, exact
+`SYNC_CHATGPT_APP_CONNECT_DOMAINS` and `SYNC_CHATGPT_APP_RESOURCE_DOMAINS`, and any
+upload relay settings. The Docker image remains API-only when no widget domain
+or legacy app directory is configured. Outside Docker, the legacy app directory
+continues to support local development without a release manifest.
+
+No production deployment or settings are changed by the local packaging command.
 
 ## Updating and retaining bundles
 
@@ -100,12 +104,16 @@ uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
 while cached clients still need them. Packaging permits nine releases total.
 
+Update `deploy/chatgpt/releases.json` to select the new hash and retain published
+hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.
+The generated catalog is copied into the production image with the verified HTML.
+
 Run `npm run build`, `npm run package:chatgpt`, and
 `npm run verify:chatgpt-package`, then build/test the image as in CI. Review the
-new provenance and artifact checksum in the PR. Activation selects the new
-directory; prior releases stay addressable when configured as previous directories.
+new provenance and artifact checksum in the PR. Deployment selects the manifest's current release; prior releases stay addressable through its previous list.
 
-Rollback selects the previous directory and retains the new directory for
-clients that already cached its URI, provided both are in the image. If rolling
-back the whole image, ensure its retained bundles still satisfy published
-resource URIs. Never wait for an OpenAI rescan to fix a broken server contract.
+To roll back the UI, change the checked-in manifest's `current` to a retained hash,
+move the newer hash into `previous`, and deploy through the normal workflow.
+No Porter variable change is needed. If rolling back the entire image, ensure
+that image also contains every UI resource still referenced by published or
+cached tool metadata; an older image may not contain the newest bundle.
