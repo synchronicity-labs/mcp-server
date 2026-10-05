@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ResourceMetadata } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { combineSignals } from './abort-signals.js';
 import type { SyncMcpConfig } from './config.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { MCP_APP_RESOURCE_MIME_TYPE } from './tools/upload-widget.js';
@@ -23,12 +24,14 @@ const configSchema = z.object({
 const manifestSchema = z.object({
   version: z.literal(1),
   file: z.literal('app.html'),
+  initialProjectsVersion: z.number().int().positive().optional(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
 export type ChatgptApp = {
   uri: string;
   html: string;
+  initialProjectsVersion?: number;
   metadata: ResourceMetadata;
 };
 
@@ -58,6 +61,7 @@ export async function loadChatgptApp(
   return {
     uri: `ui://sync/app-${manifest.sha256}.html`,
     html: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+    initialProjectsVersion: manifest.initialProjectsVersion,
     metadata: {
       title: 'Sync',
       description: 'Browse your Sync projects and create videos using your existing assets.',
@@ -99,7 +103,10 @@ export async function loadChatgptAppReleases(
   ];
 }
 
-export function createOpenSyncAppTool(app: ChatgptApp): McpToolDefinition {
+export function createOpenSyncAppTool(
+  app: ChatgptApp,
+  projects?: McpToolDefinition,
+): McpToolDefinition {
   return {
     name: 'open-sync-app',
     title: 'Open Sync',
@@ -120,6 +127,38 @@ export function createOpenSyncAppTool(app: ChatgptApp): McpToolDefinition {
       'openai/toolInvocation/invoked': 'Sync interface requested',
       'openai/ui': { entrypoints: [{ type: 'global' }, { type: 'thread' }] },
     },
-    handler: async () => ({ requested: true, renderStatus: 'awaiting_client' }),
+    resultFormat: 'mcp',
+    handler: async (_args, context) => {
+      const structuredContent = { requested: true, renderStatus: 'awaiting_client' };
+      const result = {
+        content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
+        structuredContent,
+      };
+      if (!projects || app.initialProjectsVersion !== 1) return result;
+      // Optional read: never make opening the UI depend on a slow project API.
+      const deadline = AbortSignal.timeout(500);
+      const { signal, dispose } = combineSignals(
+        context?.signal ? [context.signal, deadline] : [deadline],
+      );
+      try {
+        const page = await projects.handler(
+          { searchQuery: '', limit: 12, sortBy: 'updatedAt' },
+          { signal },
+        );
+        return {
+          ...result,
+          _meta: {
+            // Per-invocation, authenticated data, never part of shared resource HTML.
+            'sync/initialProjects': { version: 1, fetchedAt: Date.now(), page },
+          },
+        };
+      } catch {
+        // The widget can fetch normally and display the canonical API error/retry.
+        context?.signal?.throwIfAborted();
+        return result;
+      } finally {
+        dispose();
+      }
+    },
   };
 }

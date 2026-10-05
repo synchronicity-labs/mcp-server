@@ -6,11 +6,30 @@ time. Activation still requires the environment configuration below.
 
 ## Included release
 
-- Source: [sync-api-v2 a31411b8](https://github.com/synchronicity-labs/sync-api-v2/commit/a31411b8f38fa165f1903f3a489bb3e8db28c6fe).
-- HTML SHA256: `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`.
-- Container directory: `/app/chatgpt-dist/5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`.
-- Includes shared models, recording/uploads, generation overlays, Input/Output
-  playback, and project history. The editor supports lipsync and image-to-video.
+- Candidate source: [sync-api-v2 ff0283bf3](https://github.com/synchronicity-labs/sync-api-v2/commit/ff0283bf314e1d25341df53732dc5ca4ddb26010). Review the companion frontend PR before activating this release.
+- HTML SHA256: `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
+- Container directory: `/app/chatgpt-dist/c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
+- Opens projects from validated private tool-result metadata and defers model
+  loading until the editor. Includes the current frontend's recording/upload,
+  generation playback and history behavior.
+- Retained published release: `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`
+  from `a31411b8`. Keep its directory in `SYNC_CHATGPT_APP_PREVIOUS_DIRS` when
+  selecting the candidate directory. Existing production configuration continues
+  selecting the old bundle until explicitly updated.
+
+### Initial project data
+
+`open-sync-app` reads the canonical first project page using the same generated
+`projects_get-all` handler and request authentication as normal browsing. It
+returns the page only in result `_meta["sync/initialProjects"]`, with version 1
+and `fetchedAt` in epoch milliseconds. Shared resource HTML and model-visible
+content contain no account data. The optional request is canceled after 500ms;
+a failure still opens the widget, which falls back to its normal project read.
+The read only runs when the active bundle manifest declares
+`initialProjectsVersion: 1`. Older bundles open immediately without prefetching.
+The candidate frontend validates
+freshness and shape before seeding its first-page cache. This removes a host
+round trip; it does not change ChatGPT's time to dispatch the opening tool.
 
 `deploy/chatgpt/<HTML SHA256>/` contains deterministic gzip-compressed HTML,
 the frontend's original manifest, and source/build provenance in `release.json`.
