@@ -7,14 +7,16 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release
 
-- Active source: [sync-api-v2 ff0283bf3](https://github.com/synchronicity-labs/sync-api-v2/commit/ff0283bf314e1d25341df53732dc5ca4ddb26010).
-- HTML SHA256: `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
-- Container directory: `/app/chatgpt-dist/c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
-- Opens projects from validated private tool-result metadata and defers model
-  loading until the editor. Includes the current frontend's recording/upload,
-  generation playback and history behavior.
-- Retained published release: `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`
-  from `a31411b8`. It remains available through the release manifest for cached clients.
+- Active source: [sync-api-v2 b33752ffd](https://github.com/synchronicity-labs/sync-api-v2/commit/b33752ffd6b3c4d1046bfcd1a64284a3a0624f57).
+- HTML SHA256: `69d71e5db26368ceb8858421f3c4d604dc4bde3e917eb38d747228e32c3ca8b0`.
+- Container directory: `/app/chatgpt-dist/69d71e5db26368ceb8858421f3c4d604dc4bde3e917eb38d747228e32c3ca8b0`.
+- Shows the expected generation cost in credits or USD before submission. Updates
+  estimates when media, model, or reasoning changes, and requires a current valid
+  estimate before generation. Includes retry and Studio fallback.
+- Preserves project startup, recording/upload, generation playback and history.
+- Retained published releases: `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`
+  from `ff0283bf3` and `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`
+  from `a31411b8`. Both remain available for cached clients.
 
 ### Initial project data
 
@@ -52,7 +54,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
-   startup improvements already approved in the companion frontend PR.
+   cost display already approved in the companion frontend PR.
 3. Verify ready replicas, the opening tool's resource URI, and reads of both the
    active and retained resources. Refresh the plugin metadata in the publisher
    portal when needed; automatic server activation does not bypass OpenAI's
