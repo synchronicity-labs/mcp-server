@@ -134,7 +134,7 @@ describe('combined translation generation', () => {
   it('does not advertise translation when the upstream contract is missing', () => {
     expect(createTranslationTools([], { request: vi.fn() })).toEqual([]);
     const operations = parseSpec(translationSpec);
-    operations[0]!.requestBody!.schema = {};
+    operations.find((operation) => operation.path === '/v2/generate')!.requestBody!.schema = {};
     expect(createTranslationTools(operations, { request: vi.fn() })).toEqual([]);
   });
 });

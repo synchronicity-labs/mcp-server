@@ -66,7 +66,7 @@ export function createTranslationTools(
       title: 'Translate and dub a video',
       description:
         'Translate a video’s speech and lip-sync it in the target language. Requires a saved video asset, selected project, model, and persistent idempotency key. ' +
-        'This is a paid action: confirm the requested language and configuration with the user before calling. Translation/dubbing may incur additional charges; generate_estimate-cost covers only the lip-sync stage, not the full workflow. ' +
+        'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generate_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. ' +
         'The API manages dubbing and final rendering under the returned generation id. Poll generate_get-generation for that same id until COMPLETED; do not create another job to finish or recover it.',
       inputSchema: schema.shape,
       outputSchema: generationOutputSchema,

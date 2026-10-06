@@ -15,6 +15,16 @@ import { createTranslationTools } from './tools/translation.js';
 const upstreams: Server[] = [];
 const clients: Client[] = [];
 const servers: McpServer[] = [];
+const externalEstimate = {
+  estimatedFrameCount: 300,
+  estimatedGenerationCost: 1.6,
+  estimatedCredits: 160,
+  breakdown: {
+    lipsync: { estimatedGenerationCost: 1.6, estimatedCredits: 160 },
+    dubbing: { billing: 'external', estimatedGenerationCost: null, estimatedCredits: null },
+    excludesExternalCharges: true,
+  },
+};
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
   for (const server of servers.splice(0)) await server.close();
@@ -52,6 +62,8 @@ async function fixture() {
       res.end(JSON.stringify({ message: 'Not allowed' }));
     } else if (req.url === `/v2/projects/${projectId}`) {
       res.end(JSON.stringify({ id: projectId }));
+    } else if (req.url === '/v2/generate/estimate-cost') {
+      res.end(JSON.stringify(externalEstimate));
     } else if (req.url === '/v2/generate') {
       res.end(
         JSON.stringify({
@@ -110,6 +122,41 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
       input: [{ type: 'video', assetId: translationInput.videoAssetId }],
     },
   });
+});
+
+it('carries the combined estimate through the authenticated MCP boundary without losing external billing disclosures', async () => {
+  const { calls, baseUrl } = await fixture();
+  const factory = await createMcpServerFactory({ baseUrl, transport: 'http', port: 0 });
+  const server = factory.createServer();
+  servers.push(server);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  const client = new Client({ name: 'openai-mcp', version: '1.0.0' });
+  clients.push(client);
+  await client.connect(clientTransport);
+  const tool = (await client.listTools()).tools.find(
+    (item) => item.name === 'generate_estimate-cost',
+  )!;
+  expect(tool.inputSchema.properties?.workflow).toMatchObject({
+    enum: ['lipsync', 'translate-and-dub'],
+  });
+  expect(tool.annotations?.readOnlyHint).toBe(true);
+  expect(tool._meta?.['openai/widgetAccessible']).toBe(true);
+  const args = { model: 'sync-3', duration: 12, fps: 25, workflow: 'translate-and-dub' };
+  const result = await runWithAuth('estimate-reader', 'openai-mcp', () =>
+    client.callTool({ name: tool.name, arguments: args }),
+  );
+  expect(result.isError).not.toBe(true);
+  expect(result.structuredContent).toEqual(externalEstimate);
+  expect(calls).toEqual([
+    {
+      path: '/v2/generate/estimate-cost',
+      token: 'Bearer estimate-reader',
+      source: 'mcp:openai-mcp',
+      key: undefined,
+      body: args,
+    },
+  ]);
 });
 
 it('isolates concurrent OAuth callers and stops a denied caller before generation', async () => {

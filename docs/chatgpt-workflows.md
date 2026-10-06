@@ -34,10 +34,12 @@ The adapter itself performs no write retries or provider requests.
 
 ### Remaining before enabling the workflow UI
 
-1. Add an authoritative combined estimate. `generate_estimate-cost` currently
-   returns lip-sync pricing only. Dubbing admission uses separate organization,
-   provider-key, allowance, and credit rules. Do not present the lip-sync number
-   as the total, hardcode a dubbing rate, or assume translation is free.
+1. Ship the authoritative combined estimate in [API #6423](https://github.com/synchronicity-labs/sync-api-v2/pull/6423).
+   Once the API advertises it, the generated `generate_estimate-cost` tool accepts
+   `workflow: "translate-and-dub"` and preserves the full breakdown. The UI must
+   require that supported input and response breakdown, show the combined Sync
+   estimate, and disclose excluded external provider charges. Older APIs still
+   price lip-sync only; do not use that number as the full workflow total.
 2. Implement [CRAFT-6458](https://linear.app/sync-labs/issue/CRAFT-6458): source
    video, canonical language picker, model controls, full cost review, explicit
    generation action, persisted submission state, progress and final video.
@@ -50,8 +52,9 @@ The adapter itself performs no write retries or provider requests.
    the adapter contract, not backend authorization or final video quality.
 
 The current UI remains unchanged. Conversational use of this new tool must
-confirm the paid action and disclose that translation can add charges beyond
-the existing lip-sync estimate. Do not publish this batch as a completed
+confirm the paid action using the combined estimate when available and disclose
+any excluded provider charges. Until that contract is deployed, the existing
+lip-sync estimate excludes dubbing. Do not publish this batch as a completed
 cost-reviewed Translate & Dub workflow until the above acceptance is met.
 
 ## Next mappings to complete
@@ -70,7 +73,9 @@ internal/debug endpoints to satisfy tool discovery.
 
 The translation adapter tests cover public-schema discovery, request shape,
 language validation, project denial, OAuth caller isolation, cancellation,
-unknown outcomes and stable-key retries. Existing app-tool regressions protect
+unknown outcomes and stable-key retries. A real local HTTP plus MCP SDK test
+verifies estimate workflow forwarding, caller OAuth context, and preservation
+of the full breakdown and unpriced external charges. Existing app-tool regressions protect
 lip-sync behavior. They use fixture API responses and incur no generation cost.
 
 Keep the frontend source promotion and MCP package release unmerged while
