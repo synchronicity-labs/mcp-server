@@ -11,6 +11,19 @@ function fixture(request = vi.fn<HttpClient['request']>(async () => ({ id: proje
 }
 
 describe('combined translation generation', () => {
+  it('discovers API-supported languages without submitting or probing an account', async () => {
+    const request = vi.fn();
+    const options = createTranslationTools(parseSpec(translationSpec), { request }).find(
+      (tool) => tool.name === 'get-translation-options',
+    );
+    expect(options).toBeDefined();
+    expect(await options!.handler({})).toEqual({
+      targetLanguages: ['es', 'fr', 'ja'],
+      sourceLanguages: ['auto', 'en', 'es', 'fr', 'ja'],
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('submits one saved video with canonical dubbing parameters and a stable key', async () => {
     const { tool, request } = fixture();
     const signal = new AbortController().signal;

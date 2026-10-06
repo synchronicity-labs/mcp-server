@@ -96,6 +96,12 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   const tools = (await client.listTools()).tools;
   expect(tools).toHaveLength(factory.toolCount);
   expect(tools.some((tool) => tool.name === 'generate_create-generation')).toBe(false);
+  const options = await client.callTool({ name: 'get-translation-options', arguments: {} });
+  expect(options.structuredContent).toEqual({
+    targetLanguages: ['es', 'fr', 'ja'],
+    sourceLanguages: ['auto', 'en', 'es', 'fr', 'ja'],
+  });
+  expect(calls).toEqual([]);
   const tool = tools.find((tool) => tool.name === 'create-translate-and-dub')!;
   expect(tool.inputSchema.properties?.targetLang).toMatchObject({ enum: ['es', 'fr', 'ja'] });
   expect(tool.inputSchema.required).toContain('idempotencyKey');

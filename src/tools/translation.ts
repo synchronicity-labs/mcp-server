@@ -108,5 +108,20 @@ export function createTranslationTools(
         });
       },
     },
+    {
+      name: 'get-translation-options',
+      title: 'Translation options',
+      description:
+        'Read the source and target languages supported by the current translation API. Does not create a generation or estimate pricing.',
+      inputSchema: {},
+      outputSchema: { targetLanguages: languageList, sourceLanguages: languageList },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      handler: async () => ({ targetLanguages: target.data, sourceLanguages: source.data }),
+    },
   ];
 }

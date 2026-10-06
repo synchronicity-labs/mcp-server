@@ -83,3 +83,8 @@ developing. After the intended features are verified, rebuild the frontend from
 the selected merged source, update the package release, retain older UI bundles,
 and follow the existing release process. New tool discovery requires a
 successful publisher scan; deployed tool success is not visual UI acceptance.
+
+The embedded language form reads `get-translation-options`, an authenticated,
+read-only tool whose lists come from the same public schema as submission. It
+creates no job and makes no billing request. Older servers leave translation
+unavailable; the form additionally requires a combined estimate breakdown.
