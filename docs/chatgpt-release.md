@@ -7,14 +7,21 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release
 
-- Active source: [sync-api-v2 ff0283bf3](https://github.com/synchronicity-labs/sync-api-v2/commit/ff0283bf314e1d25341df53732dc5ca4ddb26010).
-- HTML SHA256: `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
-- Container directory: `/app/chatgpt-dist/c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`.
-- Opens projects from validated private tool-result metadata and defers model
-  loading until the editor. Includes the current frontend's recording/upload,
-  generation playback and history behavior.
-- Retained published release: `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`
-  from `a31411b8`. It remains available through the release manifest for cached clients.
+- Active source: [sync-api-v2 3a0bd4bc5](https://github.com/synchronicity-labs/sync-api-v2/commit/3a0bd4bc5c46e744ed083d2ecf54d00d6d6673bf).
+- HTML SHA256: `a39e27ca488992ab54f148417646a041c7e6d667055dbc0fa5bcd674af76532b`.
+- Container directory: `/app/chatgpt-dist/a39e27ca488992ab54f148417646a041c7e6d667055dbc0fa5bcd674af76532b`.
+- Includes pre-generation credits/USD estimates, combined Translate & Dub pricing,
+  the workflow home card, Studio's searchable source/target language controls,
+  recorded-audio duration probing, and mobile generation controls.
+- Retained published releases: `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`
+  from `ff0283bf3` and `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`
+  from `a31411b8`. Both remain addressable for cached clients.
+
+The source is merged into dev. Promote and verify the required API changes in
+production before releasing this package. This bundle replaces the unpublished
+cost-only release candidate; no unpublished intermediate bundle is needed for
+production compatibility. Production release and live ChatGPT acceptance remain
+separate gates. Packaging does not change production settings.
 
 ### Initial project data
 
@@ -52,7 +59,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
-   startup improvements already approved in the companion frontend PR.
+   frontend selected by the checked-in release manifest.
 3. Verify ready replicas, the opening tool's resource URI, and reads of both the
    active and retained resources. Refresh the plugin metadata in the publisher
    portal when needed; automatic server activation does not bypass OpenAI's
