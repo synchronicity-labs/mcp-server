@@ -77,7 +77,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generate_estimate-cost': {
     description:
-      'Estimate the credit cost before creating a generation. Supply model and duration in seconds, with optional fps and reasoningEnabled. This does not submit a generation.',
+      'Estimate Sync cost before generating, without jobs or credit reservations. Supply model, duration in seconds, optional fps and reasoningEnabled. For script replacement, when its schema supports workflow=replace-dialogue, also supply script and require dialogueBreakdown. It prices speech and lip-sync using estimated speech length; final duration/cost can differ. Disclose any excluded external speech charges. Without the combined breakdown this is lip-sync-only pricing, not the full script workflow cost.',
   },
   'generations_get-by-id': {
     description:

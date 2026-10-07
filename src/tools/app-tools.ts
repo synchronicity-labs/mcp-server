@@ -749,7 +749,14 @@ export function createAppTools(
         signal?.throwIfAborted();
         return httpClient.request('post', '/v2/generate', {
           signal,
-          ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+          ...(hasScript || idempotencyKey
+            ? {
+                headers: {
+                  ...(hasScript ? { 'x-sync-async-tts': 'true' } : {}),
+                  ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+                },
+              }
+            : {}),
           body: {
             model: resolvedModel,
             ...(options === undefined ? {} : { options }),
