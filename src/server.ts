@@ -22,6 +22,7 @@ import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAppTools } from './tools/app-tools.js';
+import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { createProjectHistoryTools, projectHistoryOperations } from './tools/project-history.js';
@@ -33,11 +34,19 @@ const SERVER_DESCRIPTION =
   'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
 
 export const SERVER_INSTRUCTIONS =
+  'Edit Dialogue uses timed transcript word edits/removals and an audio preview in the original speaker voice, followed by create-dialogue-video. Do not substitute full-script TTS. Use the dedicated dialogue tools when available. ' +
   'When create-translate-and-dub is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generate_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ' +
   'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'get-dialogue-options',
+  'create-dialogue-transcription',
+  'get-dialogue-transcription',
+  'create-dialogue-preview',
+  'get-dialogue-preview',
+  'estimate-dialogue-video',
+  'create-dialogue-video',
   'open-sync-app',
   'open-upload-widget',
   'upload-media',
@@ -59,6 +68,13 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'get-dialogue-options',
+  'create-dialogue-transcription',
+  'get-dialogue-transcription',
+  'create-dialogue-preview',
+  'get-dialogue-preview',
+  'estimate-dialogue-video',
+  'create-dialogue-video',
   'upload-media',
   'create-lipsync',
   'create-translate-and-dub',
@@ -313,6 +329,7 @@ function createProfiledServer(
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
+    ...createDialogueTools(operations, httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
@@ -448,7 +465,8 @@ export async function createMcpServerFactory(
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
-      translationOperation([operation]) !== undefined,
+      translationOperation([operation]) !== undefined ||
+      dialogueOperations([operation]).length > 0,
   );
   const registeredNames = new Set([
     ...(chatgptApp ? ['open-sync-app'] : []),
@@ -459,6 +477,7 @@ export async function createMcpServerFactory(
     ...createTranslationTools(operations, createHttpClient(config.baseUrl)).map(
       (tool) => tool.name,
     ),
+    ...createDialogueTools(operations, createHttpClient(config.baseUrl)).map((tool) => tool.name),
     ...operations
       .map((operation) => operationIdToToolName(operation.operationId))
       .filter((name) => HOSTED_HTTP_TOOL_ALLOWLIST.has(name)),
