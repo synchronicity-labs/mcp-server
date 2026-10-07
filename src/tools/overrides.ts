@@ -77,7 +77,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generate_estimate-cost': {
     description:
-      'Estimate the credit cost before creating a generation. Supply model and duration in seconds, with optional fps and reasoningEnabled. This does not submit a generation.',
+      'Estimate Sync cost before generating. Supply model, duration in seconds, optional fps and reasoningEnabled. If the schema supports workflow=translate-and-dub, use it for both stages and show the returned breakdown; disclose excluded external provider charges. Otherwise this prices lip-sync only. Does not create jobs or reserve credits.',
   },
   'generations_get-by-id': {
     description:
