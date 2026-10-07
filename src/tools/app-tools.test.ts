@@ -729,7 +729,6 @@ describe('createAppTools — create-lipsync', () => {
 
     expect(fetch).not.toHaveBeenCalled();
     expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
-      headers: { 'x-sync-async-tts': 'true' },
       body: {
         model: 'sync-3',
         input: [
@@ -758,7 +757,6 @@ describe('createAppTools — create-lipsync', () => {
 
     expect(fetch).not.toHaveBeenCalled();
     expect(request).toHaveBeenCalledWith('post', '/v2/generate', {
-      headers: { 'x-sync-async-tts': 'true' },
       body: {
         model: 'sync-3',
         input: [

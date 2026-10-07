@@ -21,7 +21,6 @@ const calls: Array<{
   path: string;
   token?: string;
   idempotencyKey?: string | string[];
-  asyncTts?: string | string[];
   body: Record<string, unknown>;
   query: Record<string, string>;
 }> = [];
@@ -82,8 +81,6 @@ const spec = {
                   duration: { type: 'number' },
                   fps: { type: 'number' },
                   reasoningEnabled: { type: 'boolean' },
-                  workflow: { type: 'string', enum: ['lipsync', 'replace-dialogue'] },
-                  script: { type: 'string', maxLength: 5000 },
                 },
               },
             },
@@ -142,7 +139,6 @@ beforeEach(async () => {
       path,
       token,
       idempotencyKey: req.headers['idempotency-key'],
-      asyncTts: req.headers['x-sync-async-tts'],
       body,
       query: Object.fromEntries(requestUrl.searchParams),
     });
@@ -501,13 +497,6 @@ it.each([
     query: {},
     body: { model: 'sync-3', duration: 12, fps: 24, reasoningEnabled: false },
   },
-  {
-    name: 'generate_estimate-cost',
-    path: '/v2/generate/estimate-cost',
-    args: { model: 'sync-3', duration: 12, workflow: 'replace-dialogue', script: 'New dialogue' },
-    query: {},
-    body: { model: 'sync-3', duration: 12, workflow: 'replace-dialogue', script: 'New dialogue' },
-  },
 ])('calls $name with authenticated generated contracts through hosted MCP', async ({
   name,
   path,
@@ -547,41 +536,7 @@ it('forwards a caller-owned submission key through hosted MCP as an API header',
     expect(submission.idempotencyKey).toBe('action_A._~-09');
     expect(submission.body).not.toHaveProperty('idempotencyKey');
     expect(submission.body.projectId).toBe('selected-project');
-    expect(submission.asyncTts).toBeUndefined();
   }
-});
-
-it('admits script replacement through one durable parent and retains script/voice/key on retry', async () => {
-  const client = await connect('chatgpt', 'dialogue-key');
-  const args = {
-    videoAssetId: 'existing-video',
-    projectId: 'selected-project',
-    script: 'This is the replacement dialogue.',
-    voiceId: 'fixture-voice',
-    idempotencyKey: 'dialogue-action',
-    model: 'sync-3',
-  };
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await client.callTool({ name: 'create-lipsync', arguments: args });
-    expect(result.isError).not.toBe(true);
-  }
-  const own = calls.filter((call) => call.token === 'Bearer dialogue-key');
-  const submissions = own.filter((call) => call.path === '/v2/generate');
-  expect(submissions).toHaveLength(2);
-  for (const submission of submissions) {
-    expect(submission.asyncTts).toBe('true');
-    expect(submission.idempotencyKey).toBe('dialogue-action');
-    expect(submission.body).toMatchObject({
-      input: [
-        { type: 'video', assetId: 'existing-video' },
-        {
-          type: 'text',
-          provider: { name: 'elevenlabs', voiceId: 'fixture-voice', script: args.script },
-        },
-      ],
-    });
-  }
-  expect(own.some((call) => call.path.startsWith('/v2/tts'))).toBe(false);
 });
 
 it.each([

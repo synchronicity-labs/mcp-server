@@ -125,6 +125,7 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `generate_get-generation` | Get generation status — poll until COMPLETED |
 | `generate_get-generations` | List recent generations |
 | `generate_estimate-cost` | Estimate generation cost before creating |
+| `create-translate-and-dub` | Translate and lip-sync a saved video in one generation, when supported by the API contract |
 | `generations_get-by-id` | Get a generation by ID |
 | `generations_delete` | Delete a generation |
 | `assets_create-upload-url` | Get a presigned URL to upload a local file |
@@ -139,6 +140,13 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `projects_create` | Create a project to group generations + assets |
 | `projects_get-all` / `projects_get` | List / get projects |
 | `projects_update` / `projects_delete` | Update or delete a project |
+
+`create-translate-and-dub` requires a saved video asset, accessible project,
+model, target language and persistent idempotency key. Confirm the paid action
+before calling it, then poll its generation ID through completion. The current
+`generate_estimate-cost` response covers lip-sync only, not additional dubbing
+charges. See the [workflow integration and release plan](docs/chatgpt-workflows.md)
+for the remaining combined-pricing and embedded UI work.
 
 ## Example Prompts
 
