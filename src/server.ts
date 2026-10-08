@@ -24,6 +24,7 @@ import type { SyncMcpConfig } from './config.js';
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
+import { createAccountContextTool } from './tools/account-context.js';
 import { createAppTools } from './tools/app-tools.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
@@ -36,11 +37,13 @@ const SERVER_DESCRIPTION =
   'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
 
 export const SERVER_INSTRUCTIONS =
+  'Use get-account-context to identify the connected organization before selecting existing media or confirming paid generation. Include its name in the cost confirmation. If it is the wrong organization, ask the user to reconnect Sync and select the intended organization. Never infer the connected organization from a previous conversation. ' +
   'When create-translate-and-dub is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generate_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ' +
   'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'get-account-context',
   'open-sync-app',
   'open-upload-widget',
   'upload-media',
@@ -62,6 +65,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'get-account-context',
   'upload-media',
   'create-lipsync',
   'create-translate-and-dub',
@@ -310,6 +314,7 @@ function createProfiledServer(
           ),
         ]
       : []),
+    createAccountContextTool(httpClient),
     createUploadWidgetTool(),
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
@@ -461,6 +466,7 @@ export async function createMcpServerFactory(
       translationOperation([operation]) !== undefined,
   );
   const registeredNames = new Set([
+    'get-account-context',
     ...(chatgptApp ? ['open-sync-app'] : []),
     'open-upload-widget',
     'upload-media',

@@ -479,3 +479,21 @@ trusted publishing for this repository, the `publish-npm.yml` workflow, and the
 `npm-release` GitHub environment before dispatch; no npm token is stored here.
 Keep that environment restricted to reviewed releases. A successful local build
 or plugin install is not publication or Claude directory approval.
+
+### Connected account and organization
+
+`get-account-context` returns the Sync account and organization bound to the
+current credentials, including the member role. It is read-only and creates no
+billable work. API-key connections return a null user account and the key's
+organization. Claude and other clients should use this result before choosing
+existing media or confirming paid generation, and include the organization name
+in the cost confirmation.
+
+Hosted OAuth connections show explicit account context, permissions and an
+organization choice when the API consent rollout is enabled. Changing the active
+organization in Studio does not change an OAuth connection; reconnect Sync to
+choose another organization. Local device-code login still uses its existing
+organization flow.
+
+Deploy the API's `/v2/oauth/account` endpoint before releasing this MCP update.
+Deploy the consent page before enabling `OAUTH_CONSENT_ENABLED` on the API.
