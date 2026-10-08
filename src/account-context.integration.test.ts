@@ -5,7 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
-import { createMcpServerFactory } from './server.js';
+import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 
 it('reports the credential-bound account through Claude tools without caching another request’s identity', async () => {
   const requests: string[] = [];
@@ -69,6 +69,59 @@ it('reports the credential-bound account through Claude tools without caching an
     expect(denied.isError).toBe(true);
     expect(denied.structuredContent).toMatchObject({ error: { status: 401 } });
     expect(requests).toEqual(Array(3).fill('GET /v2/oauth/account'));
+  } finally {
+    await client.close();
+    await server.close();
+    upstream.closeAllConnections();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
+it('reports the organization without a user for a local API-key connection', async () => {
+  const requests: Array<{ path?: string; key?: string | string[]; bearer?: string }> = [];
+  const organization = {
+    id: '00000000-0000-4000-8000-000000000002',
+    name: 'API team',
+    role: 'member',
+  };
+  const upstream = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api-json') {
+      res.end(JSON.stringify({ openapi: '3.0.0', paths: {} }));
+      return;
+    }
+    requests.push({
+      path: req.url,
+      key: req.headers['x-api-key'],
+      bearer: req.headers.authorization,
+    });
+    if (req.headers['x-api-key'] !== 'fixture-local-key') {
+      res.statusCode = 401;
+      res.end('{}');
+      return;
+    }
+    res.end(JSON.stringify({ account: null, organization }));
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+  const server = await createSyncMcpServer({
+    baseUrl,
+    transport: 'stdio',
+    apiKey: 'fixture-local-key',
+    port: 0,
+  });
+  const client = new Client({ name: 'claude-code', version: '1.0.0' });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const response = await client.callTool({ name: 'get-account-context', arguments: {} });
+    expect(response.isError).not.toBe(true);
+    expect(response.structuredContent).toEqual({ account: null, organization });
+    expect(requests).toEqual([
+      { path: '/v2/oauth/account', key: 'fixture-local-key', bearer: undefined },
+    ]);
   } finally {
     await client.close();
     await server.close();
