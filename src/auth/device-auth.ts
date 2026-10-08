@@ -30,8 +30,11 @@ export async function performDeviceAuth(
   baseUrl: string,
   log: (message: string) => void,
 ): Promise<DeviceAuthToken> {
+  let end = baseUrl.length;
+  while (end > 0 && baseUrl[end - 1] === '/') end--;
+  const endpoint = baseUrl.slice(0, end);
   const startedAt = Date.now();
-  const startResponse = await fetch(`${baseUrl.replace(/\/+$/, '')}/v2/device-auth/start`, {
+  const startResponse = await fetch(`${endpoint}/v2/device-auth/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ clientId: CLIENT_ID }),
@@ -57,7 +60,7 @@ export async function performDeviceAuth(
     if (Date.now() >= deadline) throw expired();
     const polledAt = Date.now();
     const pollResponse = await fetch(
-      `${baseUrl.replace(/\/+$/, '')}/v2/device-auth/poll?deviceCode=${encodeURIComponent(deviceCode)}`,
+      `${endpoint}/v2/device-auth/poll?deviceCode=${encodeURIComponent(deviceCode)}`,
       { signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, deadline - polledAt)) },
     );
     if (pollResponse.status === 404 || Date.now() >= deadline) throw expired();
