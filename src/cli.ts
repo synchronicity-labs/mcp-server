@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { clearToken } from './auth/token-store.js';
 import { resolveConfig } from './config.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const config = resolveConfig(parseArgs(args));
+
+  if (args.includes('--logout')) {
+    await clearToken(config.baseUrl);
+    process.stderr.write('Cached Sync login removed for this API.\n');
+    return;
+  }
 
   if (config.transport === 'stdio') {
     const server = await createSyncMcpServer(config);
@@ -61,6 +68,7 @@ Options:
   --base-url <url>    API base URL (default: https://api.sync.so)
   --transport <type>  stdio (default) or http
   --port <port>       HTTP port (default: 3002, only with --transport http)
+  --logout           Remove the cached login for this API and exit
   -h, --help          Show this help message
 `);
 }

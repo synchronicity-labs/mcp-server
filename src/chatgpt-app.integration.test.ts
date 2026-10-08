@@ -157,6 +157,7 @@ it.each([
 it.each([
   'openai-mcp',
   'openai-mcp (Codex)',
+  'claude',
 ])('serves the exact previous bundle to cached descriptors for %s', async (name) => {
   const previous = await releaseConfig();
   const current = await releaseConfig();
@@ -169,7 +170,11 @@ it.each([
   );
   const factory = await createMcpServerFactory({
     ...current,
-    chatgptApp: { ...current.chatgptApp, previousDirectories: [previous.chatgptApp.directory] },
+    chatgptApp: {
+      ...current.chatgptApp,
+      claudeMcpUrl: name === 'claude' ? 'https://mcp.sync.so/mcp' : undefined,
+      previousDirectories: [previous.chatgptApp.directory],
+    },
   });
   const server = factory.createServer();
   const client = new Client({ name, version: 'fixture' });
@@ -334,3 +339,62 @@ it.each([
     await server.close();
   }
 }, 2000);
+
+it('isolates opted-in Claude app metadata from ChatGPT and keeps OpenAI uploads unavailable', async () => {
+  const config = await releaseConfig();
+  const factory = await createMcpServerFactory({
+    ...config,
+    chatgptApp: { ...config.chatgptApp, claudeMcpUrl: 'https://mcp.sync.so/mcp' },
+  });
+  const sessions = await Promise.all(
+    ['claude', 'chatgpt', 'unknown'].map(async (name) => {
+      const server = factory.createServer();
+      const client = new Client({ name, version: 'fixture' });
+      const [ct, st] = InMemoryTransport.createLinkedPair();
+      await server.connect(st);
+      await client.connect(ct);
+      return { name, client, server };
+    }),
+  );
+  try {
+    const claude = sessions[0]!;
+    const chatgpt = sessions[1]!;
+    const generic = sessions[2]!;
+    const tools = (await claude.client.listTools()).tools;
+    const open = tools.find((tool) => tool.name === 'open-sync-app');
+    expect(open?._meta?.ui).toMatchObject({ resourceUri: `ui://sync/app-${digest}.html` });
+    expect(JSON.stringify(tools)).not.toContain('openai/');
+    expect(tools.map((tool) => tool.name)).not.toContain('upload-media');
+    const generate = tools.find((tool) => tool.name === 'create-lipsync');
+    expect(generate?._meta?.ui).toMatchObject({ visibility: ['model', 'app'] });
+    expect(generate?.inputSchema.properties).not.toHaveProperty('video');
+    expect(
+      (await claude.client.callTool({ name: 'open-sync-app', arguments: {} })).isError,
+    ).not.toBe(true);
+    expect((await claude.client.callTool({ name: 'upload-media', arguments: {} })).isError).toBe(
+      true,
+    );
+    await expect(claude.client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow();
+    const resource = (await claude.client.listResources()).resources[0]!;
+    expect(resource._meta?.ui).toMatchObject({
+      domain: '71524bf808b6d7c1ed1673fdc86c703a.claudemcpcontent.com',
+    });
+    const read = await claude.client.readResource({ uri: resource.uri });
+    expect(read.contents[0]).toMatchObject({ text: html, _meta: resource._meta });
+    expect(JSON.stringify(read)).not.toContain('openai/');
+    const other = await chatgpt.client.readResource({ uri: resource.uri });
+    expect(other.contents[0]!._meta).toMatchObject({
+      'openai/widgetDomain': 'https://sync.fixture.invalid',
+      ui: { domain: 'https://sync.fixture.invalid' },
+    });
+    expect((await generic.client.listResources()).resources).toEqual([]);
+    await expect(generic.client.readResource({ uri: resource.uri })).rejects.toThrow();
+  } finally {
+    await Promise.all(
+      sessions.map(async ({ client, server }) => {
+        await client.close();
+        await server.close();
+      }),
+    );
+  }
+});

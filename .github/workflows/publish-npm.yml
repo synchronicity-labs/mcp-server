@@ -1,0 +1,45 @@
+name: Publish npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Reviewed package version to publish from main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: npm-release
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Check requested release version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const plugin = JSON.parse(readFileSync('claude-plugin/.claude-plugin/plugin.json', 'utf8'));
+          if (pkg.version !== process.env.RELEASE_VERSION || pkg.version !== plugin.version) {
+            throw new Error('Requested, package, and plugin versions must match.');
+          }
+          JS
+      - run: npm ci --ignore-scripts
+      # prepublishOnly runs lint, typecheck, tests and build before publishing.
+      - run: npm publish --provenance --access public
