@@ -2,18 +2,19 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { clearToken } from './auth/token-store.js';
-import { resolveConfig } from './config.js';
+import { DEFAULT_CONFIG, resolveConfig } from './config.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const config = resolveConfig(parseArgs(args));
+  const overrides = parseArgs(args);
 
   if (args.includes('--logout')) {
-    await clearToken(config.baseUrl);
+    await clearToken(overrides.baseUrl ?? process.env.SYNC_BASE_URL ?? DEFAULT_CONFIG.baseUrl);
     process.stderr.write('Cached Sync login removed for this API.\n');
     return;
   }
+  const config = resolveConfig(overrides);
 
   if (config.transport === 'stdio') {
     const server = await createSyncMcpServer(config);
