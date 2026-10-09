@@ -67,7 +67,8 @@ jobs:
         with:
           role-to-assume: ${{ vars.EKS_READ_ROLE_ARN }}
           aws-region: us-east-1
-          allowed-account-ids: "428519446578"
+      - name: Require Product AWS account
+        run: test "$(aws sts get-caller-identity --query Account --output text)" = 428519446578
       - name: Install verified Argo CLI
         run: |
           version=v3.5.3
