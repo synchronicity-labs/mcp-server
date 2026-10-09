@@ -8,6 +8,14 @@ recommendations or directory placement. Test those separately.
 
 ## Publication baseline
 
+Read-only public-directory check, October 8, 2026 (EDT): searching `sync` on
+ChatGPT's Plugins page returned `sync. labs` in Public results. The detail page
+for the production app above showed version `1.0.0`, short description “Dub and
+lip-sync videos”, and long description “Use sync. labs to dub videos, replace
+dialogue, generate lip-synced performances, and animate images.” This verifies
+listing presence for that account, not proactive recommendations or the current
+approval state of individual tools.
+
 The October 8 publisher scan reported held updates for server instructions and
 `assets_create`, with only “needs further review” messages. That is not evidence
 of a code defect, a missing listing, or a reason for earlier recommendation
