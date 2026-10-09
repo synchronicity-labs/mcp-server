@@ -16,6 +16,14 @@ dialogue, generate lip-synced performances, and animate images.” This verifies
 listing presence for that account, not proactive recommendations or the current
 approval state of individual tools.
 
+The same public detail page's app tool catalog includes dialogue transcription,
+read and estimate tools, but omits `create-dialogue-preview` and
+`create-dialogue-video`. The connected tool inventory in the audit chat also
+omits these two names. This is an observed publication/availability gap, not a
+diagnosed cause: inspect those definitions in the publisher view before claiming
+full public Dialogue acceptance. `voices_clone-voice` is also absent, as expected
+before the separate hosted-cloning change.
+
 The October 8 publisher scan reported held updates for server instructions and
 `assets_create`, with only “needs further review” messages. That is not evidence
 of a code defect, a missing listing, or a reason for earlier recommendation
