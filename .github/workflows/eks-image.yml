@@ -1,0 +1,112 @@
+name: MCP EKS image
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full reviewed source SHA on main
+        required: true
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: mcp-eks-image
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    environment: eks-dev
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      IMAGE: 428519446578.dkr.ecr.us-east-1.amazonaws.com/sync-product/mcp-server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r scripts/eks/requirements.txt
+      - name: Require protected environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PYTHONPATH=scripts/eks python -c 'from release import validate_environment; validate_environment("dev")'
+      - name: Validate and check out source
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          git checkout --detach "$SOURCE_SHA"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.EKS_PUBLISH_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Require Product AWS account
+        run: test "$(aws sts get-caller-identity --query Account --output text)" = 428519446578
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Require immutable registry
+        run: |
+          aws ecr describe-repositories --repository-names sync-product/mcp-server \
+            --query 'repositories[0].imageTagMutability' --output text | grep -x IMMUTABLE
+      - name: Build and inspect final runtime
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # Retry a partially completed multi-architecture run without overwriting tags.
+          aws ecr batch-get-image --repository-name sync-product/mcp-server \
+            --image-ids "imageTag=sha-$SOURCE_SHA-$ARCH" > "$RUNNER_TEMP/existing.json"
+          if jq -e '.images | length == 1' "$RUNNER_TEMP/existing.json" >/dev/null; then
+            docker pull "$IMAGE:sha-$SOURCE_SHA-$ARCH"
+            test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE:sha-$SOURCE_SHA-$ARCH")" = "$SOURCE_SHA"
+            publish=false
+          else
+            jq -e '.failures | length == 1 and .[0].failureCode == "ImageNotFound"' "$RUNNER_TEMP/existing.json"
+            docker build --label "org.opencontainers.image.revision=$SOURCE_SHA" -t "$IMAGE:sha-$SOURCE_SHA-$ARCH" .
+            publish=true
+          fi
+          docker run --rm -i --network none --read-only --user 1000:1000 --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges --entrypoint node \
+            "$IMAGE:sha-$SOURCE_SHA-$ARCH" --input-type=module - /app/chatgpt-dist --require-image-config \
+            < scripts/verify-chatgpt-package.mjs
+          if [ "$publish" = true ]; then docker push "$IMAGE:sha-$SOURCE_SHA-$ARCH"; fi
+  publish:
+    needs: build
+    environment: eks-dev
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      IMAGE: 428519446578.dkr.ecr.us-east-1.amazonaws.com/sync-product/mcp-server
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.EKS_PUBLISH_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Require Product AWS account
+        run: test "$(aws sts get-caller-identity --query Account --output text)" = 428519446578
+      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Publish index and receipt
+        run: |
+          docker buildx imagetools create -t "$IMAGE:sha-$SOURCE_SHA" \
+            "$IMAGE:sha-$SOURCE_SHA-amd64" "$IMAGE:sha-$SOURCE_SHA-arm64"
+          digest=$(aws ecr describe-images --repository-name sync-product/mcp-server \
+            --image-ids "imageTag=sha-$SOURCE_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          jq -n --arg source "$SOURCE_SHA" --arg image "$IMAGE@$digest" \
+            '{source_sha:$source,image:$image}' > image-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcp-eks-image-${{ inputs.source_sha }}
+          path: image-receipt.json
