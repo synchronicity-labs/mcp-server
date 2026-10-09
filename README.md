@@ -207,6 +207,9 @@ Options:
 | `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
 | `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
 | `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
+| `MCP_REPLICA_SERVICE` | Headless peer service FQDN; enables session and upload owner routing | unset |
+| `MCP_REPLICA_PORT` | Internal MCP peer HTTP port | `PORT` or `3002` |
+| `MCP_REPLICA_IP` | Private IPv4 pod address when Porter does not supply `PORTER_POD_IP` | unset |
 | `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `1800000` (30 min) |
 | `MCP_MAX_SESSIONS` | Maximum active and initializing HTTP sessions | `1000` |
 | `MCP_SESSION_SWEEP_INTERVAL_MS` | Interval for idle-session cleanup | `60000` (1 min) |
@@ -439,10 +442,12 @@ and streams only to the configured HTTPS storage origin under the existing uploa
 concurrency and timeout limits. Browser relay uploads support the API single-PUT
 maximum of 5 GiB; the 512 MiB download limit still applies to rehosting ChatGPT
 attachments. Legacy presign responses without an expiry receive a five-minute ticket.
-Tickets are process-local: the MCP session and its upload must reach the same instance.
-A restart invalidates outstanding tickets; the client can request a new upload. Multi-instance
-release routing must account for this before enabling the relay in production. The widget
-origin must also route `/app-upload` to that instance and appear in connect domains.
+Tickets are process-local. With replica routing enabled, sessions and uploads reaching
+any pod are forwarded to their owner. A restart invalidates outstanding tickets; the
+client must request a new upload. See [multi-replica setup](docs/multi-replica.md) for
+the required headless service, environment configuration, rollout and recovery checks.
+Without that setup, use a single instance or independently verified owner routing.
+The widget origin must route `/app-upload` to this deployment and appear in connect domains.
 
 OAuth verification reuses successful results for at most 15 seconds and never beyond
 token expiry. Concurrent checks are deduplicated; successful revocation clears this

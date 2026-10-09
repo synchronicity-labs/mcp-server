@@ -23,6 +23,11 @@ import { oauthFailureDiagnostics, oauthGrantType } from './auth/oauth-diagnostic
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { readOAuthResponseText } from './oauth-response.js';
+import {
+  createReplicaId,
+  createReplicaRouter,
+  getReplicaRoutingConfig,
+} from './replica-routing.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry, sessionOwner } from './session-registry.js';
 import { uploadRuntime } from './upload-runtime.js';
@@ -248,6 +253,7 @@ export async function startHttpServer(
     );
   };
   const requestMetrics = new HttpRequestMetrics();
+  const replicaConfig = getReplicaRoutingConfig();
 
   const app = express();
   app.set('trust proxy', 1);
@@ -318,7 +324,7 @@ export async function startHttpServer(
   if (config.chatgptApp?.uploadStorageOrigin) {
     // No user bearer token enters the browser. The single-use ticket is issued only
     // after the authenticated assets/upload call has checked the account's limits.
-    app.put('/app-upload', appUploadHandler);
+    app.put('/app-upload', createReplicaRouter('upload', replicaConfig), appUploadHandler);
   }
 
   // Health check (unauthenticated)
@@ -566,10 +572,18 @@ export async function startHttpServer(
   sessionSweepInterval.unref();
 
   // JSON body parsing for MCP requests
-  app.use('/mcp', express.json());
+  // Authenticate before routing; only the owning pod parses/dispatches JSON.
+  // Keeping the body as a stream preserves upload backpressure and cancellation.
+  app.use(
+    '/mcp',
+    mcpRateLimit,
+    bearerAuth,
+    createReplicaRouter('mcp', replicaConfig),
+    express.json(),
+  );
 
   let shuttingDown = false;
-  app.all('/mcp', mcpRateLimit, bearerAuth, async (req, res) => {
+  app.all('/mcp', async (req, res) => {
     const token = req.auth?.token;
     if (!token) {
       res.status(401).json({ error: 'Missing auth token' });
@@ -611,7 +625,7 @@ export async function startHttpServer(
         }
 
         transport = createHttpMcpTransport({
-          sessionIdGenerator: () => randomUUID(),
+          sessionIdGenerator: () => createReplicaId(replicaConfig),
           onsessioninitialized: (sessionId) => {
             if (!reservation) {
               throw new Error('MCP session initialized without a capacity reservation');
