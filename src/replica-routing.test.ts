@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import type { IncomingMessage, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { setImmediate } from 'node:timers/promises';
+import { gzipSync } from 'node:zlib';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
@@ -17,7 +19,7 @@ import { SessionRegistry } from './session-registry.js';
 const network = vi.hoisted(() => ({
   ports: new Map<string, number>(),
   targets: [] as string[],
-  headers: [] as import('node:http').OutgoingHttpHeaders[],
+  headers: [] as import('node:http').RequestOptions['headers'][],
   storagePort: 0,
 }));
 vi.mock('node:http', async () => {
@@ -239,6 +241,74 @@ async function initialize(pod = 0) {
   await res.text();
   return res.headers.get('mcp-session-id')!;
 }
+it('preserves compressed MCP bodies when entering a different replica', async () => {
+  const id = await initialize();
+  for (const pod of [0, 3]) {
+    const response = await fetch(`${urls[pod]}/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer owner',
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+        'content-encoding': 'gzip',
+        'mcp-session-id': id,
+      },
+      body: gzipSync(JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/list' })),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      result: { tools: expect.arrayContaining([expect.objectContaining({ name: 'echo' })]) },
+    });
+  }
+});
+it('does not forward after the client disconnects during peer discovery', async () => {
+  const id = await initialize();
+  let release!: (addresses: string[]) => void;
+  let started!: () => void;
+  let closed!: () => void;
+  const discovering = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const disconnected = new Promise<void>((resolve) => {
+    closed = resolve;
+  });
+  const discovery = new Promise<string[]>((resolve) => {
+    release = resolve;
+  });
+  const app = express();
+  app.use((_req, res, next) => {
+    res.once('close', closed);
+    next();
+  });
+  app.use(
+    '/mcp',
+    createReplicaRouter(
+      'mcp',
+      {
+        address: addresses[4]!,
+        service: 'mcp-peers.default.svc.cluster.local',
+        port: 3002,
+      },
+      () => {
+        started();
+        return discovery;
+      },
+    ),
+  );
+  const port = ((await listen(app)).address() as AddressInfo).port;
+  const controller = new AbortController();
+  const result = fetch(`http://127.0.0.1:${port}/mcp`, {
+    signal: controller.signal,
+    headers: { 'mcp-session-id': id },
+  }).catch((error) => error);
+  await discovering;
+  controller.abort();
+  await disconnected;
+  release([...addresses]);
+  await result;
+  await setImmediate();
+  expect(network.targets).toEqual([]);
+});
 it('keeps initialize, notifications, tools, refreshed auth and DELETE on the owner across five replicas', async () => {
   const id = await initialize(2);
   expect((await rpc(0, id, { jsonrpc: '2.0', method: 'notifications/initialized' })).status).toBe(
@@ -338,8 +408,9 @@ it('routes a bounded single-use upload to its issuing pod and denies concurrent 
   expect(putBytes).toBe('hello');
   expect(putCount).toBe(1);
   for (const headers of network.headers) {
-    expect(headers.authorization).toBeUndefined();
-    expect(headers['x-untrusted']).toBeUndefined();
+    expect(Array.isArray(headers)).toBe(false);
+    expect(headers).not.toHaveProperty('authorization');
+    expect(headers).not.toHaveProperty('x-untrusted');
   }
 });
 it('fails closed for departed owners, discovery failures, foreign destinations and routing loops', async () => {

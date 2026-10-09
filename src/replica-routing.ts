@@ -112,7 +112,13 @@ export function createReplicaRouter(
       res.status(503).json({ error: 'Replica discovery unavailable. Retry later.' });
       return;
     }
+    // Discovery can outlive the client. Do not start an orphaned operation.
+    if (req.aborted || res.destroyed) return;
     const headers: Record<string, string | string[]> = { [FORWARDED]: '1' };
+    // JSON parsing happens on the owner, so preserve compression of the raw body.
+    if (kind === 'mcp' && req.headers['content-encoding'] !== undefined) {
+      headers['content-encoding'] = req.headers['content-encoding'];
+    }
     for (const name of REQUEST_HEADERS) {
       if (kind === 'upload' && name === 'authorization') continue;
       const value = req.headers[name];
