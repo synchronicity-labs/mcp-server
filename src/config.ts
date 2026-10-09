@@ -10,6 +10,7 @@ export type SyncMcpConfig = {
     directory: string;
     previousDirectories?: string[];
     domain: string;
+    claudeMcpUrl?: string;
     resourceDomains: string[];
     connectDomains?: string[];
     uploadStorageOrigin?: string;
@@ -52,6 +53,7 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
         ? {
             ...release,
             domain: process.env.SYNC_CHATGPT_APP_DOMAIN ?? '',
+            claudeMcpUrl: process.env.SYNC_CLAUDE_APP_MCP_URL,
             uploadStorageOrigin: process.env.SYNC_APP_UPLOAD_STORAGE_ORIGIN,
             uploadOrigins: process.env.SYNC_APP_UPLOAD_ORIGINS
               ? JSON.parse(process.env.SYNC_APP_UPLOAD_ORIGINS)

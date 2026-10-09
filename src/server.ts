@@ -8,10 +8,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { relayUploadTool } from './app-upload-relay.js';
-import { createApiKeyAuth } from './auth/api-key.js';
-import { performDeviceAuth } from './auth/device-auth.js';
-import { loadToken } from './auth/token-store.js';
-import { type ChatgptApp, createOpenSyncAppTool, loadChatgptAppReleases } from './chatgpt-app.js';
+import { resolveLocalAuth } from './auth/local-auth.js';
+import {
+  appMetadataForClient,
+  type ChatgptApp,
+  createOpenSyncAppTool,
+  loadChatgptAppReleases,
+} from './chatgpt-app.js';
 import {
   type ClientProfile,
   resolveClientProfile,
@@ -234,7 +237,7 @@ export function selectHostedHttpTools(
     .map((tool) => presentTool(tool, profile));
 }
 
-function exposeToolToWidget(tool: McpToolDefinition): McpToolDefinition {
+function exposeToolToWidget(tool: McpToolDefinition, openai = true): McpToolDefinition {
   const meta = tool.meta ?? {};
   const ui = asRecord(meta.ui);
   return {
@@ -245,7 +248,7 @@ function exposeToolToWidget(tool: McpToolDefinition): McpToolDefinition {
         ...ui,
         visibility: ['model', 'app'],
       },
-      'openai/widgetAccessible': true,
+      ...(openai ? { 'openai/widgetAccessible': true } : {}),
     },
   };
 }
@@ -280,16 +283,14 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
       .optional()
       .describe('Public or Sync-hosted video URL. Supply exactly one visual input.');
   }
-  const meta = profile.supportsAppUi
-    ? tool.meta
-    : Object.fromEntries(
-        Object.entries(tool.meta ?? {}).filter(
-          ([key]) => !key.startsWith('openai/') && key !== 'ui',
-        ),
-      );
+  const meta = Object.fromEntries(
+    Object.entries(tool.meta ?? {}).filter(
+      ([key]) => !key.startsWith('openai/') && (profile.supportsAppUi || key !== 'ui'),
+    ),
+  );
   const presented = { ...tool, inputSchema, description, meta };
   return profile.supportsAppUi && WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name)
-    ? exposeToolToWidget(presented)
+    ? exposeToolToWidget(presented, false)
     : presented;
 }
 
@@ -400,7 +401,7 @@ function createProfiledServer(
               uri: app.uri,
               mimeType: app.metadata.mimeType,
               text: app.html,
-              _meta: app.metadata._meta,
+              _meta: appMetadataForClient(app, getProfile())._meta,
             },
           ],
         };
@@ -413,15 +414,24 @@ function createProfiledServer(
     return { tools: descriptors };
   });
   server.server.setRequestHandler(ListResourcesRequestSchema, () => ({
-    resources: resources.filter((resource) =>
-      resource.name === 'sync-app' ? getProfile().supportsAppUi : getProfile().supportsUploads,
-    ),
+    resources: resources
+      .filter((resource) =>
+        resource.name === 'sync-app' ? getProfile().supportsAppUi : getProfile().supportsUploads,
+      )
+      .map((resource) =>
+        resource.name === 'sync-app' && chatgptApp
+          ? { ...resource, ...appMetadataForClient(chatgptApp, getProfile()) }
+          : resource,
+      ),
   }));
   const onInitialized = server.server.oninitialized;
   server.server.oninitialized = () => {
     if (!profile) {
       clientName = server.server.getClientVersion()?.name;
-      const initializedProfile = resolveClientProfile(clientName);
+      const initializedProfile = resolveClientProfile(
+        clientName,
+        Boolean(chatgptApp?.claudeDomain),
+      );
       profile = initializedProfile;
       const visible =
         config.transport === 'http'
@@ -450,7 +460,7 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   const log = (message: string) => {
     process.stderr.write(message);
   };
-  const authHeaders = config.transport === 'http' ? {} : await resolveAuth(config, log);
+  const authHeaders = config.transport === 'http' ? {} : await resolveLocalAuth(config, log);
   const operations = parseSpec(await fetchSpec(config.baseUrl));
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
   return createProfiledServer(config, operations, authHeaders, chatgptApp, previousApps);
@@ -487,26 +497,4 @@ export async function createMcpServerFactory(
     toolCount: registeredNames.size,
     createServer: () => createProfiledServer(config, operations, {}, chatgptApp, previousApps),
   };
-}
-
-async function resolveAuth(
-  config: SyncMcpConfig,
-  log: (message: string) => void,
-): Promise<Record<string, string>> {
-  if (config.apiKey) {
-    log('Using API key authentication\n');
-    return createApiKeyAuth(config.apiKey).headers;
-  }
-
-  const cachedToken = await loadToken();
-  if (cachedToken) {
-    log('Using cached device auth token\n');
-    return {
-      Authorization: `Bearer ${cachedToken}`,
-    };
-  }
-
-  log('No API key or cached token found. Starting device auth...\n');
-  const auth = await performDeviceAuth(config.baseUrl, log);
-  return auth.headers;
 }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { resolveSyncSource } from './http-client.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createHttpClient, resolveSyncSource } from './http-client.js';
 
 describe('resolveSyncSource', () => {
   it('maps flagship assistant clients to first-class sources', () => {
@@ -22,4 +22,34 @@ describe('resolveSyncSource', () => {
   it('falls back to bare mcp when no client name is known', () => {
     expect(resolveSyncSource(undefined)).toBe('mcp');
   });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+it.each([
+  'claude',
+  'claude-ai',
+  'chatgpt',
+  'openai',
+  'gemini',
+])('keeps bearer authentication compatible with the deployed API for %s', async (name) => {
+  vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    // The API selects its bearer auth path only for mcp and mcp:* sources.
+    if (
+      headers.get('authorization') === 'Bearer session' &&
+      headers.get('x-sync-source')?.startsWith('mcp:')
+    ) {
+      return Response.json([{ name: 'sync-3' }]);
+    }
+    return Response.json(
+      { message: 'Either Cookie or x-api-key header must be provided' },
+      { status: 401 },
+    );
+  });
+  const client = createHttpClient(
+    'https://fixture.invalid',
+    { Authorization: 'Bearer session' },
+    () => name,
+  );
+  await expect(client.request('get', '/v2/models')).resolves.toEqual([{ name: 'sync-3' }]);
 });

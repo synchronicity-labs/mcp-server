@@ -33,7 +33,7 @@ const CLAUDE: ClientProfile = Object.freeze({
 });
 
 /** Presentation only. These untrusted handshake names never grant permissions. */
-export function resolveClientProfile(name?: string): ClientProfile {
+export function resolveClientProfile(name?: string, claudeAppEnabled = false): ClientProfile {
   switch (name?.toLowerCase()) {
     case 'chatgpt':
     case 'openai':
@@ -44,7 +44,7 @@ export function resolveClientProfile(name?: string): ClientProfile {
       return CODEX;
     case 'claude':
     case 'claude-ai':
-      return CLAUDE;
+      return claudeAppEnabled ? Object.freeze({ ...CLAUDE, supportsAppUi: true }) : CLAUDE;
     // Muse remains generic until Meta documentation or a real handshake verifies its alias.
     default:
       return GENERIC;

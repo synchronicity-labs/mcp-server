@@ -2,7 +2,7 @@
 
 An open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for the [Sync](https://sync.so) API. Gives AI agents the ability to create lipsync videos, manage assets, check generation status, and more.
 
-Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API endpoints ship, they become available to agents automatically — no server update needed.
+Tools are **auto-generated from the Sync OpenAPI spec** at startup. Local stdio exposes generated operations. The hosted service keeps a curated allowlist, so new endpoints are not automatically exposed there.
 
 ## Supported Clients
 
@@ -23,7 +23,7 @@ Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API e
 
 No installation required — connect directly from your browser.
 
-1. Go to [claude.ai](https://claude.ai) → **Settings** → **Integrations**
+1. Go to [claude.ai](https://claude.ai) → **Customize** → **Connectors**
 2. Click **Add custom connector**
 3. Enter **Name:** `Sync` and **URL:** `https://mcp.sync.so/mcp`
 4. Click **Add**, then **Connect**
@@ -33,25 +33,34 @@ No API key needed — authentication is handled via OAuth.
 
 ### Claude Code
 
+Use the maintained remote server with OAuth:
+
 ```bash
-claude mcp add sync -- npx -y @sync.so/mcp-server --api-key YOUR_API_KEY
+claude mcp add --transport http sync https://mcp.sync.so/mcp
 ```
 
-Or add to `.mcp.json` in your project root:
+Open `/mcp` in Claude Code and authenticate Sync. Do not also install the plugin
+below if you already configured the same server, unless you remove that duplicate.
 
-```json
-{
-  "mcpServers": {
-    "sync": {
-      "command": "npx",
-      "args": ["-y", "@sync.so/mcp-server"],
-      "env": {
-        "SYNC_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
+The repository also packages a Claude Code plugin with workflow guidance and
+that same remote connector. To test the local checkout:
+
+```bash
+claude plugin validate ./claude-plugin
+claude --plugin-dir ./claude-plugin
 ```
+
+After this version is merged into the repository's default branch, install it
+from the Sync-managed marketplace:
+
+```text
+/plugin marketplace add synchronicity-labs/mcp-server
+/plugin install sync@sync-plugins
+```
+
+This is a self-managed marketplace, not an Anthropic directory approval. Local
+stdio remains available using `npx -y @sync.so/mcp-server` and either device
+login or the `SYNC_API_KEY` environment variable.
 
 ### Claude Desktop
 
@@ -104,7 +113,12 @@ Omit `SYNC_API_KEY` and the server will start a device auth flow on first run:
 }
 ```
 
-You'll be prompted to visit a URL and enter a code. After approval, the token is cached at `~/.config/sync/mcp-credentials.json`.
+You'll be prompted to visit a URL and approve a short-lived code. The server honors the API polling interval and stops when the code expires. Credentials are stored with private permissions in API-specific `~/.config/sync/mcp-credentials-<hash>.json` files. Version 0.2.0 requires one fresh login rather than reusing the old unscoped cache.
+
+Run `sync-mcp --logout` to remove the production API's local cached login, or
+`sync-mcp --base-url https://your-api.example --logout` for another environment.
+This removes local credentials; it does not revoke your browser session.
+Restart the client after logging out to authenticate again.
 
 ## Getting an API Key
 
@@ -143,9 +157,9 @@ Tools are dynamically generated from the Sync API. Core tools include:
 
 `create-translate-and-dub` requires a saved video asset, accessible project,
 model, target language and persistent idempotency key. Confirm the paid action
-before calling it, then poll its generation ID through completion. The current
-`generate_estimate-cost` response covers lip-sync only, not additional dubbing
-charges. See the [workflow integration and release plan](docs/chatgpt-workflows.md)
+before calling it, then poll its generation ID through completion. Request `generate_estimate-cost` with `workflow=translate-and-dub` when supported
+and require its returned combined breakdown. Without that field and breakdown,
+the quote covers lip-sync only. Disclose external charges excluded from the quote. See the [workflow integration and release plan](docs/chatgpt-workflows.md)
 for the remaining combined-pricing and embedded UI work.
 
 ### Edit Dialogue
@@ -188,6 +202,7 @@ Options:
   --base-url <url>    API base URL (default: https://api.sync.so)
   --transport <type>  stdio (default) or http
   --port <port>       HTTP port (default: 3002, only with --transport http)
+  --logout           Remove the cached login for this API and exit
   -h, --help          Show this help message
 ```
 
@@ -203,6 +218,7 @@ Options:
 | `SYNC_CHATGPT_APP_CONNECT_DOMAINS` | JSON array of exact HTTPS origins for uploads and media extraction | `[]` |
 | `SYNC_APP_UPLOAD_ORIGINS` | JSON array of exact HTTPS browser origins allowed to upload | widget domain and `https://web-sandbox.oaiusercontent.com` |
 | `SYNC_APP_UPLOAD_STORAGE_ORIGIN` | Exact HTTPS storage origin allowed for the one-use upload relay; unset uses direct presigned uploads | unset |
+| `SYNC_CLAUDE_APP_MCP_URL` | Opt-in Claude app presentation: exact public MCP endpoint URL, used to derive its sandbox domain. Leave unset until durable recovery and real-client acceptance pass | unset |
 | `SYNC_CHATGPT_APP_DOMAIN` | Exact HTTPS widget origin for the configured app | required when app is configured |
 | `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
 | `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
@@ -453,3 +469,33 @@ than blocking unrelated accounts or treating temporary errors as invalid tokens.
 `npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
 storage. Install Chromium with `npx playwright install chromium` first. This does not
 prove live authenticated storage delivery or authorize a production rollout.
+
+## Claude app rollout
+
+`SYNC_CLAUDE_APP_MCP_URL` enables standard app tools/resources for the exact
+Claude aliases. It does not enable the OpenAI attachment bridge. The app resource
+uses the [Claude sandbox domain format](https://claude.com/docs/connectors/building/mcp-apps/getting-started)
+and omits OpenAI metadata. ChatGPT keeps its existing metadata and uploads,
+including when both hosts read the same current or retained artifact.
+
+Keep this opt-in unset in production until the shared frontend supports durable
+recovery without `window.openai` and the real Claude upload/generation/download
+acceptance passes. This change prepares resource presentation; it does not make
+the currently packaged ChatGPT-only recovery flow ready for paid Claude UI use.
+
+The existing `SYNC_CHATGPT_APP_DOMAIN` remains the upload relay HTTP origin.
+The Claude sandbox hostname must never replace it. Configure the exact HTTPS
+Claude sandbox origin separately in `SYNC_APP_UPLOAD_ORIGINS` (and storage CORS
+for direct uploads). Media CSP still requires every playback redirect origin.
+Do not change the canonical MCP URL's trailing slash when computing its hash.
+
+## npm release
+
+Version 0.2.0 is a release candidate until published. Run all verification and
+`npm pack --dry-run`, then create a release from the reviewed commit on `main`.
+The manual **Publish npm** workflow checks the requested version against the
+package and plugin, runs the tests, and publishes with provenance. Configure npm
+trusted publishing for this repository, the `publish-npm.yml` workflow, and the
+`npm-release` GitHub environment before dispatch; no npm token is stored here.
+Keep that environment restricted to reviewed releases. A successful local build
+or plugin install is not publication or Claude directory approval.

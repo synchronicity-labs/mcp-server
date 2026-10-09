@@ -15,6 +15,9 @@ Hosted endpoint: `https://mcp.sync.so/mcp`
 - [x] Client-specific default projects for ChatGPT and Claude
 - [x] Public setup instructions for Claude custom connectors
 
+See [Claude acceptance and rollout](claude-acceptance.md) for October 8 live
+connectivity evidence, the opt-in app metadata, and outstanding launch gates.
+
 ## Before Submission
 
 - [ ] Receive Anthropic's written exception for AI video generation under section 4.B of the Software Directory Policy
