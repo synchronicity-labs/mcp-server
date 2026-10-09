@@ -34,6 +34,7 @@ const SERVER_DESCRIPTION =
   'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
 
 export const SERVER_INSTRUCTIONS =
+  'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
   'Edit Dialogue uses timed transcript word edits/removals and an audio preview in the original speaker voice, followed by create-dialogue-video. Do not substitute full-script TTS. Use the dedicated dialogue tools when available. ' +
   'When create-translate-and-dub is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generate_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ' +
   'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
@@ -54,6 +55,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'create-translate-and-dub',
   'get-translation-options',
   'voices_get-voices',
+  'voices_clone-voice',
   'generate_get-generation',
   'models_get',
   'projects_get-all',

@@ -170,6 +170,30 @@ publisher metadata and verify the actual ChatGPT flow before claiming acceptance
 
 ## Example Prompts
 
+### Reusable voice cloning in ChatGPT
+
+When the connected API exposes voice cloning, hosted clients can call
+`voices_clone-voice`. Ask: “Save a reusable clone of my voice from this sample,
+called My narration.” Confirm permission to clone the speaker, the sample and
+the name before creating it. Plan limits and provider requirements still apply.
+
+1. Upload an audio/video sample in Sync, or upload and register it with the asset
+   tools. Reuse its `assetId`; alternatively provide a Sync-hosted `url`.
+2. List existing voices first to avoid unnecessary duplicates. Clone with
+   `name`, `provider: elevenlabs` and exactly one sample source.
+3. Use the returned **`id`** as `voiceId` in `create-lipsync` with `script`.
+   The separate provider-specific `voiceId` field is not the Sync identifier.
+4. Review the video estimate and confirm generation separately.
+
+This exposes the conversational tool flow, not a new clone form in the embedded
+UI. It does not enable hosted voice deletion or standalone TTS. Edit Dialogue's
+original-speaker previews remain a different workflow.
+
+The API enforces sample validity, asset access, plan slots, provider access and
+duplicate names. On a failed or lost response, do not automatically retry:
+list voices, reconcile the result and explain uncertainty to the user. See
+[voice-cloning acceptance](docs/chatgpt-voice-cloning.md) before publication.
+
 Once configured, ask your AI agent:
 
 - *"List available Sync models"*
