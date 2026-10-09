@@ -26,7 +26,9 @@ afterEach(async () => {
   }
 });
 
-async function fixture(options: { available?: boolean; status?: number; code?: string } = {}) {
+async function fixture(
+  options: { available?: boolean; status?: number; code?: string; dropResponse?: boolean } = {},
+) {
   const calls: Array<{
     method: string;
     path: string;
@@ -61,6 +63,23 @@ async function fixture(options: { available?: boolean; status?: number; code?: s
                                 assetId: { type: 'string', format: 'uuid' },
                                 url: { type: 'string', format: 'uri' },
                               },
+                              // The live API puts the exclusive sample sources in allOf/oneOf.
+                              allOf: [
+                                {
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      properties: { url: { type: 'string', format: 'uri' } },
+                                      required: ['url'],
+                                    },
+                                    {
+                                      type: 'object',
+                                      properties: { assetId: { type: 'string', format: 'uuid' } },
+                                      required: ['assetId'],
+                                    },
+                                  ],
+                                },
+                              ],
                             },
                           },
                         },
@@ -85,6 +104,10 @@ async function fixture(options: { available?: boolean; status?: number; code?: s
       source: req.headers['x-sync-source'] as string | undefined,
     });
     if (req.url === '/v2/voices' && req.method === 'POST') {
+      if (options.dropResponse) {
+        res.destroy();
+        return;
+      }
       res.statusCode = options.status ?? 201;
       if (options.code) res.setHeader('Retry-After', '60');
       res.end(
@@ -183,6 +206,28 @@ it('passes a Sync-hosted sample URL verbatim for API validation', async () => {
   });
   expect(result.isError).not.toBe(true);
   expect(calls[0]?.body).toEqual({ name: input.name, provider: input.provider, url });
+});
+
+it.each([
+  {},
+  { assetId, url: 'https://storage.fixture.invalid/sample.wav' },
+  { assetId: 'not-an-id' },
+  { url: 'not-a-url' },
+])('rejects missing or ambiguous clone samples before sending a write: %j', async (sample) => {
+  const { calls, call } = await fixture();
+  const result = await call('voices_clone-voice', {
+    name: input.name,
+    provider: input.provider,
+    ...sample,
+  });
+  expect(result.isError).toBe(true);
+  expect(calls).toHaveLength(0);
+});
+
+it('does not repeat a clone when the API receives the write but loses its response', async () => {
+  const { calls, call } = await fixture({ dropResponse: true });
+  expect((await call('voices_clone-voice', input)).isError).toBe(true);
+  expect(calls).toHaveLength(1);
 });
 
 it.each([

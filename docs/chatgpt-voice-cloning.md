@@ -5,6 +5,13 @@ the operation. The existing generated API schema and request-scoped OAuth client
 remain in use. The API remains authoritative for access, plan and sample checks.
 There is no new frontend bundle or voice-cloning form in this change.
 
+The live API schema was read without authentication or writes on October 8,
+2026 (EDT). It exposes `POST /v2/voices` with `name`, `provider: elevenlabs`, and
+an `allOf/oneOf` choice of `url` or `assetId`. The generic converter incorrectly
+made both alternatives required. The clone-specific descriptor now leaves the
+alternatives optional individually and the handler validates exactly one valid
+URL or UUID before sending a request. Tests use that observed composed schema.
+
 ## Verification layers
 
 - MCP fixture tests: initialize as `openai-mcp`, discover cloning, submit one

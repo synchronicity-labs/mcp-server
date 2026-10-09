@@ -30,6 +30,21 @@ type RawMcpToolDefinition = McpToolBaseDefinition & {
 
 export type McpToolDefinition = JsonMcpToolDefinition | RawMcpToolDefinition;
 
+const voiceCloneSourceSchema = z
+  .object({
+    url: z
+      .url()
+      .optional()
+      .describe('Sync-hosted audio/video sample URL. Supply url or assetId, not both.'),
+    assetId: z
+      .uuid()
+      .optional()
+      .describe('Accessible audio/video sample asset ID. Supply assetId or url, not both.'),
+  })
+  .refine((input) => (input.url !== undefined) !== (input.assetId !== undefined), {
+    message: 'Provide exactly one of url or assetId for a voice sample.',
+  });
+
 export function generateTools(
   operations: ParsedOperation[],
   httpClient: HttpClient,
@@ -63,6 +78,11 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
   const description = override?.description ?? truncate(operation.summary, 200);
 
   const inputSchema = buildInputSchema(operation);
+  if (name === 'voices_clone-voice') {
+    // Flattening the API's allOf/oneOf alternatives makes both sources required.
+    // Keep the descriptor flat, then enforce the exclusive choice before writing.
+    Object.assign(inputSchema, voiceCloneSourceSchema.shape);
+  }
 
   return {
     name,
@@ -72,6 +92,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     outputSchema: override?.outputSchema,
     annotations: deriveAnnotations(operation.method, name),
     handler: async (args, context) => {
+      if (name === 'voices_clone-voice') voiceCloneSourceSchema.parse(args);
       const path = buildPath(operation.path, args);
       const query = buildQuery(operation.parameters, args);
       const body = buildBody(operation, args);
