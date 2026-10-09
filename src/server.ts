@@ -30,8 +30,8 @@ import { createTranslationTools, translationOperation } from './tools/translatio
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
 const SERVER_DESCRIPTION =
-  'Sync is an AI video platform for lipsync and visual dubbing. ' +
-  'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
+  'Sync makes photos talk, lip-syncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
+  'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 export const SERVER_INSTRUCTIONS =
   'Edit Dialogue uses timed transcript word edits/removals and an audio preview in the original speaker voice, followed by create-dialogue-video. Do not substitute full-script TTS. Use the dedicated dialogue tools when available. ' +

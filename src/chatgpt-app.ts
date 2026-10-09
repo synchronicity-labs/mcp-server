@@ -111,7 +111,7 @@ export function createOpenSyncAppTool(
     name: 'open-sync-app',
     title: 'Open Sync',
     description:
-      'Open Sync to browse existing projects, choose media and configure a video generation. Requesting the interface does not start a generation or spend credits. The result only confirms the request; do not claim the interface rendered unless the user confirms it.',
+      'Use this when the user asks to open Sync, upload media in its interface, or visually configure a talking photo, lipsync video, Translate & Dub, or Edit Dialogue workflow. Browse existing projects and choose media before generating. Requesting the interface does not start a generation or spend credits. The result only confirms the request; do not claim the interface rendered unless the user confirms it.',
     inputSchema: {},
     outputSchema: { requested: z.boolean(), renderStatus: z.literal('awaiting_client') },
     annotations: {

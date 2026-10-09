@@ -102,7 +102,7 @@ export function createDialogueTools(
     {
       name: 'create-dialogue-transcription',
       description:
-        'Transcribe a saved single-speaker video for timed-word editing. Transcription is unbilled and identical sources reuse their existing job. Does not replace dialogue or generate a video.',
+        'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. Does not replace dialogue or generate a video.',
       inputSchema: sourceSchema.shape,
       annotations: writeHints,
       handler: async (args, context) => {
