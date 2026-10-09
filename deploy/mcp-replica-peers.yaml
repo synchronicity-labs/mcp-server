@@ -1,0 +1,18 @@
+# Internal discovery only. No public port, RBAC or new credential is created.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server-peers
+  namespace: default
+spec:
+  clusterIP: None
+  # Keep draining owners discoverable until their pod is actually removed.
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/instance: mcp-server
+    app.kubernetes.io/name: mcp-server-web
+  ports:
+    - name: mcp
+      port: 3002
+      targetPort: 3002
+      protocol: TCP
