@@ -36,6 +36,7 @@ async function fixture(
     auth?: string;
     source?: string;
   }> = [];
+  let cloned = false;
   const upstream = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
@@ -104,6 +105,7 @@ async function fixture(
       source: req.headers['x-sync-source'] as string | undefined,
     });
     if (req.url === '/v2/voices' && req.method === 'POST') {
+      if (!options.code) cloned = true;
       if (options.dropResponse) {
         res.destroy();
         return;
@@ -118,7 +120,9 @@ async function fixture(
         ),
       );
     } else if (req.url === '/v2/voices') {
-      res.end(JSON.stringify([{ id: voiceId, name: input.name, provider: 'elevenlabs' }]));
+      res.end(
+        JSON.stringify(cloned ? [{ id: voiceId, name: input.name, provider: 'elevenlabs' }] : []),
+      );
     } else if (req.url === `/v2/projects/${projectId}`) {
       res.end(JSON.stringify({ id: projectId }));
     } else if (req.url === '/v2/generate') {
@@ -226,8 +230,15 @@ it.each([
 
 it('does not repeat a clone when the API receives the write but loses its response', async () => {
   const { calls, call } = await fixture({ dropResponse: true });
+  expect((await call('voices_get-voices', {})).content).toEqual([{ type: 'text', text: '[]' }]);
   expect((await call('voices_clone-voice', input)).isError).toBe(true);
-  expect(calls).toHaveLength(1);
+  expect((await call('voices_get-voices', {})).content).toEqual([
+    {
+      type: 'text',
+      text: JSON.stringify([{ id: voiceId, name: input.name, provider: 'elevenlabs' }], null, 2),
+    },
+  ]);
+  expect(calls.filter((request) => request.method === 'POST')).toHaveLength(1);
 });
 
 it.each([
