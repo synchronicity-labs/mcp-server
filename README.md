@@ -453,3 +453,10 @@ than blocking unrelated accounts or treating temporary errors as invalid tokens.
 `npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
 storage. Install Chromium with `npx playwright install chromium` first. This does not
 prove live authenticated storage delivery or authorize a production rollout.
+
+### Product EKS migration
+
+The staged migration, Platform prerequisites, real-client routing experiment and
+rollback procedure are in [docs/eks-migration.md](docs/eks-migration.md). EKS image
+and deployment workflows are manual; Porter continues serving production until a
+separately approved cutover. Production staging requires recorded dev acceptance.

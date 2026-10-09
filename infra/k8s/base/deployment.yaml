@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sync-mcp
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels: &id001
+      app.kubernetes.io/name: sync-mcp
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: sync-mcp
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 90
+      nodeSelector:
+        kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels: *id001
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels: *id001
+      containers:
+      - name: mcp
+        image: MCP_IMAGE
+        ports:
+        - name: http
+          containerPort: 3002
+        envFrom:
+        - secretRef:
+            name: sync-mcp-runtime
+        env:
+        - name: MCP_SHUTDOWN_GRACE_MS
+          value: '45000'
+        - name: MCP_ISSUER_URL
+          value: https://MCP_HOST
+        - name: SYNC_BASE_URL
+          value: https://dev-api.sync.so
+        - name: MCP_REPLICA_SERVICE
+          value: ''
+        resources:
+          requests:
+            cpu: 250m
+            memory: 1Gi
+          limits:
+            memory: 2Gi
+        startupProbe:
+          httpGet: &id002
+            path: /health
+            port: http
+          timeoutSeconds: 3
+          periodSeconds: 5
+          failureThreshold: 24
+        readinessProbe:
+          httpGet: *id002
+          timeoutSeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        livenessProbe:
+          tcpSocket:
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 6
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - sleep 20
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi

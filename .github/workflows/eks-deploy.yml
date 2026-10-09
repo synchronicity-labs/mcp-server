@@ -1,0 +1,92 @@
+name: MCP EKS deployment
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, production]
+        required: true
+      source_sha:
+        description: Source SHA from the successful MCP EKS image receipt
+        required: true
+      image_digest:
+        description: Immutable multi-platform sha256 digest
+        required: true
+      manifest_sha:
+        description: Reviewed manifest commit on main
+        required: true
+      routing:
+        type: choice
+        options: [alb, owner]
+        default: alb
+        required: true
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: mcp-eks-${{ inputs.environment }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ inputs.environment == 'production' && 'eks-production' || 'eks-dev' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      IMAGE_DIGEST: ${{ inputs.image_digest }}
+      MANIFEST_SHA: ${{ inputs.manifest_sha }}
+      EKS_ENVIRONMENT: ${{ inputs.environment }}
+      ROUTING: ${{ inputs.routing }}
+      TEST_HOST: ${{ vars.EKS_TEST_HOSTNAME }}
+      READINESS: ${{ vars.EKS_READINESS_RECORD }}
+      ARGOCD_SERVER: argocd.sync-internal.com
+      ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+      ARGOCD_OPTS: --grpc-web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select reviewed manifests
+        run: |
+          [[ "$MANIFEST_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$MANIFEST_SHA" origin/main
+          git checkout --detach "$MANIFEST_SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r scripts/eks/requirements.txt
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.0
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.EKS_READ_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Install verified Argo CLI
+        run: |
+          version=v3.5.3
+          curl --fail --silent --show-error --location "https://github.com/argoproj/argo-cd/releases/download/$version/argocd-linux-amd64" -o "$RUNNER_TEMP/argocd-linux-amd64"
+          curl --fail --silent --show-error --location "https://github.com/argoproj/argo-cd/releases/download/$version/cli_checksums.txt" -o "$RUNNER_TEMP/cli_checksums.txt"
+          (cd "$RUNNER_TEMP" && grep ' argocd-linux-amd64$' cli_checksums.txt | sha256sum --check)
+          sudo install -m 555 "$RUNNER_TEMP/argocd-linux-amd64" /usr/local/bin/argocd
+      - name: Deploy staging endpoint only
+        run: |
+          : "${ARGOCD_AUTH_TOKEN:?Configure a scoped Argo token}"
+          acceptance=()
+          if [ "$EKS_ENVIRONMENT" = production ]; then
+            acceptance=(--acceptance deploy/eks-dev-acceptance.json)
+          fi
+          python scripts/eks/release.py deploy --environment "$EKS_ENVIRONMENT" \
+            --source "$SOURCE_SHA" --digest "$IMAGE_DIGEST" --revision "$MANIFEST_SHA" \
+            --host "$TEST_HOST" --readiness "$READINESS" --routing "$ROUTING" \
+            --output "$RUNNER_TEMP/mcp-release" "${acceptance[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-eks-${{ inputs.environment }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/mcp-release/
