@@ -481,7 +481,9 @@ export function createAppTools(
       name: 'create-lipsync',
       title: 'Create lipsync',
       description:
+        'Use this when the user wants to make a photo talk, make an image or video say a script, or match a speaker’s lip movements to supplied audio. ' +
         'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
+        'For translating spoken video into another language, use create-translate-and-dub when available. Do not use for subtitles only, standalone audio, or general video editing. ' +
         'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
         'The model defaults to sync-3. Supply projectId to use an existing project, or projectName to find or create one. When neither is supplied, an integration-specific default project is used. ' +
         'This starts an asynchronous generation and returns its id and status.',
