@@ -148,6 +148,26 @@ before calling it, then poll its generation ID through completion. The current
 charges. See the [workflow integration and release plan](docs/chatgpt-workflows.md)
 for the remaining combined-pricing and embedded UI work.
 
+### Edit Dialogue
+
+When the API exposes transcription and dialogue-edit endpoints, `get-dialogue-options`
+enables the embedded timed-word editor. `create-dialogue-transcription` and
+`get-dialogue-transcription` obtain the single-speaker transcript. Users edit or
+remove timed words, then explicitly request `create-dialogue-preview` and poll
+`get-dialogue-preview`. The adapter reads the server-owned transcript and keeps
+the original speaker voice. It does not accept a full replacement script or a
+selected TTS voice.
+
+`estimate-dialogue-video` and `create-dialogue-video` use the completed preview's
+`dialogueEdit.id`, original video asset and project. The final generation retains
+normal API admission, retiming, billing and idempotency. A lost preview creation
+response must not be automatically retried. Reopening an identified preview is
+read-only. Partial completion must be shown to the user.
+
+This adapter release does not package a new frontend. Build and package the
+merged ChatGPT frontend separately, retaining published UI bundles, then rescan
+publisher metadata and verify the actual ChatGPT flow before claiming acceptance.
+
 ## Example Prompts
 
 Once configured, ask your AI agent:

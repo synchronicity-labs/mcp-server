@@ -11,6 +11,8 @@ const ALLOWED_TAGS = new Set([
   'projects',
   'voices',
   'text-to-speech',
+  'transcriptions',
+  'dialogue edits',
 ]);
 
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
