@@ -91,10 +91,13 @@ class ReleaseTests(unittest.TestCase):
             release.application('dev', SOURCE, 'latest', REVISION, 'mcp.dev.sync-internal.com', 'https://example.com')
 
     def test_registry_requires_matching_digest_and_immutability(self):
-        repository = json.dumps({'repositories': [{'imageTagMutability': 'IMMUTABLE'}]})
+        repository = json.dumps({'repositories': [{'imageTagMutability': 'IMMUTABLE', 'repositoryUri': release.IMAGE}]})
         image = json.dumps({'imageDetails': [{'imageDigest': DIGEST}]})
         with patch('release.run', side_effect=[repository, image]):
             release.validate_image(SOURCE, DIGEST)
+        with patch('release.run', return_value=repository.replace(release.IMAGE, 'other-account/repository')):
+            with self.assertRaises(ValueError):
+                release.validate_image(SOURCE, DIGEST)
         with patch('release.run', return_value=repository.replace('IMMUTABLE', 'MUTABLE')):
             with self.assertRaises(ValueError):
                 release.validate_image(SOURCE, DIGEST)

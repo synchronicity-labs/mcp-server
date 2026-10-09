@@ -154,6 +154,7 @@ def validate_environment(environment):
 def validate_image(source, digest):
     response = json.loads(run('aws', 'ecr', 'describe-repositories', '--region', 'us-east-1',
                               '--repository-names', 'sync-product/mcp-server'))
+    require(response['repositories'][0]['repositoryUri'] == IMAGE, 'Registry account or repository mismatch')
     require(response['repositories'][0]['imageTagMutability'] == 'IMMUTABLE',
             'ECR repository must have immutable tags without exclusions')
     image = json.loads(run('aws', 'ecr', 'describe-images', '--region', 'us-east-1',
