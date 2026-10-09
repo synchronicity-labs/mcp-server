@@ -19,7 +19,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'voices_get-voices': {
     description:
-      'List available voices — premade ElevenLabs voices plus voices your org has cloned. For "make this image/video say X", use a returned voice `id` as `voiceId` in create-lipsync with `script` directly.',
+      'List available voices: premade ElevenLabs voices plus voices your org has cloned. For "make this image/video say X", use an available returned voice `id` as `voiceId` in create-lipsync with `script` directly. Respect any returned restriction. Use this to find an existing clone before creating another.',
   },
 
   // --- Assets (upload + manage reusable media) ---
@@ -48,7 +48,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // --- Voices (clone + manage) ---
   'voices_clone-voice': {
     description:
-      'Clone a custom voice from an audio or video sample — pass a Sync-hosted `url` or an `assetId` (upload local files via assets_create-upload-url first), plus `provider` (elevenlabs) and a `name`. Returns a voice `id` for tts_create.',
+      'Use this when the user explicitly wants to save a reusable clone of their own voice or a voice they have permission to clone. Confirm the sample and name first; plan limits and provider requirements apply, so do not claim this is free. Pass exactly one Sync-hosted `url` or accessible `assetId`, plus `provider` (elevenlabs) and `name`. Upload/register local samples first. Video samples have audio extracted by the API. Returns a Sync `id`: use that id as `voiceId` in create-lipsync with script, not the provider-specific `voiceId` field. Do not use for Edit Dialogue previews, selecting an existing voice, or designing a voice from a text description. This creates a persistent voice and is not idempotent. On timeout or uncertain failure, list voices and reconcile; never automatically retry. Surface API plan limits, sample errors and duplicate-name errors without retrying or changing accounts.',
   },
   'voices_delete-voice': {
     description: 'Delete a cloned voice by id, freeing a clone slot.',
