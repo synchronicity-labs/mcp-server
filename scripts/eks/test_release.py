@@ -46,6 +46,9 @@ class ReleaseTests(unittest.TestCase):
                     variables = {x['name']: x.get('value') for x in container['env']}
                     self.assertEqual(container['image'], release.IMAGE + '@' + DIGEST)
                     self.assertEqual(deployment['spec']['replicas'], 3)
+                    self.assertEqual(pod['topologySpreadConstraints'][0]['minDomains'], 3)
+                    pdb = next(x for x in docs if x['kind'] == 'PodDisruptionBudget')
+                    self.assertEqual(pdb['spec']['minAvailable'], 2)
                     self.assertEqual(deployment['spec']['strategy']['rollingUpdate']['maxUnavailable'], 0)
                     self.assertEqual(variables['GIT_SHA'], SOURCE)
                     self.assertEqual(variables['SYNC_BASE_URL'], 'https://api.sync.so' if env == 'production' else 'https://dev-api.sync.so')
