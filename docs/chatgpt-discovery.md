@@ -30,6 +30,16 @@ of a code defect, a missing listing, or a reason for earlier recommendation
 failures. A successful server deployment does not prove that held definitions
 are live in ChatGPT.
 
+October 11 follow-up: the directory still returns Sync for `sync`, with version
+`1.0.0` published. The publisher lists `2.0.0` as ready to publish, but its
+contents must be compared before release. The MCP connection is authorized;
+`assets_create` is now live. Server instructions still show “Earlier version
+live”, and `create-dialogue-preview` and `create-dialogue-video` show “Not live”
+with the generic server-instructions review finding. This blocks complete
+public Edit Dialogue acceptance. It does not establish why a recommendation
+was absent. The published listing shows Entertainment, no capabilities, and no
+skills; absence of optional skills is not itself a publishing defect.
+
 Before publishing this change, record the actual public listing, live and held
 tool definitions, scan time, review result, account/workspace and app ID. Compare
 the live tool names and descriptions with the release candidate. Ask publisher
@@ -38,13 +48,17 @@ repeatedly rewrite metadata to bypass review.
 
 Suggested listing copy for review, not automatically published:
 
-- Short description: Make photos talk, lip-sync and dub videos, and edit dialogue.
+- Short description: Dub and lip-sync videos
 - Long description: Use your own images, videos and audio to create talking
   photos, match a speaker’s lips to audio or a script, translate and dub a video,
   or correct spoken words while keeping the original voice. Open Sync to choose
   media, review available generation estimates, and view or download results.
   Requires a Sync account. Generation and voice features depend on your plan
   and may incur charges.
+
+Keep the existing short description: it is accurate and within the documented
+30-character limit. The longer proposed description requires publisher review;
+do not replace already accurate metadata just to make it different.
 
 ## Repeatable routing evaluation
 
