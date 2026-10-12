@@ -34,6 +34,29 @@ describe('SessionRegistry', () => {
     expect(registry.stats().inFlight).toBe(0);
   });
 
+  it('rejects new sessions under memory pressure while preserving existing owners and recovery', () => {
+    let healthy = true;
+    const registry = new SessionRegistry<TestTransport>({
+      idleTtlMs: 30_000,
+      maxSessions: 1000,
+      canAdmit: () => healthy,
+    });
+    const value = transport();
+    registry.reserve()!.commit('existing', value, owner).release();
+    healthy = false;
+    expect(registry.reserve()).toBeUndefined();
+    expect(registry.stats()).toMatchObject({ active: 1, pending: 0, rejected: 1 });
+    const lease = registry.acquire('existing', owner);
+    expect(lease?.transport).toBe(value);
+    lease?.release();
+    expect(value.close).not.toHaveBeenCalled();
+    healthy = true;
+    const next = registry.reserve();
+    expect(next).toBeDefined();
+    next!.release();
+    expect(registry.stats().pending).toBe(0);
+  });
+
   it('rejects late commits after shutdown begins and releases pending capacity', () => {
     const registry = new SessionRegistry<TestTransport>({ idleTtlMs: 30_000, maxSessions: 1 });
     const reservation = registry.reserve();

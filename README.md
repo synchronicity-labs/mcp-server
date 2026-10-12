@@ -218,6 +218,22 @@ Options:
 | `MCP_UPLOAD_RETRY_AFTER_MS` | Suggested retry delay returned by upload overload errors | `5000` (5 sec) |
 | `MCP_UPLOAD_TIMEOUT_MS` | End-to-end deadline for a queued or active re-host upload | `900000` (15 min) |
 
+New HTTP session initialization is also refused with HTTP 503 and `Retry-After: 60`
+when V8 heap usage reaches 60% of its actual heap limit. Existing sessions remain
+callable; no session is evicted and no paid action is replayed. Admission resumes
+when memory is available. `mcp_runtime.memory.heapLimitBytes` reports that limit
+alongside heap usage and session rejection counts. This guard bounds session
+admission, not all request/response or upload memory; size container resources
+with those workloads in mind.
+
+Tool schemas and stateless handlers are built once per HTTP factory. Discovery
+descriptions are cached for the four supported presentation profiles. Session
+profiles, transports and validation remain separate; credentials are resolved
+per request. After `npm run build`, `npm run test:memory` exercises local session
+load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
+`-- --burst` to defer initialization until all connections have reserved capacity,
+covering clients that complete discovery after an initialization burst.
+
 HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. When capacity is exhausted, new session initialization returns `503` with `Retry-After`; existing sessions continue normally.
 
 Host-provided upload source URLs must use HTTP(S) on the protocol default port, without credentials. IP literals and every DNS answer used by a source connection must be public unicast destinations. Private, loopback, link-local, reserved, mapped and transition addresses are rejected. Source redirects are rejected; hosts must provide the final download URL. Source connections use a dedicated direct dispatcher rather than an environment or global proxy.
