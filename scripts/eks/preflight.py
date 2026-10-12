@@ -3,13 +3,15 @@ import argparse
 import json
 import subprocess
 
+from release import CLUSTERS
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--kubeconfig', required=True)
-    parser.add_argument('--environment', choices=['dev', 'production'], default='dev')
+    parser.add_argument('--environment', choices=CLUSTERS, default='dev')
     args = parser.parse_args()
-    cluster = 'sync-eks-dev-blue' if args.environment == 'dev' else 'sync-eks-prod'
+    cluster = CLUSTERS[args.environment]
     kube = ['kubectl', '--kubeconfig', args.kubeconfig, '--context', cluster, '--request-timeout=15s']
     checks = {
         'namespace': kube + ['get', 'namespace', 'sync-mcp', '-o', 'name'],

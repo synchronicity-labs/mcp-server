@@ -54,6 +54,10 @@ spec:
         - secretRef:
             name: sync-mcp-runtime
         env:
+        - name: MCP_UPLOAD_MAX_BYTES
+          value: '536870912'
+        - name: MCP_UPLOAD_CONCURRENCY
+          value: '2'
         - name: MCP_SHUTDOWN_GRACE_MS
           value: '45000'
         - name: MCP_ISSUER_URL
@@ -66,8 +70,10 @@ spec:
           requests:
             cpu: 250m
             memory: 1Gi
+            ephemeral-storage: 2Gi
           limits:
             memory: 2Gi
+            ephemeral-storage: 3Gi
         startupProbe:
           httpGet:
             path: /health
@@ -107,4 +113,4 @@ spec:
       volumes:
       - name: tmp
         emptyDir:
-          sizeLimit: 64Mi
+          sizeLimit: 2Gi

@@ -3,8 +3,9 @@
 Status: preparation only. Porter serves production. No EKS deployment, real ALB
 acceptance, soak, public cutover or Porter retirement has been completed by this PR.
 
-Use account `428519446578`, region `us-east-1`, clusters `sync-eks-dev-blue` and
-`sync-eks-prod`, namespace `sync-mcp`. Never use the Studios cluster. This is an
+Use account `428519446578`: dev `sync-eks-dev-blue` and production
+`sync-eks-prod` in `us-east-1`, plus production `sync-eks-prod-usw1` in
+`us-west-1`, namespace `sync-mcp`. Never use the Studios cluster. This is an
 independent MCP deployment, not an API/worker release or database migration.
 
 ## Platform handoff
@@ -13,12 +14,12 @@ Provision through the existing infrastructure repository/review process:
 
 | Deliverable | Exact requirement |
 | --- | --- |
-| Namespace | Apply `infra/k8s/bootstrap/namespace.yaml` to the Product dev cluster first, then production after readiness. Do not grant this application cluster-admin. |
+| Namespace | Apply `infra/k8s/bootstrap/namespace.yaml` to the Product dev cluster first, then each production cluster after its readiness. Do not grant this application cluster-admin. |
 | Registry | `428519446578.dkr.ecr.us-east-1.amazonaws.com/sync-product/mcp-server`, immutable tags without exclusions. Node pull access and scoped GitHub OIDC publish/read roles. |
 | GitHub environments | `eks-dev` and `eks-production`, main-only branch policies and required reviewers (no self-review for production). The repository currently has neither. Do not run unprotected deployments. |
-| GitHub variables | Per environment: `EKS_PUBLISH_ROLE_ARN` (dev/image workflow), `EKS_READ_ROLE_ARN` (deployment/ECR read), `EKS_TEST_HOSTNAME`, `EKS_READINESS_RECORD` (dated HTTPS readiness evidence). Trust only this repository and the matching environment OIDC subject. |
-| Argo | Repository access and `default` project destination permission limited to the intended clusters/namespace. Scoped `ARGOCD_AUTH_TOKEN` in each GitHub environment for read/create/update/sync of only the corresponding `sync-mcp-dev` or `sync-mcp-production` application. Valid TLS for `argocd.sync-internal.com`; the workflow does not disable certificate validation or use admin credentials. |
-| Staging hosts | Approve one host under `dev.sync-internal.com` and one under `prod.sync-internal.com`, with matching HTTPS certificates and existing external-dns/ALB controllers. Suggested names: `eks-dev-mcp.dev.sync-internal.com`, `eks-prod-mcp.prod.sync-internal.com`. These are proposals, not provisioned endpoints. |
+| GitHub variables | Per protected environment: `EKS_PUBLISH_ROLE_ARN` (dev/image workflow), `EKS_READ_ROLE_ARN` (deployment/ECR read), `EKS_TEST_HOSTNAME`, `EKS_READINESS_RECORD` (dated HTTPS evidence). Production also requires regional ACM `EKS_CERTIFICATE_ARN`. West uses `EKS_USW1_TEST_HOSTNAME`, `EKS_USW1_READINESS_RECORD`, `EKS_USW1_CERTIFICATE_ARN` in the same protected production environment; missing west values never fall back to east. Trust only this repository and the matching environment OIDC subject. |
+| Argo | Repository access and `default` project destination permission limited to the intended clusters/namespace. Scoped `ARGOCD_AUTH_TOKEN` in each GitHub environment for read/create/update/sync of only the corresponding `sync-mcp-dev`, `sync-mcp-production` or `sync-mcp-production-usw1` application. Valid TLS for `argocd.sync-internal.com`; the workflow does not disable certificate validation or use admin credentials. |
+| Staging hosts | Approve one dev host and a separate staging host for each production region. Dev retains ExternalDNS; production DNS/certificates are managed through Terraform and explicit regional ACM ARNs. Production Ingress opts out of ExternalDNS. These manifests still provision ALBs via AWS Load Balancer Controller; if Platform owns ALBs in Terraform too, implement the agreed TargetGroupBinding instead before deploying. Preserve existing DNS ownership/records when switching controllers. |
 | Runtime secrets | Materialize `sync-mcp-runtime` in each namespace using the existing approved secrets process. Reconcile required Porter configuration privately; no values in Git or release artifacts. The MCP service talks to the API and signed storage URLs; do not copy the API/worker IAM role or database credentials. |
 | Capacity/network | Capacity for three pods plus one surge; separate nodes and zone spread. Initial experimental requests 250m CPU/1Gi memory, memory limit 2Gi, no CPU limit. Review these after load/soak data. Permit ALB-to-pod TCP3002, DNS and required HTTPS API/storage/provider egress. For owner routing also permit same-app TCP3002. Confirm inherited NetworkPolicies/security groups. |
 | Observability | Ingest structured stdout/stderr into existing logs; provision memory/RSS, CPU, restarts/OOM, readiness, latency and HTTP-status alerts. Verify evidence and dashboard links in readiness record. |
@@ -178,3 +179,45 @@ sessions need not survive either direction. Never replay an uncertain paid call.
 After 48 hours healthy on EKS, Platform may retire Porter and remove its workflow
 in a separate reviewed change. Record final origin, image, replica readiness and
 published ChatGPT acceptance. Do not retire Porter during this preparation PR.
+
+## Regional rollout after the Redis cutover (CRAFT-6672)
+
+Select `production` for east or `production-usw1` for west. Both reuse the same
+immutable image from east-1 ECR and the same dev-acceptance gate, with separate
+Argo applications, readiness records and staging host/certificate configuration.
+Production delivery is serialized across both regions. Read-only `preflight.py`
+also accepts `--environment production-usw1` with that exact kubeconfig alias.
+
+Three pods plus surge are required per region. The hard three-domain spread is
+by **node hostname**, not three availability zones; zone spread remains preferred.
+Validate node and network capacity in each cluster. The API dependency stays
+`https://api.sync.so`; the OAuth issuer stays `https://mcp.sync.so` regardless of
+region. Moving MCP does not move its upstream API, database, or Redis.
+
+The east/west manifests are staging preparation, not proof that in-memory
+sessions can cross clusters. ALB cookie stickiness is local to an ALB. PR #81's
+optional owner routing is also cluster-local. Do not copy Controller's 50/50 DNS
+weights to MCP. Test actual client reconnection/reinitialization and upload
+recovery across the intended ingress before selecting a public routing policy.
+Never replay a paid tool call merely because its connection was interrupted.
+Keep Porter as the public origin until acceptance; during a cutover preserve
+existing connections where possible and exercise the documented reconnect flow.
+Rollback uses the recorded Porter origin/image and has the same session-boundary
+limitations.
+
+Local October 12 validation: ten delivery/probe tests passed, including actual
+Kustomize rendering of all six environment/routing combinations, unchanged
+health/shutdown configuration, manual production DNS, regional certificate
+validation and acceptance rejection. These are local tests, not a live ALB or
+ChatGPT acceptance result. Required dev acceptance and 24-hour soak remain open.
+
+Upload storage is reserved explicitly: two 512 MiB uploads, disk-backed `/tmp`
+2 GiB, ephemeral-storage request 2 GiB and limit 3 GiB for volume plus logs/layer.
+The pod explicitly bounds upload size/concurrency so Secret overrides cannot
+outgrow that allocation. Compare these limits with serving Porter before rollout;
+any approved higher limits require matching storage reservations and load tests.
+The render regression checks concurrent maximum bytes fit the volume. Runtime
+node eviction/resource behavior still needs the acceptance load test. Argo uses
+pruning for reviewed resource removals (including owner-to-ALB peers Service),
+with the existing repository/destination ownership checks retained. Release
+workflow actions are pinned to commit SHAs; Argo credentials are step-scoped.

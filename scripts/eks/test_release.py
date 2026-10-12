@@ -25,6 +25,8 @@ def acceptance():
 
 
 def app(env='dev', **kwargs):
+    if env != 'dev':
+        kwargs.setdefault('certificate', 'arn:aws:acm:' + ('us-west-1' if env == 'production-usw1' else 'us-east-1') + ':428519446578:certificate/test')
     return release.application(env, SOURCE, DIGEST, REVISION,
                                f'mcp.{"dev" if env == "dev" else "prod"}.sync-internal.com',
                                'https://example.com/readiness', **kwargs)
@@ -33,7 +35,7 @@ def app(env='dev', **kwargs):
 class ReleaseTests(unittest.TestCase):
     def test_actual_kustomize_renders_each_environment_and_mode(self):
         (release.ROOT / '.cache').mkdir(exist_ok=True)
-        for env in ['dev', 'production']:
+        for env in ['dev', 'production', 'production-usw1']:
             for mode in ['alb', 'owner']:
                 with self.subTest(env=env, mode=mode):
                     record = acceptance()
@@ -45,25 +47,41 @@ class ReleaseTests(unittest.TestCase):
                     container = pod['containers'][0]
                     variables = {x['name']: x.get('value') for x in container['env']}
                     self.assertEqual(container['image'], release.IMAGE + '@' + DIGEST)
+                    maximum_upload_bytes = int(variables['MCP_UPLOAD_MAX_BYTES']) * int(variables['MCP_UPLOAD_CONCURRENCY'])
+                    tmp = next(v for v in pod['volumes'] if v['name'] == 'tmp')['emptyDir']
+                    self.assertGreater(int(tmp['sizeLimit'].removesuffix('Gi')) * 1024 ** 3, maximum_upload_bytes)
+                    self.assertEqual(container['resources']['requests']['ephemeral-storage'], tmp['sizeLimit'])
                     self.assertEqual(deployment['spec']['replicas'], 3)
                     self.assertEqual(pod['topologySpreadConstraints'][0]['minDomains'], 3)
                     pdb = next(x for x in docs if x['kind'] == 'PodDisruptionBudget')
                     self.assertEqual(pdb['spec']['minAvailable'], 2)
                     self.assertEqual(deployment['spec']['strategy']['rollingUpdate']['maxUnavailable'], 0)
                     self.assertEqual(variables['GIT_SHA'], SOURCE)
-                    self.assertEqual(variables['SYNC_BASE_URL'], 'https://api.sync.so' if env == 'production' else 'https://dev-api.sync.so')
+                    self.assertEqual(variables['SYNC_BASE_URL'], 'https://api.sync.so' if env != 'dev' else 'https://dev-api.sync.so')
                     self.assertEqual(bool(variables['MCP_REPLICA_SERVICE']), mode == 'owner')
                     self.assertTrue(all(x['metadata']['namespace'] == 'sync-mcp' for x in docs))
                     self.assertFalse(any(x['kind'] == 'Namespace' for x in docs))
                     ingress = next(x for x in docs if x['kind'] == 'Ingress')
                     annotations = ingress['metadata']['annotations']
-                    self.assertNotIn('mcp.sync.so', annotations['external-dns.alpha.kubernetes.io/hostname'])
+                    if env == 'dev':
+                        self.assertEqual(annotations['external-dns.alpha.kubernetes.io/hostname'], 'mcp.dev.sync-internal.com')
+                    else:
+                        self.assertEqual(annotations['external-dns.alpha.kubernetes.io/controller'], 'terraform')
+                        self.assertNotIn('external-dns.alpha.kubernetes.io/hostname', annotations)
+                        region = 'us-west-1' if env == 'production-usw1' else 'us-east-1'
+                        self.assertIn('acm:' + region + ':', annotations['alb.ingress.kubernetes.io/certificate-arn'])
+                        self.assertEqual(application['spec']['destination']['name'], 'sync-eks-prod-usw1' if env == 'production-usw1' else 'sync-eks-prod')
                     self.assertIn('stickiness.enabled=' + ('true' if mode == 'alb' else 'false'), annotations['alb.ingress.kubernetes.io/target-group-attributes'])
                     peers = [x for x in docs if x['metadata']['name'] == 'mcp-server-peers']
                     self.assertEqual(len(peers), int(mode == 'owner'))
                     if peers:
                         self.assertEqual(peers[0]['spec']['clusterIP'], 'None')
                     self.assertNotIn('automated', application['spec']['syncPolicy'])
+
+    def test_production_rejects_missing_or_wrong_region_certificate(self):
+        for certificate in ['', 'arn:aws:acm:us-east-1:428519446578:certificate/test']:
+            with self.subTest(certificate=certificate), self.assertRaisesRegex(ValueError, 'certificate'):
+                app('production-usw1', certificate=certificate, acceptance=acceptance())
 
     def test_prod_refuses_missing_or_stale_acceptance(self):
         with self.assertRaises(ValueError):
@@ -104,6 +122,28 @@ class ReleaseTests(unittest.TestCase):
         with patch('release.run', side_effect=[repository, image.replace(DIGEST, 'other')]):
             with self.assertRaises(ValueError):
                 release.validate_image(SOURCE, DIGEST)
+
+    def test_owner_to_alb_removes_retired_service_and_writes_receipt(self):
+        previous = app(mode='owner')
+        selected = app()
+        synced = False
+        def command(*args):
+            nonlocal synced
+            if args[:3] == ('argocd', 'app', 'list'):
+                return json.dumps([previous])
+            if args[:3] == ('argocd', 'app', 'sync'):
+                synced = '--prune' in args
+            if args[:3] == ('argocd', 'app', 'wait'):
+                self.assertTrue(synced, 'Retired peers Service remains OutOfSync without pruning')
+            if args[:3] == ('argocd', 'app', 'get'):
+                return json.dumps({'spec': selected['spec'], 'status': {
+                    'sync': {'revision': REVISION},
+                    'summary': {'images': [release.IMAGE + '@' + DIGEST]}}})
+            return ''
+        with tempfile.TemporaryDirectory() as temp, patch('release.run', side_effect=command):
+            release.deploy(selected, Path(temp))
+            receipt = json.loads((Path(temp) / 'release-receipt.json').read_text())
+            self.assertEqual(receipt['application'], selected)
 
     def test_deploy_refuses_existing_app_owned_by_other_repository(self):
         existing = deepcopy(app())

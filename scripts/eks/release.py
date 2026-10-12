@@ -15,7 +15,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 REPO = 'https://github.com/synchronicity-labs/mcp-server.git'
 IMAGE = '428519446578.dkr.ecr.us-east-1.amazonaws.com/sync-product/mcp-server'
-CLUSTERS = {'dev': 'sync-eks-dev-blue', 'production': 'sync-eks-prod'}
+CLUSTERS = {'dev': 'sync-eks-dev-blue', 'production': 'sync-eks-prod',
+            'production-usw1': 'sync-eks-prod-usw1'}
 CHECKS = ('chatgpt', 'refresh', 'uploads', 'isolation', 'scale', 'rollout', 'pod_loss',
           'no_paid_replay', 'resources', 'memory')
 
@@ -69,7 +70,7 @@ def validate_acceptance(record, source, digest, mode):
     https_url(record['evidence_url'])
 
 
-def application(env, source, digest, revision, host, readiness, mode='alb', acceptance=None):
+def application(env, source, digest, revision, host, readiness, mode='alb', acceptance=None, certificate=''):
     require(env in CLUSTERS, 'Unknown environment')
     sha(source)
     sha(revision)
@@ -79,13 +80,16 @@ def application(env, source, digest, revision, host, readiness, mode='alb', acce
                              r'\.sync-internal\.com', host)), 'Only an approved staging hostname is allowed')
     https_url(readiness)
     require(mode in ('alb', 'owner'), 'Routing must be alb or owner')
-    if env == 'production':
+    if env != 'dev':
         require(acceptance is not None, 'Production staging requires recorded dev acceptance')
         validate_acceptance(acceptance, source, digest, mode)
+        region = 'us-west-1' if env == 'production-usw1' else 'us-east-1'
+        require(bool(re.fullmatch(rf'arn:aws:acm:{region}:428519446578:certificate/[a-zA-Z0-9-]+', certificate)),
+                'Production certificate must match the selected region and account')
     env_values = {
         'GIT_SHA': source,
-        'MCP_ISSUER_URL': 'https://mcp.sync.so' if env == 'production' else f'https://{host}',
-        'SYNC_BASE_URL': 'https://api.sync.so' if env == 'production' else 'https://dev-api.sync.so',
+        'MCP_ISSUER_URL': 'https://mcp.sync.so' if env != 'dev' else f'https://{host}',
+        'SYNC_BASE_URL': 'https://api.sync.so' if env != 'dev' else 'https://dev-api.sync.so',
         'MCP_REPLICA_SERVICE': 'mcp-server-peers.sync-mcp.svc.cluster.local' if mode == 'owner' else '',
         'MCP_REPLICA_PORT': '3002',
     }
@@ -97,8 +101,11 @@ def application(env, source, digest, revision, host, readiness, mode='alb', acce
     if mode == 'owner':
         annotations['alb.ingress.kubernetes.io/target-group-attributes'] = (
             'deregistration_delay.timeout_seconds=60,stickiness.enabled=false')
-    if env == 'production':
-        # Only the staging hostname is owned by external-dns. Public origin switch is separate.
+    if env != 'dev':
+        # Terraform owns production DNS and ACM; ExternalDNS must ignore this Ingress.
+        annotations['external-dns.alpha.kubernetes.io/hostname'] = None
+        annotations['external-dns.alpha.kubernetes.io/controller'] = 'terraform'
+        annotations['alb.ingress.kubernetes.io/certificate-arn'] = certificate
         annotations['alb.ingress.kubernetes.io/conditions.sync-mcp'] = json.dumps([
             {'field': 'host-header', 'hostHeaderConfig': {'values': ['mcp.sync.so']}}])
     ingress = {'apiVersion': 'networking.k8s.io/v1', 'kind': 'Ingress',
@@ -135,12 +142,12 @@ def render(app):
 
 
 def validate_environment(environment):
-    name = 'eks-production' if environment == 'production' else 'eks-dev'
+    name = 'eks-production' if environment != 'dev' else 'eks-dev'
     repository = 'repos/synchronicity-labs/mcp-server'
     settings = json.loads(run('gh', 'api', f'{repository}/environments/{name}'))
     rules = [x for x in settings.get('protection_rules', []) if x['type'] == 'required_reviewers']
     require(any(x.get('reviewers') for x in rules), 'GitHub environment needs required reviewers')
-    if environment == 'production':
+    if environment != 'dev':
         require(all(x.get('prevent_self_review') for x in rules), 'Production must prevent self-review')
     policy = settings.get('deployment_branch_policy') or {}
     require(policy.get('custom_branch_policies') and not policy.get('protected_branches'),
@@ -178,7 +185,7 @@ def deploy(app, output):
         (output / 'previous-application.json').write_text(json.dumps(previous, indent=2))
     filename = output / 'application.yaml'
     run('argocd', 'app', 'create', '--file', str(filename), '--upsert')
-    run('argocd', 'app', 'sync', name, '--revision', app['spec']['source']['targetRevision'], '--timeout', '600')
+    run('argocd', 'app', 'sync', name, '--prune', '--revision', app['spec']['source']['targetRevision'], '--timeout', '600')
     run('argocd', 'app', 'wait', name, '--health', '--sync', '--operation', '--timeout', '600')
     current = json.loads(run('argocd', 'app', 'get', name, '--refresh', '-o', 'json'))
     require(current['status']['sync']['revision'] == app['spec']['source']['targetRevision'],
@@ -203,11 +210,12 @@ def main():
     parser.add_argument('--readiness', required=True)
     parser.add_argument('--routing', choices=['alb', 'owner'], default='alb')
     parser.add_argument('--acceptance', type=Path)
+    parser.add_argument('--certificate', default='')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     acceptance = json.loads(args.acceptance.read_text()) if args.acceptance else None
     app = application(args.environment, args.source, args.digest, args.revision, args.host,
-                      args.readiness, args.routing, acceptance)
+                      args.readiness, args.routing, acceptance, args.certificate)
     if args.action == 'deploy':
         require(os.environ.get('GITHUB_REF') == 'refs/heads/main', 'Deploy only from the main workflow')
         require(os.environ.get('GITHUB_REPOSITORY') == 'synchronicity-labs/mcp-server', 'Wrong repository')
