@@ -9,7 +9,7 @@ not authorization to merge, deploy, publish or submit to the directory.
   and opt-in app metadata. PR #78 adds connected account/organization context.
 - Both include main `599d790` (Edit Dialogue). Do not replace the newer ChatGPT
   artifact with the older artifact used in the first Claude test.
-- API/web PR #6536 is merged into dev. Claude dev consent acceptance passed
+- API/web PR #6536 is merged into dev and production main. Claude dev consent acceptance passed
   with MCP `27bbc192`; see [acceptance](claude-acceptance.md). The merged release
   revision requires its own successful CI and target-environment smoke test.
 - npm currently serves 0.1.4. Package, lockfile and plugin candidate versions are
@@ -35,11 +35,18 @@ not authorization to merge, deploy, publish or submit to the directory.
 - [ ] Fresh Claude Code OAuth acceptance passes. Prior plugin validation and
   isolated install/uninstall prove packaging, not the entire client workflow.
 
+Production API deployment `3061b7e98692a7658a15da731ba1aef8500834ac`
+[completed successfully](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/38239577699)
+and includes #6536. An unauthenticated account-route probe returned 401;
+authenticated production OAuth/account acceptance and runtime consent flag
+verification remain. Preparation did not change production settings.
+
 ## npm publisher setup
 
-At preparation time the GitHub environments API returned no environments. Create
-`npm-release`, restrict it to main, and require a release reviewer before dispatch.
-Verify the environment protection rules before the first publication.
+Configured and verified `npm-release`: only the `main` branch may deploy;
+Noah Milberger (`nozma-knows`) is the required reviewer, with administrator bypass
+disabled. The release owner may approve their own manually dispatched release.
+Verify these rules before the first publication. No publish workflow was run.
 
 A package owner must configure or verify this npm trusted publisher:
 
