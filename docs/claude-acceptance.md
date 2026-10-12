@@ -1,6 +1,6 @@
 # Claude acceptance and rollout
 
-Evidence recorded October 8, 2026. This is a staged implementation, not a launch
+Evidence recorded October 8–12, 2026. This is a staged implementation, not a launch
 approval. The hosted baseline was MCP main `8d931ae`; the shared frontend/API
 implementation baseline is dev `b635f01139ba`.
 
@@ -19,6 +19,28 @@ implementation baseline is dev `b635f01139ba`.
 
 Keep credentials, device secrets, media URLs and account identifiers out of this
 file. Local evidence belongs to the testing task, not the published plugin.
+
+## Subsequent hosted acceptance
+
+- The approved hosted Claude lipsync test completed one generation, with one
+  recorded $0.075 charge. Download and full MP4 decoding passed. This was the
+  tool workflow; it does not establish embedded Claude app acceptance.
+- API/web PR #6536 is deployed to dev. The separate Claude dev connector
+  completed fresh DCR and PKCE, explicit organization selection, denial and
+  consumed-request rejection using MCP PR #78 at `27bbc192`.
+- Claude's actual `get-account-context` response matched the selected dev
+  organization. Reconnecting to a second dev organization changed that response;
+  Studio's active organization stayed unchanged after full reloads.
+- An unused request loaded at 593 seconds; a decision submitted at 608 seconds
+  was rejected. Reload also rejected the expired request. Viewing the request
+  midway did not extend its original expiry. No generation ran during consent
+  acceptance, and no production consent setting changed.
+- These live results attest to the revisions tested. The release branch now
+  also includes main's Edit Dialogue changes; CI and packaged-client validation
+  must cover the combined revision before release.
+
+See [0.2.0 release preparation](claude-release-0.2.0.md) for release order,
+publisher setup and gates that remain open.
 
 ## This release candidate
 
@@ -42,14 +64,16 @@ file. Local evidence belongs to the testing task, not the published plugin.
   and matching npm trusted-publisher settings for `publish-npm.yml` and the
   `npm-release` GitHub environment. No publication was performed.
 
-## Remaining gates, in order
+## Workstream gates and remaining scope
 
-1. **Fresh client and paid workflow:** choose a test organization, approve a
+1. **Fresh client and paid workflow:** hosted tool generation is verified above.
+   Fresh Claude Code OAuth/generation and embedded app acceptance remain. Choose a test organization, approve a
    numeric budget, authenticate a new Claude connection, upload or select an
    approved fixture, estimate, submit once, poll, play/download, and verify the
    same generation and charge in Studio. Record client/server/API/artifact
    revisions and resulting IDs in private acceptance evidence.
-2. **Account consent:** show authenticated identity, selectable authorized
+2. **Account consent:** Claude dev acceptance is verified above; target production
+   and ChatGPT acceptance remain. Show authenticated identity, selectable authorized
    organizations, requested capabilities and denial. Validate membership and
    the complete OAuth transaction at confirmation, then bind the code/token to
    the selected organization. Do not silently change the Studio active org.
