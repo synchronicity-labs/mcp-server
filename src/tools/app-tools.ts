@@ -693,7 +693,7 @@ export function createAppTools(
           (await getOrCreateProjectId(
             httpClient,
             projectName,
-            getProfile().defaultProjectName,
+            (context?.clientProfile ?? getProfile()).defaultProjectName,
             signal,
           ));
         if (requestedProjectId !== undefined) {

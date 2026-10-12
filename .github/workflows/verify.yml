@@ -26,6 +26,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run test:memory
+      - run: npm run test:memory -- --burst
       - run: npm run package:chatgpt
       - run: npm run verify:chatgpt-package
       - run: npm test -- --no-file-parallelism

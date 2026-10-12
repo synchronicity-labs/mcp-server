@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
+import { getHeapStatistics } from 'node:v8';
 import { InvalidRequestError, OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import {
   createOAuthMetadata,
@@ -56,6 +57,12 @@ const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 60_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
 const DEFAULT_RUNTIME_TELEMETRY_INTERVAL_MS = 15_000;
 const MAX_REQUEST_ID_LENGTH = 128;
+
+// Leave room for existing requests, JSON/UI responses and GC. Never evict an
+// active session or replay an operation merely to admit a new connection.
+export function hasSessionHeapCapacity(heap = getHeapStatistics()): boolean {
+  return heap.used_heap_size < heap.heap_size_limit * 0.6;
+}
 
 type SessionRuntimeConfig = {
   idleTtlMs: number;
@@ -495,6 +502,7 @@ export async function startHttpServer(
   const sessions = new SessionRegistry<StreamableHTTPServerTransport>({
     idleTtlMs: sessionRuntimeConfig.idleTtlMs,
     maxSessions: sessionRuntimeConfig.maxSessions,
+    canAdmit: hasSessionHeapCapacity,
     onRemove: (sessionId) => sessionClientNames.delete(sessionId),
     onCloseError: (error) => {
       logEvent('mcp_session_close_error', { error: serializeError(error) });
@@ -530,6 +538,7 @@ export async function startHttpServer(
         rssBytes: memory.rss,
         heapUsedBytes: memory.heapUsed,
         heapTotalBytes: memory.heapTotal,
+        heapLimitBytes: getHeapStatistics().heap_size_limit,
         externalBytes: memory.external,
         arrayBuffersBytes: memory.arrayBuffers,
       },

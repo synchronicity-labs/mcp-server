@@ -25,7 +25,7 @@ import { createAppTools } from './tools/app-tools.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
-import { createProjectHistoryTools, projectHistoryOperations } from './tools/project-history.js';
+import { createProjectHistoryTools } from './tools/project-history.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
@@ -257,7 +257,7 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-/** Session-local descriptors and presentation. Authentication remains request-scoped. */
+/** Profile-specific descriptors and presentation. Authentication remains request-scoped. */
 function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
   if (profile.supportsUploads)
     return WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool;
@@ -293,21 +293,15 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
     : presented;
 }
 
-function createProfiledServer(
+// Schemas and stateless handlers belong to the factory, not each HTTP session.
+// Authentication is resolved per request by createHttpClient; presentation stays local.
+function createTools(
   config: SyncMcpConfig,
   operations: ReturnType<typeof parseSpec>,
-  authHeaders: Record<string, string> = {},
+  httpClient: ReturnType<typeof createHttpClient>,
+  getProfile: () => ClientProfile,
   chatgptApp?: ChatgptApp,
-  previousApps: ChatgptApp[] = [],
-): McpServer {
-  let profile: ClientProfile | undefined;
-  let clientName: string | undefined;
-  const getProfile = () => profile ?? resolveClientProfile();
-  const httpClient = createHttpClient(
-    config.baseUrl,
-    authHeaders,
-    config.transport === 'stdio' ? () => clientName : undefined,
-  );
+): McpToolDefinition[] {
   const generatedTools = generateTools(
     config.transport === 'http'
       ? operations.filter((operation) =>
@@ -336,10 +330,32 @@ function createProfiledServer(
         : tool,
     ),
   ];
+  return config.transport === 'http'
+    ? allTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
+    : allTools;
+}
+
+function createProfiledServer(
+  config: SyncMcpConfig,
+  operations: ReturnType<typeof parseSpec>,
+  authHeaders: Record<string, string> = {},
+  chatgptApp?: ChatgptApp,
+  previousApps: ChatgptApp[] = [],
+  sharedCatalog?: {
+    tools: McpToolDefinition[];
+    descriptors: Map<ClientProfile['name'], Tool[]>;
+  },
+): McpServer {
+  let profile: ClientProfile | undefined;
+  let clientName: string | undefined;
+  const getProfile = () => profile ?? resolveClientProfile();
+  const httpClient = createHttpClient(
+    config.baseUrl,
+    authHeaders,
+    config.transport === 'stdio' ? () => clientName : undefined,
+  );
   const tools =
-    config.transport === 'http'
-      ? allTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-      : allTools;
+    sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
   const server = new McpServer(
     { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
     { instructions: SERVER_INSTRUCTIONS },
@@ -367,7 +383,7 @@ function createProfiledServer(
             ) {
               throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
             }
-            return tool.handler.apply(undefined, parameters);
+            return tool.handler(args, { ...parameters[1], clientProfile: profile });
           },
         }) as McpToolDefinition,
     ),
@@ -423,6 +439,12 @@ function createProfiledServer(
       clientName = server.server.getClientVersion()?.name;
       const initializedProfile = resolveClientProfile(clientName);
       profile = initializedProfile;
+      const cached = sharedCatalog?.descriptors.get(initializedProfile.name);
+      if (cached) {
+        descriptors = cached;
+        onInitialized?.();
+        return;
+      }
       const visible =
         config.transport === 'http'
           ? selectHostedHttpTools(tools, initializedProfile)
@@ -440,6 +462,7 @@ function createProfiledServer(
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       }));
+      sharedCatalog?.descriptors.set(initializedProfile.name, descriptors);
     }
     onInitialized?.();
   };
@@ -460,32 +483,28 @@ export async function createMcpServerFactory(
   config: SyncMcpConfig,
 ): Promise<{ createServer: () => McpServer; toolCount: number }> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
-  // Filter once before constructing per-session schemas. Handlers and profile
-  // state remain session-local, but excluded API operations do no session work.
+  // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
       translationOperation([operation]) !== undefined ||
       dialogueOperations([operation]).length > 0,
   );
-  const registeredNames = new Set([
-    ...(chatgptApp ? ['open-sync-app'] : []),
-    'open-upload-widget',
-    'upload-media',
-    'create-lipsync',
-    ...(projectHistoryOperations(operations).length ? ['projects_get-generations'] : []),
-    ...createTranslationTools(operations, createHttpClient(config.baseUrl)).map(
-      (tool) => tool.name,
-    ),
-    ...createDialogueTools(operations, createHttpClient(config.baseUrl)).map((tool) => tool.name),
-    ...operations
-      .map((operation) => operationIdToToolName(operation.operationId))
-      .filter((name) => HOSTED_HTTP_TOOL_ALLOWLIST.has(name)),
-  ]);
+  const tools = createTools(
+    config,
+    operations,
+    createHttpClient(config.baseUrl),
+    resolveClientProfile,
+    chatgptApp,
+  );
+
+  // Four presentation profiles at most; never key this by untrusted client names.
+  const sharedCatalog = { tools, descriptors: new Map<ClientProfile['name'], Tool[]>() };
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
-    toolCount: registeredNames.size,
-    createServer: () => createProfiledServer(config, operations, {}, chatgptApp, previousApps),
+    toolCount: new Set(tools.map((tool) => tool.name)).size,
+    createServer: () =>
+      createProfiledServer(config, operations, {}, chatgptApp, previousApps, sharedCatalog),
   };
 }
 
