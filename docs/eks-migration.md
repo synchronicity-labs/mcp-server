@@ -28,10 +28,14 @@ Observed October 9: dev namespace absent; current ProductEng role cannot create
 namespaces or list nodes; ECR repository absent. Production access is not established.
 This is a provisioning/access blocker, not a failed replica experiment.
 
-Run read-only discovery (explicit context protects the Studios cluster):
+From the repository root, install the pinned Python dependency in a local virtual
+environment, then run read-only discovery. `aws` and `kubectl` must be on PATH
+with the intended read-only access; the explicit context protects the Studios cluster.
 
 ```sh
-python3 scripts/eks/preflight.py --environment dev --kubeconfig /path/to/kubeconfig
+python3 -m venv .cache/eks-python
+.cache/eks-python/bin/python -m pip install -r scripts/eks/requirements.txt
+.cache/eks-python/bin/python scripts/eks/preflight.py --environment dev --kubeconfig /path/to/kubeconfig
 ```
 
 Runtime secret inventory: `OAUTH_REGISTRATION_SECRET`, the existing challenge-token
