@@ -40,6 +40,52 @@ public Edit Dialogue acceptance. It does not establish why a recommendation
 was absent. The published listing shows Entertainment, no capabilities, and no
 skills; absence of optional skills is not itself a publishing defect.
 
+October 12 follow-up: server instructions are now Live. The two Dialogue write
+tools remain Not live; the other 24 tools are Live. The publisher connection is
+authorized. Optional package 2.0.1 is an unsubmitted draft, not the published
+version. Support has been asked for actionable held-tool review requirements
+and confirmation of in-chat discovery eligibility/indexing.
+
+### October 12 baseline results
+
+Completed 135 trials: all 15 prompts repeated three times in each of the three
+contexts below. Environment: one supplied Personal Plus account in Chrome
+Incognito, Chat mode, Instant. Exact model ID and geographic eligibility were
+not exposed. Conversations were fresh, but account memory/history was not reset;
+these are not independent random samples. No media was attached and no paid
+generation was started. This measures discovery and clarification, not output
+quality or the effect of this unreleased PR.
+
+- Not connected, 45 trials: Sync was mentioned in 4 of the 24 unbranded supported
+  workflow trials, including 3 indirect lip-sync prompts and 1 indirect dialogue
+  prompt. The 9 direct photo/lip-sync/dubbing trials had no Sync mention. No Sync
+  install card was observed. The two interactive brand mentions inspected opened
+  company information panels; the second was inspected after connecting the
+  account, without regenerating the original response. A separate explicit
+  category control produced a HeyGen install card; directory search finds Sync.
+- Connected but unselected, 45 trials: all 3 explicit Open Sync prompts rendered
+  the real app. History was returned in all 3 read-only trials. Whole-script
+  replacement was overpromised in all 3 boundary trials.
+- Explicitly selected, 45 trials: all 3 Open Sync prompts rendered the real app;
+  the 6 photo prompts rendered its image/audio uploader. History was returned in
+  all 3 trials. Two French-dubbing trials reported connection/media-retrieval
+  failures; later account reads recovered. The public health endpoint returned
+  HTTP 200, which does not establish authenticated connection health.
+- Capability boundaries remain inaccurate: the selected subtitle-only trials
+  opened Sync and implied support in 3/3; general editing was overpromised in
+  2/3, with the third explaining the limitation. Whole-script replacement was
+  not clearly rejected in 3/3 selected trials (one qualified that replacements
+  would first be assessed). Audio-only trials explained the lack of standalone
+  MP3 generation. No paid operation was observed.
+
+This PR now explicitly states these limits in the server instructions and app
+opener description. Passing descriptor/integration tests does not prove improved
+model behavior. Repeat the matrix against a private candidate before release;
+do not describe this baseline as an A/B result. Investigate the intermittent
+authenticated failures separately, without inferring their cause from the UI.
+Local raw trial records and screenshots are retained in the task's October 12
+discovery evidence directory; private account media details are not committed.
+
 Before publishing this change, record the actual public listing, live and held
 tool definitions, scan time, review result, account/workspace and app ID. Compare
 the live tool names and descriptions with the release candidate. Ask publisher
@@ -63,8 +109,9 @@ do not replace already accurate metadata just to make it different.
 ## Repeatable routing evaluation
 
 Use [chatgpt-discovery-prompts.csv](chatgpt-discovery-prompts.csv) in fresh chats.
-All cases are pending until a human records a real ChatGPT result. Automated
-descriptor/schema tests are not recommendation or routing measurements.
+The October 12 published-version baseline is recorded above; the candidate
+comparison remains pending. Automated descriptor/schema tests are not
+recommendation or routing measurements.
 
 Run the same prompts before and after the metadata update in three separate
 contexts, keeping account, model, workspace, region and plan constant:
