@@ -98,7 +98,10 @@ try {
     const client = new Client({ name: 'chatgpt', version: 'memory-regression' });
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await server.connect(st);
-    const connection = { client, server, ct, reservation, id: String(index) };
+    const connection = { client, server, ct, reservation, id: String(index), closed: false };
+    client.onclose = () => {
+      connection.closed = true;
+    };
     clients.push(connection);
     if (!burst) await initialize(connection);
     if (clients.length === 120) {
@@ -128,21 +131,29 @@ try {
       rejected: registry.stats().rejected,
     }),
   );
+  // Expiry must close still-live transports, not merely remove registry entries.
+  assert(clients.every((connection) => !connection.closed));
+  now = 2;
+  assert.equal(await registry.sweep(), clients.length);
+  assert.equal(registry.size, 0);
+  assert(
+    clients.every((connection) => connection.closed),
+    'Expiry must close every live client transport',
+  );
+  clients = [];
+  await new Promise((resolve) => setImmediate(resolve));
+  const afterClose = heap();
+  assert(afterClose - baseline < 20 * 1024 ** 2, 'Expired sessions retained their memory');
+  const recovered = registry.reserve();
+  assert(recovered, 'Admission must recover after memory is released');
+  recovered.release();
+  console.log(JSON.stringify({ afterClose, baseline, recovery: 'passed' }));
 } finally {
+  // Failure cleanup only; the successful path relies entirely on expiry above.
   for (const { client, server, reservation } of clients) {
     await client.close();
     await server.close();
     reservation.release();
   }
-  clients = [];
-  now = 2;
-  await registry.sweep();
-  assert.equal(registry.size, 0);
+  await registry.closeAll();
 }
-await new Promise((resolve) => setImmediate(resolve));
-const afterClose = heap();
-assert(afterClose - baseline < 20 * 1024 ** 2, 'Closed/expired sessions retained their memory');
-const recovered = registry.reserve();
-assert(recovered, 'Admission must recover after memory is released');
-recovered.release();
-console.log(JSON.stringify({ afterClose, baseline, recovery: 'passed' }));
