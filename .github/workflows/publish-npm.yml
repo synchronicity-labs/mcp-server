@@ -7,6 +7,10 @@ on:
         description: Reviewed package version to publish from main
         required: true
         type: string
+      revision:
+        description: Full reviewed main commit SHA (40 characters)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -28,12 +32,16 @@ jobs:
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
-      - name: Check requested release version
+      - name: Check requested release revision and version
         env:
           RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_REVISION: ${{ inputs.revision }}
         run: |
           node --input-type=module <<'JS'
           import { readFileSync } from 'node:fs';
+          if (!/^[a-f0-9]{40}$/.test(process.env.RELEASE_REVISION ?? '') || process.env.RELEASE_REVISION !== process.env.GITHUB_SHA) {
+            throw new Error('The workflow revision must match the reviewed main commit.');
+          }
           const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
           const plugin = JSON.parse(readFileSync('claude-plugin/.claude-plugin/plugin.json', 'utf8'));
           if (pkg.version !== process.env.RELEASE_VERSION || pkg.version !== plugin.version) {

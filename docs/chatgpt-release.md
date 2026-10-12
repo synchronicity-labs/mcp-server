@@ -5,23 +5,31 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
-## Included release
+## Included release candidate
 
-- Active source: [sync-api-v2 3a0bd4bc5](https://github.com/synchronicity-labs/sync-api-v2/commit/3a0bd4bc5c46e744ed083d2ecf54d00d6d6673bf).
-- HTML SHA256: `a39e27ca488992ab54f148417646a041c7e6d667055dbc0fa5bcd674af76532b`.
-- Container directory: `/app/chatgpt-dist/a39e27ca488992ab54f148417646a041c7e6d667055dbc0fa5bcd674af76532b`.
-- Includes pre-generation credits/USD estimates, combined Translate & Dub pricing,
-  the workflow home card, Studio's searchable source/target language controls,
-  recorded-audio duration probing, and mobile generation controls.
-- Retained published releases: `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`
-  from `ff0283bf3` and `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`
-  from `a31411b8`. Both remain addressable for cached clients.
+- Source: [release CI checkout 0140adbb3](https://github.com/synchronicity-labs/sync-api-v2/commit/0140adbb3d83111790cbb11bf8a31fbe108f0a42).
+  Its Git tree is identical to dev `a558d7d5e6b4f58d7dabdf19a64ab903e20cfa55`.
+- HTML SHA256: `0f4f454753a88e6264cf1393500c9d9dac8673040459642407230a0e1ddbb258`.
+- Container directory: `/app/chatgpt-dist/0f4f454753a88e6264cf1393500c9d9dac8673040459642407230a0e1ddbb258`.
+- Adds the shared compact Edit Dialogue editor: timed-word changes, original-voice
+  preview, undo/redo, waveform/playback, preview-based final pricing, and recovery.
+  Workflow cards use two rows and two columns.
+- Preserves existing estimates, Translate & Dub, project history and media inputs.
+- Retains all three published releases: `a39e27ca488992ab54f148417646a041c7e6d667055dbc0fa5bcd674af76532b`,
+  `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`,
+  and `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`.
+  All remain addressable for cached clients.
 
-The source is merged into dev. Promote and verify the required API changes in
-production before releasing this package. This bundle replaces the unpublished
-cost-only release candidate; no unpublished intermediate bundle is needed for
-production compatibility. Production release and live ChatGPT acceptance remain
-separate gates. Packaging does not change production settings.
+The bytes come unchanged from [frontend CI run 37779270942](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/37779270942),
+which used a frozen lockfile and passed all 228 development/artifact browser tests.
+The artifact name, actual checkout, source tree and build commands are recorded
+in `release.json`; this is a CI-built candidate, not a new local frontend build.
+
+Production release is on hold pending Noah's pilot-flow acceptance of the full
+monorepo batch and final release confirmation. Promote and verify required API,
+worker and database changes before deploying this package. Package CI/review and
+published ChatGPT acceptance are separate gates. See the
+[release tracker](../plans/multi-pr/edit-dialogue-release-76.md).
 
 ### Initial project data
 
@@ -40,7 +48,7 @@ round trip; it does not change ChatGPT's time to dispatch the opening tool.
 `deploy/chatgpt/<HTML SHA256>/` contains deterministic gzip-compressed HTML,
 the frontend's original manifest, and source/build provenance in `release.json`.
 Compression keeps the generated artifact small; the manifest hashes the
-uncompressed HTML. The package is identical to the verified local release.
+uncompressed HTML. The candidate package is identical to the verified CI artifact.
 
 `npm run build && npm run package:chatgpt` expands and validates every included
 release in `chatgpt-dist/`. Docker copies only that verified output to its final
