@@ -1,5 +1,6 @@
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import type { ClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
 import { getOverride } from './overrides.js';
@@ -16,7 +17,11 @@ type McpToolBaseDefinition = {
   meta?: Record<string, unknown>;
 };
 
-export type ToolRequestContext = { signal?: AbortSignal };
+export type ToolRequestContext = {
+  signal?: AbortSignal;
+  // Internal session presentation, supplied by the server wrapper, never tool arguments.
+  clientProfile?: ClientProfile;
+};
 
 type JsonMcpToolDefinition = McpToolBaseDefinition & {
   resultFormat?: 'json';

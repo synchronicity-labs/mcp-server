@@ -25,17 +25,18 @@ import { createAppTools } from './tools/app-tools.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
-import { createProjectHistoryTools, projectHistoryOperations } from './tools/project-history.js';
+import { createProjectHistoryTools } from './tools/project-history.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
 const SERVER_DESCRIPTION =
-  'Sync is an AI video platform for lipsync and visual dubbing. ' +
-  'The MCP server creates lipsync videos from image or video inputs with audio or text, manages media assets, and reports generation status.';
+  'Sync makes photos talk, lip-syncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
+  'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 export const SERVER_INSTRUCTIONS =
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
-  'Edit Dialogue uses timed transcript word edits/removals and an audio preview in the original speaker voice, followed by create-dialogue-video. Do not substitute full-script TTS. Use the dedicated dialogue tools when available. ' +
+  'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
+  'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
   'When create-translate-and-dub is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generate_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ' +
   'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
@@ -259,7 +260,7 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-/** Session-local descriptors and presentation. Authentication remains request-scoped. */
+/** Profile-specific descriptors and presentation. Authentication remains request-scoped. */
 function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
   if (profile.supportsUploads)
     return WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool;
@@ -295,21 +296,15 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
     : presented;
 }
 
-function createProfiledServer(
+// Schemas and stateless handlers belong to the factory, not each HTTP session.
+// Authentication is resolved per request by createHttpClient; presentation stays local.
+function createTools(
   config: SyncMcpConfig,
   operations: ReturnType<typeof parseSpec>,
-  authHeaders: Record<string, string> = {},
+  httpClient: ReturnType<typeof createHttpClient>,
+  getProfile: () => ClientProfile,
   chatgptApp?: ChatgptApp,
-  previousApps: ChatgptApp[] = [],
-): McpServer {
-  let profile: ClientProfile | undefined;
-  let clientName: string | undefined;
-  const getProfile = () => profile ?? resolveClientProfile();
-  const httpClient = createHttpClient(
-    config.baseUrl,
-    authHeaders,
-    config.transport === 'stdio' ? () => clientName : undefined,
-  );
+): McpToolDefinition[] {
   const generatedTools = generateTools(
     config.transport === 'http'
       ? operations.filter((operation) =>
@@ -338,10 +333,32 @@ function createProfiledServer(
         : tool,
     ),
   ];
+  return config.transport === 'http'
+    ? allTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
+    : allTools;
+}
+
+function createProfiledServer(
+  config: SyncMcpConfig,
+  operations: ReturnType<typeof parseSpec>,
+  authHeaders: Record<string, string> = {},
+  chatgptApp?: ChatgptApp,
+  previousApps: ChatgptApp[] = [],
+  sharedCatalog?: {
+    tools: McpToolDefinition[];
+    descriptors: Map<ClientProfile['name'], Tool[]>;
+  },
+): McpServer {
+  let profile: ClientProfile | undefined;
+  let clientName: string | undefined;
+  const getProfile = () => profile ?? resolveClientProfile();
+  const httpClient = createHttpClient(
+    config.baseUrl,
+    authHeaders,
+    config.transport === 'stdio' ? () => clientName : undefined,
+  );
   const tools =
-    config.transport === 'http'
-      ? allTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-      : allTools;
+    sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
   const server = new McpServer(
     { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
     { instructions: SERVER_INSTRUCTIONS },
@@ -369,7 +386,7 @@ function createProfiledServer(
             ) {
               throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
             }
-            return tool.handler.apply(undefined, parameters);
+            return tool.handler(args, { ...parameters[1], clientProfile: profile });
           },
         }) as McpToolDefinition,
     ),
@@ -425,6 +442,12 @@ function createProfiledServer(
       clientName = server.server.getClientVersion()?.name;
       const initializedProfile = resolveClientProfile(clientName);
       profile = initializedProfile;
+      const cached = sharedCatalog?.descriptors.get(initializedProfile.name);
+      if (cached) {
+        descriptors = cached;
+        onInitialized?.();
+        return;
+      }
       const visible =
         config.transport === 'http'
           ? selectHostedHttpTools(tools, initializedProfile)
@@ -442,6 +465,7 @@ function createProfiledServer(
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       }));
+      sharedCatalog?.descriptors.set(initializedProfile.name, descriptors);
     }
     onInitialized?.();
   };
@@ -462,32 +486,28 @@ export async function createMcpServerFactory(
   config: SyncMcpConfig,
 ): Promise<{ createServer: () => McpServer; toolCount: number }> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
-  // Filter once before constructing per-session schemas. Handlers and profile
-  // state remain session-local, but excluded API operations do no session work.
+  // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
       translationOperation([operation]) !== undefined ||
       dialogueOperations([operation]).length > 0,
   );
-  const registeredNames = new Set([
-    ...(chatgptApp ? ['open-sync-app'] : []),
-    'open-upload-widget',
-    'upload-media',
-    'create-lipsync',
-    ...(projectHistoryOperations(operations).length ? ['projects_get-generations'] : []),
-    ...createTranslationTools(operations, createHttpClient(config.baseUrl)).map(
-      (tool) => tool.name,
-    ),
-    ...createDialogueTools(operations, createHttpClient(config.baseUrl)).map((tool) => tool.name),
-    ...operations
-      .map((operation) => operationIdToToolName(operation.operationId))
-      .filter((name) => HOSTED_HTTP_TOOL_ALLOWLIST.has(name)),
-  ]);
+  const tools = createTools(
+    config,
+    operations,
+    createHttpClient(config.baseUrl),
+    resolveClientProfile,
+    chatgptApp,
+  );
+
+  // Four presentation profiles at most; never key this by untrusted client names.
+  const sharedCatalog = { tools, descriptors: new Map<ClientProfile['name'], Tool[]>() };
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
-    toolCount: registeredNames.size,
-    createServer: () => createProfiledServer(config, operations, {}, chatgptApp, previousApps),
+    toolCount: new Set(tools.map((tool) => tool.name)).size,
+    createServer: () =>
+      createProfiledServer(config, operations, {}, chatgptApp, previousApps, sharedCatalog),
   };
 }
 
