@@ -151,8 +151,8 @@ that record. The public issuer remains `mcp.sync.so`; test the staged target usi
 an approved hostname/Host-routing test path without rewriting production OAuth
 identity. Verify the certificate used for public origin TLS supports `mcp.sync.so`
 and Cloudflare's configured TLS mode before cutover. Do not disable TLS checks.
-The ingress includes the public host rule, but external-dns owns only the staging
-hostname. No workflow edits Cloudflare or switches normal production traffic.
+The ingress includes the public host rule; Terraform owns both production staging
+and public DNS. No workflow edits Cloudflare or switches normal production traffic.
 
 ## Cutover, rollback and retirement
 
