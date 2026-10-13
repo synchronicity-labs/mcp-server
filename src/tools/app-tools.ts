@@ -657,7 +657,7 @@ export function createAppTools(
 
         if (!hasAudio && !hasScript) {
           throw new Error(
-            'Audio or script is required — pass `audioUrl`/upload audio, or pass `script` with a `voiceId` from voices_get-voices.',
+            'Audio or script is required - pass `audioAssetId`, or pass `script` with a `voiceId` from voices_get-voices. create-lipsync also accepts `audioUrl` or an uploaded audio file.',
           );
         }
         if (hasAudio && hasScript) {
@@ -668,7 +668,7 @@ export function createAppTools(
         }
         if (!hasVideo && !hasImage) {
           throw new Error(
-            'Provide a video or an image — pass `videoUrl`/`imageUrl` or upload a file.',
+            'Provide a video or an image - pass `videoAssetId` or `imageAssetId`. create-lipsync also accepts `videoUrl`/`imageUrl` or an uploaded file.',
           );
         }
         if (hasVideo && hasImage) {

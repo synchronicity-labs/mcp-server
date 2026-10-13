@@ -159,6 +159,18 @@ it.each([
     expect(
       tools.find((tool) => tool.name === 'create-lipsync')?._meta?.['openai/fileParams'],
     ).toEqual(['video', 'image', 'audio']);
+    for (const [args, correction] of [
+      [{ videoAssetId: 'video-1' }, 'audioAssetId'],
+      [{ audioAssetId: 'audio-1' }, 'videoAssetId'],
+    ] as const) {
+      const rejected = await client.callTool({
+        name: 'create-lipsync-from-assets',
+        arguments: args,
+      });
+      expect(rejected.isError).toBe(true);
+      expect(JSON.stringify(rejected.content)).toContain(correction);
+    }
+    expect(requests).toEqual([]);
     const result = await client.callTool({
       name: 'create-lipsync-from-assets',
       arguments: {
