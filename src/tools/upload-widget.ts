@@ -541,7 +541,7 @@ export const UPLOAD_WIDGET_HTML = `
             lipsyncStarted: true,
           });
           var createArgs = { imageAssetId: assetId, script: script, voiceId: voice.id };
-          var createResult = await openai.callTool("create-lipsync", createArgs);
+          var createResult = await openai.callTool("create-lipsync-from-assets", createArgs);
           var generationId = generationIdFrom(createResult);
           if (!generationId) {
             throw new Error("Sync did not return a generation id.");

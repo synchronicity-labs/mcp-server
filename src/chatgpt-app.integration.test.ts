@@ -118,6 +118,78 @@ it.each([
   }
 });
 
+it.each([
+  'openai-mcp',
+  'openai-mcp (Codex)',
+])('creates from saved media through an app-callable descriptor without file parameters in %s', async (name) => {
+  const config = await releaseConfig();
+  const requests: { path: string; body: unknown; key: string | null }[] = [];
+  vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+    const path = new URL(input).pathname;
+    if (path === '/v2/projects/project-1') return Response.json({ id: 'project-1' });
+    if (path === '/v2/generate') {
+      requests.push({
+        path,
+        body: JSON.parse(String(init?.body)),
+        key: new Headers(init?.headers).get('Idempotency-Key'),
+      });
+      return Response.json({ id: 'generation-1', status: 'PENDING' });
+    }
+    return Response.json({ openapi: '3.0.0', paths: {} });
+  });
+  const factory = await createMcpServerFactory(config);
+  const server = factory.createServer();
+  const client = new Client({ name, version: 'fixture' });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await server.connect(st);
+  await client.connect(ct);
+  try {
+    const { tools } = await client.listTools();
+    const appTool = tools.find((tool) => tool.name === 'create-lipsync-from-assets');
+    expect(appTool).toBeDefined();
+    // The host refuses iframe calls to any tool carrying fileParams, even
+    // when this particular request contains only asset IDs.
+    expect(appTool?._meta?.['openai/fileParams']).toBeUndefined();
+    expect(appTool?._meta?.ui).toMatchObject({ visibility: ['app'] });
+    expect(appTool?._meta?.['openai/widgetAccessible']).toBe(true);
+    for (const field of ['video', 'image', 'audio', 'videoUrl', 'imageUrl', 'audioUrl']) {
+      expect(appTool?.inputSchema.properties).not.toHaveProperty(field);
+    }
+    // Model-initiated attachment handling remains available independently.
+    expect(
+      tools.find((tool) => tool.name === 'create-lipsync')?._meta?.['openai/fileParams'],
+    ).toEqual(['video', 'image', 'audio']);
+    const result = await client.callTool({
+      name: 'create-lipsync-from-assets',
+      arguments: {
+        projectId: 'project-1',
+        videoAssetId: 'video-1',
+        audioAssetId: 'audio-1',
+        idempotencyKey: 'one-user-action',
+      },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ id: 'generation-1' });
+    expect(requests).toEqual([
+      {
+        path: '/v2/generate',
+        key: 'one-user-action',
+        body: {
+          model: 'sync-3',
+          projectId: 'project-1',
+          input: [
+            { type: 'video', assetId: 'video-1' },
+            { type: 'audio', assetId: 'audio-1' },
+          ],
+        },
+      },
+    ]);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
 it('rejects a release whose HTML does not match its manifest', async () => {
   const config = await releaseConfig();
   await writeFile(join(config.chatgptApp.directory, 'app.html'), '<html>changed bytes</html>');
