@@ -20,7 +20,11 @@ import {
   ClientAuthenticationError,
   mergeBasicClientCredentials,
 } from './auth/client-credentials.js';
-import { oauthFailureDiagnostics, oauthGrantType } from './auth/oauth-diagnostics.js';
+import {
+  oauthFailureDiagnostics,
+  oauthGrantType,
+  oauthRequestDiagnostics,
+} from './auth/oauth-diagnostics.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { readOAuthResponseText } from './oauth-response.js';
@@ -367,14 +371,18 @@ export async function startHttpServer(
     res.setHeader('Pragma', 'no-cache');
     const usesAuthorization = req.headers.authorization !== undefined;
     const body = asRecord(req.body);
+    const requestDiagnostics = {
+      requestId: res.locals.requestId,
+      oauthPath: path,
+      grantType: oauthGrantType(body.grant_type),
+      authorizationHeaderPresent: usesAuthorization,
+      ...oauthRequestDiagnostics(body, req.headers.authorization),
+    };
     const logOAuthFailure = (source: string, statusCode: number, response: unknown) => {
       logEvent('oauth_exchange_rejected', {
-        requestId: res.locals.requestId,
-        oauthPath: path,
+        ...requestDiagnostics,
         source,
         statusCode,
-        grantType: oauthGrantType(body.grant_type),
-        authorizationHeaderPresent: usesAuthorization,
         ...oauthFailureDiagnostics(response),
       });
     };
@@ -412,6 +420,13 @@ export async function startHttpServer(
       const responseBody = await readOAuthResponseText(upstream, controller.signal);
       if (controller.signal.aborted || res.destroyed) return;
       if (!upstream.ok) logOAuthFailure('upstream', upstream.status, responseBody);
+      else {
+        logEvent('oauth_exchange_succeeded', {
+          ...requestDiagnostics,
+          source: 'upstream',
+          statusCode: upstream.status,
+        });
+      }
       if (upstream.status === 401 && usesAuthorization) {
         res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
       }
