@@ -53,6 +53,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'open-upload-widget',
   'upload-media',
   'create-lipsync',
+  'create-lipsync-from-assets',
   'create-translate-and-dub',
   'get-translation-options',
   'voices_get-voices',
@@ -80,6 +81,7 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'create-dialogue-video',
   'upload-media',
   'create-lipsync',
+  'create-lipsync-from-assets',
   'create-translate-and-dub',
   'get-translation-options',
   'voices_get-voices',
@@ -222,6 +224,7 @@ function isStructuredContent(result: unknown): result is Record<string, unknown>
 }
 
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
+  if (tool.name === 'create-lipsync-from-assets') return profile.supportsAppUi;
   if (tool.name === 'open-sync-app') return profile.supportsAppUi;
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
   return true;
@@ -246,7 +249,7 @@ function exposeToolToWidget(tool: McpToolDefinition): McpToolDefinition {
       ...meta,
       ui: {
         ...ui,
-        visibility: ['model', 'app'],
+        visibility: ui.visibility ?? ['model', 'app'],
       },
       'openai/widgetAccessible': true,
     },

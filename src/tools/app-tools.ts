@@ -417,7 +417,7 @@ export function createAppTools(
   runtime: UploadRuntime = uploadRuntime,
   getProfile: () => ClientProfile = () => resolveClientProfile(),
 ): McpToolDefinition[] {
-  return [
+  const tools: McpToolDefinition[] = [
     {
       name: 'upload-media',
       title: 'Upload media',
@@ -657,7 +657,7 @@ export function createAppTools(
 
         if (!hasAudio && !hasScript) {
           throw new Error(
-            'Audio or script is required — pass `audioUrl`/upload audio, or pass `script` with a `voiceId` from voices_get-voices.',
+            'Audio or script is required - pass `audioAssetId`, or pass `script` with a `voiceId` from voices_get-voices. create-lipsync also accepts `audioUrl` or an uploaded audio file.',
           );
         }
         if (hasAudio && hasScript) {
@@ -668,7 +668,7 @@ export function createAppTools(
         }
         if (!hasVideo && !hasImage) {
           throw new Error(
-            'Provide a video or an image — pass `videoUrl`/`imageUrl` or upload a file.',
+            'Provide a video or an image - pass `videoAssetId` or `imageAssetId`. create-lipsync also accepts `videoUrl`/`imageUrl` or an uploaded file.',
           );
         }
         if (hasVideo && hasImage) {
@@ -738,4 +738,22 @@ export function createAppTools(
       },
     },
   ];
+  const lipsync = tools.find((tool) => tool.name === 'create-lipsync')!;
+  // Embedded apps cannot invoke tools annotated with fileParams, even with
+  // asset-only arguments. Reuse generation admission/execution without exposing
+  // the host's attachment transport to this app-only entry point.
+  const inputSchema = { ...lipsync.inputSchema };
+  for (const key of ['video', 'image', 'audio', 'videoUrl', 'imageUrl', 'audioUrl']) {
+    delete inputSchema[key];
+  }
+  const { 'openai/fileParams': _fileParams, ...meta } = lipsync.meta ?? {};
+  tools.push({
+    ...lipsync,
+    name: 'create-lipsync-from-assets',
+    description:
+      'Create one lipsync generation from saved Sync image/video and audio asset IDs, or a saved visual asset plus script and voiceId. Uses the same project access, options, and idempotency rules as create-lipsync. For embedded Sync interfaces only.',
+    inputSchema,
+    meta: { ...meta, ui: { visibility: ['app'] }, 'openai/widgetAccessible': true },
+  });
+  return tools;
 }
