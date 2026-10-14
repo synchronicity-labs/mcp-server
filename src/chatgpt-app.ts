@@ -109,7 +109,7 @@ export function createOpenSyncAppTool(
 ): McpToolDefinition {
   return {
     name: 'open-sync-app',
-    title: 'sync.',
+    title: 'sync. labs',
     description:
       'Use this when the user asks to open Sync, upload media in its interface, or visually configure a talking photo, lipsync video, Translate & Dub, or Edit Dialogue workflow. Browse existing projects and choose media before generating. This interface does not provide subtitle-only output, standalone MP3 voiceovers, trimming, or background-music mixing; explain that limitation rather than opening it to fulfill those tasks. Requesting the interface does not start a generation or spend credits. The result only confirms the request; do not claim the interface rendered unless the user confirms it.',
     inputSchema: {},
