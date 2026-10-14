@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sync-mcp
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=900
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=60,stickiness.enabled=true,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400
+    external-dns.alpha.kubernetes.io/hostname: MCP_HOST
+    external-dns.alpha.kubernetes.io/ingress-hostname-source: annotation-only
+spec:
+  ingressClassName: alb
+  tls:
+  - hosts:
+    - MCP_HOST
+  rules:
+  - host: MCP_HOST
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sync-mcp
+            port:
+              number: 80
