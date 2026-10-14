@@ -1,10 +1,10 @@
-import { randomBytes } from 'node:crypto';
 import { request } from 'node:https';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import cors from 'cors';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
+import { createReplicaId } from './replica-routing.js';
 import type { McpToolDefinition } from './tools/generator.js';
 import { uploadRuntime } from './upload-runtime.js';
 
@@ -54,7 +54,7 @@ export function relayUploadTool(
         destination.password
       )
         throw new Error('Unexpected storage upload destination.');
-      const token = randomBytes(32).toString('hex');
+      const token = createReplicaId();
       const expiresIn = Math.min(signed.expiresIn ?? 300, 300);
       process.stderr.write(
         JSON.stringify({

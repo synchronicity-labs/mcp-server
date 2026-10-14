@@ -28,6 +28,9 @@ let started = deferred<void>();
 let aborted = false;
 let release = deferred<void>();
 beforeAll(async () => {
+  // Exercise production wiring with owner-tagged IDs, not only the router fixture.
+  vi.stubEnv('MCP_REPLICA_SERVICE', 'mcp-peers.default.svc.cluster.local');
+  vi.stubEnv('PORTER_POD_IP', '10.10.0.1');
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   upstream = createServer(async (req, res) => {
@@ -113,6 +116,7 @@ afterAll(async () => {
         if (!previous.get(event)?.includes(listener))
           emitter.removeListener(event, listener as (...args: unknown[]) => void);
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   }
 });
 
