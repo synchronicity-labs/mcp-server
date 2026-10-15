@@ -4,6 +4,7 @@ import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
+import { translationPreviewAvailable } from './translation-preview.js';
 
 // Resolve the public DTO's allOf wrapper without maintaining a second language list.
 function property(schema: JsonSchema | undefined, name: string): JsonSchema | undefined {
@@ -114,14 +115,22 @@ export function createTranslationTools(
       description:
         'Read the source and target languages supported by the current translation API. Does not create a generation or estimate pricing.',
       inputSchema: {},
-      outputSchema: { targetLanguages: languageList, sourceLanguages: languageList },
+      outputSchema: {
+        targetLanguages: languageList,
+        sourceLanguages: languageList,
+        previewAvailable: z.boolean(),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
       },
-      handler: async () => ({ targetLanguages: target.data, sourceLanguages: source.data }),
+      handler: async () => ({
+        targetLanguages: target.data,
+        sourceLanguages: source.data,
+        previewAvailable: translationPreviewAvailable(operations),
+      }),
     },
   ];
 }

@@ -13,6 +13,7 @@ const ALLOWED_TAGS = new Set([
   'text-to-speech',
   'transcriptions',
   'dialogue edits',
+  'dubbing',
 ]);
 
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {

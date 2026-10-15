@@ -70,6 +70,7 @@ describe('createAppTools — create-lipsync', () => {
   ])('forwards public model settings and speaker selection %j without changing the idempotency key', async (speaker) => {
     const { tool, request } = setup();
     const options = {
+      sync_mode: 'silence',
       temperature: 0.7,
       active_speaker_detection: speaker,
       occlusion_detection_enabled: true,
@@ -107,6 +108,7 @@ describe('createAppTools — create-lipsync', () => {
 
   it.each([
     { temperature: 1.1 },
+    { sync_mode: 'unknown-mode' },
     { reasoning_enabled: 'true' },
     { output_bucket_name: 'untrusted' },
     { active_speaker_detection: { coordinates: [1] } },

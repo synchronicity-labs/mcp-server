@@ -186,6 +186,26 @@ published UI resources. Rescan publisher metadata and verify preview, attachment
 reload recovery and playback in ChatGPT. This branch does not deploy or establish
 production acceptance; older APIs omit the speech tools and the UI fails closed.
 
+### Embedded translation previews
+
+With the project-scoped `/v2/dubbing/jobs` API deployed, the server exposes
+`estimate-translation-preview`, `create-translation-preview` and
+`get-translation-preview`. These are separate from combined video dubbing.
+Creation requires a stable UUID key and an authorized saved audio asset; the API
+binds the key to immutable inputs before provider admission. A lost response
+reuses the same key or known job ID. `recoveryRequired` never permits a fresh
+paid request. Save/reconcile the resulting audio separately, then explicitly
+lip-sync that saved audio rather than submitting another combined dub.
+
+Older APIs omit these tools; `get-translation-options.previewAvailable` reports
+that distinction. Deploy API support before MCP, package the matching shared
+Studio frontend, rescan, and verify the real ChatGPT workflow. Local fixtures
+establish neither production release nor provider output quality.
+
+`get-account-context` reads `/v2/oauth/account` for the connected account and
+organization. API keys retain a null signed-in account. The UI must not infer a
+personal asset scope or permissions from a client name or an API key's owner.
+
 ### Reusable voice cloning in ChatGPT
 
 When the connected API exposes voice cloning, hosted clients can call
