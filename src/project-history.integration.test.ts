@@ -24,9 +24,15 @@ afterEach(async () => {
 });
 
 async function fixture(
-  options: { supported?: boolean; ignoresFilter?: boolean; denied?: boolean } = {},
+  options: {
+    supported?: boolean;
+    ignoresFilter?: boolean;
+    denied?: boolean;
+    basePath?: string;
+  } = {},
 ) {
   const calls: Array<{ path: string; query: Record<string, string> }> = [];
+  const basePath = options.basePath ?? '';
   const rows = [
     {
       id: generationId,
@@ -38,7 +44,7 @@ async function fixture(
   const upstream = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://fixture.invalid');
     res.setHeader('Content-Type', 'application/json');
-    if (url.pathname === '/api-json') {
+    if (url.pathname === `${basePath}/api-json`) {
       res.end(
         JSON.stringify({
           openapi: '3.0.0',
@@ -86,12 +92,12 @@ async function fixture(
       return;
     }
     calls.push({ path: url.pathname, query: Object.fromEntries(url.searchParams) });
-    if (url.pathname === `/v2/projects/${projectId}`) {
+    if (url.pathname === `${basePath}/v2/projects/${projectId}`) {
       res.statusCode = options.denied ? 404 : 200;
       res.end(
         JSON.stringify(options.denied ? { message: 'Project not found' } : { id: projectId }),
       );
-    } else if (url.pathname === '/v2/generations') {
+    } else if (url.pathname === `${basePath}/v2/generations`) {
       res.end(
         JSON.stringify(
           options.ignoresFilter
@@ -108,7 +114,7 @@ async function fixture(
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const factory = await createMcpServerFactory({
-    baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
+    baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}${basePath}`,
     transport: 'http',
     port: 0,
   });
@@ -122,8 +128,11 @@ async function fixture(
   return { client, calls, rows };
 }
 
-it('reads selected-project history through the hosted ChatGPT tool with cursor pagination', async () => {
-  const { client, calls, rows } = await fixture();
+it.each([
+  '',
+  '/api-proxy',
+])('reads selected-project history with cursor pagination under API base path %j', async (basePath) => {
+  const { client, calls, rows } = await fixture({ basePath });
   const tool = (await client.listTools()).tools.find(
     (item) => item.name === 'projects_get-generations',
   );
@@ -136,8 +145,8 @@ it('reads selected-project history through the hosted ChatGPT tool with cursor p
   expect(result.isError).not.toBe(true);
   expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(rows, null, 2) }]);
   expect(calls).toEqual([
-    { path: `/v2/projects/${projectId}`, query: {} },
-    { path: '/v2/generations', query: { projectId, limit: '2', cursor: generationId } },
+    { path: `${basePath}/v2/projects/${projectId}`, query: {} },
+    { path: `${basePath}/v2/generations`, query: { projectId, limit: '2', cursor: generationId } },
   ]);
 });
 

@@ -16,6 +16,7 @@ let dropUpstreamResponse = false;
 let userinfoStatus = 200;
 const calls: Array<{ path: string; body: URLSearchParams; authorization: string | undefined }> = [];
 const logs: string[] = [];
+const apiPrefix = '/api-proxy';
 const events = ['SIGINT', 'SIGTERM', 'uncaughtExceptionMonitor', 'warning', 'exit'] as const;
 const emitter: EventEmitter = process;
 const previous = new Map<string, ReturnType<EventEmitter['listeners']>>();
@@ -39,13 +40,13 @@ beforeAll(async () => {
       return;
     }
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/v2/oauth/userinfo') {
+    if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
       res.statusCode = userinfoStatus;
       res.setHeader('Retry-After', '9');
       res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
       return;
     }
-    if (req.url?.startsWith('/v2/oauth/register/')) {
+    if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
       res.end(
         JSON.stringify({
           client_id: 'client',
@@ -75,7 +76,7 @@ beforeAll(async () => {
   await startHttpServer(
     { toolCount: 0, createServer: () => new McpServer({ name: 'auth-fixture', version: '1' }) },
     {
-      baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
+      baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}${apiPrefix}`,
       transport: 'http',
       port: 0,
     },
@@ -228,7 +229,7 @@ for (const path of ['/token', '/revoke']) {
     expect(res.status).toBe(200);
     expect(calls.length).toBe(before + 1);
     const sent = calls.at(-1);
-    expect(sent?.path).toBe(`/v2/oauth${path}`);
+    expect(sent?.path).toBe(`${apiPrefix}/v2/oauth${path}`);
     expect(sent?.body.get('client_id')).toBe('client');
     expect(sent?.body.get('client_secret')).toBe('fake-secret');
     expect(sent?.body.get('code_verifier')).toBe('fake-verifier');

@@ -78,7 +78,7 @@ export function createHttpClient(
       );
       try {
         signal.throwIfAborted();
-        const url = new URL(path, baseUrl);
+        const url = new URL(path.replace(/^\//, ''), `${baseUrl.replace(/\/$/, '')}/`);
         if (options.query) {
           for (const [key, value] of Object.entries(options.query)) {
             if (value !== undefined && value !== '') {
