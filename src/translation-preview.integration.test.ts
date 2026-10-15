@@ -17,12 +17,12 @@ afterEach(async () => {
 });
 async function fixture({
   available = true,
-  denied = false,
+  rejection,
   transport = 'http',
   preview = { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
 }: {
   available?: boolean;
-  denied?: boolean;
+  rejection?: { status: number; message: string; errorCode?: string };
   transport?: 'http' | 'stdio';
   preview?: {
     sourceDurationSeconds: number;
@@ -31,6 +31,7 @@ async function fixture({
   } | null;
 } = {}) {
   const calls: { path: string; key?: string; token?: string; body?: unknown }[] = [];
+  let readStatus = 'COMPLETED';
   const upstream = createServer(async (req, res) => {
     res.setHeader('content-type', 'application/json');
     if (req.url === '/api-json') {
@@ -81,9 +82,9 @@ async function fixture({
       token: req.headers.authorization,
       body: raw ? JSON.parse(raw) : undefined,
     });
-    if (denied) {
-      res.statusCode = 422;
-      res.end(JSON.stringify({ message: 'Project not found' }));
+    if (rejection) {
+      res.statusCode = rejection.status;
+      res.end(JSON.stringify(rejection));
       return;
     }
     if (req.url === '/v2/dubbing/jobs/estimate')
@@ -101,12 +102,13 @@ async function fixture({
         JSON.stringify({
           id: jobId,
           projectId,
-          status: req.method === 'GET' ? 'COMPLETED' : 'PROCESSING',
+          status: req.method === 'GET' ? readStatus : 'PROCESSING',
           sourceLang: 'auto',
           targetLang: 'es',
           outputMediaUrl: req.method === 'GET' ? 'https://media.example.test/translated.wav' : null,
           outputDurationSec: req.method === 'GET' ? 2 : null,
           error: null,
+          createdAt: '2026-10-15T12:00:00.000Z',
           recoveryRequired: false,
           privateProviderId: 'must-not-leak',
         }),
@@ -132,14 +134,21 @@ async function fixture({
   await client.connect(ct);
   const call = (name: string, args: Record<string, unknown>) =>
     runWithAuth('translation-user', 'openai-mcp', () => client.callTool({ name, arguments: args }));
-  return { client, call, calls };
+  return {
+    client,
+    call,
+    calls,
+    setReadStatus: (status: string) => {
+      readStatus = status;
+    },
+  };
 }
 
 it.each([
   'http',
   'stdio',
 ] as const)('%s quotes and admits only a keyed standalone dub, then reads its translated audio', async (transport) => {
-  const { client, call, calls } = await fixture({ transport });
+  const { client, call, calls, setReadStatus } = await fixture({ transport });
   const catalog = (await client.listTools()).tools;
   expect(catalog.filter((tool) => tool.name.startsWith('dubbing-jobs_'))).toEqual([]);
   const tool = catalog.find((t) => t.name === 'create-translation-preview');
@@ -160,6 +169,14 @@ it.each([
       })
     ).structuredContent,
   ).toMatchObject({ id: jobId, status: 'PROCESSING' });
+  setReadStatus('COMPLETING');
+  const completing = await call('get-translation-preview', { projectId, id: jobId });
+  expect(completing.structuredContent).toMatchObject({
+    id: jobId,
+    status: 'COMPLETING',
+    createdAt: '2026-10-15T12:00:00.000Z',
+  });
+  setReadStatus('COMPLETED');
   const completed = await call('get-translation-preview', { projectId, id: jobId });
   expect(completed.structuredContent).toMatchObject({
     status: 'COMPLETED',
@@ -178,6 +195,12 @@ it.each([
       key: idempotencyKey,
       token: 'Bearer translation-user',
       body: { projectId, audioAssetId, targetLang: 'es', sourceLang: 'auto' },
+    },
+    {
+      path: `/v2/dubbing/jobs/${jobId}?projectId=${projectId}`,
+      key: undefined,
+      token: 'Bearer translation-user',
+      body: undefined,
     },
     {
       path: `/v2/dubbing/jobs/${jobId}?projectId=${projectId}`,
@@ -229,20 +252,34 @@ it.each([
   ).toBe(true);
   expect(calls).toHaveLength(0);
 });
-it('propagates project denial without retrying paid admission', async () => {
-  const { client, call, calls } = await fixture({ denied: true });
+it.each([
+  { status: 422, message: 'Project not found' },
+  { status: 402, message: 'No free previews remain', errorCode: 'free_tier_generations_exhausted' },
+  { status: 402, message: 'Account payment hold', errorCode: 'account_payment_required' },
+  { status: 402, message: 'Not enough credits', errorCode: 'insufficient_credits' },
+])('preserves typed rejection $errorCode without retrying paid admission', async (rejection) => {
+  const { client, call, calls } = await fixture({ rejection });
   await client.listTools();
-  expect(
-    (
-      await call('create-translation-preview', {
-        projectId,
-        audioAssetId,
-        targetLang: 'es',
-        idempotencyKey,
-      })
-    ).isError,
-  ).toBe(true);
-  expect(calls).toHaveLength(1);
+  for (const [name, args] of [
+    ['estimate-translation-preview', { projectId, audioAssetId }],
+    ['create-translation-preview', { projectId, audioAssetId, targetLang: 'es', idempotencyKey }],
+  ] as const) {
+    const rejected = await call(name, args);
+    expect(rejected.isError).toBe(true);
+    const text = (rejected.content as { type: string; text?: string }[]).find(
+      (part) => part.type === 'text',
+    )?.text;
+    const payload = JSON.parse(text!);
+    expect(payload.error).toMatchObject({
+      status: rejection.status,
+      ...(rejection.errorCode ? { code: rejection.errorCode } : {}),
+    });
+    expect(payload.error.message).toContain(rejection.message);
+  }
+  expect(calls.map((request) => request.path)).toEqual([
+    '/v2/dubbing/jobs/estimate',
+    '/v2/dubbing/jobs',
+  ]);
 });
 it('omits standalone translation tools against an older API', async () => {
   const { client, calls } = await fixture({ available: false });
