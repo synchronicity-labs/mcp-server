@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
+import { dialogueEditsSchema } from './dialogue-edits.js';
 import { generateTools, type McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
@@ -132,10 +133,11 @@ export function createDialogueTools(
       inputSchema: sourceSchema.extend({
         transcriptionId: z.uuid().optional(),
         previousPreviewId: z.uuid().optional(),
-        edits: preview.inputSchema.edits,
+        edits: dialogueEditsSchema,
       }).shape,
       annotations: writeHints,
       handler: async (args, context) => {
+        const edits = dialogueEditsSchema.parse(args.edits);
         if (Boolean(args.transcriptionId) === Boolean(args.previousPreviewId)) {
           throw new Error('Provide one transcriptionId or previousPreviewId, not both.');
         }
@@ -160,9 +162,9 @@ export function createDialogueTools(
             sourceVideoUrl: input.sourceVideoUrl,
             projectId: input.projectId,
             transcript: previous ? previous.sourceTranscript : transcriptJob.transcript,
-            edits: args.edits,
+            edits,
             ...(previous?.voiceId ? { voiceId: previous.voiceId } : {}),
-            ...(previous && JSON.stringify(previous.edits) === JSON.stringify(args.edits)
+            ...(previous && JSON.stringify(previous.edits) === JSON.stringify(edits)
               ? { rerunOfJobId: previous.id }
               : {}),
           },
