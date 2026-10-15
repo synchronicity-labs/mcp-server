@@ -144,6 +144,21 @@ export function createToolDescriptorMeta(
   };
 }
 
+// SDK clients validate structured errors too. Retained widgets require this
+// envelope; success registration and projection remain independently strict.
+const toolErrorOutputSchema = z.toJSONSchema(
+  z.object({
+    error: z.object({
+      message: z.string(),
+      status: z.number().int().optional(),
+      code: z.string().optional(),
+      retryable: z.boolean().optional(),
+      retryAfterMs: z.number().finite().optional(),
+      generationId: z.string().optional(),
+    }),
+  }),
+);
+
 export function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
     server.registerTool(
@@ -164,17 +179,14 @@ export function registerTools(server: McpServer, tools: McpToolDefinition[]): vo
           const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
           return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
-          return createToolErrorResult(error, !tool.outputSchema);
+          return createToolErrorResult(error);
         }
       },
     );
   }
 }
 
-export function createToolErrorResult(
-  error: unknown,
-  includeStructuredContent = true,
-): CallToolResult {
+export function createToolErrorResult(error: unknown): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ApiRequestError) {
     const structuredContent = {
@@ -187,15 +199,13 @@ export function createToolErrorResult(
       },
     };
     return {
-      // Clients validate structured content against the success schema even for
-      // isError replies. Keep typed error details in JSON text for these tools.
       content: [
         {
           type: 'text',
-          text: includeStructuredContent ? `Error: ${message}` : JSON.stringify(structuredContent),
+          text: JSON.stringify(structuredContent),
         },
       ],
-      ...(includeStructuredContent ? { structuredContent } : {}),
+      structuredContent,
       isError: true,
     };
   }
@@ -218,7 +228,7 @@ export function createToolErrorResult(
     };
     return {
       content: [{ type: 'text', text: JSON.stringify(structuredContent, null, 2) }],
-      ...(includeStructuredContent ? { structuredContent } : {}),
+      structuredContent,
       isError: true,
     };
   }
@@ -518,7 +528,12 @@ function createProfiledServer(
         description: tool.description,
         inputSchema: z.toJSONSchema(z.object(tool.inputSchema)) as Tool['inputSchema'],
         ...(tool.outputSchema
-          ? { outputSchema: z.toJSONSchema(z.object(tool.outputSchema)) as Tool['outputSchema'] }
+          ? {
+              outputSchema: {
+                type: 'object',
+                anyOf: [z.toJSONSchema(z.object(tool.outputSchema)), toolErrorOutputSchema],
+              } as Tool['outputSchema'],
+            }
           : {}),
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),

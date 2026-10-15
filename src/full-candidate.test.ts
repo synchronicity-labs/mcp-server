@@ -263,6 +263,10 @@ beforeEach(async () => {
       res.end(JSON.stringify({ id: 'generation', status: 'PENDING' }));
       return;
     }
+    if (path === '/v2/generate/malformed') {
+      res.end(JSON.stringify({ id: 'malformed', status: 123 }));
+      return;
+    }
     if (path === '/v2/generate/generation') {
       const timeout = requestUrl.searchParams.get('timeout');
       if (timeout !== null && Number(timeout) > 10) {
@@ -373,6 +377,11 @@ it('preserves profiles, authenticated writes and signed results across concurren
         arguments: { id: 'generation', wait: true },
       });
       expect(result.structuredContent).toMatchObject({ outputUrl: signedUrl });
+      const malformed = await client.callTool({
+        name: 'generate_get-generation',
+        arguments: { id: 'malformed' },
+      });
+      expect(malformed.isError).toBe(true);
       const polls = calls.filter(
         (call) => call.path === '/v2/generate/generation' && call.token === `Bearer ${name}`,
       );
@@ -654,10 +663,11 @@ it.each([
     },
   });
   expect(result.isError).toBe(true);
-  expect(result.structuredContent).toBeUndefined();
   const detail = CallToolResultSchema.parse(result).content.find((item) => item.type === 'text');
   expect(detail?.type).toBe('text');
-  expect(JSON.parse(detail!.text as string)).toEqual({
+  const payload = JSON.parse(detail!.text as string);
+  expect(result.structuredContent).toEqual(payload);
+  expect(payload).toEqual({
     error: {
       status,
       code,

@@ -22,7 +22,13 @@ async function fixture({
   preview = { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
 }: {
   available?: boolean;
-  rejection?: { status: number; message: string; errorCode?: string };
+  rejection?: {
+    status: number;
+    message: string;
+    errorCode?: string;
+    generationId?: string;
+    retryAfterSeconds?: number;
+  };
   transport?: 'http' | 'stdio';
   preview?: {
     sourceDurationSeconds: number;
@@ -84,6 +90,7 @@ async function fixture({
     });
     if (rejection) {
       res.statusCode = rejection.status;
+      if (rejection.retryAfterSeconds) res.setHeader('retry-after', rejection.retryAfterSeconds);
       res.end(JSON.stringify(rejection));
       return;
     }
@@ -254,6 +261,14 @@ it.each([
 });
 it.each([
   { status: 422, message: 'Project not found' },
+  { status: 403, message: 'Project access revoked' },
+  {
+    status: 429,
+    message: 'Recover the existing job',
+    errorCode: 'rate_limited',
+    retryAfterSeconds: 2,
+    generationId: jobId,
+  },
   { status: 402, message: 'No free previews remain', errorCode: 'free_tier_generations_exhausted' },
   { status: 402, message: 'Account payment hold', errorCode: 'account_payment_required' },
   { status: 402, message: 'Not enough credits', errorCode: 'insufficient_credits' },
@@ -270,6 +285,10 @@ it.each([
       (part) => part.type === 'text',
     )?.text;
     const payload = JSON.parse(text!);
+    // Retained packaged widgets decode errors only from this protocol field.
+    expect(rejected.structuredContent).toEqual(payload);
+    if ('retryAfterSeconds' in rejection) expect(payload.error.retryAfterMs).toBe(2000);
+    if ('generationId' in rejection) expect(payload.error.generationId).toBe(jobId);
     expect(payload.error).toMatchObject({
       status: rejection.status,
       ...(rejection.errorCode ? { code: rejection.errorCode } : {}),
