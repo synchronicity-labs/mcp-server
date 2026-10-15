@@ -8,6 +8,50 @@ methods. Registration normalization still defaults/forces confidential
 existing registration and cold-client recovery behavior. No public-client support
 or SDK upgrade is introduced.
 
+## Diagnosing a publisher connection
+
+Both `/token` and `/revoke` emit `oauth_exchange_rejected` on failure and
+`oauth_exchange_succeeded` when the upstream accepts the exchange. Events include
+the existing `requestId`, `oauthPath`, `grantType`, `source`, and `statusCode`.
+Match `requestId` to the response's `x-request-id` and the `http_request` event.
+An exchange success alone does not prove that the client received or saved its
+tokens, or that a later publisher scan succeeded.
+
+Credential diagnostics contain fixed labels only:
+
+| Field | Values / meaning |
+| --- | --- |
+| `bodyClientId`, `bodyClientSecret` | `missing`, `empty`, `present`, or `non_string`; presence in the incoming form, not validity |
+| `authorizationScheme` | `none`, `basic`, or `other`; describes the header without decoding or logging it |
+| `authorizationHeaderPresent` | Existing boolean retained for log consumers |
+| `reason` (rejections only) | Allowlisted reason such as `invalid_client_secret`, `refresh_token_invalid_revoked_or_expired`, or `organization_access_revoked`; otherwise `unrecognized_response` |
+
+A valid Basic request has both body credential fields `missing`. Do not interpret
+those fields without `authorizationScheme` and the rejection reason. A local
+`invalid_client_authentication` with scheme `none` and missing/empty form fields
+means required credentials did not arrive. An upstream `invalid_client_secret`
+means the API rejected the supplied secret. Refresh-token rejection does not by
+itself distinguish expiry, revocation, or reuse after rotation. Logs intentionally
+omit client IDs, secrets, tokens, authorization headers, and arbitrary upstream
+response text. These labels do not identify a request as OpenAI's.
+
+For one controlled publisher attempt:
+
+1. Record the UTC time, publisher scan ID, failed URL/status, OAuth error, and
+   `x-request-id` from the publisher or OpenAI support. Never request credential
+   values. If Reconnect/Rescan is disabled, obtain a supported connection-recovery
+   path from OpenAI before proceeding.
+2. Match the request ID to these events and the HTTP completion event. The ID is
+   local to the MCP hop; it is not currently forwarded to the API. Distinguish
+   local validation, upstream rejection, and transport/timeout failures before
+   changing code. Do not identify callers from a request-ID prefix alone.
+3. Repair missing stored connection credentials through the supported reconnect
+   flow, or reproduce the demonstrated server/rotation defect with an isolated
+   client and a regression test. Do not weaken authentication to accept a scan.
+4. Verify initial authorization-code exchange, a subsequent refresh exchange,
+   and a completed publisher scan with expected tools/resources. Record separate
+   evidence for each. A package approval or a reconnect alone is not acceptance.
+
 Evidence for compatibility: merged MCP PRs [9](https://github.com/synchronicity-labs/mcp-server/pull/9)
 and [37](https://github.com/synchronicity-labs/mcp-server/pull/37) document ChatGPT's
 Basic path and the cold-cache secret gap. Sync API source examined at

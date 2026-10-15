@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
+import { getHeapStatistics } from 'node:v8';
 import { InvalidRequestError, OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import {
   createOAuthMetadata,
@@ -19,7 +20,11 @@ import {
   ClientAuthenticationError,
   mergeBasicClientCredentials,
 } from './auth/client-credentials.js';
-import { oauthFailureDiagnostics, oauthGrantType } from './auth/oauth-diagnostics.js';
+import {
+  oauthFailureDiagnostics,
+  oauthGrantType,
+  oauthRequestDiagnostics,
+} from './auth/oauth-diagnostics.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import type { SyncMcpConfig } from './config.js';
 import { readOAuthResponseText } from './oauth-response.js';
@@ -56,6 +61,12 @@ const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 60_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
 const DEFAULT_RUNTIME_TELEMETRY_INTERVAL_MS = 15_000;
 const MAX_REQUEST_ID_LENGTH = 128;
+
+// Leave room for existing requests, JSON/UI responses and GC. Never evict an
+// active session or replay an operation merely to admit a new connection.
+export function hasSessionHeapCapacity(heap = getHeapStatistics()): boolean {
+  return heap.used_heap_size < heap.heap_size_limit * 0.6;
+}
 
 type SessionRuntimeConfig = {
   idleTtlMs: number;
@@ -360,14 +371,18 @@ export async function startHttpServer(
     res.setHeader('Pragma', 'no-cache');
     const usesAuthorization = req.headers.authorization !== undefined;
     const body = asRecord(req.body);
+    const requestDiagnostics = {
+      requestId: res.locals.requestId,
+      oauthPath: path,
+      grantType: oauthGrantType(body.grant_type),
+      authorizationHeaderPresent: usesAuthorization,
+      ...oauthRequestDiagnostics(body, req.headers.authorization),
+    };
     const logOAuthFailure = (source: string, statusCode: number, response: unknown) => {
       logEvent('oauth_exchange_rejected', {
-        requestId: res.locals.requestId,
-        oauthPath: path,
+        ...requestDiagnostics,
         source,
         statusCode,
-        grantType: oauthGrantType(body.grant_type),
-        authorizationHeaderPresent: usesAuthorization,
         ...oauthFailureDiagnostics(response),
       });
     };
@@ -405,6 +420,13 @@ export async function startHttpServer(
       const responseBody = await readOAuthResponseText(upstream, controller.signal);
       if (controller.signal.aborted || res.destroyed) return;
       if (!upstream.ok) logOAuthFailure('upstream', upstream.status, responseBody);
+      else {
+        logEvent('oauth_exchange_succeeded', {
+          ...requestDiagnostics,
+          source: 'upstream',
+          statusCode: upstream.status,
+        });
+      }
       if (upstream.status === 401 && usesAuthorization) {
         res.setHeader('WWW-Authenticate', BASIC_CHALLENGE);
       }
@@ -495,6 +517,7 @@ export async function startHttpServer(
   const sessions = new SessionRegistry<StreamableHTTPServerTransport>({
     idleTtlMs: sessionRuntimeConfig.idleTtlMs,
     maxSessions: sessionRuntimeConfig.maxSessions,
+    canAdmit: hasSessionHeapCapacity,
     onRemove: (sessionId) => sessionClientNames.delete(sessionId),
     onCloseError: (error) => {
       logEvent('mcp_session_close_error', { error: serializeError(error) });
@@ -530,6 +553,7 @@ export async function startHttpServer(
         rssBytes: memory.rss,
         heapUsedBytes: memory.heapUsed,
         heapTotalBytes: memory.heapTotal,
+        heapLimitBytes: getHeapStatistics().heap_size_limit,
         externalBytes: memory.external,
         arrayBuffersBytes: memory.arrayBuffers,
       },

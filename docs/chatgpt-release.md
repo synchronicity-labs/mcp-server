@@ -7,29 +7,29 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [release CI checkout 0140adbb3](https://github.com/synchronicity-labs/sync-api-v2/commit/0140adbb3d83111790cbb11bf8a31fbe108f0a42).
-  Its Git tree is identical to dev `a558d7d5e6b4f58d7dabdf19a64ab903e20cfa55`.
-- HTML SHA256: `0f4f454753a88e6264cf1393500c9d9dac8673040459642407230a0e1ddbb258`.
-- Container directory: `/app/chatgpt-dist/0f4f454753a88e6264cf1393500c9d9dac8673040459642407230a0e1ddbb258`.
-- Adds the shared compact Edit Dialogue editor: timed-word changes, original-voice
-  preview, undo/redo, waveform/playback, preview-based final pricing, and recovery.
-  Workflow cards use two rows and two columns.
-- Preserves existing estimates, Translate & Dub, project history and media inputs.
-- Retains all three published releases: `a39e27ca488992ab54f148417646a041c7e6d667055dbc0fa5bcd674af76532b`,
-  `c048cd48c1d3bde0c9fafb1dd3cdd9ccc6dd45085060a92ed653b7cfce7592dd`,
-  and `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`.
-  All remain addressable for cached clients.
+- Source: [frontend CI checkout 304093ed83](https://github.com/synchronicity-labs/sync-api-v2/commit/304093ed83e1b5eb1090968f8d9af9d7a8e17944).
+  Its Git tree `5061f9ee55b8af1d38c9c5dc6bb9a9e39f6bb688` is identical to
+  merged main release `812ec674f8b4e896812bca9d1924f93e45d58941` (PR #6722).
+- HTML SHA256: `670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
+- Container directory: `/app/chatgpt-dist/670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
+- Uses `create-lipsync-from-assets` for embedded generation, avoiding ChatGPT's
+  rejection of app calls to tools with file parameters (frontend PR #6723).
+- Explains definite pre-submission host refusals, preserves media and unlocks
+  inputs. Uncertain submissions retain their request identity and protection
+  against duplicate jobs; status recovery shows "Checking generation...".
+- Includes partial host-state restoration from PR #6657.
+- Retains all four earlier bundles unchanged for published and cached clients.
 
-The bytes come unchanged from [frontend CI run 37779270942](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/37779270942),
-which used a frozen lockfile and passed all 228 development/artifact browser tests.
-The artifact name, actual checkout, source tree and build commands are recorded
-in `release.json`; this is a CI-built candidate, not a new local frontend build.
+The bytes come unchanged from [frontend CI run 38413950994](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/38413950994),
+which used a frozen lockfile and passed 250 source/artifact browser tests (four
+skipped). The checkout, tree, artifact ID, merged commit, and build commands are
+recorded in `release.json`. This is the tested CI artifact, not a local rebuild.
 
-Production release is on hold pending Noah's pilot-flow acceptance of the full
-monorepo batch and final release confirmation. Promote and verify required API,
-worker and database changes before deploying this package. Package CI/review and
-published ChatGPT acceptance are separate gates. See the
-[release tracker](../plans/multi-pr/edit-dialogue-release-76.md).
+MCP PR #84 already provides the required companion tool; the publisher has
+registered it as Live. Packaging and fixture tests do not establish real
+ChatGPT generation success. Follow the [release acceptance checklist](../plans/multi-pr/frontend-recovery-release.md)
+after deployment. Paid generation requires explicit approval. This bundle
+update does not require publishing plugin package 2.0.2.
 
 ### Initial project data
 

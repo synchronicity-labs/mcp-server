@@ -308,6 +308,103 @@ it('distinguishes local credential rejection and does not echo an unrecognized g
   expect(logged).toContain('"grantType":"other"');
   expect(logged).not.toContain('secret-grant-test');
 });
+
+it.each([
+  ['', 'missing', 'missing'],
+  ['client_secret=private-secret', 'missing', 'present'],
+  ['client_id=private-client', 'present', 'missing'],
+  ['client_id=&client_secret=private-secret', 'empty', 'present'],
+  ['client_id=private-client&client_secret=', 'present', 'empty'],
+])('distinguishes missing and empty body credentials: %s', async (body, idState, secretState) => {
+  const before = logs.length;
+  const response = await post('/token', body);
+  expect(response.status).toBe(400);
+  await response.text();
+  const logged = logs.slice(before).join('');
+  expect(logged).toContain(`"bodyClientId":"${idState}"`);
+  expect(logged).toContain(`"bodyClientSecret":"${secretState}"`);
+  expect(logged).toContain('"authorizationScheme":"none"');
+  expect(logged).not.toContain('private-secret');
+  expect(logged).not.toContain('private-client');
+});
+
+it.each([
+  'post',
+  'basic',
+])('correlates successful code and refresh exchanges for %s', async (method) => {
+  for (const grant of ['authorization_code', 'refresh_token']) {
+    const before = logs.length;
+    const requestId = `scan-${method}-${grant}`;
+    const response = await fetch(`${url}/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'x-request-id': requestId,
+        ...(method === 'basic' ? { Authorization: basic() } : {}),
+      },
+      body:
+        `grant_type=${grant}&code=private-code&refresh_token=private-refresh` +
+        (method === 'post' ? '&client_id=private-client&client_secret=private-secret' : ''),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-request-id')).toBe(requestId);
+    expect(await response.json()).toEqual({
+      access_token: 'fake-access-token',
+      token_type: 'Bearer',
+    });
+    const entries = logs.slice(before).map((line) => JSON.parse(line));
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: 'oauth_exchange_succeeded',
+        requestId,
+        oauthPath: 'token',
+        source: 'upstream',
+        statusCode: 200,
+        grantType: grant,
+        bodyClientId: method === 'post' ? 'present' : 'missing',
+        bodyClientSecret: method === 'post' ? 'present' : 'missing',
+        authorizationScheme: method === 'post' ? 'none' : 'basic',
+      }),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({ event: 'http_request', requestId, statusCode: 200 }),
+    );
+    const logged = logs.slice(before).join('');
+    for (const secret of [
+      'private-code',
+      'private-refresh',
+      'private-client',
+      'private-secret',
+      'fake-access-token',
+      basic(),
+    ])
+      expect(logged).not.toContain(secret);
+  }
+});
+
+it('identifies an upstream rejected secret without treating it as missing', async () => {
+  const before = logs.length;
+  upstreamStatus = 401;
+  upstreamBody = JSON.stringify({ error: 'invalid_client', message: 'Invalid client_secret' });
+  try {
+    const response = await post(
+      '/token',
+      'grant_type=refresh_token&client_id=private-client&client_secret=private-secret',
+    );
+    expect(response.status).toBe(401);
+    expect(await response.text()).toBe(upstreamBody);
+    const logged = logs.slice(before).join('');
+    expect(logged).toContain('"reason":"invalid_client_secret"');
+    expect(logged).toContain('"bodyClientSecret":"present"');
+    expect(logged).toContain('"source":"upstream"');
+    expect(logged).not.toContain('private-client');
+    expect(logged).not.toContain('private-secret');
+    expect(logged).not.toContain('oauth_exchange_succeeded');
+  } finally {
+    upstreamStatus = 200;
+    upstreamBody = undefined;
+  }
+});
 it('records the grant and source when the upstream connection fails', async () => {
   const before = logs.length;
   dropUpstreamResponse = true;

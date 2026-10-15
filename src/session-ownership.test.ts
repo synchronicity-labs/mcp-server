@@ -6,6 +6,9 @@ import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { startHttpServer } from './http-server.js';
 
+const heap = vi.hoisted(() => ({ used_heap_size: 20, heap_size_limit: 100 }));
+vi.mock('node:v8', () => ({ getHeapStatistics: () => heap }));
+
 // Exercise hosted verification and session dispatch with an SDK tool that exposes cancellation.
 // All credentials and userinfo responses are local test fixtures.
 let upstream: Server | undefined;
@@ -230,4 +233,35 @@ it('treats an absent organization as an exact legacy identity, never a wildcard'
   expect(allowed.status).toBe(200);
   await allowed.text();
   await (await request(id, 'missing-org', 'DELETE')).text();
+});
+
+it('returns retryable 503 before allocation under heap pressure, while existing sessions keep working', async () => {
+  const id = await initialize();
+  try {
+    heap.used_heap_size = 60;
+    const response = await request(undefined, 'owner', 'POST', {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: { name: 'fixture', version: '1' },
+      },
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('60');
+    expect(await response.json()).toEqual({ error: 'MCP session capacity reached' });
+    const existing = await request(id, 'owner-refreshed', 'POST', list);
+    expect(existing.status).toBe(200);
+    expect(await existing.text()).toContain('hold');
+  } finally {
+    heap.used_heap_size = 20;
+  }
+  const recovered = await initialize();
+  for (const sessionId of [id, recovered]) {
+    const response = await request(sessionId, 'owner', 'DELETE');
+    expect(response.status).toBe(200);
+    await response.text();
+  }
 });

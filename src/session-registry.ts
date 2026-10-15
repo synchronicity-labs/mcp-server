@@ -38,6 +38,7 @@ type SessionRemovalReason = 'closed' | 'expired' | 'shutdown';
 type SessionRegistryOptions = {
   idleTtlMs: number;
   maxSessions: number;
+  canAdmit?: () => boolean;
   now?: () => number;
   onCloseError?: (error: unknown) => void;
   onRemove?: (sessionId: string, reason: SessionRemovalReason) => void;
@@ -62,6 +63,7 @@ export class SessionRegistry<T extends ClosableTransport> {
   readonly #entries = new Map<string, SessionEntry<T>>();
   readonly #idleTtlMs: number;
   readonly #maxSessions: number;
+  readonly #canAdmit: () => boolean;
   readonly #now: () => number;
   readonly #onCloseError: (error: unknown) => void;
   readonly #onRemove: (sessionId: string, reason: SessionRemovalReason) => void;
@@ -75,6 +77,7 @@ export class SessionRegistry<T extends ClosableTransport> {
   constructor(options: SessionRegistryOptions) {
     this.#idleTtlMs = options.idleTtlMs;
     this.#maxSessions = options.maxSessions;
+    this.#canAdmit = options.canAdmit ?? (() => true);
     this.#now = options.now ?? Date.now;
     this.#onCloseError = options.onCloseError ?? (() => undefined);
     this.#onRemove = options.onRemove ?? (() => undefined);
@@ -95,7 +98,7 @@ export class SessionRegistry<T extends ClosableTransport> {
       }
     | undefined {
     if (!this.#accepting) return undefined;
-    if (this.#entries.size + this.#pending >= this.#maxSessions) {
+    if (this.#entries.size + this.#pending >= this.#maxSessions || !this.#canAdmit()) {
       this.#rejected += 1;
       return undefined;
     }

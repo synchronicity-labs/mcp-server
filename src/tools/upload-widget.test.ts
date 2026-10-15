@@ -84,7 +84,7 @@ describe('UPLOAD_WIDGET_HTML', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('mcpToolResult._meta');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("upload-media"');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("voices_get-voices"');
-    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("create-lipsync"');
+    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("create-lipsync-from-assets"');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("generate_get-generation"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="scriptInput"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="runLipsync"');

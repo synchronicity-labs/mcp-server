@@ -52,6 +52,7 @@
     "lint:fix": "biome check --fix ./src ./scripts",
     "format": "biome format --write ./src ./scripts",
     "test": "vitest run",
+    "test:memory": "node --expose-gc --max-old-space-size=512 scripts/verify-session-memory.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
     "prepublishOnly": "npm run lint && npm run typecheck && npm test -- --no-file-parallelism && npm run build",
