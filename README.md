@@ -170,6 +170,22 @@ publisher metadata and verify the actual ChatGPT flow before claiming acceptance
 
 ## Example Prompts
 
+### Embedded speech previews
+
+When the API advertises durable `/v2/tts/jobs` creation and status endpoints,
+ChatGPT can check `get-speech-options`, create a confirmed `create-speech-preview`
+and read the same job with `get-speech-preview`. Creation requires a persisted
+UUID idempotency key and is potentially paid. Reuse the key and identical input
+only to reconcile uncertain admission. Never synthesize again because saving the
+resulting audio asset failed. Project access and organization billing remain API
+authority; options expose only the fields needed for the speech quote.
+
+Release this capability with sync-api-v2 PR #6822: deploy the compatible backend
+first, then these MCP tools, then package the merged frontend while retaining
+published UI resources. Rescan publisher metadata and verify preview, attachment,
+reload recovery and playback in ChatGPT. This branch does not deploy or establish
+production acceptance; older APIs omit the speech tools and the UI fails closed.
+
 ### Reusable voice cloning in ChatGPT
 
 When the connected API exposes voice cloning, hosted clients can call
