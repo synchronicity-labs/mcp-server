@@ -184,6 +184,30 @@ publisher metadata and verify the actual ChatGPT flow before claiming acceptance
 
 ## Example Prompts
 
+### Reusable voice cloning in ChatGPT
+
+When the connected API exposes voice cloning, hosted clients can call
+`voices_clone-voice`. Ask: “Save a reusable clone of my voice from this sample,
+called My narration.” Confirm permission to clone the speaker, the sample and
+the name before creating it. Plan limits and provider requirements still apply.
+
+1. Upload an audio/video sample in Sync, or upload and register it with the asset
+   tools. Reuse its `assetId`; alternatively provide a Sync-hosted `url`.
+2. List existing voices first to avoid unnecessary duplicates. Clone with
+   `name`, `provider: elevenlabs` and exactly one sample source.
+3. Use the returned **`id`** as `voiceId` in `create-lipsync` with `script`.
+   The separate provider-specific `voiceId` field is not the Sync identifier.
+4. Review the video estimate and confirm generation separately.
+
+This exposes the conversational tool flow, not a new clone form in the embedded
+UI. It does not enable hosted voice deletion or standalone TTS. Edit Dialogue's
+original-speaker previews remain a different workflow.
+
+The API enforces sample validity, asset access, plan slots, provider access and
+duplicate names. On a failed or lost response, do not automatically retry:
+list voices, reconcile the result and explain uncertainty to the user. See
+[voice-cloning acceptance](docs/chatgpt-voice-cloning.md) before publication.
+
 Once configured, ask your AI agent:
 
 - *"List available Sync models"*
@@ -233,6 +257,22 @@ Options:
 | `MCP_UPLOAD_MAX_QUEUED` | Maximum re-host uploads waiting for process capacity | `8` |
 | `MCP_UPLOAD_RETRY_AFTER_MS` | Suggested retry delay returned by upload overload errors | `5000` (5 sec) |
 | `MCP_UPLOAD_TIMEOUT_MS` | End-to-end deadline for a queued or active re-host upload | `900000` (15 min) |
+
+New HTTP session initialization is also refused with HTTP 503 and `Retry-After: 60`
+when V8 heap usage reaches 60% of its actual heap limit. Existing sessions remain
+callable; no session is evicted and no paid action is replayed. Admission resumes
+when memory is available. `mcp_runtime.memory.heapLimitBytes` reports that limit
+alongside heap usage and session rejection counts. This guard bounds session
+admission, not all request/response or upload memory; size container resources
+with those workloads in mind.
+
+Tool schemas and stateless handlers are built once per HTTP factory. Discovery
+descriptions are cached for the four supported presentation profiles. Session
+profiles, transports and validation remain separate; credentials are resolved
+per request. After `npm run build`, `npm run test:memory` exercises local session
+load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
+`-- --burst` to defer initialization until all connections have reserved capacity,
+covering clients that complete discovery after an initialization burst.
 
 HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. When capacity is exhausted, new session initialization returns `503` with `Retry-After`; existing sessions continue normally.
 

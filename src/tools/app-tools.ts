@@ -417,7 +417,7 @@ export function createAppTools(
   runtime: UploadRuntime = uploadRuntime,
   getProfile: () => ClientProfile = () => resolveClientProfile(),
 ): McpToolDefinition[] {
-  return [
+  const tools: McpToolDefinition[] = [
     {
       name: 'upload-media',
       title: 'Upload media',
@@ -481,7 +481,9 @@ export function createAppTools(
       name: 'create-lipsync',
       title: 'Create lipsync',
       description:
+        'Use this when the user wants to make a photo talk, make an image or video say a script, or match a speaker’s lip movements to supplied audio. ' +
         'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
+        'For translating spoken video into another language, use create-translate-and-dub when available. Do not use for subtitles only, standalone audio, or general video editing. ' +
         'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
         'The model defaults to sync-3. Supply projectId to use an existing project, or projectName to find or create one. When neither is supplied, an integration-specific default project is used. ' +
         'This starts an asynchronous generation and returns its id and status.',
@@ -655,7 +657,7 @@ export function createAppTools(
 
         if (!hasAudio && !hasScript) {
           throw new Error(
-            'Audio or script is required — pass `audioUrl`/upload audio, or pass `script` with a `voiceId` from voices_get-voices.',
+            'Audio or script is required - pass `audioAssetId`, or pass `script` with a `voiceId` from voices_get-voices. create-lipsync also accepts `audioUrl` or an uploaded audio file.',
           );
         }
         if (hasAudio && hasScript) {
@@ -666,7 +668,7 @@ export function createAppTools(
         }
         if (!hasVideo && !hasImage) {
           throw new Error(
-            'Provide a video or an image — pass `videoUrl`/`imageUrl` or upload a file.',
+            'Provide a video or an image - pass `videoAssetId` or `imageAssetId`. create-lipsync also accepts `videoUrl`/`imageUrl` or an uploaded file.',
           );
         }
         if (hasVideo && hasImage) {
@@ -693,7 +695,7 @@ export function createAppTools(
           (await getOrCreateProjectId(
             httpClient,
             projectName,
-            getProfile().defaultProjectName,
+            (context?.clientProfile ?? getProfile()).defaultProjectName,
             signal,
           ));
         if (requestedProjectId !== undefined) {
@@ -736,4 +738,22 @@ export function createAppTools(
       },
     },
   ];
+  const lipsync = tools.find((tool) => tool.name === 'create-lipsync')!;
+  // Embedded apps cannot invoke tools annotated with fileParams, even with
+  // asset-only arguments. Reuse generation admission/execution without exposing
+  // the host's attachment transport to this app-only entry point.
+  const inputSchema = { ...lipsync.inputSchema };
+  for (const key of ['video', 'image', 'audio', 'videoUrl', 'imageUrl', 'audioUrl']) {
+    delete inputSchema[key];
+  }
+  const { 'openai/fileParams': _fileParams, ...meta } = lipsync.meta ?? {};
+  tools.push({
+    ...lipsync,
+    name: 'create-lipsync-from-assets',
+    description:
+      'Create one lipsync generation from saved Sync image/video and audio asset IDs, or a saved visual asset plus script and voiceId. Uses the same project access, options, and idempotency rules as create-lipsync. For embedded Sync interfaces only.',
+    inputSchema,
+    meta: { ...meta, ui: { visibility: ['app'] }, 'openai/widgetAccessible': true },
+  });
+  return tools;
 }

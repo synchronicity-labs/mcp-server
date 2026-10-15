@@ -15,6 +15,7 @@ const OAUTH_ERRORS = new Set([
 const KNOWN_REASONS = new Map([
   ['Invalid, revoked, or expired refresh token', 'refresh_token_invalid_revoked_or_expired'],
   ['Refresh token not found', 'refresh_token_not_found'],
+  ['Account no longer has access to this organization', 'organization_access_revoked'],
   ['refresh_token and client_id are required', 'missing_refresh_parameters'],
   ['Unknown client_id', 'unknown_client'],
   ['Invalid client_secret', 'invalid_client_secret'],
@@ -60,4 +61,26 @@ export function oauthFailureDiagnostics(response: unknown): {
 export function oauthGrantType(value: unknown): string {
   if (value === 'authorization_code' || value === 'refresh_token') return value;
   return value === undefined ? 'missing' : 'other';
+}
+
+// Describe only presence and the scheme. Never decode or retain credential values.
+export function oauthRequestDiagnostics(
+  body: Record<string, unknown>,
+  authorization: string | undefined,
+) {
+  const presence = (value: unknown) => {
+    if (value === undefined) return 'missing';
+    if (typeof value !== 'string') return 'non_string';
+    return value.length === 0 ? 'empty' : 'present';
+  };
+  return {
+    bodyClientId: presence(body.client_id),
+    bodyClientSecret: presence(body.client_secret),
+    authorizationScheme:
+      authorization === undefined
+        ? 'none'
+        : /^Basic(?:\s|$)/i.test(authorization)
+          ? 'basic'
+          : 'other',
+  };
 }
