@@ -193,17 +193,17 @@ it('does not advertise speech preview when the API lacks durable job support', a
   expect(writes).toHaveLength(0);
 });
 
-it.each([undefined, 'invalid-key'])(
-  'rejects a missing or malformed speech key before any upstream call (%s)',
-  async (key) => {
-    const { call, writes, paths } = await fixture();
-    const { idempotencyKey: _key, ...withoutKey } = input;
-    const response = await call('create-speech-preview', {
-      ...withoutKey,
-      ...(key === undefined ? {} : { idempotencyKey: key }),
-    });
-    expect(response.isError).toBe(true);
-    expect(writes).toHaveLength(0);
-    expect(paths).toEqual([]);
-  },
-);
+it.each([
+  undefined,
+  'invalid-key',
+])('rejects a missing or malformed speech key before any upstream call (%s)', async (key) => {
+  const { call, writes, paths } = await fixture();
+  const { idempotencyKey: _key, ...withoutKey } = input;
+  const response = await call('create-speech-preview', {
+    ...withoutKey,
+    ...(key === undefined ? {} : { idempotencyKey: key }),
+  });
+  expect(response.isError).toBe(true);
+  expect(writes).toHaveLength(0);
+  expect(paths).toEqual([]);
+});
