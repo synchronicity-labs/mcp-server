@@ -529,3 +529,13 @@ than blocking unrelated accounts or treating temporary errors as invalid tokens.
 `npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
 storage. Install Chromium with `npx playwright install chromium` first. This does not
 prove live authenticated storage delivery or authorize a production rollout.
+
+The hosted Studio asset library uses the existing authenticated asset update,
+delete and signed-download endpoints. These tools preserve upstream
+permission checks and write annotations; the UI requires an explicit asset
+rename or delete action and reconciles an interrupted response before offering
+another write. Connected account context includes only the displayed identity,
+organization and seat/voice-clone limits, with nullable identity fields preserved.
+Voice cloning accepts exactly one source form: a URL, saved asset, or sample URL
+list. A sample list creates one voice, not a voice per sample; uncertain clone
+admission must be reconciled from the voice list without automatically resending.

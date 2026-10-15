@@ -50,8 +50,32 @@ const spec = {
       },
     },
     '/v2/assets/{id}': {
+      patch: {
+        operationId: 'AssetsController_update',
+        tags: ['assets'],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: { type: 'object', properties: { name: { type: 'string' } } },
+            },
+          },
+        },
+      },
+      delete: {
+        operationId: 'AssetsController_delete',
+        tags: ['assets'],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      },
       get: {
         operationId: 'AssetsController_get',
+        tags: ['assets'],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      },
+    },
+    '/v2/assets/{id}/download': {
+      get: {
+        operationId: 'AssetsController_getDownloadUrl',
         tags: ['assets'],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       },
@@ -200,6 +224,7 @@ beforeEach(async () => {
         '/v2/models',
         '/v2/assets',
         '/v2/assets/asset-1',
+        '/v2/assets/asset-1/download',
         '/v2/generations',
         '/v2/generate/estimate-cost',
       ].includes(path)
@@ -316,7 +341,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = (await client.listTools()).tools;
-      expect(tools.length).toBe(index === 0 ? 14 : 11);
+      expect(tools.length).toBe(index === 0 ? 17 : 14);
       const create = tools.find((tool) => tool.name === 'create-lipsync')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
       expect((await client.listResources()).resources.length > 0).toBe(index === 0);
@@ -415,6 +440,33 @@ it('propagates explicit cancellation through bearer auth, sessions and the profi
   expect(
     calls.filter((call) => call.token === 'Bearer cancelled' && call.path === '/v2/projects'),
   ).toHaveLength(1);
+});
+
+it('offers asset management through the authenticated widget boundary', async () => {
+  const client = await connect('chatgpt', 'asset-manager');
+  const tools = (await client.listTools()).tools;
+  for (const [name, args, path, body] of [
+    [
+      'assets_update',
+      { id: 'asset-1', name: 'Renamed' },
+      '/v2/assets/asset-1',
+      { name: 'Renamed' },
+    ],
+    ['assets_get-download-url', { id: 'asset-1' }, '/v2/assets/asset-1/download', {}],
+    ['assets_delete', { id: 'asset-1' }, '/v2/assets/asset-1', {}],
+  ] as const) {
+    const descriptor = tools.find((tool) => tool.name === name);
+    expect(descriptor?._meta?.['openai/widgetAccessible']).toBe(true);
+    expect(descriptor?.annotations?.destructiveHint).toBe(name !== 'assets_get-download-url');
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ path, query: {}, body });
+  }
+  expect(calls.filter((call) => call.path.startsWith('/v2/assets/'))).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ token: 'Bearer asset-manager', body: { name: 'Renamed' } }),
+    ]),
+  );
 });
 
 it('uses authenticated project browsing and canonical selection through the hosted transport', async () => {

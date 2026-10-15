@@ -22,10 +22,22 @@ it('projects the authenticated account and keeps API-key identity null across th
       return;
     }
     calls.push(req.url!);
+    if (req.url === '/v2/plans/limits') {
+      res.end(JSON.stringify({ seats: 3, voiceClone: 5, privateToken: 'must-not-leak' }));
+      return;
+    }
     res.end(
       JSON.stringify({
-        account: req.headers.authorization === 'Bearer api-key' ? null : account,
-        organization,
+        account:
+          req.headers.authorization === 'Bearer api-key'
+            ? null
+            : req.headers.authorization === 'Bearer unnamed-user'
+              ? { ...account, email: null, name: null }
+              : account,
+        organization:
+          req.headers.authorization === 'Bearer unnamed-user'
+            ? { ...organization, name: null }
+            : organization,
         privateToken: 'must-not-leak',
       }),
     );
@@ -43,18 +55,31 @@ it('projects the authenticated account and keeps API-key identity null across th
   const client = new Client({ name: 'openai-mcp', version: '1.0.0' });
   await client.connect(ct);
   try {
-    for (const token of ['oauth-user', 'api-key']) {
+    for (const token of ['oauth-user', 'api-key', 'unnamed-user']) {
       const result = await runWithAuth(token, 'openai-mcp', () =>
         client.callTool({ name: 'get-account-context', arguments: {} }),
       );
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual({
-        account: token === 'api-key' ? null : account,
-        organization,
+        account:
+          token === 'api-key'
+            ? null
+            : token === 'unnamed-user'
+              ? { ...account, email: null, name: null }
+              : account,
+        organization: token === 'unnamed-user' ? { ...organization, name: null } : organization,
+        limits: { seats: 3, voiceClone: 5 },
       });
       expect(JSON.stringify(result)).not.toContain('must-not-leak');
     }
-    expect(calls).toEqual(['/v2/oauth/account', '/v2/oauth/account']);
+    expect(calls).toEqual([
+      '/v2/oauth/account',
+      '/v2/plans/limits',
+      '/v2/oauth/account',
+      '/v2/plans/limits',
+      '/v2/oauth/account',
+      '/v2/plans/limits',
+    ]);
   } finally {
     await client.close();
     await server.close();
