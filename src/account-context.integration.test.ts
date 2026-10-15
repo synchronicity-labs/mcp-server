@@ -18,10 +18,55 @@ it('projects the authenticated account and keeps API-key identity null across th
   const upstream = createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
     if (req.url === '/api-json') {
-      res.end(JSON.stringify({ openapi: '3.0.0', paths: {} }));
+      res.end(
+        JSON.stringify({
+          openapi: '3.0.0',
+          paths: {
+            '/v2/assets/count': {
+              get: {
+                operationId: 'AssetsController_count',
+                tags: ['Assets'],
+                summary: 'Get count of assets',
+                parameters: [
+                  { name: 'userId', in: 'query', schema: { type: 'string' } },
+                  { name: 'projectId', in: 'query', schema: { type: 'string' } },
+                ],
+                responses: {
+                  '200': {
+                    description: 'Number of assets',
+                    content: { 'application/json': { schema: { type: 'number' } } },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
       return;
     }
     calls.push(req.url!);
+    if (req.url?.startsWith('/v2/assets/count')) {
+      res.end('7');
+      return;
+    }
+    if (req.url === `/v2/organizations/${organization.id}/members`) {
+      res.end(
+        JSON.stringify([
+          {
+            userId: account.id,
+            user: {
+              id: account.id,
+              displayName: 'Member',
+              email: account.email,
+              avatarUrl: null,
+              privateToken: 'must-not-leak',
+            },
+            privateToken: 'must-not-leak',
+          },
+        ]),
+      );
+      return;
+    }
     if (req.url === '/v2/plans/limits') {
       res.end(JSON.stringify({ seats: 3, voiceClone: 5, privateToken: 'must-not-leak' }));
       return;
@@ -71,14 +116,47 @@ it('projects the authenticated account and keeps API-key identity null across th
         limits: { seats: 3, voiceClone: 5 },
       });
       expect(JSON.stringify(result)).not.toContain('must-not-leak');
+      const members = await runWithAuth(token, 'openai-mcp', () =>
+        client.callTool({
+          name: 'get-asset-creators',
+          arguments: { organizationId: 'foreign-org' },
+        }),
+      );
+      expect(members.isError).not.toBe(true);
+      expect(members.structuredContent).toEqual({
+        members: [
+          {
+            userId: account.id,
+            user: { id: account.id, displayName: 'Member', email: account.email, avatarUrl: null },
+          },
+        ],
+      });
+      expect(JSON.stringify(members)).not.toContain('must-not-leak');
+      const count = await runWithAuth(token, 'openai-mcp', () =>
+        client.callTool({
+          name: 'assets_count',
+          arguments: { userId: account.id, projectId: 'selected-project' },
+        }),
+      );
+      expect(count.isError).not.toBe(true);
+      expect(count.content).toContainEqual({ type: 'text', text: '7' });
     }
     expect(calls).toEqual([
       '/v2/oauth/account',
       '/v2/plans/limits',
       '/v2/oauth/account',
-      '/v2/plans/limits',
+      `/v2/organizations/${organization.id}/members`,
+      `/v2/assets/count?userId=${account.id}&projectId=selected-project`,
       '/v2/oauth/account',
       '/v2/plans/limits',
+      '/v2/oauth/account',
+      `/v2/organizations/${organization.id}/members`,
+      `/v2/assets/count?userId=${account.id}&projectId=selected-project`,
+      '/v2/oauth/account',
+      '/v2/plans/limits',
+      '/v2/oauth/account',
+      `/v2/organizations/${organization.id}/members`,
+      `/v2/assets/count?userId=${account.id}&projectId=selected-project`,
     ]);
   } finally {
     await client.close();

@@ -23,6 +23,7 @@ import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAccountContextTool } from './tools/account-context.js';
 import { createAppTools } from './tools/app-tools.js';
+import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
@@ -51,6 +52,7 @@ export const SERVER_INSTRUCTIONS =
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'get-account-context',
+  'get-asset-creators',
   'get-speech-options',
   'create-speech-preview',
   'get-speech-preview',
@@ -78,6 +80,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'projects_get-all',
   'projects_get',
   'assets_get-all',
+  'assets_count',
   'assets_get',
   'assets_update',
   'assets_delete',
@@ -91,6 +94,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'get-account-context',
+  'get-asset-creators',
   'get-speech-options',
   'create-speech-preview',
   'get-speech-preview',
@@ -115,6 +119,7 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'projects_get-all',
   'projects_get',
   'assets_get-all',
+  'assets_count',
   'assets_get',
   'assets_update',
   'assets_delete',
@@ -359,6 +364,7 @@ function createTools(
       : []),
     createUploadWidgetTool(),
     createAccountContextTool(httpClient),
+    createAssetCreatorsTool(httpClient),
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),

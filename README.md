@@ -130,7 +130,8 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `generations_delete` | Delete a generation |
 | `assets_create-upload-url` | Get a presigned URL to upload a local file |
 | `assets_create` | Register a media URL as a reusable asset |
-| `assets_get-all` | List all assets in your organization |
+| `assets_get-all` / `assets_count` | List and count assets with authenticated project, creator, search and type filters |
+| `get-asset-creators` | Read creator labels for the connected organization without accepting an organization override |
 | `assets_get` | Get a specific asset by ID |
 | `assets_update` / `assets_delete` | Update or delete an asset |
 | `voices_get-voices` | List premade + cloned voices |
