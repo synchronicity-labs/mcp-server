@@ -1,6 +1,6 @@
 # Claude acceptance and rollout
 
-Evidence recorded October 8–12, 2026. This is a staged implementation, not a launch
+Evidence recorded October 8–15, 2026. This is a staged implementation, not a launch
 approval. The hosted baseline was MCP main `8d931ae`; the shared frontend/API
 implementation baseline is dev `b635f01139ba`.
 
@@ -19,6 +19,14 @@ implementation baseline is dev `b635f01139ba`.
 
 Keep credentials, device secrets, media URLs and account identifiers out of this
 file. Local evidence belongs to the testing task, not the published plugin.
+
+## Full catalog acceptance
+
+The [October 15 full-tool matrix](claude-full-tool-acceptance-2026-10-15.md)
+records actual Claude Code HTTP/OAuth calls against the isolated 0.2.0 candidate
+and production API. It supersedes earlier discovery/smoke coverage. The matrix
+states paid workflow outcomes and negative cases separately and does not claim
+that every tool has been tested in Claude web.
 
 ## Subsequent hosted acceptance
 
@@ -67,13 +75,14 @@ publisher setup and gates that remain open.
 ## Workstream gates and remaining scope
 
 1. **Fresh client and paid workflow:** hosted tool generation is verified above.
-   Fresh Claude Code OAuth/generation and embedded app acceptance remain. Choose a test organization, approve a
+   Fresh Claude Code OAuth passed October 13. Embedded app acceptance remains. Choose a test organization, approve a
    numeric budget, authenticate a new Claude connection, upload or select an
    approved fixture, estimate, submit once, poll, play/download, and verify the
    same generation and charge in Studio. Record client/server/API/artifact
    revisions and resulting IDs in private acceptance evidence.
-2. **Account consent:** Claude dev acceptance is verified above; target production
-   and ChatGPT acceptance remain. Show authenticated identity, selectable authorized
+2. **Account consent:** Claude dev acceptance is verified above; production Claude,
+   Claude Code and ChatGPT acceptance are recorded in the October 15 release report.
+   Show authenticated identity, selectable authorized
    organizations, requested capabilities and denial. Validate membership and
    the complete OAuth transaction at confirmation, then bind the code/token to
    the selected organization. Do not silently change the Studio active org.
@@ -90,8 +99,8 @@ publisher setup and gates that remain open.
    tools, publish the reviewed frontend artifact, then opt Claude into app
    presentation. Configure exact observed sandbox/upload/media origins. Keep
    OpenAI attachment support separate. Never point the relay at the sandbox.
-6. **Distribution:** validate an installed npm tarball and a fresh Claude Code
-   OAuth workflow, publish from the verified revision, and confirm the registry
+6. **Distribution:** installed tarball and fresh Claude Code OAuth validation have
+   passed. After approval, publish from the verified revision and confirm the registry
    and installed version match. The local plugin marketplace is separate from
    Anthropic's reviewed directory.
 7. **Directory:** preserve CRAFT-5421's owner, confirm the written policy
@@ -100,6 +109,12 @@ publisher setup and gates that remain open.
    by this release candidate.
 
 ## Rollback
+
+The [October 15 release report](claude-release-0.2.0.md) supersedes earlier pending
+auth checks: production token lifecycle and ChatGPT read-only acceptance passed;
+the ChatGPT Back to app caveat has a verified fresh-chat workaround. The temporary
+production consent test was rolled back to false. No merge or publication is
+authorized by those test results.
 
 Unset `SYNC_CLAUDE_APP_MCP_URL` to restore Claude's tool-only presentation. Keep
 retained artifacts, OAuth, and recovery reads available. Accepted jobs and their

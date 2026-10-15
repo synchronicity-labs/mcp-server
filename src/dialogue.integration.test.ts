@@ -246,3 +246,52 @@ it('rejects ambiguous transcript identity before any preview synthesis', async (
   expect(response.isError).toBe(true);
   expect(calls.some((call) => call.path === '/v2/dialogue-edits')).toBe(false);
 });
+
+it('publishes actionable edit variants even when OpenAPI items are opaque, and accepts removal', async () => {
+  const { client, call, calls } = await fixture();
+  const tool = (await client.listTools()).tools.find(
+    (tool) => tool.name === 'create-dialogue-preview',
+  );
+  expect(tool?.inputSchema.properties?.edits).toMatchObject({
+    minItems: 1,
+    maxItems: 100,
+    items: {
+      oneOf: [
+        {
+          properties: {
+            kind: { const: 'change' },
+            wordId: { type: 'string' },
+            replacement: { type: 'string' },
+          },
+          required: ['kind', 'wordId', 'replacement'],
+        },
+        {
+          properties: { kind: { const: 'remove' }, wordIds: { type: 'array' } },
+          required: ['kind', 'wordIds'],
+        },
+      ],
+    },
+  });
+  const removal = [{ kind: 'remove', wordIds: ['w1'] }];
+  expect(
+    (await call('create-dialogue-preview', { ...source, transcriptionId, edits: removal })).isError,
+  ).not.toBe(true);
+  expect(calls.find((call) => call.path === '/v2/dialogue-edits')?.body?.edits).toEqual(removal);
+});
+
+it.each([
+  { edits: [{ type: 'remove', wordIds: ['w1'] }] },
+  { edits: [{ kind: 'change', wordId: 'w1' }] },
+  { edits: [{ kind: 'remove', wordIds: [] }] },
+  { edits: [{ kind: 'remove', wordIds: ['w1'], pronunciation: 'Hello' }] },
+  { edits: [] },
+])('rejects malformed edits before accessing the API: %j', async ({ edits: invalid }) => {
+  const { call, calls } = await fixture();
+  const result = await call('create-dialogue-preview', {
+    ...source,
+    transcriptionId,
+    edits: invalid,
+  });
+  expect(result.isError).toBe(true);
+  expect(calls).toHaveLength(0);
+});

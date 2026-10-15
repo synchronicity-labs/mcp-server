@@ -24,6 +24,7 @@ import type { SyncMcpConfig } from './config.js';
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
+import { createAccountContextTool } from './tools/account-context.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
@@ -37,6 +38,7 @@ const SERVER_DESCRIPTION =
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 export const SERVER_INSTRUCTIONS =
+  'Use get-account-context to identify the connected organization before selecting existing media or confirming paid generation. Include its name in the cost confirmation. If it is the wrong organization, ask the user to reconnect Sync and select the intended organization. Never infer the connected organization from a previous conversation. ' +
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
   'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
   'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
@@ -45,6 +47,7 @@ export const SERVER_INSTRUCTIONS =
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'get-account-context',
   'get-dialogue-options',
   'create-dialogue-transcription',
   'get-dialogue-transcription',
@@ -75,6 +78,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'get-account-context',
   'get-dialogue-options',
   'create-dialogue-transcription',
   'get-dialogue-transcription',
@@ -326,6 +330,7 @@ function createTools(
           ),
         ]
       : []),
+    createAccountContextTool(httpClient),
     createUploadWidgetTool(),
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),

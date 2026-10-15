@@ -209,7 +209,8 @@ describe('immutable client profiles', () => {
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
         const { tools } = await client.listTools();
-        expect(tools.length).toBe(supportsUploads ? 6 : 3);
+        expect(tools.length).toBe(supportsUploads ? 7 : 4);
+        expect(tools.some((tool) => tool.name === 'get-account-context')).toBe(true);
         expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
         const create = tools.find((tool) => tool.name === 'create-lipsync')!;
@@ -367,6 +368,7 @@ describe('immutable client profiles', () => {
         expect(tools.map((tool) => tool.name)).toEqual(
           index === 0
             ? [
+                'get-account-context',
                 'open-upload-widget',
                 'upload-media',
                 'create-lipsync',
@@ -374,7 +376,12 @@ describe('immutable client profiles', () => {
                 'voices_get-voices',
                 'generate_get-generation',
               ]
-            : ['create-lipsync', 'voices_get-voices', 'generate_get-generation'],
+            : [
+                'get-account-context',
+                'create-lipsync',
+                'voices_get-voices',
+                'generate_get-generation',
+              ],
         );
         const create = tools.find((tool) => tool.name === 'create-lipsync')!;
         expect(create.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false });
@@ -436,7 +443,7 @@ describe('immutable client profiles', () => {
     expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(3);
     // Repeated notifications cannot reconfigure the immutable session profile.
     sessions[0]!.server.server.oninitialized?.();
-    expect((await sessions[0]!.client.listTools()).tools).toHaveLength(6);
+    expect((await sessions[0]!.client.listTools()).tools).toHaveLength(7);
   });
 
   it.each([
@@ -499,7 +506,7 @@ describe('immutable client profiles', () => {
     const calls = fakeApi();
     const stdio = await createSyncMcpServer({ ...config, transport: 'stdio', apiKey: 'fake-key' });
     const { client: stdioClient } = await connect(
-      { createServer: () => stdio, toolCount: 5 },
+      { createServer: () => stdio, toolCount: 6 },
       'claude',
     );
     const { client: httpClient } = await connect(await createMcpServerFactory(config), 'unknown');
@@ -539,12 +546,12 @@ it.each([
     vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
   );
   const factory = await createMcpServerFactory(config);
-  expect(factory.toolCount).toBe(4 + count);
+  expect(factory.toolCount).toBe(5 + count);
   const chatgpt = await connect(factory, 'chatgpt');
   const claude = await connect(factory, 'claude');
   const chatTools = (await chatgpt.client.listTools()).tools;
   const claudeTools = (await claude.client.listTools()).tools;
-  expect(chatTools).toHaveLength(4 + count);
-  expect(claudeTools).toHaveLength(1 + count);
+  expect(chatTools).toHaveLength(5 + count);
+  expect(claudeTools).toHaveLength(2 + count);
   expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
 });
