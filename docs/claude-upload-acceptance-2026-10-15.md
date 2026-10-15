@@ -6,7 +6,7 @@ is authorized by this work.
 
 ## Immutable frontend
 
-- Source PR: https://github.com/synchronicity-labs/sync-api-v2/pull/6875
+- Source PR: https://github.com/synchronicity-labs/sync-api-v2/pull/6876
 - Source commit: `a0aa13d2ba246113e2a0a3423d1b50a7f0e1da99`
 - Upload HTML SHA-256: `89517f0149c29f93ac66b2e4458de81f1184eadf6ceefae20d91f4a3f7107c5d`
 - Upload HTML size: 2,261,862 bytes.
