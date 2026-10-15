@@ -10,7 +10,8 @@ not authorization to merge, deploy, publish or submit to the directory.
 - Both include main `ce16c5245983beda89826001526bb9133a85618a` (including
   Edit Dialogue, frontend recovery, discovery, voice cloning and shared session
   catalogs). PR #77 integration revision: `e44e4a7`. PR #78 code revision:
-  `223d8bd`; subsequent documentation commits do not change that runtime.
+  `f90dbc8` (account context plus the dialogue input correction found during full
+  tool acceptance).
   Preserve the selected ChatGPT artifact `670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
 - API/web PR #6536 is merged into dev and production main. Claude dev consent acceptance passed
   with MCP `27bbc192`; see [acceptance](claude-acceptance.md). The merged release
@@ -22,9 +23,10 @@ not authorization to merge, deploy, publish or submit to the directory.
 
 ## Release gates
 
-- [ ] Current PR #77 and #78 revisions have passing verification, packaged-image
-  and applicable security/review checks. The workflow includes stacked Claude
-  branches; PR #78 previously received no verification run.
+- [x] PR #77 `e44e4a7` and PR #78 runtime `f90dbc8` passed verification and
+  packaged-image checks. PR #77 also passed CodeQL. Require green checks on
+  the final documentation heads before approved merging. Human review remains
+  a separate gate.
 - [ ] Release reviewer approves the exact revisions. Merging to MCP main starts
   the production Porter deployment automatically; merge approval includes this
   consequence. Preparation and passing tests do not authorize that deployment.
@@ -61,7 +63,8 @@ user's authorization, consent was temporarily enabled on that same image, then
 restored to `false`. Rollback revision `6ff07365-f3a7-481a-a020-206b1849398b`
 completed; all three API replicas were updated/ready on the same image and
 ReplicaSet `5f78c8f6cd`, and a running process reported `false`. Doppler was
-unchanged. No new MCP code was deployed and no generation ran in this pass.
+unchanged. No new MCP code was deployed. The separate full-tool acceptance pass below
+uses an isolated local candidate and short paid fixtures against that API.
 
 ## ChatGPT reconnect navigation caveat
 
@@ -82,14 +85,19 @@ so it is not specific to the new consent page. No upstream report was sent.
 
 ## Combined candidate verification
 
-PR #77 passed 575 tests locally. PR #78 passed 577 tests in 43 files after
-integrating account context with the shared catalog; the updated assertions
+PR #77 passed 575 tests locally. PR #78 passed 583 tests in 43 files after
+integrating account context and explicit dialogue edit schemas with the shared catalog; the updated assertions
 check account-tool presence for every host. Lint, typecheck, build, ChatGPT
 packaging and retained-artifact verification passed. The 0.2.0 tarball installed
 successfully and its live stdio account/model smoke passed across process
 restart. GitHub verification additionally covers parallel tests, bounded-heap
 session checks, browser CORS upload, dependency audits and the final Docker
 image. Require green checks on the exact current PR heads before merging.
+
+See the [full 25-tool acceptance matrix](claude-full-tool-acceptance-2026-10-15.md)
+for actual Claude Code HTTP invocations, paid workflow results, negative cases,
+and the distinction between Claude attachment upload and the staged asset API.
+Earlier catalog discovery was not full invocation coverage.
 
 Private evidence contains logs and screenshots; do not add credentials,
 deployment manifests, account IDs or callback URLs to the release package.

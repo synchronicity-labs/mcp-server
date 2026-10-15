@@ -20,6 +20,14 @@ implementation baseline is dev `b635f01139ba`.
 Keep credentials, device secrets, media URLs and account identifiers out of this
 file. Local evidence belongs to the testing task, not the published plugin.
 
+## Full catalog acceptance
+
+The [October 15 full-tool matrix](claude-full-tool-acceptance-2026-10-15.md)
+records actual Claude Code HTTP/OAuth calls against the isolated 0.2.0 candidate
+and production API. It supersedes earlier discovery/smoke coverage. The matrix
+states paid workflow outcomes and negative cases separately and does not claim
+that every tool has been tested in Claude web.
+
 ## Subsequent hosted acceptance
 
 - The approved hosted Claude lipsync test completed one generation, with one
