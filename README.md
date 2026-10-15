@@ -261,7 +261,8 @@ Options:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
-| `SYNC_BASE_URL` | API base URL | `https://api.sync.so` |
+| `SYNC_BASE_URL` | Direct API base URL for server-side calls, including token exchange | `https://api.sync.so` |
+| `SYNC_OAUTH_AUTHORIZATION_URL` | Optional browser-only authorization endpoint when Studio login uses another origin | `<SYNC_BASE_URL>/v2/oauth/authorize` |
 | `SYNC_CHATGPT_APP_RELEASES` | Release manifest selecting the current and retained UI bundles; set by the Docker image, no per-release Porter edit | `/app/chatgpt-dist/releases.json` in Docker; otherwise unset |
 | `SYNC_CHATGPT_APP_DIR` | Legacy/local frontend directory; packaged deployments select the release manifest instead | unset |
 | `SYNC_CHATGPT_APP_PREVIOUS_DIRS` | Legacy additional frontend directories; external mounts remain retained, packaged retention is managed by the release manifest | `[]` |
@@ -370,6 +371,14 @@ To test the HTTP transport (OAuth flow) locally:
    curl https://<ngrok-url>/health
    curl https://<ngrok-url>/.well-known/oauth-authorization-server
    ```
+When an isolated Studio login requires the same-origin web proxy, set
+`SYNC_OAUTH_AUTHORIZATION_URL` to its `/api-proxy/v2/oauth/authorize` URL, while
+keeping `SYNC_BASE_URL` on the direct isolated API listener. Only browser
+navigation uses the web proxy. Registration, code exchange, refresh, revocation,
+userinfo and tool calls use the direct API and retain existing deadlines,
+PKCE and confidential-client checks. The optional URL must use HTTP(S), with no
+credentials, query or fragment. Existing deployments need no new setting.
+
 6. Add `https://<ngrok-url>/mcp` as a custom connector in [Claude Web](https://claude.ai)
 
 ## Learn More

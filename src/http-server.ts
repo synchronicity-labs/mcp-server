@@ -274,7 +274,7 @@ export async function startHttpServer(
   });
 
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
-  const oauthProvider = createOAuthProvider(config.baseUrl);
+  const oauthProvider = createOAuthProvider(config.baseUrl, config.oauthAuthorizationUrl);
 
   if (config.chatgptApp?.uploadStorageOrigin) {
     app.use(
