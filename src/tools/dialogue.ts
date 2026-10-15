@@ -16,6 +16,7 @@ export function dialogueOperations(operations: ParsedOperation[]) {
 }
 const sourceSchema = z.object({ projectId: z.uuid(), videoAssetId: z.uuid() });
 const object = z.record(z.string(), z.unknown());
+const previewKeySchema = z.string().regex(/^[A-Za-z0-9._~-]{1,128}$/);
 
 export function createDialogueTools(
   operations: ParsedOperation[],
@@ -31,6 +32,16 @@ export function createDialogueTools(
   const readPreview = find(paths[3]!, 'get');
   if (!transcribe || !readTranscript || !preview || !readPreview || !preview.inputSchema.edits)
     return [];
+
+  const keyedPreview = selected.some(
+    (operation) =>
+      operation.path === paths[2] &&
+      operation.method === 'post' &&
+      operation.parameters.some(
+        (parameter) =>
+          parameter.in === 'header' && parameter.name.toLowerCase() === 'idempotency-key',
+      ),
+  );
 
   async function source(args: Record<string, unknown>, signal?: AbortSignal) {
     signal?.throwIfAborted();
@@ -97,7 +108,7 @@ export function createDialogueTools(
         'Check whether the connected API supports timed-word Edit Dialogue. Does not transcribe, synthesize or generate.',
       inputSchema: {},
       annotations: readHints,
-      handler: async () => ({ available: true }),
+      handler: async () => ({ available: true, keyedPreview }),
     },
     {
       name: 'create-dialogue-transcription',
@@ -128,14 +139,18 @@ export function createDialogueTools(
     {
       name: 'create-dialogue-preview',
       description:
-        'Preview timed word changes/removals in the original speaker’s voice. This is a synthesis action. Use a completed transcription, or a prior preview of this source when reopening. Confirm edits first. Never retry an ambiguous creation automatically. This is not arbitrary full-transcript replacement.',
+        'Preview timed word changes/removals in the original speaker’s voice. This is a synthesis action. Use a completed transcription, or a prior preview of this source when reopening. Confirm edits first. Persist an idempotencyKey before creating when get-dialogue-options advertises keyedPreview. Recover only through an explicit retry of identical input with that same key; never retry an ambiguous creation automatically. This is not arbitrary full-transcript replacement.',
       inputSchema: sourceSchema.extend({
+        idempotencyKey: previewKeySchema.optional(),
         transcriptionId: z.uuid().optional(),
         previousPreviewId: z.uuid().optional(),
         edits: preview.inputSchema.edits,
       }).shape,
       annotations: writeHints,
       handler: async (args, context) => {
+        const key = previewKeySchema.optional().parse(args.idempotencyKey);
+        if (key && !keyedPreview)
+          throw new Error('This API does not support keyed dialogue preview recovery.');
         if (Boolean(args.transcriptionId) === Boolean(args.previousPreviewId)) {
           throw new Error('Provide one transcriptionId or previousPreviewId, not both.');
         }
@@ -155,19 +170,23 @@ export function createDialogueTools(
           !(previous && transcriptJob.status === 'COMPLETED_PARTIAL')
         )
           throw new Error('Wait for the source transcript to finish.');
-        return preview.handler(
-          {
-            sourceVideoUrl: input.sourceVideoUrl,
-            projectId: input.projectId,
-            transcript: previous ? previous.sourceTranscript : transcriptJob.transcript,
-            edits: args.edits,
-            ...(previous?.voiceId ? { voiceId: previous.voiceId } : {}),
-            ...(previous && JSON.stringify(previous.edits) === JSON.stringify(args.edits)
-              ? { rerunOfJobId: previous.id }
-              : {}),
-          },
-          context,
-        );
+        const body = z.object(preview.inputSchema).parse({
+          // Job snapshots retain the immutable source identity across rotating asset signatures.
+          sourceVideoUrl: z.url().parse(transcriptJob.sourceVideoUrl),
+          projectId: input.projectId,
+          transcript: previous ? previous.sourceTranscript : transcriptJob.transcript,
+          edits: args.edits,
+          ...(previous?.voiceId ? { voiceId: previous.voiceId } : {}),
+          ...(previous ? {} : { transcriptionJobId: args.transcriptionId }),
+          ...(previous && JSON.stringify(previous.edits) === JSON.stringify(args.edits)
+            ? { rerunOfJobId: previous.id }
+            : {}),
+        });
+        return httpClient.request('post', paths[2]!, {
+          body,
+          ...(key ? { headers: { 'Idempotency-Key': key } } : {}),
+          signal: context?.signal,
+        });
       },
     },
     {

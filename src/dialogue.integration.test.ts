@@ -33,6 +33,7 @@ const bodies = {
     edits: { type: 'array', items: { type: 'object' } },
     voiceId: { type: 'string' },
     rerunOfJobId: { type: 'string' },
+    transcriptionJobId: { type: 'string' },
   },
 };
 const spec = {
@@ -87,14 +88,27 @@ afterEach(async () => {
   }
 });
 async function fixture(
-  options: { denied?: boolean; mismatched?: boolean; lostPreview?: boolean } = {},
+  options: {
+    denied?: boolean;
+    mismatched?: boolean;
+    lostPreview?: boolean;
+    keyedPreview?: boolean;
+    rotatingAssetUrl?: boolean;
+  } = {},
 ) {
   const calls: { path: string; body?: Record<string, unknown>; token?: string; key?: string }[] =
     [];
   const upstream = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
-      res.end(JSON.stringify(spec));
+      const current = structuredClone(spec);
+      if (options.keyedPreview)
+        Object.assign(current.paths['/v2/dialogue-edits']!.post!, {
+          parameters: [
+            { name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } },
+          ],
+        });
+      res.end(JSON.stringify(current));
       return;
     }
     let raw = '';
@@ -114,7 +128,11 @@ async function fixture(
     let value: unknown;
     if (req.url === `/v2/projects/${projectId}`) value = { id: projectId };
     else if (req.url === `/v2/assets/${videoAssetId}`)
-      value = { id: videoAssetId, type: 'VIDEO', url: sourceVideoUrl };
+      value = {
+        id: videoAssetId,
+        type: 'VIDEO',
+        url: options.rotatingAssetUrl ? `${sourceVideoUrl}?read=${calls.length}` : sourceVideoUrl,
+      };
     else if (req.url?.startsWith('/v2/transcriptions'))
       value = {
         id: transcriptionId,
@@ -185,6 +203,7 @@ it('transcribes, previews original-voice word edits, estimates and submits the c
     projectId,
     transcript,
     edits,
+    transcriptionJobId: transcriptionId,
   });
   const input = {
     ...source,
@@ -245,4 +264,55 @@ it('rejects ambiguous transcript identity before any preview synthesis', async (
   });
   expect(response.isError).toBe(true);
   expect(calls.some((call) => call.path === '/v2/dialogue-edits')).toBe(false);
+});
+
+it('forwards one frozen keyed preview through explicit recovery even when asset playback signatures rotate', async () => {
+  const { call, calls } = await fixture({
+    keyedPreview: true,
+    rotatingAssetUrl: true,
+    lostPreview: true,
+  });
+  const request = {
+    ...source,
+    transcriptionId,
+    edits,
+    idempotencyKey: 'dialogue-preview-recovery',
+  };
+  expect((await call('create-dialogue-preview', request)).isError).toBe(true);
+  expect(calls.filter((c) => c.path === '/v2/dialogue-edits')).toHaveLength(1);
+  expect((await call('create-dialogue-preview', request)).isError).toBe(true);
+  const writes = calls.filter((c) => c.path === '/v2/dialogue-edits');
+  expect(writes).toHaveLength(2);
+  expect(writes.map((c) => c.key)).toEqual([
+    'dialogue-preview-recovery',
+    'dialogue-preview-recovery',
+  ]);
+  expect(writes[0]!.body).toEqual({
+    sourceVideoUrl,
+    projectId,
+    transcript,
+    edits,
+    transcriptionJobId: transcriptionId,
+  });
+  expect(writes[1]!.body).toEqual(writes[0]!.body);
+  expect((await call('get-dialogue-options', {})).structuredContent).toMatchObject({
+    keyedPreview: true,
+  });
+});
+it('refuses keyed preview admission when the upstream has no idempotency contract', async () => {
+  const { call, calls } = await fixture();
+  expect(
+    (
+      await call('create-dialogue-preview', {
+        ...source,
+        transcriptionId,
+        edits,
+        idempotencyKey: 'unsupported-recovery',
+      })
+    ).isError,
+  ).toBe(true);
+  expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
+  expect((await call('get-dialogue-options', {})).structuredContent).toMatchObject({
+    keyedPreview: false,
+  });
 });
