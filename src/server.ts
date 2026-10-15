@@ -27,6 +27,7 @@ import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
+import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
@@ -53,6 +54,7 @@ const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'get-account-context',
   'get-asset-creators',
+  'get-playback-metadata',
   'get-speech-options',
   'create-speech-preview',
   'get-speech-preview',
@@ -95,6 +97,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'get-account-context',
   'get-asset-creators',
+  'get-playback-metadata',
   'get-speech-options',
   'create-speech-preview',
   'get-speech-preview',
@@ -161,14 +164,17 @@ export function registerTools(server: McpServer, tools: McpToolDefinition[]): vo
           const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
           return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
-          return createToolErrorResult(error);
+          return createToolErrorResult(error, !tool.outputSchema);
         }
       },
     );
   }
 }
 
-export function createToolErrorResult(error: unknown): CallToolResult {
+export function createToolErrorResult(
+  error: unknown,
+  includeStructuredContent = true,
+): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ApiRequestError) {
     const structuredContent = {
@@ -181,8 +187,15 @@ export function createToolErrorResult(error: unknown): CallToolResult {
       },
     };
     return {
-      content: [{ type: 'text', text: `Error: ${message}` }],
-      structuredContent,
+      // Clients validate structured content against the success schema even for
+      // isError replies. Keep typed error details in JSON text for these tools.
+      content: [
+        {
+          type: 'text',
+          text: includeStructuredContent ? `Error: ${message}` : JSON.stringify(structuredContent),
+        },
+      ],
+      ...(includeStructuredContent ? { structuredContent } : {}),
       isError: true,
     };
   }
@@ -205,7 +218,7 @@ export function createToolErrorResult(error: unknown): CallToolResult {
     };
     return {
       content: [{ type: 'text', text: JSON.stringify(structuredContent, null, 2) }],
-      structuredContent,
+      ...(includeStructuredContent ? { structuredContent } : {}),
       isError: true,
     };
   }
@@ -365,6 +378,7 @@ function createTools(
     createUploadWidgetTool(),
     createAccountContextTool(httpClient),
     createAssetCreatorsTool(httpClient),
+    createPlaybackMetadataTool(httpClient),
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),

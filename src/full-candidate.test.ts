@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { startHttpServer } from './http-server.js';
@@ -341,7 +342,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = (await client.listTools()).tools;
-      expect(tools.length).toBe(index === 0 ? 18 : 15);
+      expect(tools.length).toBe(index === 0 ? 19 : 16);
       const create = tools.find((tool) => tool.name === 'create-lipsync')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
       expect((await client.listResources()).resources.length > 0).toBe(index === 0);
@@ -642,6 +643,7 @@ it.each([
   generationId,
 }) => {
   const client = await connect('chatgpt', token);
+  await client.listTools();
   const result = await client.callTool({
     name: 'create-lipsync',
     arguments: {
@@ -652,7 +654,10 @@ it.each([
     },
   });
   expect(result.isError).toBe(true);
-  expect(result.structuredContent).toEqual({
+  expect(result.structuredContent).toBeUndefined();
+  const detail = CallToolResultSchema.parse(result).content.find((item) => item.type === 'text');
+  expect(detail?.type).toBe('text');
+  expect(JSON.parse(detail!.text as string)).toEqual({
     error: {
       status,
       code,

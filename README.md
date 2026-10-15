@@ -132,6 +132,7 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `assets_create` | Register a media URL as a reusable asset |
 | `assets_get-all` / `assets_count` | List and count assets with authenticated project, creator, search and type filters |
 | `get-asset-creators` | Read creator labels for the connected organization without accepting an organization override |
+| `get-playback-metadata` | Read user-authorized timing, dimensions and playback proxy metadata; API-key identity stays unsupported and missing metadata stays unknown |
 | `assets_get` | Get a specific asset by ID |
 | `assets_update` / `assets_delete` | Update or delete an asset |
 | `voices_get-voices` | List premade + cloned voices |

@@ -194,7 +194,8 @@ it.each([
   expect(calls).toHaveLength(0);
 });
 it('propagates project denial without retrying paid admission', async () => {
-  const { call, calls } = await fixture({ denied: true });
+  const { client, call, calls } = await fixture({ denied: true });
+  await client.listTools();
   expect(
     (
       await call('create-translation-preview', {
