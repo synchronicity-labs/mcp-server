@@ -30,6 +30,7 @@ jobs:
       - run: npm run test:memory -- --burst
       - run: npm run package:chatgpt
       - run: npm run verify:chatgpt-package
+      - run: npm run verify:claude-upload-package
       - run: npm test -- --no-file-parallelism
       - run: npm test
       - run: npx playwright install --with-deps chromium
@@ -49,3 +50,5 @@ jobs:
         run: docker build -t sync-mcp-release-candidate .
       - name: Read packaged UI through MCP in the final image
         run: docker run --rm -i --network none --entrypoint node sync-mcp-release-candidate --input-type=module - /app/chatgpt-dist --require-image-config < scripts/verify-chatgpt-package.mjs
+      - name: Read standalone Claude upload card in the final image
+        run: docker run --rm -i --network none --entrypoint node sync-mcp-release-candidate --input-type=module - < scripts/verify-claude-upload-package.mjs

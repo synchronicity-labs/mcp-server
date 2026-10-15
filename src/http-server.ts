@@ -26,6 +26,7 @@ import {
   oauthRequestDiagnostics,
 } from './auth/oauth-diagnostics.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
+import { claudeUploadSettings } from './claude-upload.js';
 import type { SyncMcpConfig } from './config.js';
 import { readOAuthResponseText } from './oauth-response.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
@@ -276,15 +277,19 @@ export async function startHttpServer(
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
   const oauthProvider = createOAuthProvider(config.baseUrl);
 
-  if (config.chatgptApp?.uploadStorageOrigin) {
+  const claudeUpload = claudeUploadSettings(config.claudeUpload);
+  if (config.chatgptApp?.uploadStorageOrigin || claudeUpload) {
     app.use(
       '/app-upload',
-      createAppUploadCors(
-        config.chatgptApp.uploadOrigins ?? [
-          config.chatgptApp.domain,
-          'https://web-sandbox.oaiusercontent.com',
-        ],
-      ),
+      createAppUploadCors([
+        ...(config.chatgptApp?.uploadStorageOrigin
+          ? (config.chatgptApp.uploadOrigins ?? [
+              config.chatgptApp.domain,
+              'https://web-sandbox.oaiusercontent.com',
+            ])
+          : []),
+        ...(claudeUpload ? [claudeUpload.sandboxOrigin] : []),
+      ]),
     );
   }
   const mcpCors = cors({
@@ -326,7 +331,7 @@ export async function startHttpServer(
     next();
   });
 
-  if (config.chatgptApp?.uploadStorageOrigin) {
+  if (config.chatgptApp?.uploadStorageOrigin || claudeUpload) {
     // No user bearer token enters the browser. The single-use ticket is issued only
     // after the authenticated assets/upload call has checked the account's limits.
     app.put('/app-upload', appUploadHandler);

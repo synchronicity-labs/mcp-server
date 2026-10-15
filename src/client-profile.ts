@@ -2,6 +2,7 @@ export type ClientProfile = Readonly<{
   name: 'chatgpt' | 'codex' | 'claude' | 'generic';
   supportsAppUi: boolean;
   supportsUploads: boolean;
+  supportsFilePicker?: boolean;
   defaultProjectName: string;
 }>;
 
@@ -33,7 +34,11 @@ const CLAUDE: ClientProfile = Object.freeze({
 });
 
 /** Presentation only. These untrusted handshake names never grant permissions. */
-export function resolveClientProfile(name?: string, claudeAppEnabled = false): ClientProfile {
+export function resolveClientProfile(
+  name?: string,
+  claudeAppEnabled = false,
+  filePickerEnabled = false,
+): ClientProfile {
   switch (name?.toLowerCase()) {
     case 'chatgpt':
     case 'openai':
@@ -44,7 +49,15 @@ export function resolveClientProfile(name?: string, claudeAppEnabled = false): C
       return CODEX;
     case 'claude':
     case 'claude-ai':
-      return claudeAppEnabled ? Object.freeze({ ...CLAUDE, supportsAppUi: true }) : CLAUDE;
+    case 'anthropic/claudeai':
+    case 'anthropic/toolbox':
+      return claudeAppEnabled || filePickerEnabled
+        ? Object.freeze({
+            ...CLAUDE,
+            supportsAppUi: claudeAppEnabled,
+            supportsFilePicker: filePickerEnabled,
+          })
+        : CLAUDE;
     // Muse remains generic until Meta documentation or a real handshake verifies its alias.
     default:
       return GENERIC;

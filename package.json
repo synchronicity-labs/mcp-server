@@ -43,7 +43,7 @@
     "node": ">=18.17.0"
   },
   "scripts": {
-    "build": "tsc -b && chmod +x dist/cli.js",
+    "build": "tsc -b && chmod +x dist/cli.js && npm run package:claude-upload",
     "package:chatgpt": "node scripts/package-chatgpt.mjs",
     "verify:chatgpt-package": "node scripts/verify-chatgpt-package.mjs",
     "clean": "rm -rf dist .cache",
@@ -56,7 +56,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
     "prepublishOnly": "npm run lint && npm run typecheck && npm test -- --no-file-parallelism && npm run build",
-    "test:browser": "vitest run --config vitest.browser.config.ts"
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "package:claude-upload": "node scripts/package-claude-upload.mjs",
+    "verify:claude-upload-package": "node scripts/verify-claude-upload-package.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",

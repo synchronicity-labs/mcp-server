@@ -557,3 +557,31 @@ organization flow.
 
 Deploy the API's `/v2/oauth/account` endpoint before releasing this MCP update.
 Deploy the consent page before enabling `OAUTH_CONSENT_ENABLED` on the API.
+
+### Standalone Claude upload card
+
+The release candidate includes a separate, branded Sync upload card built from
+`apps/chatgpt/src/upload-card` in `synchronicity-labs/sync-api-v2`, using the real
+`@sync/ui` components and shared design tokens. This does not enable the full
+Claude app or change the selected ChatGPT artifact.
+
+Set both `SYNC_CLAUDE_UPLOAD_MCP_URL` (the exact public HTTPS MCP endpoint,
+including its `/mcp` path and trailing-slash choice) and
+`SYNC_CLAUDE_UPLOAD_STORAGE_ORIGIN` (the exact HTTPS origin of approved storage)
+to expose `open-media-upload` to Claude. Leave them unset until rollout approval.
+The card uses the MCP URL's SHA-256 Claude sandbox hostname and a bounded,
+one-use `/app-upload` relay; allow that exact sandbox origin, never `*`.
+The ticket lives in the issuing process, so route the relay to that same process
+and preserve sufficient shutdown drain before enabling this in a multi-replica
+production deployment.
+
+Users choose a file in the card's native picker. It cannot automatically read
+files attached through Claude's normal composer. The card shows the connected
+organization, uploads/registers/verifies the media, and shares its asset ID back
+to Claude. Uploading does not start a paid generation. A lost registration
+response blocks automatic retry, and failed conversation delivery retains the
+saved asset ID. No API credential is exposed in the iframe.
+
+`npm run package:claude-upload` verifies the checked-in gzip and provenance
+manifest and installs its immutable HTML under `dist/claude-upload`. Production
+images and npm packages carry those bytes without fetching another repository.

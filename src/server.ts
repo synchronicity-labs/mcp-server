@@ -16,6 +16,12 @@ import {
   loadChatgptAppReleases,
 } from './chatgpt-app.js';
 import {
+  claudeUploadSettings,
+  createClaudeUploadTool,
+  loadClaudeUploadApp,
+  registerClaudeUploadResource,
+} from './claude-upload.js';
+import {
   type ClientProfile,
   resolveClientProfile,
   UNSUPPORTED_UPLOAD_MESSAGE,
@@ -24,6 +30,7 @@ import type { SyncMcpConfig } from './config.js';
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
+import { presentTool } from './tool-presentation.js';
 import { createAccountContextTool } from './tools/account-context.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
@@ -39,6 +46,7 @@ const SERVER_DESCRIPTION =
 
 export const SERVER_INSTRUCTIONS =
   'Use get-account-context to identify the connected organization before selecting existing media or confirming paid generation. Include its name in the cost confirmation. If it is the wrong organization, ask the user to reconnect Sync and select the intended organization. Never infer the connected organization from a previous conversation. ' +
+  'When open-media-upload is available, prefer its Sync card for local media. The user selects a file inside that card; it cannot automatically read Claude composer attachments. Opening the card does not upload anything. Wait for its verified saved asset ID, and do not register that asset again. Uploading starts no generation. ' +
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
   'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
   'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
@@ -56,6 +64,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'estimate-dialogue-video',
   'create-dialogue-video',
   'open-sync-app',
+  'open-media-upload',
   'open-upload-widget',
   'upload-media',
   'create-lipsync',
@@ -64,34 +73,6 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'get-translation-options',
   'voices_get-voices',
   'voices_clone-voice',
-  'generate_get-generation',
-  'models_get',
-  'projects_get-all',
-  'projects_get',
-  'assets_get-all',
-  'assets_get',
-  'assets_create-upload-url',
-  'assets_create',
-  'projects_create',
-  'generate_get-generations',
-  'projects_get-generations',
-  'generate_estimate-cost',
-]);
-const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
-  'get-account-context',
-  'get-dialogue-options',
-  'create-dialogue-transcription',
-  'get-dialogue-transcription',
-  'create-dialogue-preview',
-  'get-dialogue-preview',
-  'estimate-dialogue-video',
-  'create-dialogue-video',
-  'upload-media',
-  'create-lipsync',
-  'create-lipsync-from-assets',
-  'create-translate-and-dub',
-  'get-translation-options',
-  'voices_get-voices',
   'generate_get-generation',
   'models_get',
   'projects_get-all',
@@ -231,6 +212,7 @@ function isStructuredContent(result: unknown): result is Record<string, unknown>
 }
 
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
+  if (tool.name === 'open-media-upload') return Boolean(profile.supportsFilePicker);
   if (tool.name === 'create-lipsync-from-assets') return profile.supportsAppUi;
   if (tool.name === 'open-sync-app') return profile.supportsAppUi;
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
@@ -247,63 +229,6 @@ export function selectHostedHttpTools(
     .map((tool) => presentTool(tool, profile));
 }
 
-function exposeToolToWidget(tool: McpToolDefinition, openai = true): McpToolDefinition {
-  const meta = tool.meta ?? {};
-  const ui = asRecord(meta.ui);
-  return {
-    ...tool,
-    meta: {
-      ...meta,
-      ui: {
-        ...ui,
-        visibility: ui.visibility ?? ['model', 'app'],
-      },
-      ...(openai ? { 'openai/widgetAccessible': true } : {}),
-    },
-  };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
-/** Profile-specific descriptors and presentation. Authentication remains request-scoped. */
-function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
-  if (profile.supportsUploads)
-    return WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool;
-  const inputSchema = { ...tool.inputSchema };
-  let description = tool.description;
-  if (tool.name === 'create-lipsync') {
-    for (const key of ['video', 'image', 'audio']) delete inputSchema[key];
-    description =
-      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; supply projectId for an existing project or projectName to find or create one; otherwise the client default is used. Poll the returned id with generate_get-generation.';
-    for (const key of ['videoAssetId', 'imageAssetId', 'audioAssetId']) {
-      inputSchema[key] = z
-        .string()
-        .optional()
-        .describe(
-          'Existing Sync asset ID in the same organization. Upload in authenticated Sync and use Copy ID.',
-        );
-    }
-    inputSchema.videoUrl = z
-      .string()
-      .optional()
-      .describe('Public or Sync-hosted video URL. Supply exactly one visual input.');
-  }
-  const meta = Object.fromEntries(
-    Object.entries(tool.meta ?? {}).filter(
-      ([key]) => !key.startsWith('openai/') && (profile.supportsAppUi || key !== 'ui'),
-    ),
-  );
-  const presented = { ...tool, inputSchema, description, meta };
-  return profile.supportsAppUi && WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name)
-    ? exposeToolToWidget(presented, false)
-    : presented;
-}
-
 // Schemas and stateless handlers belong to the factory, not each HTTP session.
 // Authentication is resolved per request by createHttpClient; presentation stays local.
 function createTools(
@@ -312,6 +237,7 @@ function createTools(
   httpClient: ReturnType<typeof createHttpClient>,
   getProfile: () => ClientProfile,
   chatgptApp?: ChatgptApp,
+  uploadApp?: ChatgptApp,
 ): McpToolDefinition[] {
   const generatedTools = generateTools(
     config.transport === 'http'
@@ -331,16 +257,27 @@ function createTools(
         ]
       : []),
     createAccountContextTool(httpClient),
+    ...(uploadApp ? [createClaudeUploadTool(uploadApp)] : []),
     createUploadWidgetTool(),
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
     ...createDialogueTools(operations, httpClient),
-    ...generatedTools.map((tool) =>
-      config.chatgptApp?.uploadStorageOrigin
+    ...generatedTools.map((tool) => {
+      const existing = config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
-        : tool,
-    ),
+        : tool;
+      const upload = claudeUploadSettings(config.claudeUpload);
+      if (!upload || tool.name !== 'assets_create-upload-url') return existing;
+      const relayed = relayUploadTool(tool, upload.origin, upload.storageOrigin);
+      return {
+        ...existing,
+        handler: (args, context) =>
+          context?.clientProfile?.supportsFilePicker
+            ? relayed.handler(args, context)
+            : existing.handler(args, context),
+      } as McpToolDefinition;
+    }),
   ];
   return config.transport === 'http'
     ? allTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
@@ -353,6 +290,7 @@ function createProfiledServer(
   authHeaders: Record<string, string> = {},
   chatgptApp?: ChatgptApp,
   previousApps: ChatgptApp[] = [],
+  uploadApp?: ChatgptApp,
   sharedCatalog?: {
     tools: McpToolDefinition[];
     descriptors: Map<ClientProfile['name'], Tool[]>;
@@ -367,7 +305,8 @@ function createProfiledServer(
     config.transport === 'stdio' ? () => clientName : undefined,
   );
   const tools =
-    sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
+    sharedCatalog?.tools ??
+    createTools(config, operations, httpClient, getProfile, chatgptApp, uploadApp);
   const server = new McpServer(
     { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
     { instructions: SERVER_INSTRUCTIONS },
@@ -383,6 +322,8 @@ function createProfiledServer(
           handler: async (...parameters: Parameters<typeof tool.handler>) => {
             const [args] = parameters;
             if (!profile) throw new Error('Complete MCP initialization before calling tools.');
+            if (tool.name === 'open-media-upload' && !profile.supportsFilePicker)
+              throw new Error('The Sync upload card is not available in this connection.');
             if (tool.name === 'open-sync-app' && !profile.supportsAppUi)
               throw new Error(
                 'Open the Sync app in ChatGPT, or use the Sync tools in this client.',
@@ -393,7 +334,11 @@ function createProfiledServer(
                 (tool.name === 'create-lipsync' &&
                   ['video', 'image', 'audio'].some((key) => args[key] !== undefined)))
             ) {
-              throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
+              throw new Error(
+                profile.supportsFilePicker
+                  ? 'Open open-media-upload and let the user choose their file in the Sync card. Claude composer attachments do not implement the ChatGPT file bridge. Wait for the card’s saved asset ID.'
+                  : UNSUPPORTED_UPLOAD_MESSAGE,
+              );
             }
             return tool.handler(args, { ...parameters[1], clientProfile: profile });
           },
@@ -401,6 +346,7 @@ function createProfiledServer(
     ),
   );
   const resources: Resource[] = [];
+  if (uploadApp) resources.push(registerClaudeUploadResource(server, uploadApp, getProfile));
   registerUploadWidgetResource({
     registerResource: (name, uri, metadata, read) => {
       resources.push({ name, uri, ...metadata });
@@ -443,7 +389,11 @@ function createProfiledServer(
   server.server.setRequestHandler(ListResourcesRequestSchema, () => ({
     resources: resources
       .filter((resource) =>
-        resource.name === 'sync-app' ? getProfile().supportsAppUi : getProfile().supportsUploads,
+        resource.name === 'claude-upload'
+          ? getProfile().supportsFilePicker
+          : resource.name === 'sync-app'
+            ? getProfile().supportsAppUi
+            : getProfile().supportsUploads,
       )
       .map((resource) =>
         resource.name === 'sync-app' && chatgptApp
@@ -458,6 +408,7 @@ function createProfiledServer(
       const initializedProfile = resolveClientProfile(
         clientName,
         Boolean(chatgptApp?.claudeDomain),
+        Boolean(uploadApp),
       );
       profile = initializedProfile;
       const cached = sharedCatalog?.descriptors.get(initializedProfile.name);
@@ -497,13 +448,15 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   const authHeaders = config.transport === 'http' ? {} : await resolveLocalAuth(config, log);
   const operations = parseSpec(await fetchSpec(config.baseUrl));
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
-  return createProfiledServer(config, operations, authHeaders, chatgptApp, previousApps);
+  const uploadApp = await loadClaudeUploadApp(config.claudeUpload);
+  return createProfiledServer(config, operations, authHeaders, chatgptApp, previousApps, uploadApp);
 }
 
 export async function createMcpServerFactory(
   config: SyncMcpConfig,
 ): Promise<{ createServer: () => McpServer; toolCount: number }> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
+  const uploadApp = await loadClaudeUploadApp(config.claudeUpload);
   // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
@@ -517,6 +470,7 @@ export async function createMcpServerFactory(
     createHttpClient(config.baseUrl),
     resolveClientProfile,
     chatgptApp,
+    uploadApp,
   );
 
   // Four presentation profiles at most; never key this by untrusted client names.
@@ -525,6 +479,14 @@ export async function createMcpServerFactory(
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: new Set(tools.map((tool) => tool.name)).size,
     createServer: () =>
-      createProfiledServer(config, operations, {}, chatgptApp, previousApps, sharedCatalog),
+      createProfiledServer(
+        config,
+        operations,
+        {},
+        chatgptApp,
+        previousApps,
+        uploadApp,
+        sharedCatalog,
+      ),
   };
 }

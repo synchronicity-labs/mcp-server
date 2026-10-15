@@ -13,10 +13,17 @@ organization when it is unclear; a similarly named project is not proof of it.
 
 `create-lipsync` takes one image or video and one audio input or script. For a
 script, select a real voice from `voices_get-voices`. Use existing asset IDs or
-public/Sync-hosted URLs. For a local file, use `assets_create-upload-url`, upload
-its bytes with the requested Content-Type, then register the returned media URL
-with `assets_create`. Do not send a local filesystem path as a public URL or
-assume Claude chat attachments implement the OpenAI file bridge.
+public/Sync-hosted URLs. When `open-media-upload` is available, open its Sync
+card for local media and wait for the user to choose a file there. Opening the
+card does not upload anything; wait for its verified asset ID before continuing.
+The card saves the asset itself, so do not register it again. If the host cannot
+send the ID back, use the ID the user copies from the saved card.
+
+For clients without the card, use `assets_create-upload-url`, upload the local
+bytes with the requested Content-Type, then register the returned media URL with
+`assets_create`. Do not send a local filesystem path as a public URL or assume
+Claude composer attachments implement the OpenAI file bridge. An unavailable
+sandbox upload needs a supported upload path, not invented attachment URLs.
 
 Before a paid action, obtain `generate_estimate-cost` for the selected model,
 settings and duration. Show its returned unit and assumptions. For translation,
