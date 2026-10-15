@@ -9,6 +9,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
+import * as tokenStore from './auth/token-store.js';
 import { resolveClientProfile } from './client-profile.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { UPLOAD_WIDGET_URI } from './tools/upload-widget.js';
@@ -37,6 +38,7 @@ const connections: Array<{ close: () => Promise<void> }> = [];
 afterEach(async () => {
   await Promise.all(connections.splice(0).map((connection) => connection.close()));
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 function fakeApi() {
   const calls: Array<{
@@ -505,9 +507,17 @@ describe('immutable client profiles', () => {
     expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(8);
   });
 
-  it('keeps stdio presentation local without contaminating an unknown HTTP session', async () => {
+  it.each([
+    'api-key',
+    'device-bearer',
+  ])('keeps %s stdio authentication local without contaminating an HTTP session', async (authentication) => {
     const calls = fakeApi();
-    const stdio = await createSyncMcpServer({ ...config, transport: 'stdio', apiKey: 'fake-key' });
+    vi.spyOn(tokenStore, 'loadToken').mockResolvedValue('fake-device-token');
+    const stdio = await createSyncMcpServer({
+      ...config,
+      transport: 'stdio',
+      apiKey: authentication === 'api-key' ? 'fake-key' : undefined,
+    });
     const { client: stdioClient } = await connect(
       { createServer: () => stdio, toolCount: 5 },
       'claude',
@@ -525,6 +535,11 @@ describe('immutable client profiles', () => {
     );
     const posts = calls.filter((call) => call.path === '/v2/generate');
     expect(posts[0]!.body.projectId).toBe('project:Claude generations');
+    expect(posts[0]!.headers).toMatchObject(
+      authentication === 'api-key'
+        ? { 'x-api-key': 'fake-key', 'x-sync-source': 'claude' }
+        : { Authorization: 'Bearer fake-device-token', 'x-sync-source': 'mcp:claude' },
+    );
     expect(posts[1]!.body.projectId).toBe('project:Sync generations');
     expect(posts[1]!.headers).toMatchObject({
       Authorization: 'Bearer http-token',

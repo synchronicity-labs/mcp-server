@@ -220,6 +220,12 @@ beforeEach(async () => {
       );
       return;
     }
+    const source = req.headers['x-sync-source'];
+    if (token?.startsWith('Bearer ') && source !== 'mcp' && !String(source).startsWith('mcp:')) {
+      res.statusCode = 401;
+      res.end(JSON.stringify({ message: 'Bearer API calls require an MCP source' }));
+      return;
+    }
     if (
       [
         '/v2/models',
