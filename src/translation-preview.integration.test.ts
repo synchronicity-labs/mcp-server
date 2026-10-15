@@ -19,10 +19,16 @@ async function fixture({
   available = true,
   denied = false,
   transport = 'http',
+  preview = { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
 }: {
   available?: boolean;
   denied?: boolean;
   transport?: 'http' | 'stdio';
+  preview?: {
+    sourceDurationSeconds: number;
+    quotedDurationSeconds: number;
+    limitSeconds: number | null;
+  } | null;
 } = {}) {
   const calls: { path: string; key?: string; token?: string; body?: unknown }[] = [];
   const upstream = createServer(async (req, res) => {
@@ -83,9 +89,11 @@ async function fixture({
     if (req.url === '/v2/dubbing/jobs/estimate')
       res.end(
         JSON.stringify({
-          billing: 'external',
+          billing: preview?.limitSeconds == null ? 'external' : 'included',
           estimatedCredits: null,
-          estimatedGenerationCost: null,
+          estimatedGenerationCost: preview?.limitSeconds == null ? null : 0,
+          ...(preview ? { preview } : {}),
+          privateIntegrationKey: 'must-not-leak',
         }),
       );
     else
@@ -136,9 +144,12 @@ it.each([
   expect(catalog.filter((tool) => tool.name.startsWith('dubbing-jobs_'))).toEqual([]);
   const tool = catalog.find((t) => t.name === 'create-translation-preview');
   expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
-  expect(
-    (await call('estimate-translation-preview', { projectId, audioAssetId })).structuredContent,
-  ).toMatchObject({ billing: 'external' });
+  const quote = await call('estimate-translation-preview', { projectId, audioAssetId });
+  expect(quote.structuredContent).toMatchObject({
+    billing: 'external',
+    preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
+  });
+  expect(JSON.stringify(quote)).not.toContain('must-not-leak');
   expect(
     (
       await call('create-translation-preview', {
@@ -175,6 +186,31 @@ it.each([
       body: undefined,
     },
   ]);
+});
+it('preserves the server preview cap and accepts an older uncapped quote without starting work', async () => {
+  const limited = await fixture({
+    preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 20, limitSeconds: 20 },
+  });
+  await limited.client.listTools();
+  expect(
+    (await limited.call('estimate-translation-preview', { projectId, audioAssetId }))
+      .structuredContent,
+  ).toMatchObject({
+    billing: 'included',
+    preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 20, limitSeconds: 20 },
+  });
+  expect(limited.calls.map((request) => request.path)).toEqual(['/v2/dubbing/jobs/estimate']);
+  const legacy = await fixture({ preview: null });
+  await legacy.client.listTools();
+  expect(
+    (await legacy.call('estimate-translation-preview', { projectId, audioAssetId }))
+      .structuredContent,
+  ).toEqual({
+    billing: 'external',
+    estimatedGenerationCost: null,
+    estimatedCredits: null,
+  });
+  expect(legacy.calls.map((request) => request.path)).toEqual(['/v2/dubbing/jobs/estimate']);
 });
 it.each([
   undefined,
