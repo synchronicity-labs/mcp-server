@@ -7,7 +7,7 @@ is authorized by this work.
 ## Immutable frontend
 
 - Source PR: https://github.com/synchronicity-labs/sync-api-v2/pull/6876
-- Source commit: `a0aa13d2ba246113e2a0a3423d1b50a7f0e1da99`
+- Source commit: `e9fae73d0782f97ee7b05c366897090761288957`
 - Upload HTML SHA-256: `89517f0149c29f93ac66b2e4458de81f1184eadf6ceefae20d91f4a3f7107c5d`
 - Upload HTML size: 2,261,862 bytes.
 - Existing selected ChatGPT SHA-256 remains `670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
@@ -24,14 +24,15 @@ logo, Satoshi font and shared light/dark tokens. No new UI dependency was added.
 - SHA-256/provenance packaging verification passed for the uploader; existing
   ChatGPT release packaging also passed. npm dry-run includes the uploader HTML
   and manifest; no package was published.
-- Uploader workspace typecheck/lint and five targeted browser cases passed:
-  save/readback/conversation receipt; organization-change refusal; uncertain
+- Uploader workspace typecheck/lint and seven targeted browser cases passed
+  in 14 executions: audio/video/image save/readback/conversation receipt; organization-change refusal; uncertain
   registration without retry; message rejection retaining the asset; dark theme
   surviving a size-only host update.
 - The broader 262-case local development/artifact run finished with 255 passed,
   four intentional skips and three failures. A frozen follow-up covering all
   three failures plus the uploader finished with 20 passed and four intentional
-  skips; all ten uploader checks passed. Exact-head CI is still being checked.
+  skips; all ten uploader checks in that follow-up passed. The final 14-case uploader
+  run also passed. Frontend CI is still being checked.
   The test-host context is supplied at construction, and uploader tests now
   reject unhandled page errors. These fixture fixes leave the UI HTML hash unchanged.
 - Real Claude Web discovers the standalone interactive tool and renders its
