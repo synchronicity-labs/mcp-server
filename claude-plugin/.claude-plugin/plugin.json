@@ -1,0 +1,9 @@
+{
+  "name": "sync",
+  "version": "0.2.0",
+  "description": "Create lipsync videos and translate saved videos with Sync's authenticated MCP connector.",
+  "author": { "name": "Sync", "url": "https://sync.so" },
+  "homepage": "https://sync.so/docs",
+  "repository": "https://github.com/synchronicity-labs/mcp-server",
+  "license": "MIT"
+}

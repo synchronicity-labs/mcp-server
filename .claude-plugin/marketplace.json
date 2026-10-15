@@ -1,0 +1,17 @@
+{
+  "name": "sync-plugins",
+  "owner": {
+    "name": "Sync",
+    "url": "https://sync.so"
+  },
+  "plugins": [
+    {
+      "name": "sync",
+      "source": "./claude-plugin",
+      "description": "Sync video creation through the hosted MCP connector."
+    }
+  ],
+  "metadata": {
+    "description": "Sync video creation tools and workflow guidance for Claude Code."
+  }
+}

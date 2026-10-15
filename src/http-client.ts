@@ -94,7 +94,14 @@ export function createHttpClient(
           : { ...staticAuthHeaders };
 
         const clientName = getClientName() ?? stdioClientName?.();
-        const syncSource = resolveSyncSource(clientName);
+        // Source participates in API auth routing. Bearer tokens must keep the
+        // MCP namespace even when a known host has a first-class analytics name.
+        const bearer = new Headers(authHeaders).get('authorization')?.startsWith('Bearer ');
+        const syncSource = bearer
+          ? clientName
+            ? `mcp:${clientName}`
+            : 'mcp'
+          : resolveSyncSource(clientName);
 
         const headers: Record<string, string> = {
           ...authHeaders,

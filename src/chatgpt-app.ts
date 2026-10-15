@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { ResourceMetadata } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
+import type { ClientProfile } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { MCP_APP_RESOURCE_MIME_TYPE } from './tools/upload-widget.js';
@@ -17,6 +18,13 @@ const originSchema = z
 const configSchema = z.object({
   directory: z.string().min(1),
   domain: originSchema,
+  claudeMcpUrl: z
+    .url({ protocol: /^https$/ })
+    .refine((value) => {
+      const url = new URL(value);
+      return !url.username && !url.password && !url.search && !url.hash && !value.includes('*');
+    }, 'Use the exact public MCP URL without credentials, query, fragment, or wildcards.')
+    .optional(),
   resourceDomains: originSchema.array(),
   connectDomains: originSchema.array().default([]),
   uploadOrigins: originSchema.array().optional(),
@@ -30,6 +38,7 @@ const manifestSchema = z.object({
 
 export type ChatgptApp = {
   uri: string;
+  claudeDomain?: string;
   html: string;
   initialProjectsVersion?: number;
   metadata: ResourceMetadata;
@@ -48,7 +57,8 @@ export async function loadChatgptApp(
   config: SyncMcpConfig['chatgptApp'],
 ): Promise<ChatgptApp | undefined> {
   if (!config) return undefined;
-  const { directory, domain, resourceDomains, connectDomains } = configSchema.parse(config);
+  const { directory, domain, claudeMcpUrl, resourceDomains, connectDomains } =
+    configSchema.parse(config);
   // Recording review uses a local object URL before the user accepts/upload the take.
   // This is a resource source only; backend connection origins remain exact HTTPS.
   const resourceSources = [...resourceDomains, 'blob:'];
@@ -60,6 +70,9 @@ export async function loadChatgptApp(
     throw new Error('ChatGPT app SHA256 does not match its release manifest.');
   return {
     uri: `ui://sync/app-${manifest.sha256}.html`,
+    claudeDomain: claudeMcpUrl
+      ? `${createHash('sha256').update(claudeMcpUrl).digest('hex').slice(0, 32)}.claudemcpcontent.com`
+      : undefined,
     html: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
     initialProjectsVersion: manifest.initialProjectsVersion,
     metadata: {
@@ -160,5 +173,18 @@ export function createOpenSyncAppTool(
         dispose();
       }
     },
+  };
+}
+
+/** Return fresh presentation metadata; the verified artifact is shared across sessions. */
+export function appMetadataForClient(app: ChatgptApp, profile: ClientProfile): ResourceMetadata {
+  if (profile.name !== 'claude') return app.metadata;
+  if (!app.claudeDomain) throw new Error('Claude app presentation is not configured.');
+  const meta = app.metadata._meta ?? {};
+  const ui = meta.ui as Record<string, unknown>;
+  const { permissions: _permissions, ...presentation } = ui;
+  return {
+    ...app.metadata,
+    _meta: { ui: { ...presentation, domain: app.claudeDomain } },
   };
 }
