@@ -6,6 +6,7 @@ export type SyncMcpConfig = {
   baseUrl: string;
   transport: 'stdio' | 'http';
   port: number;
+  claudeUpload?: { mcpUrl: string; storageOrigin: string; directory?: string };
   chatgptApp?: {
     directory: string;
     previousDirectories?: string[];
@@ -47,6 +48,14 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
     baseUrl: overrides.baseUrl ?? process.env.SYNC_BASE_URL ?? DEFAULT_CONFIG.baseUrl,
     transport: overrides.transport ?? DEFAULT_CONFIG.transport,
     port: overrides.port ?? DEFAULT_CONFIG.port,
+    claudeUpload:
+      overrides.claudeUpload ??
+      (process.env.SYNC_CLAUDE_UPLOAD_MCP_URL
+        ? {
+            mcpUrl: process.env.SYNC_CLAUDE_UPLOAD_MCP_URL,
+            storageOrigin: process.env.SYNC_CLAUDE_UPLOAD_STORAGE_ORIGIN ?? '',
+          }
+        : undefined),
     chatgptApp:
       overrides.chatgptApp ??
       (release

@@ -128,7 +128,13 @@ describe('immutable client profiles', () => {
   ])('recognizes exact ChatGPT alias %s', (name) => {
     expect(resolveClientProfile(name).name).toBe('chatgpt');
   });
-  it.each(['claude', 'claude-ai', 'Claude'])('recognizes exact Claude alias %s', (name) => {
+  it.each([
+    'claude',
+    'claude-ai',
+    'Claude',
+    'Anthropic/ClaudeAI',
+    'Anthropic/Toolbox',
+  ])('recognizes exact Claude alias %s', (name) => {
     expect(resolveClientProfile(name).name).toBe('claude');
   });
   it.each([
