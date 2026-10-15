@@ -190,7 +190,8 @@ production acceptance; older APIs omit the speech tools and the UI fails closed.
 
 ### Embedded translation previews
 
-With the project-scoped `/v2/dubbing/jobs` API deployed, the server exposes
+With saved-asset support deployed on the existing `/v2/integrations/dubbing` API,
+the server exposes
 `estimate-translation-preview`, `create-translation-preview` and
 `get-translation-preview`. These are separate from combined video dubbing.
 Creation requires a stable UUID key and an authorized saved audio asset; the API
@@ -199,6 +200,8 @@ reuses the same key or known job ID. `recoveryRequired` never permits a fresh
 paid request. Save/reconcile the resulting audio separately, then explicitly
 lip-sync that saved audio rather than submitting another combined dub.
 
+The API advertises versioned saved-source authorization and keyed recovery in
+its OpenAPI contract. Existing route presence alone does not enable these tools.
 Older APIs omit these tools; `get-translation-options.previewAvailable` reports
 that distinction. Deploy API support before MCP, package the matching shared
 Studio frontend, rescan, and verify the real ChatGPT workflow. Local fixtures

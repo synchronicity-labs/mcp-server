@@ -1,21 +1,11 @@
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
-import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
+import { schemaProperty as property } from '../openapi/parser.js';
+import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
 import { translationPreviewAvailable } from './translation-preview.js';
-
-// Resolve the public DTO's allOf wrapper without maintaining a second language list.
-function property(schema: JsonSchema | undefined, name: string): JsonSchema | undefined {
-  const properties = schema?.properties as Record<string, JsonSchema> | undefined;
-  if (properties?.[name]) return properties[name];
-  for (const member of (schema?.allOf as JsonSchema[] | undefined) ?? []) {
-    const found = property(member, name);
-    if (found) return found;
-  }
-  return undefined;
-}
 
 export function translationOperation(operations: ParsedOperation[]): ParsedOperation | undefined {
   return operations.find(

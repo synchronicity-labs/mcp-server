@@ -44,6 +44,7 @@ export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
         parameters,
         requestBody,
         isMultipart,
+        ...(operation['x-sync-saved-asset-dubbing'] === 1 ? { savedAssetDubbingVersion: 1 } : {}),
       });
     }
   }
@@ -136,4 +137,18 @@ export function resolveSchemaRefs(schema: JsonSchema, spec: OpenApiSpec): JsonSc
     }
   }
   return result;
+}
+
+/** Read a property through the DTO wrappers emitted by the API. */
+export function schemaProperty(
+  schema: JsonSchema | undefined,
+  name: string,
+): JsonSchema | undefined {
+  const properties = schema?.properties as Record<string, JsonSchema> | undefined;
+  if (properties?.[name]) return properties[name];
+  for (const member of (schema?.allOf as JsonSchema[] | undefined) ?? []) {
+    const found = schemaProperty(member, name);
+    if (found) return found;
+  }
+  return undefined;
 }

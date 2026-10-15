@@ -16,6 +16,7 @@ export type ParsedOperation = {
   parameters: ParsedParameter[];
   requestBody?: { schema: JsonSchema; contentType: string };
   isMultipart: boolean;
+  savedAssetDubbingVersion?: number;
 };
 
 export type JsonSchema = Record<string, unknown>;

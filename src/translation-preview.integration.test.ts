@@ -18,10 +18,14 @@ afterEach(async () => {
 async function fixture({
   available = true,
   rejection,
+  legacy = false,
+  incomplete,
   transport = 'http',
   preview = { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
 }: {
   available?: boolean;
+  legacy?: boolean;
+  incomplete?: 'header' | 'project' | 'version' | 'source';
   rejection?: {
     status: number;
     message: string;
@@ -46,31 +50,88 @@ async function fixture({
           openapi: '3.0.0',
           paths: available
             ? {
-                '/v2/dubbing/jobs': {
+                '/v2/integrations/dubbing': {
                   post: {
-                    operationId: 'DubbingJobs_createJob',
+                    operationId: 'DubbingController_createDubbing',
                     tags: ['Dubbing'],
+                    ...(!legacy ? { 'x-sync-saved-asset-dubbing': 1 } : {}),
+                    parameters:
+                      incomplete === 'header'
+                        ? []
+                        : [
+                            {
+                              name: 'Idempotency-Key',
+                              in: 'header',
+                              required: false,
+                              schema: { type: 'string' },
+                            },
+                          ],
                     requestBody: {
                       content: {
                         'application/json': {
                           schema: {
                             type: 'object',
-                            properties: { targetLang: { type: 'string', enum: ['es', 'fr'] } },
+                            properties: {
+                              targetLang: { type: 'string', enum: ['es', 'fr'] },
+                              ...(!legacy
+                                ? {
+                                    audioAssetId: {
+                                      type: 'string',
+                                      format: incomplete === 'source' ? 'uri' : 'uuid',
+                                    },
+                                    projectId: { type: 'string', format: 'uuid' },
+                                  }
+                                : {}),
+                            },
                           },
                         },
                       },
                     },
                   },
                 },
-                '/v2/dubbing/jobs/estimate': {
-                  post: { operationId: 'DubbingJobs_estimate', tags: ['Dubbing'] },
-                },
-                '/v2/dubbing/jobs/{id}': {
-                  get: {
-                    operationId: 'DubbingJobs_getJob',
+                '/v2/integrations/dubbing/estimate': {
+                  post: {
+                    operationId: 'DubbingController_estimateDubbingCost',
                     tags: ['Dubbing'],
+                    ...(!legacy
+                      ? { 'x-sync-saved-asset-dubbing': incomplete === 'version' ? 2 : 1 }
+                      : {}),
+                    requestBody: {
+                      content: {
+                        'application/json': {
+                          schema: {
+                            type: 'object',
+                            properties: {
+                              audioAssetId: {
+                                type: 'string',
+                                format: incomplete === 'source' ? 'uri' : 'uuid',
+                              },
+                              projectId: { type: 'string', format: 'uuid' },
+                              preview: { type: 'boolean' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+                '/v2/integrations/dubbing/{id}': {
+                  get: {
+                    operationId: 'DubbingController_getDubbingGeneration',
+                    tags: ['Dubbing'],
+                    ...(!legacy ? { 'x-sync-saved-asset-dubbing': 1 } : {}),
                     parameters: [
                       { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                      ...(incomplete === 'project'
+                        ? []
+                        : [
+                            {
+                              name: 'projectId',
+                              in: 'query',
+                              required: false,
+                              schema: { type: 'string', format: 'uuid' },
+                            },
+                          ]),
                     ],
                   },
                 },
@@ -94,7 +155,7 @@ async function fixture({
       res.end(JSON.stringify(rejection));
       return;
     }
-    if (req.url === '/v2/dubbing/jobs/estimate')
+    if (req.url === '/v2/integrations/dubbing/estimate')
       res.end(
         JSON.stringify({
           billing: preview?.limitSeconds == null ? 'external' : 'included',
@@ -157,7 +218,7 @@ it.each([
 ] as const)('%s quotes and admits only a keyed standalone dub, then reads its translated audio', async (transport) => {
   const { client, call, calls, setReadStatus } = await fixture({ transport });
   const catalog = (await client.listTools()).tools;
-  expect(catalog.filter((tool) => tool.name.startsWith('dubbing-jobs_'))).toEqual([]);
+  expect(catalog.filter((tool) => tool.name.startsWith('dubbing_'))).toEqual([]);
   const tool = catalog.find((t) => t.name === 'create-translation-preview');
   expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
   const quote = await call('estimate-translation-preview', { projectId, audioAssetId });
@@ -192,25 +253,25 @@ it.each([
   expect(JSON.stringify(completed)).not.toContain('must-not-leak');
   expect(calls).toEqual([
     {
-      path: '/v2/dubbing/jobs/estimate',
+      path: '/v2/integrations/dubbing/estimate',
       key: undefined,
       token: 'Bearer translation-user',
-      body: { projectId, audioAssetId },
+      body: { projectId, audioAssetId, preview: true },
     },
     {
-      path: '/v2/dubbing/jobs',
+      path: '/v2/integrations/dubbing',
       key: idempotencyKey,
       token: 'Bearer translation-user',
       body: { projectId, audioAssetId, targetLang: 'es', sourceLang: 'auto' },
     },
     {
-      path: `/v2/dubbing/jobs/${jobId}?projectId=${projectId}`,
+      path: `/v2/integrations/dubbing/${jobId}?projectId=${projectId}`,
       key: undefined,
       token: 'Bearer translation-user',
       body: undefined,
     },
     {
-      path: `/v2/dubbing/jobs/${jobId}?projectId=${projectId}`,
+      path: `/v2/integrations/dubbing/${jobId}?projectId=${projectId}`,
       key: undefined,
       token: 'Bearer translation-user',
       body: undefined,
@@ -229,7 +290,9 @@ it('preserves the server preview cap and accepts an older uncapped quote without
     billing: 'included',
     preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 20, limitSeconds: 20 },
   });
-  expect(limited.calls.map((request) => request.path)).toEqual(['/v2/dubbing/jobs/estimate']);
+  expect(limited.calls.map((request) => request.path)).toEqual([
+    '/v2/integrations/dubbing/estimate',
+  ]);
   const legacy = await fixture({ preview: null });
   await legacy.client.listTools();
   expect(
@@ -240,7 +303,9 @@ it('preserves the server preview cap and accepts an older uncapped quote without
     estimatedGenerationCost: null,
     estimatedCredits: null,
   });
-  expect(legacy.calls.map((request) => request.path)).toEqual(['/v2/dubbing/jobs/estimate']);
+  expect(legacy.calls.map((request) => request.path)).toEqual([
+    '/v2/integrations/dubbing/estimate',
+  ]);
 });
 it.each([
   undefined,
@@ -296,14 +361,21 @@ it.each([
     expect(payload.error.message).toContain(rejection.message);
   }
   expect(calls.map((request) => request.path)).toEqual([
-    '/v2/dubbing/jobs/estimate',
-    '/v2/dubbing/jobs',
+    '/v2/integrations/dubbing/estimate',
+    '/v2/integrations/dubbing',
   ]);
 });
-it('omits standalone translation tools against an older API', async () => {
-  const { client, calls } = await fixture({ available: false });
-  expect(
-    (await client.listTools()).tools.some((t) => t.name === 'create-translation-preview'),
-  ).toBe(false);
+it.each([
+  { available: false },
+  { legacy: true },
+  { incomplete: 'header' },
+  { incomplete: 'project' },
+  { incomplete: 'version' },
+  { incomplete: 'source' },
+] as const)('omits standalone translation tools against an older API %j', async (options) => {
+  const { client, calls } = await fixture({ ...options, transport: 'stdio' });
+  const catalog = (await client.listTools()).tools;
+  expect(catalog.some((t) => t.name === 'create-translation-preview')).toBe(false);
+  expect(catalog.filter((t) => t.name.startsWith('dubbing_'))).toEqual([]);
   expect(calls).toHaveLength(0);
 });

@@ -1,30 +1,57 @@
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
+import { schemaProperty } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
 
 const PREVIEW_OPERATIONS = [
-  ['post', '/v2/dubbing/jobs', 'DubbingJobs_createJob'],
-  ['post', '/v2/dubbing/jobs/estimate', 'DubbingJobs_estimate'],
-  ['get', '/v2/dubbing/jobs/{id}', 'DubbingJobs_getJob'],
+  ['post', '/v2/integrations/dubbing'],
+  ['post', '/v2/integrations/dubbing/estimate'],
+  ['get', '/v2/integrations/dubbing/{id}'],
 ] as const;
 
 export function translationPreviewOperations(operations: ParsedOperation[]): ParsedOperation[] {
   return operations.filter((operation) =>
     PREVIEW_OPERATIONS.some(
-      ([method, path, operationId]) =>
-        operation.method === method &&
-        operation.path === path &&
-        operation.operationId === operationId,
+      ([method, path]) => operation.method === method && operation.path === path,
     ),
   );
 }
 
 export function translationPreviewAvailable(operations: ParsedOperation[]): boolean {
   const matching = translationPreviewOperations(operations);
-  return PREVIEW_OPERATIONS.every(([, , operationId]) =>
-    matching.some((operation) => operation.operationId === operationId),
-  );
+  return PREVIEW_OPERATIONS.every(([method, path]) => {
+    const operation = matching.find(
+      (candidate) => candidate.method === method && candidate.path === path,
+    );
+    if (operation?.savedAssetDubbingVersion !== 1) return false;
+    if (method === 'get')
+      return operation.parameters.some(
+        (parameter) =>
+          parameter.in === 'query' &&
+          parameter.name === 'projectId' &&
+          parameter.schema.type === 'string' &&
+          parameter.schema.format === 'uuid',
+      );
+    if (operation.requestBody?.contentType !== 'application/json') return false;
+    const schema = operation.requestBody.schema;
+    if (
+      ['audioAssetId', 'projectId'].some((name) => {
+        const property = schemaProperty(schema, name);
+        return property?.type !== 'string' || property.format !== 'uuid';
+      })
+    )
+      return false;
+    return (
+      path.endsWith('/estimate') ||
+      operation.parameters.some(
+        (parameter) =>
+          parameter.in === 'header' &&
+          parameter.name.toLowerCase() === 'idempotency-key' &&
+          parameter.schema.type === 'string',
+      )
+    );
+  });
 }
 
 const jobSchema = z.object({
@@ -55,7 +82,7 @@ const quoteSchema = z.object({
     .optional(),
 });
 
-/** Only the new project-scoped, durably keyed API admits standalone previews. */
+/** The existing translation API must advertise saved-source authorization and keyed recovery. */
 export function createTranslationPreviewTools(
   operations: ParsedOperation[],
   http: HttpClient,
@@ -84,8 +111,8 @@ export function createTranslationPreviewTools(
       },
       handler: async (args, context) =>
         quoteSchema.parse(
-          await http.request('post', '/v2/dubbing/jobs/estimate', {
-            body: source.parse(args),
+          await http.request('post', '/v2/integrations/dubbing/estimate', {
+            body: { ...source.parse(args), preview: true },
             signal: context?.signal,
           }),
         ),
@@ -106,7 +133,7 @@ export function createTranslationPreviewTools(
       handler: async (args, context) => {
         const { idempotencyKey, ...body } = create.parse(args);
         return jobSchema.parse(
-          await http.request('post', '/v2/dubbing/jobs', {
+          await http.request('post', '/v2/integrations/dubbing', {
             body,
             headers: { 'Idempotency-Key': idempotencyKey },
             signal: context?.signal,
@@ -130,7 +157,7 @@ export function createTranslationPreviewTools(
       handler: async (args, context) => {
         const input = read.parse(args);
         return jobSchema.parse(
-          await http.request('get', `/v2/dubbing/jobs/${input.id}`, {
+          await http.request('get', `/v2/integrations/dubbing/${input.id}`, {
             query: { projectId: input.projectId },
             signal: context?.signal,
           }),
