@@ -147,3 +147,24 @@ directory and retained-resource list, without the deployment catalog. Those
 files and the running server remain unchanged. A future upgrade of that same
 private connection must retain all issued resources and reconcile the lists
 within the existing retention limit before changing its configuration.
+
+
+## Current dev conflict and CI repair checkpoint
+
+- [x] Source `12b3a6f0af16fb5b7af468d556ad09034fc1f66b` integrates dev
+  `d20c92cd56cebf493ea8d83af691bb14b781bcc0` and resolves all merge conflicts.
+- [x] API64/64, native browser33/33, changed lint, exact generated clients and
+  affected type/build34/34 pass. Native106/108 plus the full15/15 isolated
+  owner rerun covers two contention timeouts without changing assertions/timeouts.
+- [x] Plugin source/artifact37/38 plus unchanged4/4 freeform rerun covers the
+  stalled artifact reload. Recovery/durable identity and no-duplicate writes
+  remain asserted. Independent preservation/Ponytail review clears this batch.
+- [x] Clean committed-source rebuild matches tested HTML `b34102cf3652bec6cdce501d72fbdafc6a8fa4fd5c5c3c196fbdc88adc98b8b5`
+  (6,200,715 bytes). All eight retained resources match the prior retention proof.
+- [x] Final MCP build, packaging and real client/server protocol verification
+  pass for all nine resources. This batch is ready for its checkpoint push.
+- [ ] Fresh current-head CI/reviews and required independent MCP approval.
+- [ ] Original live Chrome retry, full parity/live acceptance and production
+  handoff remain open. The private test server still uses its frozen391c bundle.
+
+No merge, deployment or private-plugin activation has occurred.

@@ -1,0 +1,24 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "12b3a6f0af16fb5b7af468d556ad09034fc1f66b",
+  "tree": "c54d7408a1c6bcfa668c81b71fbdbc114e9bc252",
+  "htmlSha256": "b34102cf3652bec6cdce501d72fbdafc6a8fa4fd5c5c3c196fbdc88adc98b8b5",
+  "htmlBytes": 6200715,
+  "commands": [
+    "pnpm verify:agent --profile fast --run --only lint,typecheck,generated-clients",
+    "pnpm --filter @sync/web test:components dubbing-cost-estimate.spec.ts audio-comparison-state.spec.ts studio-lite-submit-layout.spec.ts",
+    "pnpm --filter @sync/chatgpt test --workers=1 --grep 'freeform selected audio follows'"
+  ],
+  "verification": {
+    "apiIntegrationCases": 64,
+    "nativeFocusedCases": "106/108 in initial run; full 15/15 owner file passes under exclusive lease after two 5-second timeouts",
+    "nativeBrowserCases": 33,
+    "pluginBrowserCases": "37/38 in initial cohort; unchanged desktop/mobile freeform cohort passes 4/4 after one stalled artifact reload",
+    "typesBuildTasks": 34,
+    "generatedClient": "exact",
+    "independentPreservationPonytail": "clear",
+    "remaining": "Current-head CI/reviews, independent MCP approval, original live Chrome retry and full parity acceptance remain required. This artifact has not been activated in the private plugin.",
+    "deployment": "not merged or deployed; production unchanged",
+    "mcpPackageProtocol": "pass: build/package and real MCP client/server reads all nine resources; eight retained bundles byte-identical"
+  }
+}

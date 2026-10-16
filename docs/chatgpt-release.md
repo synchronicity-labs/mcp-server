@@ -7,20 +7,23 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit faa89a077](https://github.com/synchronicity-labs/sync-api-v2/commit/faa89a077f118982bc43388562da35cd53ab1ae6).
-- HTML SHA256: `a1dd3d4a805c9f401132b2c494a470b068a74bbf96f73726de331cc0e0385597`.
-- HTML size: 6,198,861 bytes, built from clean committed source.
-  The manifest hashes the exact uncompressed bytes; `release.json` records provenance.
-- Integrates dev `73e96081e`, retaining native voice-cloning strength and preview
-  comparison behavior while using one shared translation renderer. Authorization,
-  billing, multi-speaker validation, and history overflow fixes remain intact.
-- Native Studio integration: 77/77 tests pass at original timeouts. Browser
-  translation/quote/cloning/refusal/mobile geometry: 24/24 pass. Changed lint,
-  boundaries, all 34 affected type/build tasks, and exact generated clients pass.
-  Independent preservation/Ponytail review found no actionable issue. The committed
-  frontend passes all 12 affected source/artifact translation and recovery cases
-  at original timeouts in the isolated rerun. The earlier concurrent run timed out
-  under memory pressure and is not counted as passing.
+- Source: [PR #6822, commit 12b3a6f0a](https://github.com/synchronicity-labs/sync-api-v2/commit/12b3a6f0af16fb5b7af468d556ad09034fc1f66b).
+- HTML SHA256: `b34102cf3652bec6cdce501d72fbdafc6a8fa4fd5c5c3c196fbdc88adc98b8b5`.
+- HTML size: 6,200,715 bytes. A clean committed-source rebuild exactly matches
+  the artifact exercised by the browser tests. The unchanged manifest and
+  `release.json` record exact bytes and source commit/tree.
+- Integrates dev `d20c92cd56cebf493ea8d83af691bb14b781bcc0`, preserving canonical
+  dubbing comparison, progress, cloning strength, source identity and authorization.
+  The shared serializer includes the optional cloning-strength response field.
+- API integration:64/64. Native browser:33/33. Native integration:106/108 in the
+  affected run, then the full15/15 owner file passes under an exclusive lease
+  after two five-second timeouts during memory pressure. No timeout was raised.
+- Plugin source/artifact:37/38 in the affected cohort, then the unchanged4/4
+  desktop/mobile freeform cohort passes after one stalled artifact reload.
+  Freeform speech presentation, audio selection focus, read-only translation
+  preparation recovery and current write eligibility remain covered.
+- Final changed lint, exact generated clients and all34 affected type/build
+  tasks pass. Independent preservation and Ponytail review clears the changes.
 - Media, upload, recording, audio, speech, translation, dialogue, asset, history,
   and result presentation use shared Studio views with authenticated host adapters.
   Free pricing and actual-output duration checks preserve editable refusal recovery.
@@ -33,8 +36,10 @@ Existing production origins and OAuth settings are kept.
 - Prior private-plugin completion/history/playback/OAuth observations are recorded
   in the paired parity plan. They do not establish live acceptance of this new
   candidate. No fresh paid generation or private-plugin refresh is claimed here.
-- Build, packaging and actual MCP client/server resource verification pass for
-  all nine bundles. All eight retained bundles remain byte-for-byte unchanged.
+- All eight retained bundles remain byte-for-byte unchanged. The new candidate
+  replaces only unmerged `a1dd3d4a`; it was never selected by production.
+  Build, packaging and real MCP client/server resource verification pass for
+  all nine bundles, including the exact new candidate.
   No MCP runtime source changed in this checkpoint.
 
 The replaced `391c1d60` candidate was issued only by the isolated private test
@@ -46,9 +51,9 @@ Any future upgrade of the same private connection must preserve its issued
 catalog without reconciling both lists within the existing retention limit.
 
 This is a paired PR candidate. Compatible backend support must precede frontend
-activation. Current-head CI/reviews (including
-React; the duplicate local scan was interrupted, not passed), original live
-retry, the full remaining parity matrix, and production handoff still gate readiness.
+activation. Current-head CI/reviews (including React), independent MCP approval,
+original live retry, the full remaining parity matrix, and production handoff
+still gate readiness.
 Do not merge, publish or deploy. Hosted tools/HTML activation does not itself
 require publishing plugin package 2.0.2. The detailed evidence and outstanding
 checklist live in `plans/pr-6822-studio-parity.md` in the paired source repository.
