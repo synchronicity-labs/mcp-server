@@ -188,3 +188,22 @@ No merge, deployment or private-plugin activation has occurred.
   live Chrome retry and the previous full parity/live acceptance gates.
 
 No merge, deployment or private-plugin activation is authorized or claimed.
+
+
+## Latest dev conflict reconciliation
+
+- [x] Source `a04e668e8b7a7b55c852d5af2f33f6996d99ccfe` integrates dev `b7804812b25b7566c9d0f70124950e87d5db87f1`.
+  Upstream stable disclosure IDs live in the shared cost view; no copied view.
+- [x] Strict multi-speaker admission, pre-policy idempotent replay and saved
+  preview/session readiness survive the merge. Independent preservation review
+  clears API, shared and native owners.
+- [x] New proof:90 API,9 flag,401 native,33 native browser and14 source/artifact
+  cases pass. Full lint, hydration, boundaries, exact clients and34 type/build
+  tasks pass; preceding38-case host recovery evidence remains applicable.
+- [x] Clean committed-source build matches tested HTML `34b826ef2c35bee447c3744d13757e58b341b8936b285164eae26979ca7ea216`
+  (6,201,045bytes). Real MCP client/server reads all9 resources. All24 retained
+  files remain identical; private391c stays on its independent frozen registry.
+- [ ] Fresh current-head CI/React/reviews, required independent MCP approval,
+  explicit native GitHub mergeability, original live retry and full acceptance.
+
+No merge, deploy or private-plugin activation.
