@@ -7,9 +7,9 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit e512811fe](https://github.com/synchronicity-labs/sync-api-v2/commit/e512811fe58698ffd6c7318a33f89ed83bc73841).
-- HTML SHA256: `cb227b2156f248fbc9da8845ed8efc3966ad98525450909f57f98a99341d6ace`.
-- HTML size: 6,194,570 bytes. The clean committed-source rebuild exactly matches
+- Source: [PR #6822, commit d8b45175f](https://github.com/synchronicity-labs/sync-api-v2/commit/d8b45175fe8972ae28d973c30b3885c3ccb6f01f).
+- HTML SHA256: `391c1d60718742a6cea5a392772854f47f0b882f84858728264b3f9c0da69199`.
+- HTML size: 6,194,778 bytes. The clean committed-source rebuild exactly matches
   the final source/artifact browser-tested bytes. `release.json` records provenance.
 - Uses actual shared Studio media, upload, recording, audio, speech, translation,
   dialogue, assets, history and result views through authenticated MCP adapters.
@@ -169,3 +169,18 @@ after unavailability restores the unknown-outcome message. The local test API
 flag is enabled and preserved across Doppler restarts; production is unchanged.
 Original Chrome request retry remains pending manual action, separate from the
 passing source/artifact and API replay checks. No replacement generation submitted.
+
+
+### Original voiceover continuation
+
+Translate into another language restores the original source only for matching
+project, video and prepared-audio lineage. Otherwise it retains submitted audio;
+explicit cross-workflow switches still clear it. Final affected source/artifact
+cases10/10, types/lint, clean artifact reproduction and independent review pass.
+The same source is quoted after continuation and reload, with no automatic paid
+translation or render. The previous recovery-message24/24 and API idempotency13/13
+are separate retained evidence. Live original Chrome retry is still unverified.
+
+The same private connection was refreshed to exact391c1d60 (6,194,778bytes).
+Original live request retry remains unverified: reported button click has no
+MCP/API generation dispatch and no new job/hold/deduction.

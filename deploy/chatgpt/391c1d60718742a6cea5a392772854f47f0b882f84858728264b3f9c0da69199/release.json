@@ -1,0 +1,26 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "d8b45175fe8972ae28d973c30b3885c3ccb6f01f",
+  "tree": "29e63bb0b7e4b1598727d3fb8029c8be000324eb",
+  "htmlSha256": "391c1d60718742a6cea5a392772854f47f0b882f84858728264b3f9c0da69199",
+  "htmlBytes": 6194778,
+  "commands": [
+    "pnpm --filter @sync/chatgpt typecheck",
+    "pnpm --filter @sync/chatgpt lint",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "buildOrigin": "clean committed source; rebuilt HTML exactly matches final source/artifact browser-tested bytes",
+    "finalFocusedBrowserCasesPassed": 10,
+    "finalFocusedBrowserLog": "/tmp/pr6822-next-language-source-final.log",
+    "typesAndLint": "pass; final ChatGPT typecheck/lint and staged hooks; unchanged native web/shared source retains prior pinned React gate evidence",
+    "independentPreservationReview": "clear including matched source lineage, legacy submitted-audio fallback, cross-workflow clearing, immutable request/recovery guards",
+    "actualAcceptance": "Same existing private ChatGPT connection refreshed and fetched this exact391c resource (6,194,778bytes). Priorcb authenticated app opens projects. Original Chrome recovery click produced no generation dispatch at MCP/API and no new job/hold/deduction; live retry remains unverified pending its UI error/state. No replacement generation submitted.",
+    "remaining": "Single local draft only; full multi-draft, completed-output forwarding, remaining parity matrix, current-head CI/reviews, native dev merge conflicts and production handoff remain gates.",
+    "deployment": "not merged or deployed; production plugin unchanged",
+    "finalFixtureRefactorBrowserCasesPassed": 10,
+    "finalFixtureRefactorBrowserLog": "/tmp/pr6822-unavailable-recovery-fixture-final.log",
+    "idempotencyApiIntegrationPassed": 13,
+    "nextLanguageSourceRegression": "failed before repair; quote for original separate voiceover restored after continuation and reload, no new translation/render"
+  }
+}

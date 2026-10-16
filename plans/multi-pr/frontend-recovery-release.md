@@ -104,3 +104,16 @@ fixture rerun10/10 and API idempotency integration13/13 pass; final types/lint a
 independent review pass. All eight retained resources remain unchanged. Local
 flag setup is corrected; original Chrome retry awaits manual action. No live
 retry success, merge or deployment is claimed.
+
+
+## Original voiceover follow-up
+
+Current sourced8b45175f fixes the reviewed another-language source loss through
+exact saved project/video/prepared-audio lineage. Baseline failed before repair;
+source/artifact10/10, types/lint and preservation review pass. Same immutable API
+request/keys and fresh access gates remain. Original live Chrome retry is still
+unverified. No merge/deploy.
+
+Same private connection refreshed and fetched exact391c resource. The original
+Chrome retry still has no MCP/API dispatch evidence and no new charge/job. Its
+UI error/state is the outstanding live-test input. No implicit retry is run.
