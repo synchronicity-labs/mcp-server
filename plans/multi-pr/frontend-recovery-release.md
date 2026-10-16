@@ -54,3 +54,14 @@ Select retained hash `0f4f454753a88e6264cf1393500c9d9dac8673040459642407230a0e1d
 as current, retain the new hash in previous, and deploy through the same workflow.
 Do not overwrite immutable bundle bytes or remove resources cached by ChatGPT.
 Plugin package 2.0.2 publication is unrelated to activating this frontend.
+
+## October 16 paired checkpoint
+
+Current candidate is source 837e5d9f7, packaged exactly as recorded in
+`docs/chatgpt-release.md` and the current immutable `release.json`. All eight older
+resources remain. Final scoped browser/API checks pass; real private-plugin
+completion/history/playback/OAuth refresh are verified on the earlier candidate.
+The same private connection is refreshed to the exact final hash and verifies
+saved inputs, free duration preflight and visible disabled controls.
+Current-head CI/reviews, native dev merge conflicts and the
+remaining full acceptance matrix still gate merge. No merge/deploy authorized.

@@ -7,42 +7,38 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit205baba3c](https://github.com/synchronicity-labs/sync-api-v2/commit/205baba3ca78b471a18522ab57eef5e51ad415b0).
-- HTML SHA256: `9d17542288b1a6048cce73a9747018a4dee84c985784d3b6e2facd04e95b07d1`.
-- HTML size:6,177,475bytes. `release.json` records the exact source commit/tree,
-  local build commands and scoped verification. These are local candidate bytes,
-  not a downloaded CI artifact. Current-head full CI/reviews must pass before merge.
-- Uses the actual shared Studio media, speech, translation, dialogue, assets and
-  history views, with MCP adapters. The compact editor keeps media controls
-  reachable when ChatGPT reserves space for its composer.
-- All16 focused source/artifact browser cases pass. This covers compact controls,
-  import navigation locks, history polling/focus and completed upload routing;
-  it does not establish every workflow state or full visual parity.
-- Six additional source/artifact asset-preview cases pass at390,498and1280px,
-  including host resizing and pointer selection. The pinned React web gate is100/100.
-  Actual ChatGPT verifies preview containment and selection above its composer.
-- In the private isolated ChatGPT test plugin, real speech, lipsync and dialogue
-  completion, canonical lipsync/dialogue history after full reload, recovered
-  video playback and automatic OAuth refresh were verified.
-  A bounded Spanish translation also completed and its saved audio played.
-  Translation reload recovery remains under investigation; it is not accepted.
-  Local playback required a token-protected test ingress and accepting ngrok's
-  one-time browser notice. No production configuration was changed.
-- Definite402 quota refusals reuse Studio's typed error mapper and toast policy,
-  preserve media, and leave explicit retries available. Unsupported action labels
-  fall back to Open in Sync with the exact project/generation URL. Both regressions
-  fail before repair; all10 focused source/artifact cases, types, lint and the
-  full pinned React gate pass. Independent preservation review is clear.
-  Actual refreshed ChatGPT shows friendly quota copy with inputs retained; the
-  owned generation count remains2 before/after refusal. No job or upgrade.
-- Retains the previous current bundle `feb7f2a9acbe951d81472ce6cc148727f7090abd3f278d93709fd7ec53474840`
-  and all five older bundles unchanged, so cached resource URIs remain readable.
+- Source: [PR #6822, commit 837e5d9f7](https://github.com/synchronicity-labs/sync-api-v2/commit/837e5d9f72e55e5c38a6bc11e94c5b746a85993b).
+- HTML SHA256: `0bd0cbd6a4af9cebdbd6dca0d052f4721edca5a3a8dbfbcb219ad59542fbcd2f`.
+- HTML size: 6,192,085 bytes. The clean committed-source rebuild exactly matches
+  the final source/artifact browser-tested bytes. `release.json` records provenance.
+- Uses actual shared Studio media, upload, recording, audio, speech, translation,
+  dialogue, assets, history and result views through authenticated MCP adapters.
+- Free billing is known before price presentation. Existing estimate responses add
+  optional canonical account/model duration eligibility. Actual translated output
+  is checked before Sync; prices and admission authorization remain unchanged.
+- Definite refusals preserve editable drafts and controls. Accepted IDs select the
+  output before persistence acknowledgement. Legacy draft restoration applies only
+  without known jobs or unresolved requests. Normal footers account for errors;
+  tiny host windows scroll the whole editor to retain access to controls.
+- Final focused browser cohort: 20/20 source/artifact cases. API checks: 19 billing
+  integration, 14 arithmetic and 32 translation/pricing integration cases pass.
+  Generated spec/client, ChatGPT types/lint and pinned React web gate pass.
+  Independent preservation/Ponytail review is clear. This is scoped verification,
+  not a claim that every remaining workflow/visual-parity acceptance row is complete.
+- Existing private ChatGPT connection verifies free pricing and preflight denial
+  of saved 19.89-second audio. Saved inputs survive reopen. An already-completed
+  owned lipsync render was forwarded through the documented local completion bridge;
+  completion, history, playback, reload recovery and automatic OAuth refresh work.
+  No extra generation was started. The same private plugin is refreshed to this
+  exact hash; reopened inputs, free preflight and visible disabled Sync are verified.
+  Tiny-host interaction is covered by automated source/artifact tests.
+- Retains all eight previously packaged immutable bundles unchanged.
 
-This is a paired PR candidate, not production acceptance. Deploy compatible
-backend support before MCP activation. Finish current-head CI/reviews and the
-remaining workflow acceptance checklist before merge or deployment. No merge,
-publish or deployment is authorized by this preparation. Updating hosted tools
-and this HTML does not itself require publishing plugin package2.0.2.
+This is a paired PR candidate. Deploy compatible backend support before MCP
+activation. Current-head CI/reviews, native dev merge conflicts, the full remaining
+workflow matrix and production handoff acceptance still gate merge. Do not merge,
+publish or deploy from this checkpoint. Hosted tools/HTML activation does not itself
+require publishing plugin package 2.0.2.
 
 ### Initial project data
 
