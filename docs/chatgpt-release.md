@@ -7,29 +7,35 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [frontend CI checkout 304093ed83](https://github.com/synchronicity-labs/sync-api-v2/commit/304093ed83e1b5eb1090968f8d9af9d7a8e17944).
-  Its Git tree `5061f9ee55b8af1d38c9c5dc6bb9a9e39f6bb688` is identical to
-  merged main release `812ec674f8b4e896812bca9d1924f93e45d58941` (PR #6722).
-- HTML SHA256: `670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
-- Container directory: `/app/chatgpt-dist/670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
-- Uses `create-lipsync-from-assets` for embedded generation, avoiding ChatGPT's
-  rejection of app calls to tools with file parameters (frontend PR #6723).
-- Explains definite pre-submission host refusals, preserves media and unlocks
-  inputs. Uncertain submissions retain their request identity and protection
-  against duplicate jobs; status recovery shows "Checking generation...".
-- Includes partial host-state restoration from PR #6657.
-- Retains all four earlier bundles unchanged for published and cached clients.
+- Source: [PR #6822, commitd0c895ded](https://github.com/synchronicity-labs/sync-api-v2/commit/d0c895ded9552da4e97528c5548c24661a34fbfc).
+- HTML SHA256: `feb7f2a9acbe951d81472ce6cc148727f7090abd3f278d93709fd7ec53474840`.
+- HTML size:6,177,092bytes. `release.json` records the exact source commit/tree,
+  local build commands and scoped verification. These are local candidate bytes,
+  not a downloaded CI artifact. Current-head full CI/reviews must pass before merge.
+- Uses the actual shared Studio media, speech, translation, dialogue, assets and
+  history views, with MCP adapters. The compact editor keeps media controls
+  reachable when ChatGPT reserves space for its composer.
+- All16 focused source/artifact browser cases pass. This covers compact controls,
+  import navigation locks, history polling/focus and completed upload routing;
+  it does not establish every workflow state or full visual parity.
+- Six additional source/artifact asset-preview cases pass at390,498and1280px,
+  including host resizing and pointer selection. The pinned React web gate is100/100.
+  Actual ChatGPT verifies preview containment and selection above its composer.
+- In the private isolated ChatGPT test plugin, real speech synthesis, one keyed
+  lipsync generation, provider completion, canonical history after reload,
+  recovered result playback and automatic OAuth refresh were verified.
+  A bounded Spanish translation also completed and its saved audio played.
+  Translation reload recovery remains under investigation; it is not accepted.
+  Local playback required a token-protected test ingress and accepting ngrok's
+  one-time browser notice. No production configuration was changed.
+- Retains the previous current bundle `670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`
+  and all four older bundles unchanged, so cached resource URIs remain readable.
 
-The bytes come unchanged from [frontend CI run 38413950994](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/38413950994),
-which used a frozen lockfile and passed 250 source/artifact browser tests (four
-skipped). The checkout, tree, artifact ID, merged commit, and build commands are
-recorded in `release.json`. This is the tested CI artifact, not a local rebuild.
-
-MCP PR #84 already provides the required companion tool; the publisher has
-registered it as Live. Packaging and fixture tests do not establish real
-ChatGPT generation success. Follow the [release acceptance checklist](../plans/multi-pr/frontend-recovery-release.md)
-after deployment. Paid generation requires explicit approval. This bundle
-update does not require publishing plugin package 2.0.2.
+This is a paired PR candidate, not production acceptance. Deploy compatible
+backend support before MCP activation. Finish current-head CI/reviews and the
+remaining workflow acceptance checklist before merge or deployment. No merge,
+publish or deployment is authorized by this preparation. Updating hosted tools
+and this HTML does not itself require publishing plugin package2.0.2.
 
 ### Initial project data
 
@@ -48,7 +54,7 @@ round trip; it does not change ChatGPT's time to dispatch the opening tool.
 `deploy/chatgpt/<HTML SHA256>/` contains deterministic gzip-compressed HTML,
 the frontend's original manifest, and source/build provenance in `release.json`.
 Compression keeps the generated artifact small; the manifest hashes the
-uncompressed HTML. The candidate package is identical to the verified CI artifact.
+uncompressed HTML. The manifest verifies the exact uncompressed bytes recorded in each release.
 
 `npm run build && npm run package:chatgpt` expands and validates every included
 release in `chatgpt-dist/`. Docker copies only that verified output to its final
