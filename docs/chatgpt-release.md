@@ -7,9 +7,9 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commitd0c895ded](https://github.com/synchronicity-labs/sync-api-v2/commit/d0c895ded9552da4e97528c5548c24661a34fbfc).
-- HTML SHA256: `feb7f2a9acbe951d81472ce6cc148727f7090abd3f278d93709fd7ec53474840`.
-- HTML size:6,177,092bytes. `release.json` records the exact source commit/tree,
+- Source: [PR #6822, commit205baba3c](https://github.com/synchronicity-labs/sync-api-v2/commit/205baba3ca78b471a18522ab57eef5e51ad415b0).
+- HTML SHA256: `9d17542288b1a6048cce73a9747018a4dee84c985784d3b6e2facd04e95b07d1`.
+- HTML size:6,177,475bytes. `release.json` records the exact source commit/tree,
   local build commands and scoped verification. These are local candidate bytes,
   not a downloaded CI artifact. Current-head full CI/reviews must pass before merge.
 - Uses the actual shared Studio media, speech, translation, dialogue, assets and
@@ -21,15 +21,22 @@ Existing production origins and OAuth settings are kept.
 - Six additional source/artifact asset-preview cases pass at390,498and1280px,
   including host resizing and pointer selection. The pinned React web gate is100/100.
   Actual ChatGPT verifies preview containment and selection above its composer.
-- In the private isolated ChatGPT test plugin, real speech synthesis, one keyed
-  lipsync generation, provider completion, canonical history after reload,
-  recovered result playback and automatic OAuth refresh were verified.
+- In the private isolated ChatGPT test plugin, real speech, lipsync and dialogue
+  completion, canonical lipsync/dialogue history after full reload, recovered
+  video playback and automatic OAuth refresh were verified.
   A bounded Spanish translation also completed and its saved audio played.
   Translation reload recovery remains under investigation; it is not accepted.
   Local playback required a token-protected test ingress and accepting ngrok's
   one-time browser notice. No production configuration was changed.
-- Retains the previous current bundle `670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`
-  and all four older bundles unchanged, so cached resource URIs remain readable.
+- Definite402 quota refusals reuse Studio's typed error mapper and toast policy,
+  preserve media, and leave explicit retries available. Unsupported action labels
+  fall back to Open in Sync with the exact project/generation URL. Both regressions
+  fail before repair; all10 focused source/artifact cases, types, lint and the
+  full pinned React gate pass. Independent preservation review is clear.
+  Actual refreshed ChatGPT shows friendly quota copy with inputs retained; the
+  owned generation count remains2 before/after refusal. No job or upgrade.
+- Retains the previous current bundle `feb7f2a9acbe951d81472ce6cc148727f7090abd3f278d93709fd7ec53474840`
+  and all five older bundles unchanged, so cached resource URIs remain readable.
 
 This is a paired PR candidate, not production acceptance. Deploy compatible
 backend support before MCP activation. Finish current-head CI/reviews and the
