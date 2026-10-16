@@ -1,0 +1,27 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "faa89a077f118982bc43388562da35cd53ab1ae6",
+  "tree": "7794cae9501a28e33b2a7fe5870dab60da06a382",
+  "htmlSha256": "a1dd3d4a805c9f401132b2c494a470b068a74bbf96f73726de331cc0e0385597",
+  "htmlBytes": 6198861,
+  "commands": [
+    "pnpm verify:agent --profile fast --run --only workspace-hydration,lint,boundaries,typecheck",
+    "pnpm verify:agent --profile fast --run --only generated-clients",
+    "pnpm --filter @sync/chatgpt exec playwright test --workers=1 e2e/translate-dub.spec.ts --grep 'supported language catalog|quotes translated audio separately|narrow translation editor|blocks expanded translated audio|loads the saved audio free translation quote|accepted translated-audio Sync'"
+  ],
+  "verification": {
+    "nativeStudioIntegration": 77,
+    "nativeBrowserCases": 24,
+    "typesBuildTasks": 34,
+    "generatedClient": "exact",
+    "independentPreservationPonytail": "clear",
+    "pluginBrowserLog": "/tmp/pr6822-merge-plugin-browser-exclusive.log",
+    "reactReport": "/tmp/pr6822-merge-react-report.json",
+    "remaining": "Fresh current-head CI/reviews, original live retry and full parity acceptance remain open. This candidate has not been refreshed in the private plugin.",
+    "deployment": "not merged or deployed; production unchanged",
+    "pluginSourceArtifactCasesPassed": 12,
+    "reactStatus": "earlier-snapshot local scan interrupted to release memory; exact-head required CI React gate remains pending, not a pass",
+    "mcpPackageProtocol": "pass: real MCP client/server reads all nine resources; all eight retained releases unchanged",
+    "nativeLintRepair": "paired head removes one redundant config predicate; full-config lint/format and28 native lifecycle cases pass; independent preservation review clear"
+  }
+}

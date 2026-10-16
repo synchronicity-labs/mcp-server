@@ -117,3 +117,33 @@ unverified. No merge/deploy.
 Same private connection refreshed and fetched exact391c resource. The original
 Chrome retry still has no MCP/API dispatch evidence and no new charge/job. Its
 UI error/state is the outstanding live-test input. No implicit retry is run.
+
+
+## Dev integration checkpoint
+
+Source `faa89a077f118982bc43388562da35cd53ab1ae6` / HTML `a1dd3d4a805c9f401132b2c494a470b068a74bbf96f73726de331cc0e0385597` (6,198,861 bytes)
+merges dev `73e96081e` while preserving shared translation controls and upstream
+authorization, multi-speaker validation, preview comparison and history fixes.
+Native integration77/77, native browser24/24, affected type/build34/34, changed
+lint/boundaries and exact generated clients pass. Independent preservation and
+Ponytail review is clear. No MCP runtime code changed; all eight retained
+resources remain byte-identical. The isolated source/artifact cohort passes12/12
+at original timeouts, and its rebuilt bytes match the frozen candidate exactly.
+The earlier concurrent run timed out under memory pressure. Local duplicate
+React scan was interrupted, not passed; exact-head React, package/protocol proof
+and CI/reviews remain required.
+Original live retry and full parity acceptance remain open. No merge/deploy.
+
+Final build/package/protocol verification passes for all nine resources through
+a real MCP client/server. All eight retained releases are byte-identical. Native
+CI complexity finding is repaired by deleting a redundant config-selection
+predicate; full-config file lint/format and28 lifecycle tests pass, with clear
+independent preservation review. No runtime MCP changes. Exact-head CI/reviews
+(including React), original live retry and full parity remain open gates.
+
+Retention review confirms that replaced candidate391c was never selected by
+production. The private test server explicitly uses its independent frozen391c
+directory and retained-resource list, without the deployment catalog. Those
+files and the running server remain unchanged. A future upgrade of that same
+private connection must retain all issued resources and reconcile the lists
+within the existing retention limit before changing its configuration.

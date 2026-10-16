@@ -7,55 +7,51 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit d8b45175f](https://github.com/synchronicity-labs/sync-api-v2/commit/d8b45175fe8972ae28d973c30b3885c3ccb6f01f).
-- HTML SHA256: `391c1d60718742a6cea5a392772854f47f0b882f84858728264b3f9c0da69199`.
-- HTML size: 6,194,778 bytes. The clean committed-source rebuild exactly matches
-  the final source/artifact browser-tested bytes. `release.json` records provenance.
-- Uses actual shared Studio media, upload, recording, audio, speech, translation,
-  dialogue, assets, history and result views through authenticated MCP adapters.
-- Free billing is known before price presentation. Existing estimate responses add
-  optional canonical account/model duration eligibility. Actual translated output
-  is checked before Sync; prices and admission authorization remain unchanged.
-- Definite refusals preserve editable drafts and controls. Accepted IDs select the
-  output before persistence acknowledgement. Legacy draft restoration applies only
-  without known jobs or unresolved requests. Normal footers account for errors;
-  tiny host windows scroll the whole editor to retain access to controls.
-- The prior processing/history cohort passed44/44. This recovery-message checkpoint
-  passes24/24 source/artifact cases, then10/10 affected cases after fixture extraction,
-  plus13/13 existing real API idempotency integration cases. Final types/lint and
-  independent preservation/Ponytail review pass. Existing API billing19/arithmetic14/
-  translation32, generated contracts and pinned native React gate evidence remains.
-  This does not complete the remaining workflow/visual-parity acceptance matrix.
-- Existing private ChatGPT connection verifies free pricing and preflight denial
-  of saved 19.89-second audio. Saved inputs survive reopen. An already-completed
-  owned lipsync render was forwarded through the documented local completion bridge;
-  completion, history, playback, reload recovery and automatic OAuth refresh work.
-  No extra generation was started. The same private plugin is refreshed to this
-  exact hash; the current draft row and owned historical output are verified, with
-  complete playback controls inside the actual392px stage and playback to28/28frames.
-  Reopened translation preflight was verified on the immediately preceding006 candidate.
-  Tiny-host interaction is covered by automated source/artifact tests.
-- The latest result transition uses one shared processing frame without LoadingMagic.
-  Fresh access/status/source gates still protect media. Speech progress appears
-  once in the shared control. Supported processing continuations open distinct
-  workflow drafts and retain their selection across reloads without another render.
-- Accepted translated-audio requests preserve their editor origin separately from
-  API arguments through acknowledgement, retry and reload. Legacy requests defer
-  to the project default. Historical outputs use the shared responsive result
-  frame so playback and download remain reachable in compact hosts.
-- The existing current local draft is visible in the shared history rail after
-  jobs exist, with access-gated media. Full multi-draft and completed-output
-  forwarding remain outstanding. The same private plugin serves this exact hash, reopens the saved translation
-  inputs, and exposes the current draft beside the owned completed take. Its output
-  plays and automatic OAuth refresh succeeds. Processing states are verified by
-  source/artifact browser tests; no fresh live processing job was started.
-- Retains all eight previously packaged immutable bundles unchanged.
+- Source: [PR #6822, commit faa89a077](https://github.com/synchronicity-labs/sync-api-v2/commit/faa89a077f118982bc43388562da35cd53ab1ae6).
+- HTML SHA256: `a1dd3d4a805c9f401132b2c494a470b068a74bbf96f73726de331cc0e0385597`.
+- HTML size: 6,198,861 bytes, built from clean committed source.
+  The manifest hashes the exact uncompressed bytes; `release.json` records provenance.
+- Integrates dev `73e96081e`, retaining native voice-cloning strength and preview
+  comparison behavior while using one shared translation renderer. Authorization,
+  billing, multi-speaker validation, and history overflow fixes remain intact.
+- Native Studio integration: 77/77 tests pass at original timeouts. Browser
+  translation/quote/cloning/refusal/mobile geometry: 24/24 pass. Changed lint,
+  boundaries, all 34 affected type/build tasks, and exact generated clients pass.
+  Independent preservation/Ponytail review found no actionable issue. The committed
+  frontend passes all 12 affected source/artifact translation and recovery cases
+  at original timeouts in the isolated rerun. The earlier concurrent run timed out
+  under memory pressure and is not counted as passing.
+- Media, upload, recording, audio, speech, translation, dialogue, asset, history,
+  and result presentation use shared Studio views with authenticated host adapters.
+  Free pricing and actual-output duration checks preserve editable refusal recovery.
+  Explicit service unavailability retains the original key for retry; unknown
+  outcomes remain unconfirmed rather than being treated as failed admissions.
+- The processing frame retains fresh access checks and avoids entry-loading flashes.
+  Translation origin and original voiceover lineage survive retry/reload. The
+  current single local draft and responsive historical output controls are implemented.
+  Full multi-draft behavior and completed-output forwarding remain incomplete.
+- Prior private-plugin completion/history/playback/OAuth observations are recorded
+  in the paired parity plan. They do not establish live acceptance of this new
+  candidate. No fresh paid generation or private-plugin refresh is claimed here.
+- Build, packaging and actual MCP client/server resource verification pass for
+  all nine bundles. All eight retained bundles remain byte-for-byte unchanged.
+  No MCP runtime source changed in this checkpoint.
 
-This is a paired PR candidate. Deploy compatible backend support before MCP
-activation. Current-head CI/reviews, native dev merge conflicts, the full remaining
-workflow matrix and production handoff acceptance still gate merge. Do not merge,
-publish or deploy from this checkpoint. Hosted tools/HTML activation does not itself
-require publishing plugin package 2.0.2.
+The replaced `391c1d60` candidate was issued only by the isolated private test
+server, which serves a separate frozen directory and retained-resource list.
+It was never selected by the production branch. That private server and its
+resources remain unchanged; this package update does not refresh the test plugin.
+Any future upgrade of the same private connection must preserve its issued
+`391c1d60` resource and retained resources. Do not point it at the deployment
+catalog without reconciling both lists within the existing retention limit.
+
+This is a paired PR candidate. Compatible backend support must precede frontend
+activation. Current-head CI/reviews (including
+React; the duplicate local scan was interrupted, not passed), original live
+retry, the full remaining parity matrix, and production handoff still gate readiness.
+Do not merge, publish or deploy. Hosted tools/HTML activation does not itself
+require publishing plugin package 2.0.2. The detailed evidence and outstanding
+checklist live in `plans/pr-6822-studio-parity.md` in the paired source repository.
 
 ### Initial project data
 
