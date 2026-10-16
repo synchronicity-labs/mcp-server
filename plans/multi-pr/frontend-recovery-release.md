@@ -57,7 +57,7 @@ Plugin package 2.0.2 publication is unrelated to activating this frontend.
 
 ## October 16 paired checkpoint
 
-Current candidate is source 837e5d9f7, packaged exactly as recorded in
+Current candidate is source dac5429a6, packaged exactly as recorded in
 `docs/chatgpt-release.md` and the current immutable `release.json`. All eight older
 resources remain. Final scoped browser/API checks pass; real private-plugin
 completion/history/playback/OAuth refresh are verified on the earlier candidate.
@@ -65,3 +65,16 @@ The same private connection is refreshed to the exact final hash and verifies
 saved inputs, free duration preflight and visible disabled controls.
 Current-head CI/reviews, native dev merge conflicts and the
 remaining full acceptance matrix still gate merge. No merge/deploy authorized.
+
+
+## Processing transition and draft checkpoint
+
+Source/artifact acceptance passes 26/26; final frontend types/lint and independent
+preservation/Ponytail review pass. The candidate keeps one authorized processing
+frame, removes duplicate speech status, adds supported processing workflow choices
+and shows the single current local draft in history. The same existing private
+plugin serves this exact resource, reopens saved translation inputs, presents the
+current draft row and plays the owned completed take. OAuth refresh succeeds.
+Processing states remain fixture proof; no fresh live processing job was started. Full multi-draft behavior,
+completed-output forwarding and the other declared merge gates remain open.
+No merge, deploy, production plugin change or new paid generation.

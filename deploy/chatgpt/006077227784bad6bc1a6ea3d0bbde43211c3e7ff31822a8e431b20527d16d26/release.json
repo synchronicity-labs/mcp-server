@@ -1,0 +1,22 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "dac5429a63c7a7802ee030734f44b55ba5222340",
+  "tree": "eaca8542260c3ebe1b0d9c28417c4094152b0693",
+  "htmlSha256": "006077227784bad6bc1a6ea3d0bbde43211c3e7ff31822a8e431b20527d16d26",
+  "htmlBytes": 6193837,
+  "commands": [
+    "pnpm --filter @sync/chatgpt typecheck",
+    "pnpm --filter @sync/chatgpt lint",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "buildOrigin": "clean committed source; rebuilt HTML exactly matches final source/artifact browser-tested bytes",
+    "finalFocusedBrowserCasesPassed": 26,
+    "finalFocusedBrowserLog": "/tmp/pr6822-transition-draft-release.log",
+    "typesAndLint": "pass; final ChatGPT typecheck/lint and staged hooks; unchanged native web/shared source retains prior pinned React gate evidence",
+    "independentPreservationReview": "clear including fresh status/source authorization, unsent draft guards, workflow restore ownership and legacy/unsupported defaults",
+    "actualAcceptance": "Same existing private ChatGPT plugin refreshed to this exact resource hash. Saved translation video/audio reopens, shows free and refuses 19.89-second audio against the 15-second Sync-3 allowance. Current draft row is visible/selectable beside owned completed generation78ab3dbe, whose output plays. Automatic OAuth refresh returned200. Processing transition/action states are source/artifact browser fixtures; no fresh live processing generation started. Native Studio multi-drafts remain separate browser storage.",
+    "remaining": "Single local draft only; full multi-draft, completed-output forwarding, remaining parity matrix, current-head CI/reviews, native dev merge conflicts and production handoff remain gates.",
+    "deployment": "not merged or deployed; production plugin unchanged"
+  }
+}
