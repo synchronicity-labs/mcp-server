@@ -57,7 +57,7 @@ Plugin package 2.0.2 publication is unrelated to activating this frontend.
 
 ## October 16 paired checkpoint
 
-Current candidate is source dac5429a6, packaged exactly as recorded in
+Current candidate is source 17338e6b9, packaged exactly as recorded in
 `docs/chatgpt-release.md` and the current immutable `release.json`. All eight older
 resources remain. Final scoped browser/API checks pass; real private-plugin
 completion/history/playback/OAuth refresh are verified on the earlier candidate.
@@ -78,3 +78,19 @@ current draft row and plays the owned completed take. OAuth refresh succeeds.
 Processing states remain fixture proof; no fresh live processing job was started. Full multi-draft behavior,
 completed-output forwarding and the other declared merge gates remain open.
 No merge, deploy, production plugin change or new paid generation.
+
+
+## Translation recovery and historical output checkpoint
+
+The packaged source/artifact cohort passes44/44, including origin-preserving
+translated-audio recovery, legacy project fallback and historical playback/control
+bounds on desktop/mobile. Frozen request arguments/keys and fresh access gates
+remain unchanged. Types/lint and independent preservation/Ponytail review pass.
+The eight prior immutable packaged resources remain byte-identical. This candidate
+replaces only the prior unmerged candidate. No merge or deploy.
+
+Same private connection refreshed to058849bd. The current draft is selectable;
+owned historical output78ab3dbe plays to28/28frames with controls inside the
+actual392px host stage. Screenshot: private-history-output-final.png under
+/Users/noahmilberger/.codex/visualizations/2026/10/16/pr6822-processing-drafts/.
+No additional generation started.

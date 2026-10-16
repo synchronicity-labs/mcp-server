@@ -1,0 +1,22 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "17338e6b96735bd7992206d9cc729b978d227f52",
+  "tree": "76314a4d292119fa30cd47ce1b0fc50056c5f56d",
+  "htmlSha256": "058849bd95cea74f642ac4e68dc4842258cf1142671bae233444e9a7883a7cd5",
+  "htmlBytes": 6194342,
+  "commands": [
+    "pnpm --filter @sync/chatgpt typecheck",
+    "pnpm --filter @sync/chatgpt lint",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "buildOrigin": "clean committed source; rebuilt HTML exactly matches final source/artifact browser-tested bytes",
+    "finalFocusedBrowserCasesPassed": 44,
+    "finalFocusedBrowserLog": "/tmp/pr6822-origin-history-release.log",
+    "typesAndLint": "pass; final ChatGPT typecheck/lint and staged hooks; unchanged native web/shared source retains prior pinned React gate evidence",
+    "independentPreservationReview": "clear including immutable editor origin outside API arguments, translated prepared-audio recovery, legacy project fallback, fresh history gates and desktop/mobile output controls",
+    "actualAcceptance": "Same existing private ChatGPT plugin refreshed to this exact058849bd resource (6,194,342 bytes). Current saved draft row remains selectable beside owned completed78ab3dbe. Its historical output loads, full playback controls fit the actual392px stage, and playback reaches1.125245seconds/28of28frames. Prior006 candidate verified saved translation preflight and automatic OAuth refresh. Processing transitions/actions remain source/artifact fixture proof; no new render started.",
+    "remaining": "Single local draft only; full multi-draft, completed-output forwarding, remaining parity matrix, current-head CI/reviews, native dev merge conflicts and production handoff remain gates.",
+    "deployment": "not merged or deployed; production plugin unchanged"
+  }
+}

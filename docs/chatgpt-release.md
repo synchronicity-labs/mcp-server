@@ -7,9 +7,9 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit dac5429a6](https://github.com/synchronicity-labs/sync-api-v2/commit/dac5429a63c7a7802ee030734f44b55ba5222340).
-- HTML SHA256: `006077227784bad6bc1a6ea3d0bbde43211c3e7ff31822a8e431b20527d16d26`.
-- HTML size: 6,193,837 bytes. The clean committed-source rebuild exactly matches
+- Source: [PR #6822, commit 17338e6b9](https://github.com/synchronicity-labs/sync-api-v2/commit/17338e6b96735bd7992206d9cc729b978d227f52).
+- HTML SHA256: `058849bd95cea74f642ac4e68dc4842258cf1142671bae233444e9a7883a7cd5`.
+- HTML size: 6,194,342 bytes. The clean committed-source rebuild exactly matches
   the final source/artifact browser-tested bytes. `release.json` records provenance.
 - Uses actual shared Studio media, upload, recording, audio, speech, translation,
   dialogue, assets, history and result views through authenticated MCP adapters.
@@ -20,7 +20,7 @@ Existing production origins and OAuth settings are kept.
   output before persistence acknowledgement. Legacy draft restoration applies only
   without known jobs or unresolved requests. Normal footers account for errors;
   tiny host windows scroll the whole editor to retain access to controls.
-- Final focused browser cohort: 26/26 source/artifact cases. API checks: 19 billing
+- Final focused browser cohort: 44/44 source/artifact cases. API checks: 19 billing
   integration, 14 arithmetic and 32 translation/pricing integration cases pass.
   Generated spec/client, ChatGPT types/lint and pinned React web gate pass.
   Independent preservation/Ponytail review is clear. This is scoped verification,
@@ -30,12 +30,18 @@ Existing production origins and OAuth settings are kept.
   owned lipsync render was forwarded through the documented local completion bridge;
   completion, history, playback, reload recovery and automatic OAuth refresh work.
   No extra generation was started. The same private plugin is refreshed to this
-  exact hash; reopened inputs, free preflight and visible disabled Sync are verified.
+  exact hash; the current draft row and owned historical output are verified, with
+  complete playback controls inside the actual392px stage and playback to28/28frames.
+  Reopened translation preflight was verified on the immediately preceding006 candidate.
   Tiny-host interaction is covered by automated source/artifact tests.
 - The latest result transition uses one shared processing frame without LoadingMagic.
   Fresh access/status/source gates still protect media. Speech progress appears
   once in the shared control. Supported processing continuations open distinct
   workflow drafts and retain their selection across reloads without another render.
+- Accepted translated-audio requests preserve their editor origin separately from
+  API arguments through acknowledgement, retry and reload. Legacy requests defer
+  to the project default. Historical outputs use the shared responsive result
+  frame so playback and download remain reachable in compact hosts.
 - The existing current local draft is visible in the shared history rail after
   jobs exist, with access-gated media. Full multi-draft and completed-output
   forwarding remain outstanding. The same private plugin serves this exact hash, reopens the saved translation
