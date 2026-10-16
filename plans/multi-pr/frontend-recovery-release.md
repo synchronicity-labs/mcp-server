@@ -168,3 +168,23 @@ within the existing retention limit before changing its configuration.
   handoff remain open. The private test server still uses its frozen391c bundle.
 
 No merge, deployment or private-plugin activation has occurred.
+
+
+## Full CI repair and cleared-speech draft checkpoint
+
+- [x] Source `eb945088200d296258e8086a6edab5659d20087b` repairs full lint and
+  the two React diagnostics with explicit render slots and hook-owned focus.
+- [x] Freeform drafts wait for project discovery and retain unresolved shell
+  origin. Clearing unsent speech then reloading preserves selected media and
+  the permanent composer; both artifact widths reproduce the pre-fix loss.
+- [x] Final native108/108, native browser33/33 and source/artifact38/38 pass.
+  Full repository lint and affected type/build34/34 pass. Assertions/timeouts
+  remain intact; independent preservation/Ponytail review is clear.
+- [x] Clean committed-source reproduction and final package/protocol proof for
+  HTML `bd97a950d328b823917504b28b5b49b86854ade02cf71b81b363b47a1d2363f9`
+  (6,200,832bytes). Real MCP reads all9 resources; all24 retained files and
+  the private391c registry remain unchanged.
+- [ ] Fresh current-head CI/React/reviews, independent MCP approval, original
+  live Chrome retry and the previous full parity/live acceptance gates.
+
+No merge, deployment or private-plugin activation is authorized or claimed.

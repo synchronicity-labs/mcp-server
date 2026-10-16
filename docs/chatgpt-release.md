@@ -7,23 +7,24 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 12b3a6f0a](https://github.com/synchronicity-labs/sync-api-v2/commit/12b3a6f0af16fb5b7af468d556ad09034fc1f66b).
-- HTML SHA256: `b34102cf3652bec6cdce501d72fbdafc6a8fa4fd5c5c3c196fbdc88adc98b8b5`.
-- HTML size: 6,200,715 bytes. A clean committed-source rebuild exactly matches
+- Source: [PR #6822, commit eb9450882](https://github.com/synchronicity-labs/sync-api-v2/commit/eb945088200d296258e8086a6edab5659d20087b).
+- HTML SHA256: `bd97a950d328b823917504b28b5b49b86854ade02cf71b81b363b47a1d2363f9`.
+- HTML size: 6,200,832 bytes. A clean committed-source rebuild exactly matches
   the artifact exercised by the browser tests. The unchanged manifest and
   `release.json` record exact bytes and source commit/tree.
 - Integrates dev `d20c92cd56cebf493ea8d83af691bb14b781bcc0`, preserving canonical
   dubbing comparison, progress, cloning strength, source identity and authorization.
   The shared serializer includes the optional cloning-strength response field.
-- API integration:64/64. Native browser:33/33. Native integration:106/108 in the
-  affected run, then the full15/15 owner file passes under an exclusive lease
-  after two five-second timeouts during memory pressure. No timeout was raised.
-- Plugin source/artifact:37/38 in the affected cohort, then the unchanged4/4
-  desktop/mobile freeform cohort passes after one stalled artifact reload.
-  Freeform speech presentation, audio selection focus, read-only translation
-  preparation recovery and current write eligibility remain covered.
-- Final changed lint, exact generated clients and all34 affected type/build
-  tasks pass. Independent preservation and Ponytail review clears the changes.
+- Native owner tests108/108, native browser33/33 and final plugin
+  source/artifact38/38 pass at original timeouts. Drafts retain the freeform
+  shell and media after editing or clearing speech and reloading.
+- Full repository lint and all34 affected type/build tasks pass. Explicit
+  render callbacks, focus ownership and a cohesive recovery predicate repair
+  all six full-CI lint findings, including the two React Doctor diagnostics.
+  Fresh pinned React CI remains required; no rules were suppressed.
+- API64/64 and exact generated clients passed at the integration checkpoint;
+  this follow-up changes no API or generated output. Independent preservation
+  and Ponytail review clears this batch.
 - Media, upload, recording, audio, speech, translation, dialogue, asset, history,
   and result presentation use shared Studio views with authenticated host adapters.
   Free pricing and actual-output duration checks preserve editable refusal recovery.
@@ -37,7 +38,7 @@ Existing production origins and OAuth settings are kept.
   in the paired parity plan. They do not establish live acceptance of this new
   candidate. No fresh paid generation or private-plugin refresh is claimed here.
 - All eight retained bundles remain byte-for-byte unchanged. The new candidate
-  replaces only unmerged `a1dd3d4a`; it was never selected by production.
+  replaces only unmerged `b34102cf`; it was never selected by production.
   Build, packaging and real MCP client/server resource verification pass for
   all nine bundles, including the exact new candidate.
   No MCP runtime source changed in this checkpoint.
