@@ -7,9 +7,9 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 17338e6b9](https://github.com/synchronicity-labs/sync-api-v2/commit/17338e6b96735bd7992206d9cc729b978d227f52).
-- HTML SHA256: `058849bd95cea74f642ac4e68dc4842258cf1142671bae233444e9a7883a7cd5`.
-- HTML size: 6,194,342 bytes. The clean committed-source rebuild exactly matches
+- Source: [PR #6822, commit e512811fe](https://github.com/synchronicity-labs/sync-api-v2/commit/e512811fe58698ffd6c7318a33f89ed83bc73841).
+- HTML SHA256: `cb227b2156f248fbc9da8845ed8efc3966ad98525450909f57f98a99341d6ace`.
+- HTML size: 6,194,570 bytes. The clean committed-source rebuild exactly matches
   the final source/artifact browser-tested bytes. `release.json` records provenance.
 - Uses actual shared Studio media, upload, recording, audio, speech, translation,
   dialogue, assets, history and result views through authenticated MCP adapters.
@@ -20,11 +20,12 @@ Existing production origins and OAuth settings are kept.
   output before persistence acknowledgement. Legacy draft restoration applies only
   without known jobs or unresolved requests. Normal footers account for errors;
   tiny host windows scroll the whole editor to retain access to controls.
-- Final focused browser cohort: 44/44 source/artifact cases. API checks: 19 billing
-  integration, 14 arithmetic and 32 translation/pricing integration cases pass.
-  Generated spec/client, ChatGPT types/lint and pinned React web gate pass.
-  Independent preservation/Ponytail review is clear. This is scoped verification,
-  not a claim that every remaining workflow/visual-parity acceptance row is complete.
+- The prior processing/history cohort passed44/44. This recovery-message checkpoint
+  passes24/24 source/artifact cases, then10/10 affected cases after fixture extraction,
+  plus13/13 existing real API idempotency integration cases. Final types/lint and
+  independent preservation/Ponytail review pass. Existing API billing19/arithmetic14/
+  translation32, generated contracts and pinned native React gate evidence remains.
+  This does not complete the remaining workflow/visual-parity acceptance matrix.
 - Existing private ChatGPT connection verifies free pricing and preflight denial
   of saved 19.89-second audio. Saved inputs survive reopen. An already-completed
   owned lipsync render was forwarded through the documented local completion bridge;
@@ -157,3 +158,14 @@ move the newer hash into `previous`, and deploy through the normal workflow.
 No Porter variable change is needed. If rolling back the entire image, ensure
 that image also contains every UI resource still referenced by published or
 cached tool metadata; an older image may not contain the newest bundle.
+
+
+### Explicit unavailability checkpoint
+
+IDEMPOTENCY_UNAVAILABLE now uses service availability copy and Retry original
+request. Restored/unknown outcomes no longer assume a connection interruption.
+The same key, frozen inputs, recovery handler and locks remain unchanged. A timeout
+after unavailability restores the unknown-outcome message. The local test API
+flag is enabled and preserved across Doppler restarts; production is unchanged.
+Original Chrome request retry remains pending manual action, separate from the
+passing source/artifact and API replay checks. No replacement generation submitted.

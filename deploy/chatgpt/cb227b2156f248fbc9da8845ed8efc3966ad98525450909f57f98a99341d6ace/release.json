@@ -1,0 +1,25 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "e512811fe58698ffd6c7318a33f89ed83bc73841",
+  "tree": "9c99257da64811bb8f7d1e5b24bcf2c45b59af29",
+  "htmlSha256": "cb227b2156f248fbc9da8845ed8efc3966ad98525450909f57f98a99341d6ace",
+  "htmlBytes": 6194570,
+  "commands": [
+    "pnpm --filter @sync/chatgpt typecheck",
+    "pnpm --filter @sync/chatgpt lint",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "buildOrigin": "clean committed source; rebuilt HTML exactly matches final source/artifact browser-tested bytes",
+    "finalFocusedBrowserCasesPassed": 24,
+    "finalFocusedBrowserLog": "/tmp/pr6822-unavailable-recovery-final.log",
+    "typesAndLint": "pass; final ChatGPT typecheck/lint and staged hooks; unchanged native web/shared source retains prior pinned React gate evidence",
+    "independentPreservationReview": "clear including same recovery handler/lock/key/inputs and ambiguous outcome after an unavailable response",
+    "actualAcceptance": "Original request remains in Chrome; manual retry requested there and live outcome remains pending. Previous058 candidate verified private connection and historical playback; this candidate awaits refresh. No replacement request submitted.",
+    "remaining": "Single local draft only; full multi-draft, completed-output forwarding, remaining parity matrix, current-head CI/reviews, native dev merge conflicts and production handoff remain gates.",
+    "deployment": "not merged or deployed; production plugin unchanged",
+    "finalFixtureRefactorBrowserCasesPassed": 10,
+    "finalFixtureRefactorBrowserLog": "/tmp/pr6822-unavailable-recovery-fixture-final.log",
+    "idempotencyApiIntegrationPassed": 13
+  }
+}

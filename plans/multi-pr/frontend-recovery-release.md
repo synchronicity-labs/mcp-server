@@ -94,3 +94,13 @@ owned historical output78ab3dbe plays to28/28frames with controls inside the
 actual392px host stage. Screenshot: private-history-output-final.png under
 /Users/noahmilberger/.codex/visualizations/2026/10/16/pr6822-processing-drafts/.
 No additional generation started.
+
+
+## Explicit unavailable recovery checkpoint
+
+Current sourcee512811fe distinguishes service unavailability from unconfirmed
+outcomes without changing recovery identity or admission. Browser24/24, affected
+fixture rerun10/10 and API idempotency integration13/13 pass; final types/lint and
+independent review pass. All eight retained resources remain unchanged. Local
+flag setup is corrected; original Chrome retry awaits manual action. No live
+retry success, merge or deployment is claimed.
