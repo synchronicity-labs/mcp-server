@@ -1,0 +1,24 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "50a4828ea11e0b20ef585f4730958f48b3b76585",
+  "tree": "607704909525a945af4dfed7eced276a2762e0e2",
+  "htmlSha256": "a7f08c98bbce7ab5e8a346cc3641ab516889116701c06c30ada871bb9e63ce5d",
+  "htmlBytes": 6208381,
+  "commands": [
+    "pnpm verify:agent --profile fast --run --only lint,boundaries,typecheck,generated-clients",
+    "ChatGPT quality-disclosure browser table; native/API/worker owner checks; MCP dialogue protocol table"
+  ],
+  "verification": {
+    "nativeOwnerCases": 449,
+    "apiControllerCases": 91,
+    "workerCases": 145,
+    "mcpDialogueCases": 9,
+    "qualityDisclosureBrowserCases": 4,
+    "baseIntegrated": "d892e10274f1e47090190c33a7179c103eefc868",
+    "affectedGates": "pass; /tmp/pr6822-d892-gates.json",
+    "independentPreservationPonytail": "clear",
+    "parentEvidence": "7fba1b157 automated readiness pass, Greptile5/5 and Claude Ready to merge. Existing24 recovery,8 completion/history,4 discovery and104 OAuth cases documented in the companion parity checklist.",
+    "remaining": "Fresh current-head CI/reviews and pinned React gate, independent MCP approval, latest-candidate private-plugin acceptance, original Chrome same-key retry and remaining parity. Result continuation has not started.",
+    "deployment": "not merged or deployed; production unchanged; private registry unchanged"
+  }
+}

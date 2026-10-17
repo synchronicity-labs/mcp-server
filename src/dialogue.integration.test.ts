@@ -94,6 +94,12 @@ async function fixture(
     lostPreview?: boolean;
     keyedPreview?: boolean;
     rotatingAssetUrl?: boolean;
+    previewStatus?: 'COMPLETED' | 'COMPLETED_PARTIAL';
+    partialDetail?: {
+      slotsTotal: number;
+      slotsOk: number;
+      failedSlots: { index: number; errorCode: string }[];
+    };
   } = {},
 ) {
   const calls: { path: string; body?: Record<string, unknown>; token?: string; key?: string }[] =
@@ -148,11 +154,12 @@ async function fixture(
       }
       value = {
         id: dialogueEditId,
-        status: 'COMPLETED',
+        status: options.previewStatus ?? 'COMPLETED',
         sourceVideoUrl,
         sourceTranscript: transcript,
         edits,
         voiceId: 'original-speaker',
+        ...(options.partialDetail ? { partialDetail: options.partialDetail } : {}),
       };
     } else if (req.url === '/v2/analyze/cost') value = estimate;
     else if (req.url === '/v2/generate') value = { id: dialogueEditId, status: 'PENDING' };
@@ -181,8 +188,15 @@ async function fixture(
     runWithAuth('dialogue-reader', 'openai-mcp', () => client.callTool({ name, arguments: args }));
   return { calls, client, call };
 }
-it('transcribes, previews original-voice word edits, estimates and submits the canonical preview through MCP', async () => {
-  const { calls, client, call } = await fixture();
+it.each([
+  undefined,
+  'COMPLETED',
+  'COMPLETED_PARTIAL',
+] as const)('transcribes, preserves preview quality (%s), estimates and submits the canonical preview through MCP', async (previewStatus) => {
+  const partialDetail = previewStatus
+    ? { slotsTotal: 1, slotsOk: 0, failedSlots: [{ index: 0, errorCode: 'QC_SEAM_STEP' }] }
+    : undefined;
+  const { calls, client, call } = await fixture({ previewStatus, partialDetail });
   const tools = (await client.listTools()).tools;
   expect(
     tools.find((tool) => tool.name === 'create-dialogue-preview')?._meta?.[
@@ -195,9 +209,15 @@ it('transcribes, previews original-voice word edits, estimates and submits the c
     projectId,
     maxSourceSeconds: 600,
   });
-  expect(
-    (await call('create-dialogue-preview', { ...source, transcriptionId, edits })).isError,
-  ).not.toBe(true);
+  const preview = await call('create-dialogue-preview', { ...source, transcriptionId, edits });
+  expect(preview.isError).not.toBe(true);
+  const recovered = await call('get-dialogue-preview', { ...source, id: dialogueEditId });
+  expect(recovered.isError).not.toBe(true);
+  for (const result of [preview, recovered]) {
+    if (partialDetail)
+      expect(result.structuredContent).toMatchObject({ status: previewStatus, partialDetail });
+    else expect(result.structuredContent).not.toHaveProperty('partialDetail');
+  }
   expect(calls.find((c) => c.path === '/v2/dialogue-edits')?.body).toEqual({
     sourceVideoUrl,
     projectId,
