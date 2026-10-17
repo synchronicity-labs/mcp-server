@@ -7,11 +7,16 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit a7dbac167](https://github.com/synchronicity-labs/sync-api-v2/commit/a7dbac167b0a6874e7b300ef255ed9965d08f188).
-- HTML SHA256: `bc7d54286f1efc22e568f4405221b12247fc26c858d325663db44b478f255ec8`.
-- HTML size: 6,208,801 bytes. The clean committed-source rebuild exactly matches
+- Source: [PR #6822, commit 5a125f7aa](https://github.com/synchronicity-labs/sync-api-v2/commit/5a125f7aa2f32e08e02efe01eac1177c882950d3).
+- HTML SHA256: `40194a9079531a6cab557493a98ef3636fa64536669579581e6a90162e2edcc1`.
+- HTML size: 6,208,919 bytes. The clean committed-source rebuild exactly matches
   the browser-tested bytes. Source commit/tree and hash/size are recorded in
   the manifest and release provenance.
+- Light-theme workflow tiles use the canonical light card/hover palette; the
+  exact native dark gradient is preserved. Four source/artifact light-mobile
+  and dark-desktop processing/completion cases and changed-file lint pass.
+  Actual native Studio DOM retains its original dark endpoints. The preceding
+  private candidate exposed the light-label contrast problem before repair.
 - Compact result frames retain visible media and scroll continuation actions.
   The actual shared Studio views expose layout slots; native Studio defaults
   remain unchanged. No admission, authorization or recovery logic changed.
@@ -34,16 +39,17 @@ Existing production origins and OAuth settings are kept.
   The account has exactly two completed jobs (one existing, one new); the new
   job has zero credit-ledger entries and zero credit deduction. This is not
   evidence that the original Chrome browser's separate saved key was retried.
-- Packaging replaces only unmerged `a7f08c98`, retaining all eight previously
+- Packaging replaces only unmerged `bc7d5428`, retaining all eight previously
   packaged resources and their 24 files unchanged. Private test descriptors and
   rollback files are managed separately. The replacement private plugin is
   connected to the same isolated account through the `5601` tunnel. Production
-  plugin configuration is unchanged; the compact candidate's live UI check is
-  still pending at this packaging checkpoint.
+  plugin configuration is unchanged. The preceding compact `bc7d5428` candidate
+  opened and played the recovered output in that same refreshed plugin; the
+  light-token candidate's live UI check is pending at this packaging checkpoint.
 
 This is a paired PR candidate. Compatible backend support must precede frontend
 activation. Fresh current-head CI/reviews, required independent MCP approval,
-compact-candidate private-plugin verification, original Chrome same-key retry and
+light-token candidate private-plugin verification, original Chrome same-key retry and
 the remaining full-parity matrix still gate readiness. Full multi-draft behavior
 and completed-output forwarding remain incomplete. Result continuation has not
 started because current acceptance comes first.
