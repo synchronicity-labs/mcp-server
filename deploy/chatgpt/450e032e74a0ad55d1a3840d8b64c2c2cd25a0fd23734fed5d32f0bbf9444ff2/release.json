@@ -1,0 +1,28 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "6d9327bf3fa6bb4e3e4d71521d1103f4cf8eeb57",
+  "tree": "a6cf66dfc120fa114a3cef07d48f0defd573a6dc",
+  "htmlSha256": "450e032e74a0ad55d1a3840d8b64c2c2cd25a0fd23734fed5d32f0bbf9444ff2",
+  "htmlBytes": 6242016,
+  "commands": [
+    "pnpm --filter @sync/chatgpt build",
+    "pnpm --filter @sync/ui smoke:pack",
+    "pnpm verify:agent --profile fast --base HEAD --run --only boundaries,typecheck",
+    "pnpm --filter @sync/chatgpt exec playwright test result-continuation.spec.ts project-recovery.spec.ts --workers=2",
+    "Affected native continuation and dialogue test suites"
+  ],
+  "verification": {
+    "sourceAndArtifact": true,
+    "focusedBrowserCases": 62,
+    "browserEvidence": "All62 result continuation and project recovery cases pass, including accepted speech/translated audio lineage after reload, same-key retry, scoped recovery and uncertain registration.",
+    "nativeAffectedTests": 56,
+    "mcpHttpTests": 607,
+    "standaloneUiPackageSmoke": "passed original and renamed isolated installs/imports/types/CSS",
+    "affectedTypecheckTasks": 34,
+    "boundariesFiles": 6340,
+    "scopedLintAndFormatting": "passed",
+    "independentPreservationPonytail": "clear",
+    "cleanRebuildMatchesTestedBytes": true,
+    "remaining": "Fresh required CI/reviews and exact-candidate private-plugin checks remain pending. MCP human approval required. No merge/deploy."
+  }
+}

@@ -7,38 +7,38 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 0b37a87e9](https://github.com/synchronicity-labs/sync-api-v2/commit/0b37a87e9d1f20e554150d62ad75dd22d2b00dfb).
-- HTML SHA256: `61a372e175c915af1c53ef9615751eb202113c43ae9d1c691518e82ce7c71132`; HTML size: 6,241,709 bytes.
+- Source: [PR #6822, commit 6d9327bf3](https://github.com/synchronicity-labs/sync-api-v2/commit/6d9327bf3fa6bb4e3e4d71521d1103f4cf8eeb57).
+- HTML SHA256: `450e032e74a0ad55d1a3840d8b64c2c2cd25a0fd23734fed5d32f0bbf9444ff2`; HTML size: 6,242,016 bytes.
   The clean committed-source rebuild matches the source/artifact-tested bytes.
-- Native Studio and the plugin now use the same continuation policy, result
-  renderer, workflow cards/icons and draft deletion dialog. Current/history
-  actions support original-input repeats, completed-output forwarding, accepted
-  speech restoration, saved dialogue restoration and archived unsent drafts.
-- MCP validates parent/project/source access before writes and forwards frozen
-  workflow/parent lineage through the existing generation endpoints. Its reader
-  advertises submission-context version 1; older readers hand off before writes.
-  Old pending requests retain their original headers, bodies and keys.
-- Output registration is journaled before writing. Lost replies reconcile by
-  authenticated reads; reopening never repeats an uncertain asset write or paid
-  synthesis/render. Complex timelines continue through the existing authenticated
-  Studio route and actual native remix adapter.
-- All 46 focused source/artifact behaviors have passing evidence across the
-  expanded run and final owner-repair reruns. The final archive/recovery six and
-  desktop/compact layout four pass. 99 affected native tests, repository-wide
-  lint/formatting, navigation checks and 34 affected type/build tasks pass.
-  MCP's runtime boundary suite passes 607 tests. Independent preservation and
-  Ponytail review is clear.
-- Packaging replaces only the unmerged `a914ce699` candidate, retaining all eight
-  previously packaged releases and their 24 files unchanged. Private candidate
-  files are preserved separately for rollback. Update the same private plugin;
-  no new account connection or production configuration is required.
+- Studio and the plugin use the actual shared continuation policy, result view,
+  cards/icons and draft deletion dialog. Current/history actions restore original
+  inputs, continue completed outputs, recover accepted speech/dialogue, and
+  archive or restore unsent drafts. Complex timelines use the existing native
+  Studio route and remix adapter.
+- Version9 retains project/workflow-scoped parent identity when speech or
+  translation replaces the plain draft. New submissions freeze that context;
+  legacy pending requests retain their original headers, bodies and keys.
+- MCP revalidates parent/project/source access before writes and forwards context
+  through existing endpoints. Submission-context version1 gates these actions;
+  older readers hand off before asset writes. Uncertain registrations reconcile
+  through reads without repeated writes or paid synthesis/rendering.
+- All62 source/artifact continuation and project-recovery tests pass, along with
+  56 affected native tests, 34 typecheck tasks and boundaries over6,340 files.
+  Standalone original/renamed UI tarball install/import/types/CSS smoke passes.
+  Scoped lint/formatting and independent preservation/Ponytail review are clear.
+  MCP's unchanged runtime boundary suite passes607 tests.
+- Only the unmerged `61a372e1` candidate is replaced. All eight previously
+  packaged releases and their files remain unchanged; private rollback files are
+  preserved separately. Refresh the same private plugin connection.
 
-Exact-candidate side-by-side private-plugin acceptance and fresh current-head CI
-and reviews remain pending. The local pinned React scan was interrupted under
-memory pressure and is not counted as a pass. MCP still requires an eligible
-human approval. Older live playback/history/OAuth proof applies to the previous
-UI until the candidate is refreshed and rechecked. Do not merge, publish or deploy.
-See the source PR's `plans/pr-6822-studio-parity.md` for the current checklist.
+Fresh required CI/reviews and exact-candidate private-plugin checks remain gates.
+The previous `61a372e1` plugin verified completed playback, source comparison,
+output continuation to translation/lipsync, reload and archived-draft recovery
+side by side with native Studio. Counts remained two completed generations and
+zero credit transactions. That proof does not establish every live editor state
+or OAuth refresh for these new bytes. MCP still requires human approval. Do not
+merge, publish or deploy. The source PR's `plans/pr-6822-studio-parity.md` retains
+the implemented, verified and outstanding checklist.
 
 ## Initial project data
 
