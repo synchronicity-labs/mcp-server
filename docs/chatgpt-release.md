@@ -7,39 +7,43 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 50a4828ea](https://github.com/synchronicity-labs/sync-api-v2/commit/50a4828ea11e0b20ef585f4730958f48b3b76585).
-- HTML SHA256: `a7f08c98bbce7ab5e8a346cc3641ab516889116701c06c30ada871bb9e63ce5d`.
-- HTML size: 6,208,381 bytes. The clean committed-source rebuild exactly matches
+- Source: [PR #6822, commit a7dbac167](https://github.com/synchronicity-labs/sync-api-v2/commit/a7dbac167b0a6874e7b300ef255ed9965d08f188).
+- HTML SHA256: `bc7d54286f1efc22e568f4405221b12247fc26c858d325663db44b478f255ec8`.
+- HTML size: 6,208,801 bytes. The clean committed-source rebuild exactly matches
   the browser-tested bytes. Source commit/tree and hash/size are recorded in
   the manifest and release provenance.
-- Integrates dev `d892e1027` while preserving the actual shared Studio dialogue
-  strip. Both hosts use its non-blocking quality notice and canonical
-  ready/current-preview policy. ChatGPT retains job quality details even while
-  the backend reports `COMPLETED` during the partial-status rollout.
-- New proof:449 native owner cases,91 real-DB HTTP cases,145 worker cases and4
-  source/artifact quality-disclosure browser cases pass. The two browser variants
-  fail before repair, then pass with undo removing stale warnings and disabling
-  final submission. All9 actual MCP dialogue cases preserve legacy responses and
-  quality details through create/get for both completion statuses.
-- Changed-file lint, boundaries, exact generated clients and all34 affected
-  type/build tasks pass. Independent preservation/Ponytail review is clear.
-  The queued optional local React repeat was stopped before execution; fresh
-  required CI must run the pinned gate. Parent `7fba1b157` passes automated
-  readiness, Greptile5/5 and conforming Claude review. Its24 recovery,8
-  completion/history,4 discovery and104 OAuth cases remain documented in the
-  companion parity checklist; no MCP runtime source changes in this checkpoint.
-- Packaging replaces only unmerged `ce770bd1`, retaining all eight packaged
-  resources unchanged. Private-registry changes are separate: the user authorized
-  retiring only its oldest `feb7f2a9` descriptor while retaining its files for
-  rollback, the current `391c1d60` UI and seven other versions.
-- The old private tunnel expired. Its original configuration and files remain
-  intact. A replacement tunnel uses the same isolated test account; connecting a
-  new private plugin still awaits action-time authorization. These candidate
-  bytes have not yet passed live ChatGPT acceptance.
+- Compact result frames retain visible media and scroll continuation actions.
+  The actual shared Studio views expose layout slots; native Studio defaults
+  remain unchanged. No admission, authorization or recovery logic changed.
+- All 16 final source/artifact processing, completion, failed-output recovery,
+  history and compact-output browser cases pass. The primary processing table
+  fails before repair for collapsed media at bounded host heights. Independent
+  preservation/Ponytail review is clear. Changed-file lint, boundaries and all
+  28 affected type/build tasks pass. The local pinned React audit was interrupted
+  under memory pressure, not passed; fresh required CI remains authoritative.
+- The parent `50a4828ea` also integrates dev `d892e1027` while preserving the
+  shared dialogue quality notice and canonical ready/current-preview policy.
+  Its 449 native, 91 real-DB HTTP, 145 worker, 4 quality-disclosure browser and
+  9 MCP dialogue cases pass. Parent current-head Greptile scored 5/5 and Claude
+  returned Ready to merge, with no unresolved review threads.
+- Exact parent UI `a7f08c98` passed real private-plugin acceptance: canonical
+  assets/history, completed-output playback, full reload recovery and automatic
+  OAuth refresh HTTP200. One explicit free lipsync-2 job completed through the
+  real staging controller and local completion bridge, then reopened and played
+  from canonical history after another reload. Native Studio shows the same job.
+  The account has exactly two completed jobs (one existing, one new); the new
+  job has zero credit-ledger entries and zero credit deduction. This is not
+  evidence that the original Chrome browser's separate saved key was retried.
+- Packaging replaces only unmerged `a7f08c98`, retaining all eight previously
+  packaged resources and their 24 files unchanged. Private test descriptors and
+  rollback files are managed separately. The replacement private plugin is
+  connected to the same isolated account through the `5601` tunnel. Production
+  plugin configuration is unchanged; the compact candidate's live UI check is
+  still pending at this packaging checkpoint.
 
 This is a paired PR candidate. Compatible backend support must precede frontend
 activation. Fresh current-head CI/reviews, required independent MCP approval,
-latest-candidate private-plugin acceptance, original Chrome same-key retry and
+compact-candidate private-plugin verification, original Chrome same-key retry and
 the remaining full-parity matrix still gate readiness. Full multi-draft behavior
 and completed-output forwarding remain incomplete. Result continuation has not
 started because current acceptance comes first.
