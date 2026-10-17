@@ -7,56 +7,51 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit a04e668e8](https://github.com/synchronicity-labs/sync-api-v2/commit/a04e668e8b7a7b55c852d5af2f33f6996d99ccfe).
-- HTML SHA256: `34b826ef2c35bee447c3744d13757e58b341b8936b285164eae26979ca7ea216`.
-- HTML size: 6,201,045 bytes. A clean committed-source rebuild exactly matches
-  the artifact exercised by the browser tests. The unchanged manifest and
-  `release.json` record exact bytes and source commit/tree.
-- Integrates dev `b7804812b25b7566c9d0f70124950e87d5db87f1`, preserving canonical
-  dubbing comparison, progress, cloning strength, source identity and authorization.
-  The shared serializer includes the optional cloning-strength response field.
-- Latest merge passes90 real-DB dialogue admission/replay cases,9 flag cases,
-  401 native owner cases,33 native browser cases and14 source/artifact dialogue,
-  recovery and disclosure cases. Shared cost disclosure preserves upstream's
-  stable trigger/content IDs; strict multi-speaker admission and accepted-preview
-  recovery remain intact.
-- Full repository lint, hydration, boundaries, exact generated clients and all34
-  affected type/build tasks pass. Independent API/shared/native preservation and
-  Ponytail reviews are clear. Prior38-case host recovery/freeform evidence remains
-  valid for unchanged adapters. Fresh pinned React CI remains required.
-- Media, upload, recording, audio, speech, translation, dialogue, asset, history,
-  and result presentation use shared Studio views with authenticated host adapters.
-  Free pricing and actual-output duration checks preserve editable refusal recovery.
-  Explicit service unavailability retains the original key for retry; unknown
-  outcomes remain unconfirmed rather than being treated as failed admissions.
-- The processing frame retains fresh access checks and avoids entry-loading flashes.
-  Translation origin and original voiceover lineage survive retry/reload. The
-  current single local draft and responsive historical output controls are implemented.
-  Full multi-draft behavior and completed-output forwarding remain incomplete.
-- Prior private-plugin completion/history/playback/OAuth observations are recorded
-  in the paired parity plan. They do not establish live acceptance of this new
-  candidate. No fresh paid generation or private-plugin refresh is claimed here.
-- All eight retained bundles remain byte-for-byte unchanged. The new candidate
-  replaces only unmerged `bd97a950`; it was never selected by production.
-  Build, packaging and real MCP client/server resource verification pass for
-  all nine bundles, including the exact new candidate.
-  No MCP runtime source changed in this checkpoint.
+- Source: [PR #6822, commit 7fba1b157](https://github.com/synchronicity-labs/sync-api-v2/commit/7fba1b157b9c68205f1c79cfc9dda3f2c4ea8f00).
+- HTML SHA256: `ce770bd17912240d0c156961a43d09ffee2d05563d8c4115f0a88c1ff48787b9`.
+- HTML size: 6,201,043 bytes. The clean committed-source rebuild
+  exactly matches the browser-tested bytes. Manifest and release metadata record
+  the source commit/tree and artifact hash/size.
+- Matching pending translations remain recoverable after preview availability or
+  discovery changes. Lost admission reuses its original key and frozen request;
+  a known job continues by ID. Current eligibility still gates new quotes,
+  trimming and paid admission; fresh project/source access still gates recovery.
+- Source/artifact proof:24 recovery cases,8 completion/history cases and4 final
+  pending-discovery cases pass. The two new explicit-recovery cases fail before
+  the repair because their action disappears after reload. The discovery test
+  waits for the restored editor before reading the new host log. Original
+  timeouts, immutable-request and no-new-admission assertions remain intact.
+- Changed-file lint, boundaries and all34 affected type/build tasks pass.
+  Independent preservation/Ponytail review is clear. The preceding a04e668e8
+  integration passed required CI and React100/100. An optional full local React
+  repeat was stopped to release the test lock and is not counted as passing;
+  fresh current-head CI/reviews remain required. Prior dev-integration/API proof
+  is retained in the source PR's parity checklist.
+- MCP build/lint and104 OAuth boundary/lifecycle cases pass. No MCP runtime
+  source changed. Packaging and real MCP client/server resource reads verify
+  all nine bundles; all24 files across the eight retained bundles are unchanged.
+- This replaces only unmerged34b826ef, which was never selected by production.
+  The independent private server still serves frozen391c1d60 and its eight
+  previous resources. These new bytes are not activated in that connection.
+- The existing private connection automatically refreshed OAuth with HTTP200,
+  then reopened the original completed generation from history after a full
+  ChatGPT reload and played its output. No new generation was submitted. This
+  proves the unchanged runtime and older UI, not live acceptance of this candidate.
 
-The replaced `391c1d60` candidate was issued only by the isolated private test
-server, which serves a separate frozen directory and retained-resource list.
-It was never selected by the production branch. That private server and its
-resources remain unchanged; this package update does not refresh the test plugin.
-Any future upgrade of the same private connection must preserve its issued
-`391c1d60` resource and retained resources. Do not point it at the deployment
-catalog without reconciling both lists within the existing retention limit.
+The private registry already has nine distinct issued resources. Updating the
+same connection requires an explicit retirement decision within the existing
+eight-previous-bundle limit. Preserve its current391c1d60 resource and all files
+for rollback; do not silently drop cached versions or point that server at the
+deployment catalog. The oldest test-bundle retirement decision is pending.
 
 This is a paired PR candidate. Compatible backend support must precede frontend
-activation. Current-head CI/reviews (including React), independent MCP approval,
-original live retry, the full remaining parity matrix, and production handoff
-still gate readiness.
-Do not merge, publish or deploy. Hosted tools/HTML activation does not itself
-require publishing plugin package 2.0.2. The detailed evidence and outstanding
-checklist live in `plans/pr-6822-studio-parity.md` in the paired source repository.
+activation. Fresh current-head CI/reviews, required independent MCP approval,
+latest-candidate private-plugin acceptance, original Chrome same-key retry and
+the remaining full-parity matrix still gate readiness. Full multi-draft behavior
+and completed-output forwarding remain incomplete.
+Do not merge, publish or deploy. Production remains unchanged. See
+`plans/multi-pr/frontend-recovery-release.md` and the source PR's
+`plans/pr-6822-studio-parity.md` for the implementation/verification checklist.
 
 ### Initial project data
 

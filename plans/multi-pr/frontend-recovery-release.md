@@ -207,3 +207,30 @@ No merge, deployment or private-plugin activation is authorized or claimed.
   explicit native GitHub mergeability, original live retry and full acceptance.
 
 No merge, deploy or private-plugin activation.
+
+
+### Saved translation recovery checkpoint: 7fba1b157
+
+- [x] Preserve matching pending requests independently of new-preview discovery
+  and eligibility. New admission, fresh access and immutable identity remain gated.
+- [x] Both lost-admission and known-job attachment regressions fail on the old
+  owner and pass after repair. Browser proof24 recovery +8 completion/history
+  +4 final discovery cases passes across source and packaged entrypoints. The
+  initial discovery run exposed an early host-log read; it is repaired by waiting
+  for the existing editor, with no increased timeout or retry.
+- [x] Lint/boundaries/type-build34 pass; independent preservation/Ponytail clear.
+  MCP build/lint/OAuth104 pass. Optional repeated native React scan was stopped
+  to release the lock; required fresh GitHub React CI remains authoritative.
+- [x] Clean committed-source build matches `ce770bd17912240d0c156961a43d09ffee2d05563d8c4115f0a88c1ff48787b9`
+  (6,201,043 bytes). Source/tree/commands are in release.json.
+  All nine resources pass real MCP protocol verification; retained24 files are
+  unchanged. Prior unmerged34b candidate is archived locally, not production.
+- [x] Existing private connection refreshed OAuth, recovered original completed
+  job78ab3dbe from history after full reload, and played output to end. No new
+  generation. Runtime source is unchanged since87d9ebcc; UI remains frozen391c.
+- [ ] Latest UI in private plugin: reconcile its full nine-resource registry
+  after the explicit oldest-test-bundle retirement decision. Retain files for
+  rollback; do not alter production or silently break issued resources.
+- [ ] Fresh current-head CI/bot reviews, required independent MCP approval,
+  original Chrome retry, full-parity and live-candidate acceptance. No merge or
+  deployment. Multi-drafts/completed-output forwarding remain tracked gaps.
