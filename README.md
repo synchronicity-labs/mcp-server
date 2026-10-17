@@ -559,3 +559,11 @@ organization and seat/voice-clone limits, with nullable identity fields preserve
 Voice cloning accepts exactly one source form: a URL, saved asset, or sample URL
 list. A sample list creates one voice, not a voice per sample; uncertain clone
 admission must be reconciled from the voice list without automatically resending.
+
+The embedded continuation adapters accept an optional `continuation` object on
+saved-asset lipsync, translation and dialogue generation: `{ workflow,
+parentGenerationId }`. They recheck the exact parent and source access through
+Studio's existing read endpoints, then forward the existing `x-sync-workflow`
+and `x-sync-parent-generation-id` headers to `/v2/generate`. Persist this context
+with the approved request and key. Older saved requests without it keep their
+original header set and idempotency fingerprint; do not add context on recovery.

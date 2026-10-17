@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import { schemaProperty as property } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
+import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
@@ -30,6 +31,7 @@ export function createTranslationTools(
 
   const schema = z
     .object({
+      continuation: generationContextSchema.optional(),
       videoAssetId: z
         .uuid()
         .describe(
@@ -86,9 +88,15 @@ export function createTranslationTools(
         if (typeof options?.active_speaker_detection === 'boolean') {
           options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
         }
+        const lineage = await generationContextHeaders(
+          httpClient,
+          args,
+          ['translate_and_dub'],
+          context?.signal,
+        );
         return httpClient.request('post', '/v2/generate', {
           signal: context?.signal,
-          headers: { 'Idempotency-Key': input.idempotencyKey },
+          headers: { ...lineage, 'Idempotency-Key': input.idempotencyKey },
           body: {
             model: input.model,
             projectId: input.projectId,

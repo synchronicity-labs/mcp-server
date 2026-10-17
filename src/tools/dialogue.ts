@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
+import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import { generateTools, type McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
@@ -214,6 +215,7 @@ export function createDialogueTools(
       description:
         'Generate the final video from an approved completed audio preview matching the current edits. Confirm the estimate first. Reuse the same idempotency key and inputs for recovery; poll generate_get-generation for the returned ID.',
       inputSchema: generationSchema.extend({
+        continuation: generationContextSchema.optional(),
         idempotencyKey: z.string().regex(/^[A-Za-z0-9._~-]{1,128}$/),
       }).shape,
       outputSchema: generationOutputSchema,
@@ -223,9 +225,15 @@ export function createDialogueTools(
           .string()
           .regex(/^[A-Za-z0-9._~-]{1,128}$/)
           .parse(args.idempotencyKey);
+        const lineage = await generationContextHeaders(
+          httpClient,
+          args,
+          ['edit_dialogue'],
+          context?.signal,
+        );
         return httpClient.request('post', '/v2/generate', {
           body: await generationBody(args, context?.signal),
-          headers: { 'Idempotency-Key': key },
+          headers: { ...lineage, 'Idempotency-Key': key },
           signal: context?.signal,
         });
       },
