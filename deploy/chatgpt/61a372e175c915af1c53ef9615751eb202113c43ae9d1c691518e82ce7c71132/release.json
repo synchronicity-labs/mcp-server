@@ -1,0 +1,26 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "0b37a87e9d1f20e554150d62ad75dd22d2b00dfb",
+  "tree": "df41fdca08523066a72f12f78b0ee8cc71516e82",
+  "htmlSha256": "61a372e175c915af1c53ef9615751eb202113c43ae9d1c691518e82ce7c71132",
+  "htmlBytes": 6241709,
+  "commands": [
+    "pnpm --filter @sync/chatgpt build",
+    "pnpm verify:agent --profile pr --run --only lint",
+    "pnpm --filter @sync/chatgpt typecheck",
+    "pnpm check:navigation && pnpm test:navigation",
+    "Focused Playwright result-continuation/dialogue/translation/history regressions against source and artifact"
+  ],
+  "verification": {
+    "sourceAndArtifact": true,
+    "focusedBrowserCases": 46,
+    "browserEvidence": "Expanded run 43/46; targeted repair runs cover all failing cases: six archive/recovery and four desktop/compact history tests pass. Full suite remains a current-head CI gate.",
+    "nativeAffectedTests": 99,
+    "mcpHttpTests": 607,
+    "fullRepositoryLintAndFormatting": "passed",
+    "affectedTypeBuildTasks": 34,
+    "independentPreservationPonytail": "clear",
+    "cleanRebuildMatchesTestedBytes": true,
+    "remaining": "Fresh required CI/reviews and exact-candidate private-plugin side-by-side acceptance remain pending. MCP human approval remains required. No merge/deploy."
+  }
+}

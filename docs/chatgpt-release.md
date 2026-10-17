@@ -7,52 +7,38 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit a914ce699](https://github.com/synchronicity-labs/sync-api-v2/commit/a914ce6999d32158403d3df27772692fa16b4b88).
-- HTML SHA256: `2f6bcdc402f636f6c7edf89af45beab18476b7707aecd0277d25a8c05c4754e5`; HTML size: 6,208,480 bytes.
-  The clean committed-source rebuild matches the browser-tested bytes.
-- Conventional shared `className` forwarding fixes the required full-CI lint
-  failure without changing class values or native defaults. All 8 affected
-  source/artifact browser cases, full repository lint/formatting, boundaries
-  and 28 type/build tasks pass; independent preservation review is clear.
-- Current and canonical-history results render one in-flow shared download row
-  at every host width. This repairs desktop controls clipped by the embedded
-  scroll boundary and removes duplicate download state. Shared/native Studio
-  defaults, access checks, host acknowledgement and refusal fallback are kept.
-- Parent download batch passes 20 source/artifact cases: bounded processing/completion,
-  desktop current/history download containment, compact playback, failed-result
-  recovery, host-download refusal fallback and translated-audio handoff.
-  Changed-file lint and all 14 affected type/build tasks pass. Independent
-  preservation/Ponytail review is clear. The existing video-size guard is kept.
-- The previous light-token correction was verified in the actual private plugin:
-  light card text has at least 4.54:1 contrast; actual native dark endpoints stay
-  unchanged. Compact media layout and processing continuity remain preserved.
-- Parent `50a4828ea` integrates dev `d892e1027`, preserving dialogue quality
-  disclosure. Its 449 native, 91 real-DB HTTP, 145 worker, 4 browser and 9 MCP cases
-  pass. Parent Greptile 5/5 and Claude Ready to merge are historical evidence;
-  the new checkpoint still requires fresh current-head reviews and CI.
-- Exact parent UI `a7f08c98` passed real private-plugin acceptance: automatic
-  OAuth refresh HTTP200, one explicit free lipsync-2 generation completed via
-  the real controller/local completion bridge, playback and canonical-history
-  recovery after full reload. Native Studio shows the same job. The new job
-  has zero credit-ledger entries and zero credit deduction. This does not prove
-  the original Chrome browser's separate saved key was retried.
-- Packaging replaces only unmerged `dc6de039`, retaining all eight previously
-  packaged releases and their 24 files unchanged. Private candidate files are
-  preserved separately for rollback. The same connected private plugin will be
-  refreshed; no new account connection or production configuration is needed.
+- Source: [PR #6822, commit 0b37a87e9](https://github.com/synchronicity-labs/sync-api-v2/commit/0b37a87e9d1f20e554150d62ad75dd22d2b00dfb).
+- HTML SHA256: `61a372e175c915af1c53ef9615751eb202113c43ae9d1c691518e82ce7c71132`; HTML size: 6,241,709 bytes.
+  The clean committed-source rebuild matches the source/artifact-tested bytes.
+- Native Studio and the plugin now use the same continuation policy, result
+  renderer, workflow cards/icons and draft deletion dialog. Current/history
+  actions support original-input repeats, completed-output forwarding, accepted
+  speech restoration, saved dialogue restoration and archived unsent drafts.
+- MCP validates parent/project/source access before writes and forwards frozen
+  workflow/parent lineage through the existing generation endpoints. Its reader
+  advertises submission-context version 1; older readers hand off before writes.
+  Old pending requests retain their original headers, bodies and keys.
+- Output registration is journaled before writing. Lost replies reconcile by
+  authenticated reads; reopening never repeats an uncertain asset write or paid
+  synthesis/render. Complex timelines continue through the existing authenticated
+  Studio route and actual native remix adapter.
+- All 46 focused source/artifact behaviors have passing evidence across the
+  expanded run and final owner-repair reruns. The final archive/recovery six and
+  desktop/compact layout four pass. 99 affected native tests, repository-wide
+  lint/formatting, navigation checks and 34 affected type/build tasks pass.
+  MCP's runtime boundary suite passes 607 tests. Independent preservation and
+  Ponytail review is clear.
+- Packaging replaces only the unmerged `a914ce699` candidate, retaining all eight
+  previously packaged releases and their 24 files unchanged. Private candidate
+  files are preserved separately for rollback. Update the same private plugin;
+  no new account connection or production configuration is required.
 
-The parent exact download candidate passed live private current/history playback,
-compact/desktop containment and OAuth refresh HTTP 200. Its normal external link opens
-the real video with the native Download option. A separate automation download
-probe timed out, so saved-file acknowledgement is not claimed.
-
-Exact-candidate private-plugin checks, fresh required CI/reviews, eligible MCP
-approval, original Chrome same-key retry and remaining parity still gate full
-readiness. Complete result continuation has not started because current
-acceptance comes first. Full multi-draft behavior and output forwarding remain
-incomplete. The local pinned React audit was interrupted under memory pressure;
-required cloud CI remains authoritative. Do not merge, publish or deploy.
-See the source PR's `plans/pr-6822-studio-parity.md` for the checklist.
+Exact-candidate side-by-side private-plugin acceptance and fresh current-head CI
+and reviews remain pending. The local pinned React scan was interrupted under
+memory pressure and is not counted as a pass. MCP still requires an eligible
+human approval. Older live playback/history/OAuth proof applies to the previous
+UI until the candidate is refreshed and rechecked. Do not merge, publish or deploy.
+See the source PR's `plans/pr-6822-studio-parity.md` for the current checklist.
 
 ## Initial project data
 
