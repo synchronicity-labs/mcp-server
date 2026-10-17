@@ -7,55 +7,43 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 5a125f7aa](https://github.com/synchronicity-labs/sync-api-v2/commit/5a125f7aa2f32e08e02efe01eac1177c882950d3).
-- HTML SHA256: `40194a9079531a6cab557493a98ef3636fa64536669579581e6a90162e2edcc1`.
-- HTML size: 6,208,919 bytes. The clean committed-source rebuild exactly matches
-  the browser-tested bytes. Source commit/tree and hash/size are recorded in
-  the manifest and release provenance.
-- Light-theme workflow tiles use the canonical light card/hover palette; the
-  exact native dark gradient is preserved. Four source/artifact light-mobile
-  and dark-desktop processing/completion cases and changed-file lint pass.
-  Actual native Studio DOM retains its original dark endpoints. The preceding
-  private candidate exposed the light-label contrast problem before repair.
-- Compact result frames retain visible media and scroll continuation actions.
-  The actual shared Studio views expose layout slots; native Studio defaults
-  remain unchanged. No admission, authorization or recovery logic changed.
-- All 16 final source/artifact processing, completion, failed-output recovery,
-  history and compact-output browser cases pass. The primary processing table
-  fails before repair for collapsed media at bounded host heights. Independent
-  preservation/Ponytail review is clear. Changed-file lint, boundaries and all
-  28 affected type/build tasks pass. The local pinned React audit was interrupted
-  under memory pressure, not passed; fresh required CI remains authoritative.
-- The parent `50a4828ea` also integrates dev `d892e1027` while preserving the
-  shared dialogue quality notice and canonical ready/current-preview policy.
-  Its 449 native, 91 real-DB HTTP, 145 worker, 4 quality-disclosure browser and
-  9 MCP dialogue cases pass. Parent current-head Greptile scored 5/5 and Claude
-  returned Ready to merge, with no unresolved review threads.
-- Exact parent UI `a7f08c98` passed real private-plugin acceptance: canonical
-  assets/history, completed-output playback, full reload recovery and automatic
-  OAuth refresh HTTP200. One explicit free lipsync-2 job completed through the
-  real staging controller and local completion bridge, then reopened and played
-  from canonical history after another reload. Native Studio shows the same job.
-  The account has exactly two completed jobs (one existing, one new); the new
-  job has zero credit-ledger entries and zero credit deduction. This is not
-  evidence that the original Chrome browser's separate saved key was retried.
-- Packaging replaces only unmerged `bc7d5428`, retaining all eight previously
-  packaged resources and their 24 files unchanged. Private test descriptors and
-  rollback files are managed separately. The replacement private plugin is
-  connected to the same isolated account through the `5601` tunnel. Production
-  plugin configuration is unchanged. The preceding compact `bc7d5428` candidate
-  opened and played the recovered output in that same refreshed plugin; the
-  light-token candidate's live UI check is pending at this packaging checkpoint.
+- Source: [PR #6822, commit 30a3186c0](https://github.com/synchronicity-labs/sync-api-v2/commit/30a3186c0501c68dd45ca24117a54f4bbfff8574).
+- HTML SHA256: `dc6de039504e8e6730e679841535cd5efc4c2ad6a77341e4ef020490b87f66a4`; HTML size: 6,208,505 bytes.
+  The clean committed-source rebuild matches the browser-tested bytes.
+- Current and canonical-history results render one in-flow shared download row
+  at every host width. This repairs desktop controls clipped by the embedded
+  scroll boundary and removes duplicate download state. Shared/native Studio
+  defaults, access checks, host acknowledgement and refusal fallback are kept.
+- All20 final source/artifact cases pass: bounded processing/completion,
+  desktop current/history download containment, compact playback, failed-result
+  recovery, host-download refusal fallback and translated-audio handoff.
+  Changed-file lint and all14 affected type/build tasks pass. Independent
+  preservation/Ponytail review is clear. The existing video-size guard is kept.
+- The previous light-token correction was verified in the actual private plugin:
+  light card text has at least4.54:1 contrast; actual native dark endpoints stay
+  unchanged. Compact media layout and processing continuity remain preserved.
+- Parent `50a4828ea` integrates dev `d892e1027`, preserving dialogue quality
+  disclosure. Its449 native,91 real-DB HTTP,145 worker,4 browser and9 MCP cases
+  pass. Parent Greptile5/5 and Claude Ready to merge are historical evidence;
+  the new checkpoint still requires fresh current-head reviews and CI.
+- Exact parent UI `a7f08c98` passed real private-plugin acceptance: automatic
+  OAuth refresh HTTP200, one explicit free lipsync-2 generation completed via
+  the real controller/local completion bridge, playback and canonical-history
+  recovery after full reload. Native Studio shows the same job. The new job
+  has zero credit-ledger entries and zero credit deduction. This does not prove
+  the original Chrome browser's separate saved key was retried.
+- Packaging replaces only unmerged `40194a90`, retaining all eight previously
+  packaged releases and their24 files unchanged. Private candidate files are
+  preserved separately for rollback. The same connected private plugin will be
+  refreshed; no new account connection or production configuration is needed.
 
-This is a paired PR candidate. Compatible backend support must precede frontend
-activation. Fresh current-head CI/reviews, required independent MCP approval,
-light-token candidate private-plugin verification, original Chrome same-key retry and
-the remaining full-parity matrix still gate readiness. Full multi-draft behavior
-and completed-output forwarding remain incomplete. Result continuation has not
-started because current acceptance comes first.
-Do not merge, publish or deploy. Production remains unchanged. See
-`plans/multi-pr/frontend-recovery-release.md` and the source PR's
-`plans/pr-6822-studio-parity.md` for the implementation/verification checklist.
+Exact-candidate private-plugin checks, fresh required CI/reviews, eligible MCP
+approval, original Chrome same-key retry and remaining parity still gate full
+readiness. Complete result continuation has not started because current
+acceptance comes first. Full multi-draft behavior and output forwarding remain
+incomplete. The local pinned React audit was interrupted under memory pressure;
+required cloud CI remains authoritative. Do not merge, publish or deploy.
+See the source PR's `plans/pr-6822-studio-parity.md` for the checklist.
 
 ## Initial project data
 

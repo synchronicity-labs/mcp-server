@@ -1,0 +1,23 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "30a3186c0501c68dd45ca24117a54f4bbfff8574",
+  "tree": "804153ed40cd5077ed15a223bf1b7e382ca7a2d3",
+  "htmlSha256": "dc6de039504e8e6730e679841535cd5efc4c2ad6a77341e4ef020490b87f66a4",
+  "htmlBytes": 6208505,
+  "commands": [
+    "pnpm --filter @sync/chatgpt build",
+    "pnpm --filter @sync/chatgpt test:e2e e2e/app.spec.ts e2e/shared-assets.spec.ts e2e/translate-dub.spec.ts --workers=1 --grep 'keeps the submitted input visible with|history dock fits|historical output controls|history result|failed output|declined host download|quotes translated audio separately'",
+    "pnpm verify:agent --profile fast --base 5a125f7aa --run --only lint,typecheck"
+  ],
+  "verification": {
+    "browserCases": 20,
+    "sourceAndArtifact": true,
+    "lint": "passed",
+    "typeBuildTasks": 14,
+    "independentPreservationPonytail": "clear",
+    "cleanRebuildMatchesTestedBytes": true,
+    "regressionBefore": "Desktop current-result and canonical-history download containment failed before repair in both source/artifact; mobile passed.",
+    "parentLiveAcceptance": "a7f: one free generation completed, played and recovered after full reload; automatic OAuth refresh HTTP200.40194: actual private light tile contrast corrected; native dark unchanged.",
+    "remaining": "Exact download candidate private UI verification; current-head CI/reviews; eligible MCP approval; original Chrome saved-key verification; full result continuation/parity. No merge or deploy."
+  }
+}
