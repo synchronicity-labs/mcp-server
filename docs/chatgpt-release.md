@@ -7,24 +7,28 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 30a3186c0](https://github.com/synchronicity-labs/sync-api-v2/commit/30a3186c0501c68dd45ca24117a54f4bbfff8574).
-- HTML SHA256: `dc6de039504e8e6730e679841535cd5efc4c2ad6a77341e4ef020490b87f66a4`; HTML size: 6,208,505 bytes.
+- Source: [PR #6822, commit a914ce699](https://github.com/synchronicity-labs/sync-api-v2/commit/a914ce6999d32158403d3df27772692fa16b4b88).
+- HTML SHA256: `2f6bcdc402f636f6c7edf89af45beab18476b7707aecd0277d25a8c05c4754e5`; HTML size: 6,208,480 bytes.
   The clean committed-source rebuild matches the browser-tested bytes.
+- Conventional shared `className` forwarding fixes the required full-CI lint
+  failure without changing class values or native defaults. All 8 affected
+  source/artifact browser cases, full repository lint/formatting, boundaries
+  and 28 type/build tasks pass; independent preservation review is clear.
 - Current and canonical-history results render one in-flow shared download row
   at every host width. This repairs desktop controls clipped by the embedded
   scroll boundary and removes duplicate download state. Shared/native Studio
   defaults, access checks, host acknowledgement and refusal fallback are kept.
-- All20 final source/artifact cases pass: bounded processing/completion,
+- Parent download batch passes 20 source/artifact cases: bounded processing/completion,
   desktop current/history download containment, compact playback, failed-result
   recovery, host-download refusal fallback and translated-audio handoff.
-  Changed-file lint and all14 affected type/build tasks pass. Independent
+  Changed-file lint and all 14 affected type/build tasks pass. Independent
   preservation/Ponytail review is clear. The existing video-size guard is kept.
 - The previous light-token correction was verified in the actual private plugin:
-  light card text has at least4.54:1 contrast; actual native dark endpoints stay
+  light card text has at least 4.54:1 contrast; actual native dark endpoints stay
   unchanged. Compact media layout and processing continuity remain preserved.
 - Parent `50a4828ea` integrates dev `d892e1027`, preserving dialogue quality
-  disclosure. Its449 native,91 real-DB HTTP,145 worker,4 browser and9 MCP cases
-  pass. Parent Greptile5/5 and Claude Ready to merge are historical evidence;
+  disclosure. Its 449 native, 91 real-DB HTTP, 145 worker, 4 browser and 9 MCP cases
+  pass. Parent Greptile 5/5 and Claude Ready to merge are historical evidence;
   the new checkpoint still requires fresh current-head reviews and CI.
 - Exact parent UI `a7f08c98` passed real private-plugin acceptance: automatic
   OAuth refresh HTTP200, one explicit free lipsync-2 generation completed via
@@ -32,10 +36,15 @@ Existing production origins and OAuth settings are kept.
   recovery after full reload. Native Studio shows the same job. The new job
   has zero credit-ledger entries and zero credit deduction. This does not prove
   the original Chrome browser's separate saved key was retried.
-- Packaging replaces only unmerged `40194a90`, retaining all eight previously
-  packaged releases and their24 files unchanged. Private candidate files are
+- Packaging replaces only unmerged `dc6de039`, retaining all eight previously
+  packaged releases and their 24 files unchanged. Private candidate files are
   preserved separately for rollback. The same connected private plugin will be
   refreshed; no new account connection or production configuration is needed.
+
+The parent exact download candidate passed live private current/history playback,
+compact/desktop containment and OAuth refresh HTTP 200. Its normal external link opens
+the real video with the native Download option. A separate automation download
+probe timed out, so saved-file acknowledgement is not claimed.
 
 Exact-candidate private-plugin checks, fresh required CI/reviews, eligible MCP
 approval, original Chrome same-key retry and remaining parity still gate full

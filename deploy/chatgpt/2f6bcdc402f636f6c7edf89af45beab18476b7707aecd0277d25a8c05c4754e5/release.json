@@ -1,0 +1,24 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "a914ce6999d32158403d3df27772692fa16b4b88",
+  "tree": "0aee396c7b6f1a554244cbb10c876fdb4fe44f76",
+  "htmlSha256": "2f6bcdc402f636f6c7edf89af45beab18476b7707aecd0277d25a8c05c4754e5",
+  "htmlBytes": 6208480,
+  "commands": [
+    "pnpm --filter @sync/chatgpt build",
+    "pnpm --filter @sync/chatgpt test:e2e e2e/app.spec.ts --workers=1 --grep 'keeps the submitted input visible with|historical output controls'",
+    "pnpm lint",
+    "pnpm verify:agent --profile fast --base 30a3186c0 --run --only lint,boundaries,typecheck"
+  ],
+  "verification": {
+    "browserCases": 8,
+    "sourceAndArtifact": true,
+    "fullRepositoryLintAndFormatting": "passed",
+    "affectedGates": "lint, boundaries,28 type/build tasks passed",
+    "independentPreservationPonytail": "clear",
+    "cleanRebuildMatchesTestedBytes": true,
+    "behavior": "Conventional className forwarding only; unchanged class values, order, native defaults and admission/access/recovery behavior.",
+    "parentDownloadEvidence": "20 source/artifact cases pass. Exact dc6de039 private plugin has current/history playback, compact/desktop download containment, normal browser fallback and OAuth refresh200.",
+    "remaining": "Fresh current-head CI/reviews; exact candidate private check; eligible MCP approval; original Chrome key verification; complete result continuation/parity. No merge/deploy."
+  }
+}
