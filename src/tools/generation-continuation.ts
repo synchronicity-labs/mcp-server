@@ -96,7 +96,7 @@ export function createGenerationContinuationTool(http: HttpClient): McpToolDefin
     description:
       'Read one accessible generation and its original inputs through the same Studio API. Rechecks project and referenced asset access. Does not create a draft, asset, transcription, preview or generation. Use the shared Studio continuation policy to choose source versus completed output.',
     inputSchema: input.shape,
-    outputSchema: { generation },
+    outputSchema: { submissionContextVersion: z.literal(1), generation },
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -129,7 +129,7 @@ export function createGenerationContinuationTool(http: HttpClient): McpToolDefin
           .parse(await http.request('get', `/v2/assets/${assetId}`, { signal }));
         if (asset.id !== assetId) throw new Error('Could not verify source asset access.');
       }
-      return { generation: selected };
+      return { submissionContextVersion: 1, generation: selected };
     },
   };
 }

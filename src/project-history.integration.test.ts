@@ -258,6 +258,7 @@ it.each([
   });
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toMatchObject({
+    submissionContextVersion: 1,
     generation: {
       id: generationId,
       projectId,
