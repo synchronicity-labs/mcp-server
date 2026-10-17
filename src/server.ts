@@ -25,6 +25,7 @@ import { createAccountContextTool } from './tools/account-context.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
+import { createGenerationContinuationTool } from './tools/generation-continuation.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
@@ -55,6 +56,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
+  'get-generation-continuation',
   'get-speech-options',
   'create-speech-preview',
   'get-speech-preview',
@@ -98,6 +100,7 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
+  'get-generation-continuation',
   'get-speech-options',
   'create-speech-preview',
   'get-speech-preview',
@@ -389,6 +392,7 @@ function createTools(
     createAccountContextTool(httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
+    createGenerationContinuationTool(httpClient),
     ...createAppTools(httpClient, undefined, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
