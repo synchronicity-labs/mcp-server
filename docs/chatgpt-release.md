@@ -7,8 +7,8 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 6d9327bf3](https://github.com/synchronicity-labs/sync-api-v2/commit/6d9327bf3fa6bb4e3e4d71521d1103f4cf8eeb57).
-- HTML SHA256: `450e032e74a0ad55d1a3840d8b64c2c2cd25a0fd23734fed5d32f0bbf9444ff2`; HTML size: 6,242,016 bytes.
+- Source: [PR #6822, commit 8ada744f4](https://github.com/synchronicity-labs/sync-api-v2/commit/8ada744f43e871dd4e0173e8876dfedece15e578).
+- HTML SHA256: `de0f9d6eb6219d60bfcfc4e05ce5a1dfe0c915bd66eacb1e6a52bb8e5bce4da8`; HTML size: 6,242,005 bytes.
   The clean committed-source rebuild matches the source/artifact-tested bytes.
 - Studio and the plugin use the actual shared continuation policy, result view,
   cards/icons and draft deletion dialog. Current/history actions restore original
@@ -27,18 +27,25 @@ Existing production origins and OAuth settings are kept.
   Standalone original/renamed UI tarball install/import/types/CSS smoke passes.
   Scoped lint/formatting and independent preservation/Ponytail review are clear.
   MCP's unchanged runtime boundary suite passes607 tests.
-- Only the unmerged `61a372e1` candidate is replaced. All eight previously
+- Only the unmerged `450e032e` candidate is replaced. All eight previously
   packaged releases and their files remain unchanged; private rollback files are
   preserved separately. Refresh the same private plugin connection.
 
-Fresh required CI/reviews and exact-candidate private-plugin checks remain gates.
-The previous `61a372e1` plugin verified completed playback, source comparison,
-output continuation to translation/lipsync, reload and archived-draft recovery
-side by side with native Studio. Counts remained two completed generations and
-zero credit transactions. That proof does not establish every live editor state
-or OAuth refresh for these new bytes. MCP still requires human approval. Do not
-merge, publish or deploy. The source PR's `plans/pr-6822-studio-parity.md` retains
-the implemented, verified and outstanding checklist.
+The initial62 continuation/recovery cases passed; after a full-CI speech bug was
+reproduced and repaired, all48 affected speech/image/processing/metadata behaviors
+have passing evidence (46 in the combined run plus unchanged isolated reruns of
+the two local timeouts). All30 continuation cases pass again. The speech editor
+now uses its existing draft identity before the first save, keeping the composer
+open while typing. Latest affected14 typecheck tasks and lint/formatting pass.
+
+Fresh full CI/reviews and the final new-byte private speech check remain gates.
+The prior `450e032e` candidate verified completed playback, source comparison,
+output continuation, full reload, archived drafts and language recovery against
+Studio. Same-connection refresh_token exchange returnedHTTP200, with successful
+protected reads afterward. Counts stayed at two completed generations and zero
+credit transactions. These unpaid checks do not establish every live paid editor
+state. MCP still requires human approval. Do not merge, publish or deploy. See
+`plans/pr-6822-studio-parity.md` in the source PR for the complete checklist.
 
 ## Initial project data
 
