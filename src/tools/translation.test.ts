@@ -18,6 +18,7 @@ describe('combined translation generation', () => {
     );
     expect(options).toBeDefined();
     expect(await options!.handler({})).toEqual({
+      previewAvailable: false,
       targetLanguages: ['es', 'fr', 'ja'],
       sourceLanguages: ['auto', 'en', 'es', 'fr', 'ja'],
     });

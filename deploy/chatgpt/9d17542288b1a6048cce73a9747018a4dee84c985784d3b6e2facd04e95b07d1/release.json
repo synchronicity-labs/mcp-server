@@ -1,0 +1,23 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "205baba3ca78b471a18522ab57eef5e51ad415b0",
+  "tree": "5b22b5240f9ff78bbe76b9c7d189de43bc9d351d",
+  "htmlSha256": "9d17542288b1a6048cce73a9747018a4dee84c985784d3b6e2facd04e95b07d1",
+  "htmlBytes": 6177475,
+  "commands": [
+    "pnpm --filter @sync/ui build",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "buildOrigin": "local candidate, not a downloaded CI artifact",
+    "sourceAndArtifactQuotaAndRecoveryCasesPassed": 10,
+    "quotaAndRecoveryLog": "/tmp/pr6822-submit-quota-verified.log",
+    "typesAndLint": "pass",
+    "pinnedFullReactGroup": "pass,878.211seconds",
+    "independentPreservationReview": "clear",
+    "devPlugin": "sync. labs PR 6822 local",
+    "actualAcceptance": "Speech, lipsync and dialogue completion; canonical lipsync/dialogue history after full ChatGPT reload and recovered playback; automatic OAuth refresh; completed Spanish audio playback.",
+    "remaining": "Translation draft restoration, full parity matrix, production handoff and current-head CI/reviews.",
+    "actualQuotaAcceptance": "Refreshed real ChatGPT plugin shows the canonical friendly quota message, preserves selected video/audio and enables explicit retry. Owned backend generation count remains2 before/after refusal; no job created and no upgrade clicked."
+  }
+}

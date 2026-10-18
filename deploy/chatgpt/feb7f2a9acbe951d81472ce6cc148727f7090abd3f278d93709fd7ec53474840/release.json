@@ -1,0 +1,24 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "d0c895ded9552da4e97528c5548c24661a34fbfc",
+  "tree": "6b30803feaa60ee6585fb813e69c4efe740b3476",
+  "htmlSha256": "feb7f2a9acbe951d81472ce6cc148727f7090abd3f278d93709fd7ec53474840",
+  "htmlBytes": 6177092,
+  "commands": [
+    "pnpm --filter @sync/ui build",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "sourceAndArtifactFocusedBrowserCasesPassed": 16,
+    "log": "/tmp/pr6822-ci-overlays-final.log",
+    "buildOrigin": "local candidate, not a downloaded CI artifact",
+    "fullCiAndReviews": "required before merge",
+    "devPlugin": "sync. labs PR 6822 local",
+    "devPluginAcceptance": "Real speech synthesis, keyed generation completion, canonical history reopen, recovered video playback and actual ChatGPT OAuth refresh verified on the isolated test plugin. Result required local public test ingress and one-time ngrok notice acceptance; no production changes.",
+    "sourceAndArtifactAssetPreviewCasesPassed": 6,
+    "assetPreviewLog": "/tmp/pr6822-asset-preview-inset-layout-final.log",
+    "reactDoctor": "100/100 pinned full web group,1013.4s",
+    "assetPreviewAcceptance": "Actual ChatGPT preview fits within usable515px; pointer Use selects the canonical saved source.",
+    "translationAcceptance": "Real Spanish bounded preview completed and its canonical19.892875s audio played in ChatGPT; reload recovery remains under investigation."
+  }
+}

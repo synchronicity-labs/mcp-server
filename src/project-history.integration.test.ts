@@ -10,6 +10,8 @@ import { createMcpServerFactory } from './server.js';
 const projectId = '00000000-0000-4000-8000-000000000001';
 const otherProjectId = '00000000-0000-4000-8000-000000000002';
 const generationId = '00000000-0000-4000-8000-000000000003';
+const sourceAssetId = '00000000-0000-4000-8000-000000000004';
+const sourceUrl = 'https://fixture.invalid/source.mp4?Signature=a%2Fb';
 const upstreams: Server[] = [];
 const clients: Client[] = [];
 const servers: McpServer[] = [];
@@ -24,9 +26,17 @@ afterEach(async () => {
 });
 
 async function fixture(
-  options: { supported?: boolean; ignoresFilter?: boolean; denied?: boolean } = {},
+  options: {
+    supported?: boolean;
+    ignoresFilter?: boolean;
+    denied?: boolean;
+    basePath?: string;
+    sourceDenied?: boolean;
+    wrongGeneration?: boolean;
+  } = {},
 ) {
   const calls: Array<{ path: string; query: Record<string, string> }> = [];
+  const basePath = options.basePath ?? '';
   const rows = [
     {
       id: generationId,
@@ -38,7 +48,7 @@ async function fixture(
   const upstream = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://fixture.invalid');
     res.setHeader('Content-Type', 'application/json');
-    if (url.pathname === '/api-json') {
+    if (url.pathname === `${basePath}/api-json`) {
       res.end(
         JSON.stringify({
           openapi: '3.0.0',
@@ -86,12 +96,70 @@ async function fixture(
       return;
     }
     calls.push({ path: url.pathname, query: Object.fromEntries(url.searchParams) });
-    if (url.pathname === `/v2/projects/${projectId}`) {
+    if (url.pathname === `${basePath}/v2/projects/${projectId}`) {
       res.statusCode = options.denied ? 404 : 200;
       res.end(
         JSON.stringify(options.denied ? { message: 'Project not found' } : { id: projectId }),
       );
-    } else if (url.pathname === '/v2/generations') {
+    } else if (url.pathname === `${basePath}/v2/generations/list`) {
+      res.end(
+        JSON.stringify({
+          items: [
+            {
+              id: options.wrongGeneration ? otherProjectId : generationId,
+              projectId: options.ignoresFilter ? otherProjectId : projectId,
+              status: 'COMPLETED',
+              workflow: 'edit_dialogue',
+              modelName: 'sync-3',
+              options: {
+                sync_mode: 'cut_off',
+                model_mode: 'legacy-mode',
+                mustNotLeak: 'private-provider-state',
+                active_speaker_detection: {
+                  auto_detect: true,
+                  frame_number: -1.5,
+                  mustNotLeak: 'private-provider-state',
+                },
+              },
+              segments: [
+                {
+                  startTime: 0,
+                  endTime: 1,
+                  audioInput: { refId: 'take', mustNotLeak: 'private-provider-state' },
+                  optionsOverride: { sync_mode: 'cut_off', mustNotLeak: 'private-provider-state' },
+                  mustNotLeak: 'private-provider-state',
+                },
+              ],
+              speakers: [
+                {
+                  id: 'speaker',
+                  audio: { refId: 'take' },
+                  face: { frame_number: 0, coordinates: [1, 2] },
+                },
+              ],
+              inputs: [{ type: 'video', assetId: sourceAssetId, url: sourceUrl }],
+              outputMediaUrl: rows[0]!.outputUrl,
+              dialogueEditJobId: generationId,
+              renderedFromAssetId: sourceAssetId,
+              metadata: { mustNotLeak: 'private-provider-state' },
+            },
+          ],
+        }),
+      );
+    } else if (url.pathname === `${basePath}/v2/assets/${sourceAssetId}`) {
+      res.statusCode = options.sourceDenied ? 404 : 200;
+      res.end(
+        JSON.stringify(
+          options.sourceDenied
+            ? { message: 'Asset not found' }
+            : {
+                id: sourceAssetId,
+                type: 'VIDEO',
+                url: sourceUrl,
+              },
+        ),
+      );
+    } else if (url.pathname === `${basePath}/v2/generations`) {
       res.end(
         JSON.stringify(
           options.ignoresFilter
@@ -108,7 +176,7 @@ async function fixture(
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const factory = await createMcpServerFactory({
-    baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
+    baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}${basePath}`,
     transport: 'http',
     port: 0,
   });
@@ -122,8 +190,11 @@ async function fixture(
   return { client, calls, rows };
 }
 
-it('reads selected-project history through the hosted ChatGPT tool with cursor pagination', async () => {
-  const { client, calls, rows } = await fixture();
+it.each([
+  '',
+  '/api-proxy',
+])('reads selected-project history with cursor pagination under API base path %j', async (basePath) => {
+  const { client, calls, rows } = await fixture({ basePath });
   const tool = (await client.listTools()).tools.find(
     (item) => item.name === 'projects_get-generations',
   );
@@ -136,8 +207,8 @@ it('reads selected-project history through the hosted ChatGPT tool with cursor p
   expect(result.isError).not.toBe(true);
   expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(rows, null, 2) }]);
   expect(calls).toEqual([
-    { path: `/v2/projects/${projectId}`, query: {} },
-    { path: '/v2/generations', query: { projectId, limit: '2', cursor: generationId } },
+    { path: `${basePath}/v2/projects/${projectId}`, query: {} },
+    { path: `${basePath}/v2/generations`, query: { projectId, limit: '2', cursor: generationId } },
   ]);
 });
 
@@ -174,4 +245,74 @@ it('stops before reading history when the current project access check fails', a
   });
   expect(result.isError).toBe(true);
   expect(calls).toEqual([{ path: `/v2/projects/${projectId}`, query: {} }]);
+});
+
+it.each([
+  '',
+  '/api-proxy',
+])('reads canonical continuation inputs through existing Studio routes under base path %j without writes', async (basePath) => {
+  const { client, calls, rows } = await fixture({ basePath });
+  const result = await client.callTool({
+    name: 'get-generation-continuation',
+    arguments: { projectId, id: generationId },
+  });
+  expect(result.isError).not.toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    submissionContextVersion: 1,
+    generation: {
+      id: generationId,
+      projectId,
+      workflow: 'edit_dialogue',
+      outputMediaUrl: rows[0]!.outputUrl,
+      inputs: [{ type: 'video', assetId: sourceAssetId, url: sourceUrl }],
+      options: {
+        sync_mode: 'cut_off',
+        model_mode: 'legacy-mode',
+        active_speaker_detection: { auto_detect: true, frame_number: -1.5 },
+      },
+      segments: [
+        {
+          startTime: 0,
+          endTime: 1,
+          audioInput: { refId: 'take' },
+          optionsOverride: { sync_mode: 'cut_off' },
+        },
+      ],
+      speakers: [
+        { id: 'speaker', audio: { refId: 'take' }, face: { frame_number: 0, coordinates: [1, 2] } },
+      ],
+      dialogueEditJobId: generationId,
+      renderedFromAssetId: sourceAssetId,
+    },
+  });
+  expect(JSON.stringify(result)).not.toContain('private-provider-state');
+  expect(calls).toEqual([
+    { path: `${basePath}/v2/projects/${projectId}`, query: {} },
+    {
+      path: `${basePath}/v2/generations/list`,
+      query: { projectId, ids: generationId, limit: '1' },
+    },
+    { path: `${basePath}/v2/assets/${sourceAssetId}`, query: {} },
+  ]);
+});
+
+it.each([
+  'denied',
+  'ignoresFilter',
+  'wrongGeneration',
+  'sourceDenied',
+] as const)('refuses unsafe continuation read %s without leaking source or output', async (failure) => {
+  const { client, calls } = await fixture({ [failure]: true });
+  const result = await client.callTool({
+    name: 'get-generation-continuation',
+    arguments: { projectId, id: generationId },
+  });
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result)).not.toContain(sourceUrl);
+  expect(JSON.stringify(result)).not.toContain('https://fixture.invalid/video.mp4');
+  if (failure === 'denied')
+    expect(calls).toEqual([{ path: `/v2/projects/${projectId}`, query: {} }]);
+  if (failure === 'sourceDenied') expect(calls.at(-1)?.path).toBe(`/v2/assets/${sourceAssetId}`);
+  if (failure === 'ignoresFilter' || failure === 'wrongGeneration')
+    expect(calls.some((c) => c.path.includes('/assets/'))).toBe(false);
 });

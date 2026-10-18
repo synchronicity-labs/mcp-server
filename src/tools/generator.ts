@@ -41,14 +41,25 @@ const voiceCloneSourceSchema = z
       .url()
       .optional()
       .describe('Sync-hosted audio/video sample URL. Supply url or assetId, not both.'),
+    sampleUrls: z
+      .array(z.url())
+      .min(1)
+      .max(10)
+      .optional()
+      .describe('Sync-hosted samples for one reusable voice; use instead of url or assetId.'),
     assetId: z
       .uuid()
       .optional()
       .describe('Accessible audio/video sample asset ID. Supply assetId or url, not both.'),
   })
-  .refine((input) => (input.url !== undefined) !== (input.assetId !== undefined), {
-    message: 'Provide exactly one of url or assetId for a voice sample.',
-  });
+  .refine(
+    (input) =>
+      [input.url, input.assetId, input.sampleUrls].filter((value) => value !== undefined).length ===
+      1,
+    {
+      message: 'Provide exactly one of url, assetId or sampleUrls for voice samples.',
+    },
+  );
 
 export function generateTools(
   operations: ParsedOperation[],

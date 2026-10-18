@@ -63,6 +63,12 @@ async function fixture(
                                 provider: { type: 'string', enum: ['elevenlabs'] },
                                 assetId: { type: 'string', format: 'uuid' },
                                 url: { type: 'string', format: 'uri' },
+                                sampleUrls: {
+                                  type: 'array',
+                                  minItems: 1,
+                                  maxItems: 10,
+                                  items: { type: 'string', format: 'uri' },
+                                },
                               },
                               // The live API puts the exclusive sample sources in allOf/oneOf.
                               allOf: [
@@ -212,11 +218,34 @@ it('passes a Sync-hosted sample URL verbatim for API validation', async () => {
   expect(calls[0]?.body).toEqual({ name: input.name, provider: input.provider, url });
 });
 
+it('forwards multiple Studio samples as one explicit clone request', async () => {
+  const { calls, call } = await fixture();
+  const sampleUrls = [
+    'https://storage.fixture.invalid/one.wav',
+    'https://storage.fixture.invalid/two.wav',
+  ];
+  const result = await call('voices_clone-voice', {
+    name: input.name,
+    provider: input.provider,
+    sampleUrls,
+  });
+  expect(result.isError).not.toBe(true);
+  expect(result.structuredContent).toMatchObject({ id: voiceId });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.body).toEqual({ name: input.name, provider: input.provider, sampleUrls });
+});
+
 it.each([
   {},
   { assetId, url: 'https://storage.fixture.invalid/sample.wav' },
   { assetId: 'not-an-id' },
   { url: 'not-a-url' },
+  { sampleUrls: [] },
+  { assetId, sampleUrls: ['https://storage.fixture.invalid/one.wav'] },
+  {
+    url: 'https://storage.fixture.invalid/one.wav',
+    sampleUrls: ['https://storage.fixture.invalid/two.wav'],
+  },
 ])('rejects missing or ambiguous clone samples before sending a write: %j', async (sample) => {
   const { calls, call } = await fixture();
   const result = await call('voices_clone-voice', {

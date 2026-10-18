@@ -33,6 +33,7 @@ const bodies = {
     edits: { type: 'array', items: { type: 'object' } },
     voiceId: { type: 'string' },
     rerunOfJobId: { type: 'string' },
+    transcriptionJobId: { type: 'string' },
   },
 };
 const spec = {
@@ -87,14 +88,33 @@ afterEach(async () => {
   }
 });
 async function fixture(
-  options: { denied?: boolean; mismatched?: boolean; lostPreview?: boolean } = {},
+  options: {
+    denied?: boolean;
+    mismatched?: boolean;
+    lostPreview?: boolean;
+    keyedPreview?: boolean;
+    rotatingAssetUrl?: boolean;
+    previewStatus?: 'COMPLETED' | 'COMPLETED_PARTIAL';
+    partialDetail?: {
+      slotsTotal: number;
+      slotsOk: number;
+      failedSlots: { index: number; errorCode: string }[];
+    };
+  } = {},
 ) {
   const calls: { path: string; body?: Record<string, unknown>; token?: string; key?: string }[] =
     [];
   const upstream = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
-      res.end(JSON.stringify(spec));
+      const current = structuredClone(spec);
+      if (options.keyedPreview)
+        Object.assign(current.paths['/v2/dialogue-edits']!.post!, {
+          parameters: [
+            { name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } },
+          ],
+        });
+      res.end(JSON.stringify(current));
       return;
     }
     let raw = '';
@@ -114,7 +134,11 @@ async function fixture(
     let value: unknown;
     if (req.url === `/v2/projects/${projectId}`) value = { id: projectId };
     else if (req.url === `/v2/assets/${videoAssetId}`)
-      value = { id: videoAssetId, type: 'VIDEO', url: sourceVideoUrl };
+      value = {
+        id: videoAssetId,
+        type: 'VIDEO',
+        url: options.rotatingAssetUrl ? `${sourceVideoUrl}?read=${calls.length}` : sourceVideoUrl,
+      };
     else if (req.url?.startsWith('/v2/transcriptions'))
       value = {
         id: transcriptionId,
@@ -130,11 +154,12 @@ async function fixture(
       }
       value = {
         id: dialogueEditId,
-        status: 'COMPLETED',
+        status: options.previewStatus ?? 'COMPLETED',
         sourceVideoUrl,
         sourceTranscript: transcript,
         edits,
         voiceId: 'original-speaker',
+        ...(options.partialDetail ? { partialDetail: options.partialDetail } : {}),
       };
     } else if (req.url === '/v2/analyze/cost') value = estimate;
     else if (req.url === '/v2/generate') value = { id: dialogueEditId, status: 'PENDING' };
@@ -163,8 +188,15 @@ async function fixture(
     runWithAuth('dialogue-reader', 'openai-mcp', () => client.callTool({ name, arguments: args }));
   return { calls, client, call };
 }
-it('transcribes, previews original-voice word edits, estimates and submits the canonical preview through MCP', async () => {
-  const { calls, client, call } = await fixture();
+it.each([
+  undefined,
+  'COMPLETED',
+  'COMPLETED_PARTIAL',
+] as const)('transcribes, preserves preview quality (%s), estimates and submits the canonical preview through MCP', async (previewStatus) => {
+  const partialDetail = previewStatus
+    ? { slotsTotal: 1, slotsOk: 0, failedSlots: [{ index: 0, errorCode: 'QC_SEAM_STEP' }] }
+    : undefined;
+  const { calls, client, call } = await fixture({ previewStatus, partialDetail });
   const tools = (await client.listTools()).tools;
   expect(
     tools.find((tool) => tool.name === 'create-dialogue-preview')?._meta?.[
@@ -177,14 +209,21 @@ it('transcribes, previews original-voice word edits, estimates and submits the c
     projectId,
     maxSourceSeconds: 600,
   });
-  expect(
-    (await call('create-dialogue-preview', { ...source, transcriptionId, edits })).isError,
-  ).not.toBe(true);
+  const preview = await call('create-dialogue-preview', { ...source, transcriptionId, edits });
+  expect(preview.isError).not.toBe(true);
+  const recovered = await call('get-dialogue-preview', { ...source, id: dialogueEditId });
+  expect(recovered.isError).not.toBe(true);
+  for (const result of [preview, recovered]) {
+    if (partialDetail)
+      expect(result.structuredContent).toMatchObject({ status: previewStatus, partialDetail });
+    else expect(result.structuredContent).not.toHaveProperty('partialDetail');
+  }
   expect(calls.find((c) => c.path === '/v2/dialogue-edits')?.body).toEqual({
     sourceVideoUrl,
     projectId,
     transcript,
     edits,
+    transcriptionJobId: transcriptionId,
   });
   const input = {
     ...source,
@@ -245,4 +284,55 @@ it('rejects ambiguous transcript identity before any preview synthesis', async (
   });
   expect(response.isError).toBe(true);
   expect(calls.some((call) => call.path === '/v2/dialogue-edits')).toBe(false);
+});
+
+it('forwards one frozen keyed preview through explicit recovery even when asset playback signatures rotate', async () => {
+  const { call, calls } = await fixture({
+    keyedPreview: true,
+    rotatingAssetUrl: true,
+    lostPreview: true,
+  });
+  const request = {
+    ...source,
+    transcriptionId,
+    edits,
+    idempotencyKey: 'dialogue-preview-recovery',
+  };
+  expect((await call('create-dialogue-preview', request)).isError).toBe(true);
+  expect(calls.filter((c) => c.path === '/v2/dialogue-edits')).toHaveLength(1);
+  expect((await call('create-dialogue-preview', request)).isError).toBe(true);
+  const writes = calls.filter((c) => c.path === '/v2/dialogue-edits');
+  expect(writes).toHaveLength(2);
+  expect(writes.map((c) => c.key)).toEqual([
+    'dialogue-preview-recovery',
+    'dialogue-preview-recovery',
+  ]);
+  expect(writes[0]!.body).toEqual({
+    sourceVideoUrl,
+    projectId,
+    transcript,
+    edits,
+    transcriptionJobId: transcriptionId,
+  });
+  expect(writes[1]!.body).toEqual(writes[0]!.body);
+  expect((await call('get-dialogue-options', {})).structuredContent).toMatchObject({
+    keyedPreview: true,
+  });
+});
+it('refuses keyed preview admission when the upstream has no idempotency contract', async () => {
+  const { call, calls } = await fixture();
+  expect(
+    (
+      await call('create-dialogue-preview', {
+        ...source,
+        transcriptionId,
+        edits,
+        idempotencyKey: 'unsupported-recovery',
+      })
+    ).isError,
+  ).toBe(true);
+  expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
+  expect((await call('get-dialogue-options', {})).structuredContent).toMatchObject({
+    keyedPreview: false,
+  });
 });

@@ -41,3 +41,25 @@ if dev changes. No new paid preview or generation is authorized.
    including editor, preview/cost/results/recovery. Seek a separate approved
    budget for any additional paid operations. Keep broader parity/acceptance
    work open; do not mark CRAFT-6496 Done from packaging checks alone.
+
+## Keyed embedded preview recovery checkpoint
+
+The adapter now advertises keyedPreview only when the upstream dialogue-create
+operation declares Idempotency-Key. A keyed request on an older API is refused
+before synthesis. Supported calls forward the exact key through the authenticated
+HTTP client without automatic retries. The source URL comes from the immutable
+transcription/preview snapshot after project, asset and source verification, so
+rotating asset playback signatures do not change recovery bodies. Initial
+previews forward the transcription job identity.
+
+Boundary regressions fail on missing headers and unsafe unsupported admission,
+then pass after the repair. All 579 tests in 43 files, typecheck and lint pass
+(three existing informational template-literal notices). Logs are
+/tmp/pr88-dialogue-key-boundary-baseline.log, /tmp/pr88-dialogue-key-fixed.log,
+/tmp/pr88-dialogue-full-tests.log, /tmp/pr88-dialogue-key-types.log and
+/tmp/pr88-dialogue-full-lint.log. Read-only preservation review is clean.
+
+Widget adoption, frozen persisted preview intent, restored transcription
+identity, safe voice reuse and speaker adapters remain open in coordinated
+PR #6822 work. This checkpoint does not package the frontend or establish
+release readiness or deployed acceptance.

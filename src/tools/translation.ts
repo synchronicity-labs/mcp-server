@@ -1,20 +1,12 @@
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
-import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
+import { schemaProperty as property } from '../openapi/parser.js';
+import type { ParsedOperation } from '../openapi/types.js';
+import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
-
-// Resolve the public DTO's allOf wrapper without maintaining a second language list.
-function property(schema: JsonSchema | undefined, name: string): JsonSchema | undefined {
-  const properties = schema?.properties as Record<string, JsonSchema> | undefined;
-  if (properties?.[name]) return properties[name];
-  for (const member of (schema?.allOf as JsonSchema[] | undefined) ?? []) {
-    const found = property(member, name);
-    if (found) return found;
-  }
-  return undefined;
-}
+import { translationPreviewAvailable } from './translation-preview.js';
 
 export function translationOperation(operations: ParsedOperation[]): ParsedOperation | undefined {
   return operations.find(
@@ -39,6 +31,7 @@ export function createTranslationTools(
 
   const schema = z
     .object({
+      continuation: generationContextSchema.optional(),
       videoAssetId: z
         .uuid()
         .describe(
@@ -95,9 +88,15 @@ export function createTranslationTools(
         if (typeof options?.active_speaker_detection === 'boolean') {
           options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
         }
+        const lineage = await generationContextHeaders(
+          httpClient,
+          args,
+          ['translate_and_dub'],
+          context?.signal,
+        );
         return httpClient.request('post', '/v2/generate', {
           signal: context?.signal,
-          headers: { 'Idempotency-Key': input.idempotencyKey },
+          headers: { ...lineage, 'Idempotency-Key': input.idempotencyKey },
           body: {
             model: input.model,
             projectId: input.projectId,
@@ -114,14 +113,22 @@ export function createTranslationTools(
       description:
         'Read the source and target languages supported by the current translation API. Does not create a generation or estimate pricing.',
       inputSchema: {},
-      outputSchema: { targetLanguages: languageList, sourceLanguages: languageList },
+      outputSchema: {
+        targetLanguages: languageList,
+        sourceLanguages: languageList,
+        previewAvailable: z.boolean(),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
       },
-      handler: async () => ({ targetLanguages: target.data, sourceLanguages: source.data }),
+      handler: async () => ({
+        targetLanguages: target.data,
+        sourceLanguages: source.data,
+        previewAvailable: translationPreviewAvailable(operations),
+      }),
     },
   ];
 }

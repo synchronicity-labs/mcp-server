@@ -3,6 +3,7 @@ import { z } from 'zod';
 // Public model controls accepted by the generation API. Do not expose service-only options.
 export const modelOptionsSchema = z
   .object({
+    sync_mode: z.enum(['bounce', 'loop', 'cut_off', 'silence', 'remap']).optional(),
     temperature: z.number().min(0).max(1).nullable().optional(),
     active_speaker_detection: z
       .union([

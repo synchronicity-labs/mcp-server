@@ -193,6 +193,7 @@ describe('selectHostedHttpTools', () => {
       'voices_get-voices',
       'generate_get-generation',
       'projects_get-all',
+      'assets_delete',
     ]);
   });
 

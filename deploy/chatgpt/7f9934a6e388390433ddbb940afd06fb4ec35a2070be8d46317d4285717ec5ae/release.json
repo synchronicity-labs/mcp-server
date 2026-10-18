@@ -1,0 +1,24 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "44a3736d32b516d35399f0bbf6a98ef2c3764270",
+  "tree": "e7c2fde871ae0a0376f614773cd151c28fe01f36",
+  "htmlSha256": "7f9934a6e388390433ddbb940afd06fb4ec35a2070be8d46317d4285717ec5ae",
+  "htmlBytes": 6188808,
+  "commands": [
+    "pnpm --filter @sync/ui build",
+    "pnpm --filter @sync/chatgpt typecheck",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "buildOrigin": "local clean committed source; exact bytes match source/artifact focused browser test build",
+    "focusedRecoveryCasesPassed": 12,
+    "focusedRecoveryLog": "/tmp/pr6822-recovery-checkpoint-gates.log",
+    "priorScopedStorageCasesPassed": 24,
+    "priorScopedStorageLog": "/tmp/pr6822-project-recovery-single-worker.log",
+    "typesAndLint": "pass; pre-commit lint/format pass",
+    "independentPreservationReview": "clear, including pre-ack resume and terminal media-wait followups",
+    "actualAcceptance": "Pre-resume-fix journal candidate restored completed12-second Spanish audio after full ChatGPT reload/reopen; readyState4,currentTime5.04,errornull; exactlyone translation admission. Prior speech/lipsync/dialogue completion and canonical lipsync/dialogue recovery proved on earlier candidates.",
+    "remaining": "Exact final-bundle ChatGPT acceptance blocked on expired temporary endpoint; replacement connection not authorized. Current dev integration conflicts, broader workflow cohort, interrupted local React gate rerun, current-head CI/reviews and remaining parity matrix are still open.",
+    "deployment": "not merged, not deployed; production plugin unchanged"
+  }
+}

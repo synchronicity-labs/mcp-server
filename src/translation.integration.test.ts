@@ -98,6 +98,7 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   expect(tools.some((tool) => tool.name === 'generate_create-generation')).toBe(false);
   const options = await client.callTool({ name: 'get-translation-options', arguments: {} });
   expect(options.structuredContent).toEqual({
+    previewAvailable: false,
     targetLanguages: ['es', 'fr', 'ja'],
     sourceLanguages: ['auto', 'en', 'es', 'fr', 'ja'],
   });
