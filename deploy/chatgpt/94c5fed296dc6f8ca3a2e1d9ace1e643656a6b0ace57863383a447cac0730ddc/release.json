@@ -1,0 +1,30 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "c56d1b101fe85e543013019629062b283c4e4f6c",
+  "tree": "c6ae87c12c2558f39e5e52302aec0c4c60a79e3f",
+  "htmlSha256": "94c5fed296dc6f8ca3a2e1d9ace1e643656a6b0ace57863383a447cac0730ddc",
+  "htmlBytes": 6187004,
+  "commands": [
+    "pnpm install:local --frozen-lockfile",
+    "pnpm test:file apps/api/src/modules/generate/multispeaker.integration.spec.ts",
+    "pnpm test:file apps/web/next.turbopack.config.test.ts",
+    "pnpm test:file scripts/__tests__/dev-isolated.test.mjs",
+    "pnpm --filter @sync/chatgpt test:e2e e2e/result-continuation.spec.ts --workers=1",
+    "pnpm exec turbo run typecheck --filter=@sync/chatgpt... --filter=@sync/api... --concurrency=2",
+    "pnpm lint:changed --base HEAD",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "sourceAndArtifact": true,
+    "focusedContinuationBrowserCases": 32,
+    "apiIntegrationCases": 27,
+    "nativeConfigurationCases": 14,
+    "localStackCases": 26,
+    "affectedTypecheckTasks": 21,
+    "scopedLintAndFormatting": "passed",
+    "cleanRebuildMatchesTestedBytes": true,
+    "publishedPreviousReleases": "all eight retained byte-for-byte",
+    "priorLiveAcceptance": "17a21ffb passed OAuth refresh, free speech/translation completion and reload/playback. See main checklist; distinct from current bytes.",
+    "remaining": "Current-head CI/reviews and new private connection approval; live dialogue preview, original-key retry, completion/history acceptance on current bytes. No merge/deployment."
+  }
+}
