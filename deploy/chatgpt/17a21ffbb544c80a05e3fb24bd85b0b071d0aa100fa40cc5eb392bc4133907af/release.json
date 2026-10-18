@@ -1,0 +1,35 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "654ccd52e6e89253ee7da7bffaaa661fc958f97c",
+  "tree": "4a65dc4c657fccde679f1aaf3276446fd45483f7",
+  "htmlSha256": "17a21ffbb544c80a05e3fb24bd85b0b071d0aa100fa40cc5eb392bc4133907af",
+  "htmlBytes": 6242128,
+  "commands": [
+    "pnpm --filter @sync/chatgpt build",
+    "pnpm --filter @sync/ui smoke:pack",
+    "pnpm verify:agent --profile fast --base HEAD --run --only boundaries,typecheck",
+    "pnpm --filter @sync/chatgpt exec playwright test result-continuation.spec.ts project-recovery.spec.ts --workers=2",
+    "Affected native continuation and dialogue test suites",
+    "All affected speech/image/processing/metadata owner cases through source and artifact",
+    "pnpm verify:agent --profile fast --base HEAD --run --only lint,typecheck",
+    "pnpm --filter @sync/chatgpt exec playwright test result-continuation.spec.ts translate-dub.spec.ts --workers=2"
+  ],
+  "verification": {
+    "sourceAndArtifact": true,
+    "focusedBrowserCases": 130,
+    "browserEvidence": "Final 130 source/artifact continuation and translation cases pass at original timeouts. Archived-language regression failed before the draft-owner fix and passes after. Earlier 90 continuation/recovery/speech cases pass; earlier 48 CI owner behaviors retain passing evidence.",
+    "nativeAffectedTests": 56,
+    "mcpHttpTests": 607,
+    "standaloneUiPackageSmoke": "passed original and renamed isolated installs/imports/types/CSS",
+    "affectedTypecheckTasks": 14,
+    "boundariesFiles": 6340,
+    "scopedLintAndFormatting": "passed",
+    "independentPreservationPonytail": "clear",
+    "cleanRebuildMatchesTestedBytes": true,
+    "remaining": "Current-head required CI/reviews, MCP human approval and unrun current-candidate live paid/processing/dialogue acceptance states. Prior provider/fixture evidence is distinguished in the main checklist. No merge/deploy.",
+    "sharedUiTypecheckTasks": 34,
+    "speechOwnerRepairCases": 48,
+    "continuationCasesAfterSpeechRepair": 30,
+    "privatePlugin": "Exact 17a21ffb served 6,242,128 bytes. Completed output plays all 1.125245 seconds without media error; source comparison and four shared actions verified against Studio. Speech text/draft tile survive editing, workflow switches and full host reload. Spanish survives archive activation and full reload. Same-account OAuth refresh HTTP 200 and subsequent protected reads verified. Counts 2 completed generations / 0 credit transactions; no synthesis or generation admitted."
+  }
+}

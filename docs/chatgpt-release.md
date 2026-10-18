@@ -7,45 +7,48 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 8ada744f4](https://github.com/synchronicity-labs/sync-api-v2/commit/8ada744f43e871dd4e0173e8876dfedece15e578).
-- HTML SHA256: `de0f9d6eb6219d60bfcfc4e05ce5a1dfe0c915bd66eacb1e6a52bb8e5bce4da8`; HTML size: 6,242,005 bytes.
-  The clean committed-source rebuild matches the source/artifact-tested bytes.
+- Source: [PR #6822, commit 654ccd52e](https://github.com/synchronicity-labs/sync-api-v2/commit/654ccd52e6e89253ee7da7bffaaa661fc958f97c).
+- HTML SHA256: `17a21ffbb544c80a05e3fb24bd85b0b071d0aa100fa40cc5eb392bc4133907af`;
+  HTML size: 6,242,128 bytes. A clean committed-source rebuild matches the exact
+  source/artifact-tested and private-plugin bytes.
 - Studio and the plugin use the actual shared continuation policy, result view,
-  cards/icons and draft deletion dialog. Current/history actions restore original
-  inputs, continue completed outputs, recover accepted speech/dialogue, and
-  archive or restore unsent drafts. Complex timelines use the existing native
-  Studio route and remix adapter.
-- Version9 retains project/workflow-scoped parent identity when speech or
-  translation replaces the plain draft. New submissions freeze that context;
-  legacy pending requests retain their original headers, bodies and keys.
-- MCP revalidates parent/project/source access before writes and forwards context
-  through existing endpoints. Submission-context version1 gates these actions;
-  older readers hand off before asset writes. Uncertain registrations reconcile
-  through reads without repeated writes or paid synthesis/rendering.
-- All62 source/artifact continuation and project-recovery tests pass, along with
-  56 affected native tests, 34 typecheck tasks and boundaries over6,340 files.
-  Standalone original/renamed UI tarball install/import/types/CSS smoke passes.
-  Scoped lint/formatting and independent preservation/Ponytail review are clear.
-  MCP's unchanged runtime boundary suite passes607 tests.
-- Only the unmerged `450e032e` candidate is replaced. All eight previously
-  packaged releases and their files remain unchanged; private rollback files are
-  preserved separately. Refresh the same private plugin connection.
+  workflow cards/icons and draft deletion dialog. Current and historical actions
+  restore original inputs, continue completed outputs, recover accepted speech
+  and dialogue, and preserve unsent drafts. Complex timelines use the existing
+  authenticated Studio route and native remix owner.
+- Version 9 preserves project/workflow-scoped parent identity across speech and
+  translation saves. Stable draft identity keeps the speech editor open on the
+  first text save and restores an archived translation's language. The current
+  draft remains visible in history after editor saves. Media changes in the
+  same draft still clear an unrelated language selection.
+- MCP revalidates parent/project/source access before writes and forwards frozen
+  continuation context through existing endpoints. Submission-context version 1
+  gates this behavior; older readers hand off before asset writes. Uncertain
+  registrations reconcile through authenticated reads, without repeated writes
+  or paid synthesis/rendering. Old pending requests keep original keys, bodies
+  and headers.
+- Final 130 source/artifact continuation and translation tests pass at original
+  timeouts. The archived-language regression fails before the owner repair and
+  passes after. Earlier 90 continuation/recovery/speech cases, 56 affected native
+  tests, 34 shared-policy and 14 speech-owner typecheck tasks, boundaries over 6,340
+  files, isolated UI tarball smoke and independent preservation/Ponytail review
+  pass. Final language changes also pass ChatGPT types, scoped lint and format.
+  MCP's unchanged runtime boundary suite passes 607 tests.
+- The existing private plugin serves these exact bytes. Completed output plays
+  all 1.125245 seconds without media error. Source comparison and four continuation
+  actions are verified against Studio. Speech text/draft history survive edits,
+  workflow switches and full reload; Spanish survives archive activation and
+  full host reload. Same-connection refresh_token exchange returns HTTP 200 and
+  protected reads succeed afterward. Counts remain two completed generations
+  and zero credit transactions. No synthesis or generation was admitted.
+- Only the latest unmerged candidate is replaced; all 24 files across the eight
+  previously packaged releases remain unchanged. Private rollback files remain
+  available. Refresh the existing private connection in place.
 
-The initial62 continuation/recovery cases passed; after a full-CI speech bug was
-reproduced and repaired, all48 affected speech/image/processing/metadata behaviors
-have passing evidence (46 in the combined run plus unchanged isolated reruns of
-the two local timeouts). All30 continuation cases pass again. The speech editor
-now uses its existing draft identity before the first save, keeping the composer
-open while typing. Latest affected14 typecheck tasks and lint/formatting pass.
-
-Fresh full CI/reviews and the final new-byte private speech check remain gates.
-The prior `450e032e` candidate verified completed playback, source comparison,
-output continuation, full reload, archived drafts and language recovery against
-Studio. Same-connection refresh_token exchange returnedHTTP200, with successful
-protected reads afterward. Counts stayed at two completed generations and zero
-credit transactions. These unpaid checks do not establish every live paid editor
-state. MCP still requires human approval. Do not merge, publish or deploy. See
-`plans/pr-6822-studio-parity.md` in the source PR for the complete checklist.
+Current-head full CI/reviews and MCP human approval remain merge gates. These
+unpaid checks do not establish every current-candidate live paid, processing or
+dialogue state. Prior provider proof and fixture proof remain distinct in
+`plans/pr-6822-studio-parity.md` in the source PR. No merge, publish or deployment.
 
 ## Initial project data
 
@@ -150,27 +153,15 @@ that image also contains every UI resource still referenced by published or
 cached tool metadata; an older image may not contain the newest bundle.
 
 
-### Explicit unavailability checkpoint
+## Recovery behavior
 
-IDEMPOTENCY_UNAVAILABLE now uses service availability copy and Retry original
-request. Restored/unknown outcomes no longer assume a connection interruption.
-The same key, frozen inputs, recovery handler and locks remain unchanged. A timeout
-after unavailability restores the unknown-outcome message. The local test API
-flag is enabled and preserved across Doppler restarts; production is unchanged.
-Original Chrome request retry remains pending manual action, separate from the
-passing source/artifact and API replay checks. No replacement generation submitted.
+Explicit `IDEMPOTENCY_UNAVAILABLE` refusals use service-availability copy and
+Retry original request. Unknown outcomes keep recovery controls without assuming
+that a connection interruption occurred. Keys, frozen inputs and locks remain
+unchanged. A timeout during retry returns to unknown-outcome recovery.
 
-
-### Original voiceover continuation
-
-Translate into another language restores the original source only for matching
-project, video and prepared-audio lineage. Otherwise it retains submitted audio;
-explicit cross-workflow switches still clear it. Final affected source/artifact
-cases10/10, types/lint, clean artifact reproduction and independent review pass.
-The same source is quoted after continuation and reload, with no automatic paid
-translation or render. The previous recovery-message24/24 and API idempotency13/13
-are separate retained evidence. Live original Chrome retry is still unverified.
-
-The same private connection was refreshed to exact391c1d60 (6,194,778bytes).
-Original live request retry remains unverified: reported button click has no
-MCP/API generation dispatch and no new job/hold/deduction.
+Translation into another language restores original audio only for matching
+project, visual and prepared-audio lineage; otherwise it retains submitted audio.
+Explicit cross-workflow switches clear unrelated editor state. Checking the old
+Chrome-local saved request is separate from the passing API replay and packaged
+browser proofs and remains an outstanding live acceptance item.

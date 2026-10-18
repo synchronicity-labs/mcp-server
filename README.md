@@ -168,7 +168,7 @@ response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
 This candidate includes the shared Studio frontend from sync-api-v2 PR #6822,
-with immutable bundle provenance and all five earlier bundles retained. It has
+with immutable bundle provenance and all previously packaged bundles retained. It has
 not been merged or deployed. Backend compatibility, current-head CI/reviews and
 the complete dev-plugin acceptance checklist remain release gates; see
 [frontend packaging](docs/chatgpt-release.md).
