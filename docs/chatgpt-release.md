@@ -7,48 +7,49 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 654ccd52e](https://github.com/synchronicity-labs/sync-api-v2/commit/654ccd52e6e89253ee7da7bffaaa661fc958f97c).
-- HTML SHA256: `17a21ffbb544c80a05e3fb24bd85b0b071d0aa100fa40cc5eb392bc4133907af`;
-  HTML size: 6,242,128 bytes. A clean committed-source rebuild matches the exact
-  source/artifact-tested and private-plugin bytes.
-- Studio and the plugin use the actual shared continuation policy, result view,
-  workflow cards/icons and draft deletion dialog. Current and historical actions
-  restore original inputs, continue completed outputs, recover accepted speech
-  and dialogue, and preserve unsent drafts. Complex timelines use the existing
-  authenticated Studio route and native remix owner.
-- Version 9 preserves project/workflow-scoped parent identity across speech and
-  translation saves. Stable draft identity keeps the speech editor open on the
-  first text save and restores an archived translation's language. The current
-  draft remains visible in history after editor saves. Media changes in the
-  same draft still clear an unrelated language selection.
-- MCP revalidates parent/project/source access before writes and forwards frozen
-  continuation context through existing endpoints. Submission-context version 1
-  gates this behavior; older readers hand off before asset writes. Uncertain
-  registrations reconcile through authenticated reads, without repeated writes
-  or paid synthesis/rendering. Old pending requests keep original keys, bodies
-  and headers.
-- Final 130 source/artifact continuation and translation tests pass at original
-  timeouts. The archived-language regression fails before the owner repair and
-  passes after. Earlier 90 continuation/recovery/speech cases, 56 affected native
-  tests, 34 shared-policy and 14 speech-owner typecheck tasks, boundaries over 6,340
-  files, isolated UI tarball smoke and independent preservation/Ponytail review
-  pass. Final language changes also pass ChatGPT types, scoped lint and format.
-  MCP's unchanged runtime boundary suite passes 607 tests.
-- The existing private plugin serves these exact bytes. Completed output plays
-  all 1.125245 seconds without media error. Source comparison and four continuation
-  actions are verified against Studio. Speech text/draft history survive edits,
-  workflow switches and full reload; Spanish survives archive activation and
-  full host reload. Same-connection refresh_token exchange returns HTTP 200 and
-  protected reads succeed afterward. Counts remain two completed generations
-  and zero credit transactions. No synthesis or generation was admitted.
-- Only the latest unmerged candidate is replaced; all 24 files across the eight
-  previously packaged releases remain unchanged. Private rollback files remain
+- Source: [PR #6822, commit bb3499079](https://github.com/synchronicity-labs/sync-api-v2/commit/bb3499079e43b6a3d55b8f29dfdab517203721db).
+- HTML SHA256: `7cc55adeb3684727f81019ef8176b4457b0d880dc767954082bc9f64e7240c56`;
+  HTML size: 6,188,047 bytes. A clean committed-source rebuild matches the exact
+  source/artifact-tested bytes packaged here.
+- Studio and the plugin use the shared continuation policy, result views,
+  workflow cards/icons and draft deletion dialog. Canonical authenticated
+  generation reads recover accepted speech script and voice settings for both
+  hosts. MCP forwards the existing billing projection's optional generation
+  allowance counters; the embedded editor refuses exhausted free allowances
+  before a new submission and refreshes counters across projects after admission.
+- This candidate passes 29 real-DB generation-read cases, 30 pricing browser
+  cases, two cross-project allowance cases and 10 final focused cost/dialogue
+  browser cases. Browser cases cover both source and packaged artifact.
+  TypeScript, changed-file lint/format, clean-build byte comparison and
+  independent preservation review pass. MCP's full suite passes 607 tests.
+- The existing private test plugin was refreshed to these exact `7cc55ade` bytes.
+  It refuses exhausted free allowance and disables a fresh Sync submission while
+  preserving the accepted script, Bella voice and saved audio. Completed history
+  reopens and plays the real 6.32-second output without media error. The edited
+  dialogue preview also survives reload and plays all 11.35 seconds without
+  another synthesis. Final reads leave three completed generations, three speech
+  jobs, one dialogue preview job and zero credit transactions.
+- Earlier in the same acceptance session, private candidate `94c5fed2` verified
+  a real provider generation through completion, a definite 503 followed by an
+  explicit 201 retry with identical key/body fingerprints, and automatic OAuth
+  refresh followed by protected reads. The documented local completion bridge
+  forwarded the provider's real terminal status. Only the isolated fixture's
+  protected-result URL origin was repaired to the test tunnel; its path, token,
+  output, status and billing were retained. Both native Studio and the plugin
+  played that same output. These admission/refresh checks are distinct from
+  the final `7cc55ade` read/playback/allowance checks above.
+- Prior `17a21ffb` evidence covers its own continuation/translation browser and
+  private-plugin states; it is not exact-byte acceptance of this candidate.
+  Only the latest unmerged candidate is replaced. All 24 files across the eight
+  published retained releases remain unchanged, and private rollback files remain
   available. Refresh the existing private connection in place.
 
-Current-head full CI/reviews and MCP human approval remain merge gates. These
-unpaid checks do not establish every current-candidate live paid, processing or
-dialogue state. Prior provider proof and fixture proof remain distinct in
-`plans/pr-6822-studio-parity.md` in the source PR. No merge, publish or deployment.
+Current-head full CI/reviews and MCP human approval remain merge gates. No
+purchase, quota reset, merge, publish or deployment was performed. Current UI
+playback, prior provider admission and fixture-only workflow coverage remain
+separate evidence; these checks do not claim every paid workflow or production
+configuration has been exercised. The source PR's
+`plans/pr-6822-studio-parity.md` records the broader parity checklist.
 
 ## Initial project data
 
@@ -162,6 +163,6 @@ unchanged. A timeout during retry returns to unknown-outcome recovery.
 
 Translation into another language restores original audio only for matching
 project, visual and prepared-audio lineage; otherwise it retains submitted audio.
-Explicit cross-workflow switches clear unrelated editor state. Checking the old
-Chrome-local saved request is separate from the passing API replay and packaged
-browser proofs and remains an outstanding live acceptance item.
+Explicit cross-workflow switches clear unrelated editor state. The isolated
+private-plugin same-key retry described above is separate from historical
+Chrome-local manual tests and source/artifact recovery fixtures.

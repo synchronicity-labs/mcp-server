@@ -23,7 +23,8 @@
     "lintAndFormatting": "passed",
     "cleanRebuildMatchesTestedBytes": true,
     "publishedPreviousReleases": "all eight retained byte-for-byte",
-    "liveAcceptance": "Private 94c candidate: real provider completion, reload/history playback, same-key 503-to-201 retry, OAuth refresh and speech continuation. Local completion bridge and fixture result-origin repair disclosed in main checklist.",
-    "remaining": "Load these exact UI bytes in the existing private plugin and verify exhausted allowance refusal plus preserved drafts/history. Current-head CI/reviews; MCP independent approval. No merge/deploy."
+    "liveAcceptance": "Exact7cc private plugin: exhausted allowance refusal and disabled fresh Sync; accepted speech script/voice/audio retained; completed history output plays6.32s; edited dialogue preview plays11.35s after reload. No new admission. Prior94c session separately verified real provider completion, same-key503-to-201 retry and OAuth refresh; local completion bridge and isolated result-origin repair disclosed in docs/chatgpt-release.md.",
+    "remaining": "Current-head CI/reviews and MCP independent human approval. Broader paid/production and fixture-only workflow evidence remain distinct. No merge/deploy.",
+    "mcpFullTests": 607
   }
 }
