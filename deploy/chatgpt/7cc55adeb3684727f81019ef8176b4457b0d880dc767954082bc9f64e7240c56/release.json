@@ -1,0 +1,29 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "bb3499079e43b6a3d55b8f29dfdab517203721db",
+  "tree": "d912b3ba8044a684c230668c7fad2162d97ef247",
+  "htmlSha256": "7cc55adeb3684727f81019ef8176b4457b0d880dc767954082bc9f64e7240c56",
+  "htmlBytes": 6188047,
+  "commands": [
+    "pnpm test:file apps/api/src/modules/generations/generations-read.integration.spec.ts",
+    "pnpm --filter @sync/chatgpt exec playwright test e2e/cost-estimate.spec.ts --workers=1",
+    "pnpm --filter @sync/chatgpt exec playwright test e2e/cost-estimate.spec.ts e2e/dialogue.spec.ts --grep \"preflights|another project|edits timed words|mobile editor preserves\" --workers=1",
+    "pnpm --filter @sync/chatgpt typecheck",
+    "pnpm exec oxlint apps/chatgpt/src/use-generation-estimate.ts",
+    "pnpm exec oxfmt --check apps/chatgpt/src/use-generation-estimate.ts",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "sourceAndArtifact": true,
+    "apiIntegrationCases": 29,
+    "pricingBrowserCases": 30,
+    "crossProjectAllowanceCases": 2,
+    "finalFocusedBrowserCases": 10,
+    "typecheck": "passed",
+    "lintAndFormatting": "passed",
+    "cleanRebuildMatchesTestedBytes": true,
+    "publishedPreviousReleases": "all eight retained byte-for-byte",
+    "liveAcceptance": "Private 94c candidate: real provider completion, reload/history playback, same-key 503-to-201 retry, OAuth refresh and speech continuation. Local completion bridge and fixture result-origin repair disclosed in main checklist.",
+    "remaining": "Load these exact UI bytes in the existing private plugin and verify exhausted allowance refusal plus preserved drafts/history. Current-head CI/reviews; MCP independent approval. No merge/deploy."
+  }
+}
