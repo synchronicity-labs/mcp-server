@@ -84,8 +84,13 @@ async function fixture({ denied = false, rejected = false, available = true } = 
         billingVersion: 'v3',
         hasActiveCredits: true,
         freeTtsExhausted: false,
+        freeGenerationsExhausted: false,
         paymentFailureCountExceededLimit: false,
-        freeMonthlyLimits: null,
+        freeMonthlyLimits: {
+          generations: { used: 2, max: 3 },
+          sync3: { used: 1, max: 1 },
+          tts: { used: 3, max: 10 },
+        },
         stripeCustomerId: 'private-billing-field',
       };
     } else if (req.method === 'POST' && req.url === '/v2/tts/jobs') {
@@ -145,6 +150,8 @@ it('admits a durable speech preview with caller identity, then polls that job wi
     available: true,
     billingVersion: 'v3',
     plan: 'scale',
+    freeGenerationsExhausted: false,
+    freeMonthlyLimits: { generations: { used: 2, max: 3 }, sync3: { used: 1, max: 1 } },
   });
   expect(JSON.stringify(options)).not.toContain('private-billing-field');
   expect((await call('create-speech-preview', input)).structuredContent).toMatchObject({

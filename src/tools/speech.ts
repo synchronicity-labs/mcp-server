@@ -41,9 +41,16 @@ const billingSchema = z.object({
   billingVersion: z.enum(['v2', 'v3']).optional(),
   hasActiveCredits: z.boolean(),
   freeTtsExhausted: z.boolean(),
+  freeGenerationsExhausted: z.boolean().optional(),
   paymentFailureCountExceededLimit: z.boolean(),
   freeMonthlyLimits: z
-    .object({ tts: z.object({ used: z.number().nonnegative(), max: z.number().nonnegative() }) })
+    .object({
+      tts: z.object({ used: z.number().nonnegative(), max: z.number().nonnegative() }),
+      generations: z
+        .object({ used: z.number().nonnegative(), max: z.number().nonnegative() })
+        .optional(),
+      sync3: z.object({ used: z.number().nonnegative(), max: z.number().nonnegative() }).optional(),
+    })
     .nullable(),
 });
 const optionsSchema = billingSchema.extend({ available: z.literal(true) });
