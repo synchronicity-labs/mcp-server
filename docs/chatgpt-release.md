@@ -24,12 +24,17 @@ Existing production origins and OAuth settings are kept.
   preservation review pass. The companion server passes all 607 tests, build,
   typecheck, lint and packaged-resource verification through an actual MCP
   transport handshake.
-- API follow-up [84e08e30e](https://github.com/synchronicity-labs/sync-api-v2/commit/84e08e30ef3cb8293079aac5f1903fd36eed1741)
+- API follow-up [9a1ad8b3f](https://github.com/synchronicity-labs/sync-api-v2/commit/9a1ad8b3f71dac745e76ab354f16aa805e84d7be)
   expires abandoned requests that never reached the provider, fences delayed
-  original requests and retries interrupted credit-hold cleanup. Requests that
-  may have reached the provider remain protected from resubmission. Its 70 real
-  database-backed translation tests, 24 frontend configuration/quote tests,
-  24 Studio browser cases, 28 typecheck tasks, lint and boundaries pass.
+  original requests and retries interrupted credit-hold cleanup. Reservation
+  and attachment of standalone translation funds now commit together, so a
+  pilot hold cannot be stranded if admission expires or attachment fails.
+  Requests that may have reached the provider remain protected from resubmission.
+  Its 149 real database-backed tests across translation, TTS and pilot billing
+  pass, including three regressions demonstrated on the previous code. All 28
+  typecheck tasks, lint, formatting, boundaries and independent preservation
+  review pass. The prior 24 frontend configuration/quote tests and 24 Studio
+  browser cases remain applicable to unchanged frontend code.
   The UI bytes and MCP wire contract are unchanged; the UI source remains the
   commit recorded above. No new live provider acceptance is claimed.
 - Only the current unmerged candidate is replaced. All 24 files in the eight

@@ -35,15 +35,23 @@
     "mcpBuildTypecheckLint": "passed",
     "packagedResourceTransport": "passed for all nine current/retained releases",
     "backendFollowup": {
-      "commit": "84e08e30ef3cb8293079aac5f1903fd36eed1741",
-      "tree": "591992dba0728aa4af7a64ed96dadb5cb6e2c817",
-      "behavior": "Unstarted abandoned standalone claims expire with fenced admission/provider-start writes and idempotent credit-hold cleanup. Possibly-started provider work remains protected. No wire contract or UI bytes changed.",
-      "databaseIntegrationTests": 70,
+      "commit": "9a1ad8b3f71dac745e76ab354f16aa805e84d7be",
+      "tree": "0fd47f9d77537fd0246ff5de4f07b7d2352b6c35",
+      "behavior": "Unstarted abandoned standalone claims expire with fenced admission/provider-start writes and idempotent credit-hold cleanup. Standalone hold reservation and durable attachment commit atomically under the claim row lock, including enterprise pilot funds. Possibly-started provider work remains protected. No wire contract or UI bytes changed.",
+      "databaseIntegrationTests": 149,
       "webConfigurationAndQuoteTests": 24,
       "nativeBrowserCases": 24,
       "typecheckTasks": 28,
       "lintFormattingBoundaries": "passed",
-      "independentPreservationReview": "passed; attached-hold cleanup uses a real seeded hold, not a new paid-provider test"
+      "independentPreservationReview": "passed final source, financial atomicity, lock ordering, TTS compatibility and regression value; no test-only production hooks",
+      "databaseIntegrationFiles": 6,
+      "regressionRedProof": "Actual pilot ledger tests failed before repair for a late reservation after claim expiry, failed hold attachment without cleanup, and competing expiry discarding admitted work. All pass after repair.",
+      "commands": [
+        "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/dubbing/translation-cost.integration.spec.ts src/modules/billing/enterprise-pilot-enforcement.integration.spec.ts src/modules/billing-v3/pilot-credit-ledger.integration.test.ts src/modules/tts/tts-jobs.integration.spec.ts --maxWorkers=2",
+        "pnpm typecheck",
+        "pnpm lint",
+        "pnpm check-boundaries"
+      ]
     }
   }
 }
