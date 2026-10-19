@@ -1,0 +1,38 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "f39af5c08c4fc23be765371a937462075a89286f",
+  "tree": "ca90eda963e67b2fb2c750d34217fb1a9ada97e7",
+  "htmlSha256": "42dba30e7666207508e061bb90deb39a7aa76e67507b48c71a93bc9c02307901",
+  "htmlBytes": 6190782,
+  "commands": [
+    "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/generate/translation-cost.integration.spec.ts --maxWorkers=2",
+    "pnpm --filter @sync/web exec vitest run src/hooks/studio/use-dubbing-cost-estimate.test.tsx src/components/studio-lite/hooks/use-studio-lite-dubbing.test.tsx src/hooks/studio/pro/use-pro-dubbing.test.tsx src/app/(studio)/projects/[projectSlug]/studio/_components/ai-actions/use-dub-audition.test.tsx src/app/(studio)/projects/[projectSlug]/studio/_components/ai-actions/dub-island-config.test.tsx --maxWorkers=2",
+    "pnpm --filter @sync/web exec playwright test --config playwright.components.config.ts e2e/components/dubbing-cost-estimate.spec.ts --workers=2",
+    "pnpm --filter @sync/chatgpt exec playwright test e2e/translate-dub.spec.ts --grep \"free translation offers|quotes translated audio separately|correct billing remedy|accepted translated-audio Sync|server completion progress|failed translation restores|loads the saved audio free\" --workers=2",
+    "pnpm turbo run typecheck --concurrency=2 --filter=@sync/api --filter=@sync/web --filter=@sync/chatgpt --filter=@sync/common --filter=@sync/ui",
+    "node --test scripts/__tests__/resource-command.test.mjs",
+    "pnpm generate:spec && pnpm generate:client",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "sourceAndArtifact": true,
+    "databaseIntegrationTests": 68,
+    "nativeHookAndComponentTests": 67,
+    "nativeBrowserCases": 24,
+    "chatgptSourceAndArtifactBrowserCases": 44,
+    "resourceSupervisorTests": 40,
+    "resourceSupervisorPlatformSkips": 1,
+    "typecheckTasks": 28,
+    "generatedClientsAndPublicContract": "passed; additive optional audition intent; backward compatible",
+    "migrationSafety": "passed; nullable boolean addition applied in real testcontainers migrations",
+    "regressionRedProof": "Saved-source audition quota, immutable keyed intent and quote-cache separation each failed before repair for the intended reason.",
+    "independentPreservationReview": "passed source, fixtures, generated clients and companion package integrity; no actionable findings",
+    "cleanRebuildMatchesTestedBytes": true,
+    "publishedPreviousReleases": "all eight retained byte-for-byte",
+    "liveAcceptance": "Prior7cc private-plugin reads/playback/allowance and prior94c provider/same-key/OAuth acceptance remain historical, not exact-byte live acceptance of this candidate. No provider work in this batch. See docs/chatgpt-release.md.",
+    "remaining": "Current-head CI/reviews and companion independent human approval. No merge/deploy.",
+    "mcpFullTests": 607,
+    "mcpBuildTypecheckLint": "passed",
+    "packagedResourceTransport": "passed for all nine current/retained releases"
+  }
+}

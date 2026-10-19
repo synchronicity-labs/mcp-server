@@ -7,22 +7,23 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 2b02c3480](https://github.com/synchronicity-labs/sync-api-v2/commit/2b02c3480cd9abd74d5f0848670b25e11610051f).
-- HTML SHA256: `19e595359b03b8688515c0f4af21e845b637622892479a31677cc64edd83e495`; HTML size: 6,190,593 bytes.
+- Source: [PR #6822, commit f39af5c08](https://github.com/synchronicity-labs/sync-api-v2/commit/f39af5c08c4fc23be765371a937462075a89286f).
+- HTML SHA256: `42dba30e7666207508e061bb90deb39a7aa76e67507b48c71a93bc9c02307901`; HTML size: 6,190,782 bytes.
   A clean committed-source rebuild matches the source/artifact-tested bytes.
-- Preserves the shared Studio recording view and controls while incorporating
-  upstream automatic-duration stopping and exactly-once take saving. Voice and
-  speech rejection messages use the canonical shared error mapper, retaining
-  existing duration recovery and generation admission protections.
-- Verification: 236 focused recording/error/provider/worker tests, 47 real
-  database-backed speech admission/recovery tests, four native recording browser
-  cases and 33 ChatGPT speech/audio cases across source and artifact. One
-  artifact-inapplicable case is skipped. One development recovery case was
-  interrupted by a verification-triggered host reload, then passed alone with
-  unchanged assertions and timeout. All 28 typecheck tasks, lint, formatting,
-  boundaries and independent preservation review pass.
-  The companion server passes all 607 tests, build, typecheck, lint and
-  packaged-resource verification through an actual MCP transport handshake.
+- Integrates the separate short-audition quota without changing full translation
+  admission. Bounded-source quote requests and actual audition intent remain
+  distinct. Existing full-job keys remain replayable; changing job intent under
+  the same key is rejected. Shared Studio recording, duration recovery and
+  accepted-provider handoff protections are preserved. MCP translated-driver
+  tools continue using normal full-job admission.
+- Verification: 68 real database-backed translation admission/recovery tests,
+  67 native hook/component tests, 24 Studio browser cases and 44 ChatGPT cases
+  across source and artifact. All 28 typecheck tasks, 40 resource-supervisor
+  tests (one platform-specific skip), generated-client and public-contract
+  checks, migration safety, lint, formatting, boundaries and independent source
+  preservation review pass. The companion server passes all 607 tests, build,
+  typecheck, lint and packaged-resource verification through an actual MCP
+  transport handshake.
 - Only the current unmerged candidate is replaced. All 24 files in the eight
   published retained releases remain byte-identical. The prior candidate's
   files are preserved locally for rollback.
