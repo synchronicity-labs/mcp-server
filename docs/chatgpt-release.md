@@ -7,22 +7,29 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit bb3499079](https://github.com/synchronicity-labs/sync-api-v2/commit/bb3499079e43b6a3d55b8f29dfdab517203721db).
-- HTML SHA256: `7cc55adeb3684727f81019ef8176b4457b0d880dc767954082bc9f64e7240c56`;
-  HTML size: 6,188,047 bytes. A clean committed-source rebuild matches the exact
-  source/artifact-tested bytes packaged here.
-- Studio and the plugin use the shared continuation policy, result views,
-  workflow cards/icons and draft deletion dialog. Canonical authenticated
-  generation reads recover accepted speech script and voice settings for both
-  hosts. MCP forwards the existing billing projection's optional generation
-  allowance counters; the embedded editor refuses exhausted free allowances
-  before a new submission and refreshes counters across projects after admission.
-- This candidate passes 29 real-DB generation-read cases, 30 pricing browser
-  cases, two cross-project allowance cases and 10 final focused cost/dialogue
-  browser cases. Browser cases cover both source and packaged artifact.
-  TypeScript, changed-file lint/format, clean-build byte comparison and
-  independent preservation review pass. MCP's full suite passes 607 tests.
-- The existing private test plugin was refreshed to these exact `7cc55ade` bytes.
+- Source: [PR #6822, commit def619808](https://github.com/synchronicity-labs/sync-api-v2/commit/def619808986d9de4698854da1702cb973071cc6).
+- HTML SHA256: `af6ae5622c2413836e8f092f427d8d54542d437d93d5cfe5e04dd1fc1a7b8ffa`; HTML size: 6,189,729 bytes.
+  A clean committed-source rebuild matches the source/artifact-tested bytes.
+- Retains the shared Studio transcript views while incorporating upstream live
+  fit warnings, native voiceover recovery and asset-name layout fixes. Notice
+  actions accept the host's matching icon, so retry actions do not show a mic.
+- Verification: 289 focused native dialogue/submission tests, 116 ChatGPT
+  dialogue/continuation/assets browser cases across source and artifact, and
+  25 frontend typecheck tasks. Five artifact cases timed out during concurrent
+  React analysis, then passed alone with unchanged timeouts and assertions.
+  Lint, formatting, boundaries and independent preservation reviews pass.
+  The companion server passes all 607 tests, build, typecheck, lint and the
+  packaged-resource verification through an actual MCP transport handshake.
+- Only the current unmerged candidate is replaced. All 24 files in the eight
+  published retained releases remain byte-identical. The prior candidate's
+  files are preserved locally for rollback.
+
+## Earlier live acceptance
+
+The following records apply to their named candidates. They are historical
+acceptance, not exact-byte live acceptance of the current bundle.
+
+- The existing private test plugin was refreshed to the prior `7cc55ade` bytes.
   It refuses exhausted free allowance and disables a fresh Sync submission while
   preserving the accepted script, Bella voice and saved audio. Completed history
   reopens and plays the real 6.32-second output without media error. The edited
@@ -44,12 +51,10 @@ Existing production origins and OAuth settings are kept.
   published retained releases remain unchanged, and private rollback files remain
   available. Refresh the existing private connection in place.
 
-Current-head full CI/reviews and MCP human approval remain merge gates. No
-purchase, quota reset, merge, publish or deployment was performed. Current UI
-playback, prior provider admission and fixture-only workflow coverage remain
-separate evidence; these checks do not claim every paid workflow or production
-configuration has been exercised. The source PR's
-`plans/pr-6822-studio-parity.md` records the broader parity checklist.
+Current-head CI/reviews and MCP human approval remain merge gates. No purchase,
+quota reset, merge, publish or deployment was performed. Fixture browser checks,
+private-plugin reads and prior provider acceptance are distinct evidence; they
+are not a claim that every paid workflow or production configuration was tested.
 
 ## Initial project data
 
