@@ -5,7 +5,7 @@
   "htmlSha256": "42dba30e7666207508e061bb90deb39a7aa76e67507b48c71a93bc9c02307901",
   "htmlBytes": 6190782,
   "commands": [
-    "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/generate/translation-cost.integration.spec.ts --maxWorkers=2",
+    "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/dubbing/translation-cost.integration.spec.ts --maxWorkers=2",
     "pnpm --filter @sync/web exec vitest run src/hooks/studio/use-dubbing-cost-estimate.test.tsx src/components/studio-lite/hooks/use-studio-lite-dubbing.test.tsx src/hooks/studio/pro/use-pro-dubbing.test.tsx src/app/(studio)/projects/[projectSlug]/studio/_components/ai-actions/use-dub-audition.test.tsx src/app/(studio)/projects/[projectSlug]/studio/_components/ai-actions/dub-island-config.test.tsx --maxWorkers=2",
     "pnpm --filter @sync/web exec playwright test --config playwright.components.config.ts e2e/components/dubbing-cost-estimate.spec.ts --workers=2",
     "pnpm --filter @sync/chatgpt exec playwright test e2e/translate-dub.spec.ts --grep \"free translation offers|quotes translated audio separately|correct billing remedy|accepted translated-audio Sync|server completion progress|failed translation restores|loads the saved audio free\" --workers=2",
@@ -33,6 +33,17 @@
     "remaining": "Current-head CI/reviews and companion independent human approval. No merge/deploy.",
     "mcpFullTests": 607,
     "mcpBuildTypecheckLint": "passed",
-    "packagedResourceTransport": "passed for all nine current/retained releases"
+    "packagedResourceTransport": "passed for all nine current/retained releases",
+    "backendFollowup": {
+      "commit": "84e08e30ef3cb8293079aac5f1903fd36eed1741",
+      "tree": "591992dba0728aa4af7a64ed96dadb5cb6e2c817",
+      "behavior": "Unstarted abandoned standalone claims expire with fenced admission/provider-start writes and idempotent credit-hold cleanup. Possibly-started provider work remains protected. No wire contract or UI bytes changed.",
+      "databaseIntegrationTests": 70,
+      "webConfigurationAndQuoteTests": 24,
+      "nativeBrowserCases": 24,
+      "typecheckTasks": 28,
+      "lintFormattingBoundaries": "passed",
+      "independentPreservationReview": "passed; attached-hold cleanup uses a real seeded hold, not a new paid-provider test"
+    }
   }
 }
