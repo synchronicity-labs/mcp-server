@@ -37,6 +37,15 @@ Existing production origins and OAuth settings are kept.
   browser cases remain applicable to unchanged frontend code.
   The UI bytes and MCP wire contract are unchanged; the UI source remains the
   commit recorded above. No new live provider acceptance is claimed.
+- Dev integration [80756131b](https://github.com/synchronicity-labs/sync-api-v2/commit/80756131bf5c61d22e5507da39066b2932166d1d)
+  includes `ddbae9d33` and preserves missing-frame-rate recovery together with
+  error-free reviewed-audio admission and replay assertions. Its 161 database
+  tests, 51 audio-splice/filter tests, 28 typecheck tasks and eight native
+  keyboard/project-recovery browser cases pass. CI's varying audio-floor
+  fixture now reuses the existing seeded floor, retaining the 3 dB limit;
+  removing fill still fails by 48 dB. Lint, boundaries and independent review
+  pass. The rebuilt ChatGPT HTML exactly matches the packaged bytes above.
+  Fresh remote CI/reviews remain pending; no new live-provider proof is claimed.
 - Only the current unmerged candidate is replaced. All 24 files in the eight
   published retained releases remain byte-identical. The prior candidate's
   files are preserved locally for rollback.
