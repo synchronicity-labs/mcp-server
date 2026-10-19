@@ -7,48 +7,33 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit f39af5c08](https://github.com/synchronicity-labs/sync-api-v2/commit/f39af5c08c4fc23be765371a937462075a89286f).
-- HTML SHA256: `42dba30e7666207508e061bb90deb39a7aa76e67507b48c71a93bc9c02307901`; HTML size: 6,190,782 bytes.
-  A clean committed-source rebuild matches the source/artifact-tested bytes.
-- Integrates the separate short-audition quota without changing full translation
-  admission. Bounded-source quote requests and actual audition intent remain
-  distinct. Existing full-job keys remain replayable; changing job intent under
-  the same key is rejected. Shared Studio recording, duration recovery and
-  accepted-provider handoff protections are preserved. MCP translated-driver
-  tools continue using normal full-job admission.
-- Verification: 68 real database-backed translation admission/recovery tests,
-  67 native hook/component tests, 24 Studio browser cases and 44 ChatGPT cases
-  across source and artifact. All 28 typecheck tasks, 40 resource-supervisor
-  tests (one platform-specific skip), generated-client and public-contract
-  checks, migration safety, lint, formatting, boundaries and independent source
-  preservation review pass. The companion server passes all 607 tests, build,
-  typecheck, lint and packaged-resource verification through an actual MCP
-  transport handshake.
-- API follow-up [9a1ad8b3f](https://github.com/synchronicity-labs/sync-api-v2/commit/9a1ad8b3f71dac745e76ab354f16aa805e84d7be)
-  expires abandoned requests that never reached the provider, fences delayed
-  original requests and retries interrupted credit-hold cleanup. Reservation
-  and attachment of standalone translation funds now commit together, so a
-  pilot hold cannot be stranded if admission expires or attachment fails.
-  Requests that may have reached the provider remain protected from resubmission.
-  Its 149 real database-backed tests across translation, TTS and pilot billing
-  pass, including three regressions demonstrated on the previous code. All 28
-  typecheck tasks, lint, formatting, boundaries and independent preservation
-  review pass. The prior 24 frontend configuration/quote tests and 24 Studio
-  browser cases remain applicable to unchanged frontend code.
-  The UI bytes and MCP wire contract are unchanged; the UI source remains the
-  commit recorded above. No new live provider acceptance is claimed.
-- Dev integration [80756131b](https://github.com/synchronicity-labs/sync-api-v2/commit/80756131bf5c61d22e5507da39066b2932166d1d)
-  includes `ddbae9d33` and preserves missing-frame-rate recovery together with
-  error-free reviewed-audio admission and replay assertions. Its 161 database
-  tests, 51 audio-splice/filter tests, 28 typecheck tasks and eight native
-  keyboard/project-recovery browser cases pass. CI's varying audio-floor
-  fixture now reuses the existing seeded floor, retaining the 3 dB limit;
-  removing fill still fails by 48 dB. Lint, boundaries and independent review
-  pass. The rebuilt ChatGPT HTML exactly matches the packaged bytes above.
-  Fresh remote CI/reviews remain pending; no new live-provider proof is claimed.
+- Source: [PR #6822, commit 7d62f7707](https://github.com/synchronicity-labs/sync-api-v2/commit/7d62f77070dc66d8f3e13e9789c07e18a5d3bb9f).
+- HTML SHA256: `a8d575b88cc3a29628a450ab672e2ec8cad3af078cf94bc4147a3e0d008ca8e6`; HTML size: 6,190,452 bytes.
+  Source and packaged artifact pass the same critical browser regressions.
+  A clean committed-source rebuild matches the tested bytes exactly.
+- Reopening an archived draft restores its own translation language and operation
+  state, including when optional fields were absent after JSON persistence.
+  Current draft operations remain archived with their original owner.
+- Matches Studio's shared free generation allowance and the server's duration
+  eligibility. Retired Sync 3 usage fields cannot create a separate UI quota.
+  Changing models cannot bypass a current server duration refusal.
+- Integrates dev `456065e97` while preserving standalone claim expiry, provider
+  uncertainty and atomic credit/pilot reservations. Invalid legacy history inputs
+  no longer hide valid sibling jobs; stored records remain unchanged. Reviewed
+  audio remains readable through its authorized draft-production route and is
+  refused through the standalone translation reader.
+- Verification: 100 real database-backed tests across seven suites, 12 critical
+  ChatGPT source/artifact browser cases, all 34 type/build tasks, lint, formatting,
+  boundaries and the pinned React gate at 100/100 pass. Native Studio also
+  passes 64 hook/component tests and 24 quote/browser cases. Regressions were
+  demonstrated before the repairs. Independent preservation, test-audit and
+  simplification review found no remaining issues. The clean committed-source rebuild matches the tested bundle.
+- The MCP runtime is unchanged; its prior 607 passing tests remain applicable.
+  All nine current/retained resources pass verification through an actual MCP
+  client/server handshake.
 - Only the current unmerged candidate is replaced. All 24 files in the eight
-  published retained releases remain byte-identical. The prior candidate's
-  files are preserved locally for rollback.
+  published retained releases remain byte-identical. The previous current
+  candidate is preserved locally for rollback.
 
 ## Earlier live acceptance
 

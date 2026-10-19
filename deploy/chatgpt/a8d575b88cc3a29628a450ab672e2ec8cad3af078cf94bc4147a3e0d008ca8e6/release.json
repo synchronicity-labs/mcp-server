@@ -1,0 +1,67 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "7d62f77070dc66d8f3e13e9789c07e18a5d3bb9f",
+  "tree": "e9337d0f4b1083853cc3574806de4c343f9650e9",
+  "htmlSha256": "a8d575b88cc3a29628a450ab672e2ec8cad3af078cf94bc4147a3e0d008ca8e6",
+  "htmlBytes": 6190452,
+  "commands": [
+    "pnpm workspace:hydrate @sync/web @sync/api --if-needed",
+    "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/generations/generations-read.integration.spec.ts src/modules/dubbing-review/reviewed-audio.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/billing/billing.service.integration.spec.ts src/modules/generation-admission/generation-admission-enrollment.integration.spec.ts src/modules/generate/free-generation-admission.integration.spec.ts --maxWorkers=2",
+    "pnpm --filter @sync/chatgpt exec playwright test e2e/result-continuation.spec.ts e2e/translate-dub.spec.ts e2e/cost-estimate.spec.ts --grep \"shared generation pool|expanded translated audio|visual replacement resets derived|without inheriting\" --workers=1",
+    "pnpm typecheck",
+    "pnpm lint",
+    "pnpm check-boundaries",
+    "pnpm verify:agent --profile pr --run --group react-web",
+    "pnpm --filter @sync/chatgpt build",
+    "pnpm --filter @sync/web exec vitest run src/components/nudges/use-nudge-manager.test.tsx src/lib/billing/optimistic-free-generation-usage.test.ts src/hooks/studio/use-submit-generation.test.tsx src/hooks/agent/use-start-generation.test.ts --maxWorkers=2",
+    "pnpm --filter @sync/web exec playwright test --config playwright.components.config.ts e2e/components/dubbing-cost-estimate.spec.ts --workers=1"
+  ],
+  "verification": {
+    "sourceAndArtifact": true,
+    "databaseIntegrationTests": 100,
+    "databaseIntegrationFiles": 7,
+    "chatgptSourceAndArtifactBrowserCases": 12,
+    "typecheckAndBuildTasks": 34,
+    "reactDoctorWebScore": "100/100",
+    "lintFormattingBoundaries": "passed",
+    "regressionRedProof": "Both source and artifact restored French instead of the archived Spanish selection, and blocked an available shared pool because of a retired Sync 3 counter. The actual history list returned 500 for malformed legacy JSON. Each passes after the repair; stored history inputs remain unchanged.",
+    "independentPreservationReview": "passed draft/session ownership, recovery fences, shared allowance, financial protections, reviewed-job access and test value; no production test hooks",
+    "cleanRebuildMatchesTestedBytes": true,
+    "publishedPreviousReleases": "all eight retained releases / 24 files unchanged",
+    "packagedResourceTransport": "passed all nine current/retained resources via actual MCP client/server handshake",
+    "mcpRuntimeTests": {
+      "count": 607,
+      "evidence": "Previous passing suite applies to unchanged MCP runtime; this batch changes only the UI package, catalog and release documentation."
+    },
+    "backendFollowup": {
+      "commit": "9a1ad8b3f71dac745e76ab354f16aa805e84d7be",
+      "tree": "0fd47f9d77537fd0246ff5de4f07b7d2352b6c35",
+      "behavior": "Unstarted abandoned standalone claims expire with fenced admission/provider-start writes and idempotent credit-hold cleanup. Standalone hold reservation and durable attachment commit atomically under the claim row lock, including enterprise pilot funds. Possibly-started provider work remains protected. No wire contract or UI bytes changed.",
+      "databaseIntegrationTests": 149,
+      "webConfigurationAndQuoteTests": 24,
+      "nativeBrowserCases": 24,
+      "typecheckTasks": 28,
+      "lintFormattingBoundaries": "passed",
+      "independentPreservationReview": "passed final source, financial atomicity, lock ordering, TTS compatibility and regression value; no test-only production hooks",
+      "databaseIntegrationFiles": 6,
+      "regressionRedProof": "Actual pilot ledger tests failed before repair for a late reservation after claim expiry, failed hold attachment without cleanup, and competing expiry discarding admitted work. All pass after repair.",
+      "commands": [
+        "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/dubbing/translation-cost.integration.spec.ts src/modules/billing/enterprise-pilot-enforcement.integration.spec.ts src/modules/billing-v3/pilot-credit-ledger.integration.test.ts src/modules/tts/tts-jobs.integration.spec.ts --maxWorkers=2",
+        "pnpm typecheck",
+        "pnpm lint",
+        "pnpm check-boundaries"
+      ]
+    },
+    "backendIntegration": {
+      "commit": "7d62f77070dc66d8f3e13e9789c07e18a5d3bb9f",
+      "tree": "e9337d0f4b1083853cc3574806de4c343f9650e9",
+      "integrationCommit": "94da298fe20565e9f691797428a443f09d7b3fd5",
+      "devCommit": "456065e97f062755f9be577ce672761c2f0ac1b2",
+      "behavior": "Preserves dev shared free generation allowance and server duration policy, prior standalone claim/credit/pilot atomicity, reviewed-audio missing-FPS and error-free admission/replay coverage. Draft activation replaces optional owners. History reads tolerate invalid legacy inputs without modifying persisted rows. Reviewed jobs remain behind draft authorization. Offline enrollment tests use the installed CLI without package-manager download."
+    },
+    "liveAcceptance": "Historical private-plugin/provider completion, same-key retry, OAuth refresh, history playback and allowance evidence applies to named prior candidates. It is not exact-byte live acceptance of this bundle. No provider work or quota resets were performed in this batch.",
+    "remaining": "Fresh current-head CI/reviews and independent MCP human approval. No merge/deploy.",
+    "nativeHookAndComponentTests": 64,
+    "nativeBrowserCases": 24
+  }
+}
