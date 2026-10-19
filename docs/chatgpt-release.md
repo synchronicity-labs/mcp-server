@@ -7,18 +7,21 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit def619808](https://github.com/synchronicity-labs/sync-api-v2/commit/def619808986d9de4698854da1702cb973071cc6).
-- HTML SHA256: `af6ae5622c2413836e8f092f427d8d54542d437d93d5cfe5e04dd1fc1a7b8ffa`; HTML size: 6,189,729 bytes.
+- Source: [PR #6822, commit 2b02c3480](https://github.com/synchronicity-labs/sync-api-v2/commit/2b02c3480cd9abd74d5f0848670b25e11610051f).
+- HTML SHA256: `19e595359b03b8688515c0f4af21e845b637622892479a31677cc64edd83e495`; HTML size: 6,190,593 bytes.
   A clean committed-source rebuild matches the source/artifact-tested bytes.
-- Retains the shared Studio transcript views while incorporating upstream live
-  fit warnings, native voiceover recovery and asset-name layout fixes. Notice
-  actions accept the host's matching icon, so retry actions do not show a mic.
-- Verification: 289 focused native dialogue/submission tests, 116 ChatGPT
-  dialogue/continuation/assets browser cases across source and artifact, and
-  25 frontend typecheck tasks. Five artifact cases timed out during concurrent
-  React analysis, then passed alone with unchanged timeouts and assertions.
-  Lint, formatting, boundaries and independent preservation reviews pass.
-  The companion server passes all 607 tests, build, typecheck, lint and the
+- Preserves the shared Studio recording view and controls while incorporating
+  upstream automatic-duration stopping and exactly-once take saving. Voice and
+  speech rejection messages use the canonical shared error mapper, retaining
+  existing duration recovery and generation admission protections.
+- Verification: 236 focused recording/error/provider/worker tests, 47 real
+  database-backed speech admission/recovery tests, four native recording browser
+  cases and 33 ChatGPT speech/audio cases across source and artifact. One
+  artifact-inapplicable case is skipped. One development recovery case was
+  interrupted by a verification-triggered host reload, then passed alone with
+  unchanged assertions and timeout. All 28 typecheck tasks, lint, formatting,
+  boundaries and independent preservation review pass.
+  The companion server passes all 607 tests, build, typecheck, lint and
   packaged-resource verification through an actual MCP transport handshake.
 - Only the current unmerged candidate is replaced. All 24 files in the eight
   published retained releases remain byte-identical. The prior candidate's
