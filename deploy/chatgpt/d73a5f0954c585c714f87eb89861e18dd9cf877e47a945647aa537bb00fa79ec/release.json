@@ -1,9 +1,9 @@
 {
   "repository": "synchronicity-labs/sync-api-v2",
-  "commit": "c3c1b07d971778e7da614438e633e17278fe881d",
-  "tree": "6845713e51dce3fc4d76e29933b56b621451be50",
-  "htmlSha256": "35b4cfbc108fafa691209afa743194aded9a7760eb4d623bc012c0398e2aa4a7",
-  "htmlBytes": 6196694,
+  "commit": "2e8fc6caaffeb30fc814c33a49443651b3732456",
+  "tree": "7b70f47de48845d52168cd203f9ef163116c32b5",
+  "htmlSha256": "d73a5f0954c585c714f87eb89861e18dd9cf877e47a945647aa537bb00fa79ec",
+  "htmlBytes": 6197979,
   "commands": [
     "pnpm typecheck",
     "pnpm lint",
@@ -12,13 +12,13 @@
     "pnpm verify:agent --profile pr --run --group react-web"
   ],
   "verification": {
-    "nativeBrowserCases": 14,
-    "chatgptSourceAndArtifactBrowserCases": 40,
+    "nativeBrowserCases": 6,
+    "chatgptSourceAndArtifactBrowserCases": 14,
     "typecheckAndBuildTasks": 34,
     "lintFormattingBoundaries": "passed",
-    "reactDoctorWeb": "Full current-source pinned scan running locally; current-head CI is the merge gate. Previous incomplete scans are explicitly not passes.",
-    "independentPreservationReview": "passed source/account/quote policy, shared media, optional multi-preset takes, financial protections and test preservation",
-    "regressionRedProof": "Revoked restored seed access, refreshed URL use and delayed team response each failed on the incoming hook, then passed. Held processing placeholder and recovered session reads were independently demonstrated RED then GREEN. No production test seams or weakened assertions.",
+    "reactDoctorWeb": "100/100, all 2403 files analyzed, zero diagnostics on final integrated native web source",
+    "independentPreservationReview": "Clear final source, overlap geometry and null metadata refusal preservation; canonical shared error constructor, exact media helper extraction, original-image history rendering and test audit/Ponytail review.",
+    "regressionRedProof": "URL-only original-image history failed in both source/artifact before the shared image preview fix; video neighbors retained. Both incoming real-Toaster overlap/pending refusals failed under split module constructor identity, then passed through the canonical shared entry point. Existing Library access/late-team/processing recovery regressions remain preserved.",
     "cleanCommittedRebuild": "matches tested bytes exactly",
     "packagedResourceTransport": "passed all nine current/retained resources through actual MCP client/server handshake",
     "retainedPublishedFiles": "24 retained files in eight published releases verified unchanged",
@@ -27,10 +27,10 @@
       "evidence": "Previous passing suite applies to unchanged MCP runtime; this batch replaces the unmerged UI package and provenance/docs only."
     },
     "backendIntegration": {
-      "commit": "c3c1b07d971778e7da614438e633e17278fe881d",
-      "tree": "6845713e51dce3fc4d76e29933b56b621451be50",
-      "devCommit": "42944341294959b4ce2e33d6c7c2f9183089cdd7",
-      "behavior": "Preserves branch financial, quote, media, shared Studio and recovery protections while integrating current dev Library assets/history. Canonical shared imports replace retired local modules. Restored Library seeds reauthorize row access before preview/attachment, use refreshed metadata, refuse delayed team changes and retain an in-flight selection through project persistence. URL helpers are unchanged, moved to satisfy the file-size gate."
+      "commit": "2e8fc6caaffeb30fc814c33a49443651b3732456",
+      "tree": "7b70f47de48845d52168cd203f9ef163116c32b5",
+      "devCommit": "2f5520ffa950e07995aa88303e83e71efd9e5ed8",
+      "behavior": "Integrates overlapping Studio audio repair while retaining source/quote/account/financial and recovery guards. TimelineAudioError and canonical getErrorInfo share one module entry point so fixed refusal remedies survive module loading. Unchanged media error helpers moved to respect the growing-file size gate."
     },
     "historicalFinancialFollowup": {
       "commit": "9a1ad8b3f71dac745e76ab354f16aa805e84d7be",
@@ -52,7 +52,7 @@
       ]
     },
     "liveAcceptance": "Historical private-plugin/provider completion, same-key retry, OAuth refresh, history playback and allowance evidence applies to named prior candidates. It is not exact-byte live acceptance of this bundle. No provider work or quota resets were performed in this batch.",
-    "remaining": "Current-head CI/reviews and independent MCP human approval. No merge/deploy.",
+    "remaining": "Fresh current-head CI/reviews and known independent MCP human approval. No merge/deploy.",
     "preservedSafetyCheckpoint": {
       "commit": "7ad6544eed77e62db7455a0db4a41ad29951b758",
       "databaseTests": 159,
@@ -64,10 +64,18 @@
       "sourceAndArtifactBrowserCases": 40,
       "scope": "Passed on prior integration. Protected financial/session/media owners are preserved in the latest integration; new Library seed accesses and import interactions are separately verified below."
     },
-    "nativeStoreAndLauncherTests": 215,
-    "nativeStoreAndLauncherFiles": 11,
-    "assetHistoryDatabaseTests": 3,
-    "dialogueCutTests": 35,
-    "uploadUrlHelperExtraction": "Independent exact-body preservation review clear. Post-extraction34types/build,28actual uploader-stack tests and full lint/format/boundaries pass."
+    "nativeStoreAndLauncherTests": 493,
+    "nativeStoreAndLauncherFiles": 13,
+    "commonTests": 526,
+    "previousSixthCheckpoint": {
+      "commit": "c3c1b07d971778e7da614438e633e17278fe881d",
+      "nativeTests": 215,
+      "uploaderTests": 28,
+      "assetHistoryRealDbTests": 3,
+      "dialogueCutTests": 35,
+      "nativeBrowserCases": 14,
+      "pluginSourceAndArtifactCases": 40,
+      "scope": "Historical passing proof on preserved owners; new integrated overlap and history changes separately verified above."
+    }
   }
 }
