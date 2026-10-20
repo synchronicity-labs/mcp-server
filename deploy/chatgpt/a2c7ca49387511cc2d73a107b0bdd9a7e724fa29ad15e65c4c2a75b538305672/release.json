@@ -1,21 +1,20 @@
 {
   "repository": "synchronicity-labs/sync-api-v2",
-  "commit": "7513efccdba0d02fb9f9641fb37856a9245b96cb",
-  "tree": "3a671fbfdaec094dd808cc05f334b27ac7ffe65d",
-  "htmlSha256": "15cd6733620bd79399791b29c2d9b37f2c8406b6c41723d18c131d506f19e660",
-  "htmlBytes": 6198029,
+  "commit": "48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb",
+  "tree": "ca4889de4b88e7cb20f56e5e4634cd0efbdf53a4",
+  "htmlSha256": "a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672",
+  "htmlBytes": 6198052,
   "commands": [
-    "pnpm typecheck",
-    "pnpm lint",
-    "pnpm check-boundaries",
-    "pnpm --filter @sync/chatgpt build",
-    "pnpm verify:agent --profile pr --run --group react-web"
+    "pnpm check-ai-friendliness",
+    "pnpm --filter @sync/chatgpt exec tsc --noEmit",
+    "pnpm exec oxlint apps/chatgpt/src/project-history-media.tsx",
+    "pnpm --filter @sync/chatgpt exec playwright test e2e/history-original-media.spec.ts --workers=1",
+    "pnpm --filter @sync/chatgpt build"
   ],
   "verification": {
-    "chatgptSourceAndArtifactBrowserCases": 14,
-    "typecheckAndBuildTasks": 34,
+    "chatgptSourceAndArtifactBrowserCases": 4,
     "lintFormattingBoundaries": "passed",
-    "reactDoctorWeb": "100/100, all 2403 files analyzed, zero diagnostics on final integrated native web source",
+    "reactDoctorWeb": "Previous 7513efcc full scan:100/100,2403/2403 files,zero diagnostics; native web/shared files remain byte-identical in this two-attribute ChatGPT-only follow-up.",
     "independentPreservationReview": "Clear final dialogue parity/preservation/test-audit/Ponytail review: face warning remains advisory, flag resolution and diarized-count refusal retained, shared loader status key and timeout cleanup unchanged. Previous error/audio/history/financial safeguards preserved.",
     "regressionRedProof": "Previous 2e8fc6ca checkpoint: URL-only original-image history failed in both source/artifact before the shared image preview fix; video neighbors retained. Both incoming real-Toaster overlap/pending refusals failed under split module constructor identity, then passed through the canonical shared entry point. Existing Library access/late-team/processing recovery regressions remain preserved.",
     "cleanCommittedRebuild": "matches tested bytes exactly",
@@ -73,8 +72,6 @@
       "pluginSourceAndArtifactCases": 40,
       "scope": "Historical passing proof on preserved owners; new integrated overlap and history changes separately verified above."
     },
-    "nativeDialogueTests": 272,
-    "nativeDialogueFiles": 7,
     "previousSeventhCheckpoint": {
       "commit": "2e8fc6caaffeb30fc814c33a49443651b3732456",
       "nativeTests": 493,
@@ -83,6 +80,21 @@
       "nativeBrowserCases": 6,
       "pluginHistoryBrowserCases": 14,
       "scope": "Passed previous integration; error, audio, history and recovery owners remain unchanged in this dialogue-only integration."
-    }
+    },
+    "previousEighthCheckpoint": {
+      "commit": "7513efccdba0d02fb9f9641fb37856a9245b96cb",
+      "tree": "3a671fbfdaec094dd808cc05f334b27ac7ffe65d",
+      "nativeDialogueTests": 272,
+      "nativeDialogueFiles": 7,
+      "chatgptDialogueBrowserCases": 14,
+      "typeBuildTasks": 34,
+      "lintFormattingBoundaries": "passed",
+      "reactDoctorWeb": "100/100,2403/2403 files,zero diagnostics",
+      "scope": "Current follow-up changes only two HTML image-size attributes in the ChatGPT history preview. All native web/shared owners are unchanged."
+    },
+    "chatgptTypecheck": "passed",
+    "fullAiFriendliness": "passed",
+    "focusedLintAndFormatting": "passed",
+    "ciImageSizeFollowup": "Add explicit1920x1080 width/height to history original image, matching the existing image-stage convention; absolute full-stage object-contain styling remains unchanged. Full AI-friendliness and actual source/artifact image/video history browsers pass."
   }
 }

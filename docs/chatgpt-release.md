@@ -7,32 +7,31 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 7513efcc](https://github.com/synchronicity-labs/sync-api-v2/commit/7513efccdba0d02fb9f9641fb37856a9245b96cb).
-- HTML SHA256: `15cd6733620bd79399791b29c2d9b37f2c8406b6c41723d18c131d506f19e660`; HTML size: 6,198,029 bytes.
-- Integrates dev `dcc90dcd5`, retaining the incoming overlapping-audio repair,
-  canonical quotes, archived continuation ownership, server allowance policy,
-  Library reauthorization and atomic credit/pilot reservations.
-- Native dialogue analysis warns about multiple faces only when the relevant
-  flag is resolved disabled; it does not refuse based on faces. Diarized speaker
-  counts still determine refusal. Native supplies its warning through the actual
-  shared transcript loader, whose final stage now says it is checking the transcript.
-- Current verification passes 272 native dialogue tests in seven files, all 34
-  type/build tasks, full lint/format/boundaries and 14 source/artifact dialogue
-  browser cases covering refusal, transcription, preview recovery and responsive
-  composition. The pinned native React scan passes 100/100 with all 2,403 files
-  analyzed and zero diagnostics. Clean committed rebuild matches tested bytes.
-- The previous `2e8fc6ca` checkpoint passed 493 native tests, 526 common tests,
-  six native trim/audio/removal/recovery browser cases and 14 source/artifact
-  history/navigation cases. Its real-Toaster and image-history regressions
-  demonstrated RED then GREEN; those owners are unchanged in this dialogue batch.
-- Earlier `c3c1b07d` proof includes 215 native tests, 28 uploader tests, three real
-  asset-history database tests, 35 dialogue-cut tests and 40 plugin browser cases.
-  Earlier `7ad6544e` passed 159 real database tests across seven suites. These are
-  named historical proofs on preserved owners, not rerun counts for this candidate.
-- Independent preservation/test-audit/Ponytail review is clear. MCP runtime is
-  unchanged; its prior 607 passing tests remain applicable. All nine actual MCP
-  resource reads pass, and all 24 files in eight retained published releases
-  remain byte-identical. Only the unmerged candidate is replaced and backed up.
+- Source: [PR #6822, commit 48247d3f](https://github.com/synchronicity-labs/sync-api-v2/commit/48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb).
+- HTML SHA256: `a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672`; HTML size: 6,198,052 bytes.
+- The current follow-up supplies explicit image dimensions in history, matching
+  the existing image-stage convention. Absolute full-stage containment and
+  original image/video selection remain unchanged. Full AI-friendliness,
+  ChatGPT typechecking, focused lint/formatting and four source/artifact browser
+  cases pass. Clean committed rebuild matches the tested bytes exactly.
+- The preceding `7513efcc` integration includes dev `dcc90dcd5` and passes 272
+  native dialogue tests, 14 dialogue source/artifact browser cases, all 34
+  type/build tasks and full lint/format/boundaries. Its full pinned native React
+  scan passes 100/100 with all 2,403 files analyzed and zero diagnostics. Native
+  web and shared owners are byte-identical in this ChatGPT-only attribute change.
+- Native multi-face analysis remains advisory; diarized speaker count alone
+  refuses unsupported dialogue. Shared loader timing and cleanup, the native
+  warning slot, overlap repair, quote/source/account/recovery fences and atomic
+  credit/pilot reservations remain preserved.
+- The earlier `2e8fc6ca` checkpoint passed 493 native tests, 526 common tests,
+  six native browser cases and 14 history/navigation source/artifact cases.
+  Its real-Toaster and image-history regressions demonstrated RED then GREEN.
+  Earlier database/provider proofs remain separately named historical evidence,
+  not rerun counts or exact-byte live acceptance of this candidate.
+- MCP runtime is unchanged; prior 607 passing tests remain applicable. All nine
+  actual MCP resource reads pass, and all 24 files in eight retained published
+  releases remain byte-identical. Only the unmerged candidate is replaced and
+  backed up locally. Fresh CI/reviews and MCP human approval remain pending.
 
 ## Earlier live acceptance
 
