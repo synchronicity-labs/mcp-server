@@ -7,34 +7,32 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 2e8fc6ca](https://github.com/synchronicity-labs/sync-api-v2/commit/2e8fc6caaffeb30fc814c33a49443651b3732456).
-- HTML SHA256: `d73a5f0954c585c714f87eb89861e18dd9cf877e47a945647aa537bb00fa79ec`; HTML size: 6,197,979 bytes.
-- Integrates dev `2f5520ffa`, preserving the incoming overlapping-audio repair,
-  optional voice-match takes, exclusive shared playback, canonical quote policy,
-  archived translation/continuation ownership, server allowance policy and atomic
-  credit/pilot reservations.
-- Restored Library seeds recheck access before preview/attachment, refresh metadata,
-  refuse stale team responses and retain recovery through project persistence.
-  URL-only original images in history now use the shared image preview; original
-  videos keep their playback and source/synced switching behavior.
-- Current verification passes 493 native tests in 13 files, 526 common tests,
-  34 type/build tasks, full lint/format/boundaries, six native trim/audio-removal/
-  recovery browser cases and 14 source/artifact history/navigation browser cases.
-  The full pinned React scan passes 100/100 with all 2,403 files analyzed and zero
-  diagnostics. The committed rebuild matches the tested bytes exactly.
-- Real app toast regressions demonstrated both overlap and pending refusals fail
-  with split module constructor identity, then pass through the canonical shared
-  entry point. Both URL-only image history cases demonstrated RED then GREEN.
-  Independent preservation/test-audit/Ponytail review is clear.
-- Previous `c3c1b07d` proof includes 215 native tests, 28 uploader-stack tests,
-  three real asset-history database tests, 35 dialogue-cut tests, 14 native browser
-  cases and 40 plugin source/artifact cases. The preceding `7ad6544e` integration
-  passed 159 real database tests across seven suites. These remain named earlier
-  proofs on preserved owners, not claims that every suite reran on this candidate.
-- MCP runtime is unchanged; its prior 607 passing tests remain applicable.
-  All nine current/retained resource reads pass through an actual MCP client/server
-  handshake. All 24 files in eight retained published releases remain identical;
-  only the unmerged candidate is replaced, with the prior candidate backed up.
+- Source: [PR #6822, commit 7513efcc](https://github.com/synchronicity-labs/sync-api-v2/commit/7513efccdba0d02fb9f9641fb37856a9245b96cb).
+- HTML SHA256: `15cd6733620bd79399791b29c2d9b37f2c8406b6c41723d18c131d506f19e660`; HTML size: 6,198,029 bytes.
+- Integrates dev `dcc90dcd5`, retaining the incoming overlapping-audio repair,
+  canonical quotes, archived continuation ownership, server allowance policy,
+  Library reauthorization and atomic credit/pilot reservations.
+- Native dialogue analysis warns about multiple faces only when the relevant
+  flag is resolved disabled; it does not refuse based on faces. Diarized speaker
+  counts still determine refusal. Native supplies its warning through the actual
+  shared transcript loader, whose final stage now says it is checking the transcript.
+- Current verification passes 272 native dialogue tests in seven files, all 34
+  type/build tasks, full lint/format/boundaries and 14 source/artifact dialogue
+  browser cases covering refusal, transcription, preview recovery and responsive
+  composition. The pinned native React scan passes 100/100 with all 2,403 files
+  analyzed and zero diagnostics. Clean committed rebuild matches tested bytes.
+- The previous `2e8fc6ca` checkpoint passed 493 native tests, 526 common tests,
+  six native trim/audio/removal/recovery browser cases and 14 source/artifact
+  history/navigation cases. Its real-Toaster and image-history regressions
+  demonstrated RED then GREEN; those owners are unchanged in this dialogue batch.
+- Earlier `c3c1b07d` proof includes 215 native tests, 28 uploader tests, three real
+  asset-history database tests, 35 dialogue-cut tests and 40 plugin browser cases.
+  Earlier `7ad6544e` passed 159 real database tests across seven suites. These are
+  named historical proofs on preserved owners, not rerun counts for this candidate.
+- Independent preservation/test-audit/Ponytail review is clear. MCP runtime is
+  unchanged; its prior 607 passing tests remain applicable. All nine actual MCP
+  resource reads pass, and all 24 files in eight retained published releases
+  remain byte-identical. Only the unmerged candidate is replaced and backed up.
 
 ## Earlier live acceptance
 
