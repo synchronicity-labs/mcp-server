@@ -1,0 +1,73 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "c3c1b07d971778e7da614438e633e17278fe881d",
+  "tree": "6845713e51dce3fc4d76e29933b56b621451be50",
+  "htmlSha256": "35b4cfbc108fafa691209afa743194aded9a7760eb4d623bc012c0398e2aa4a7",
+  "htmlBytes": 6196694,
+  "commands": [
+    "pnpm typecheck",
+    "pnpm lint",
+    "pnpm check-boundaries",
+    "pnpm --filter @sync/chatgpt build",
+    "pnpm verify:agent --profile pr --run --group react-web"
+  ],
+  "verification": {
+    "nativeBrowserCases": 14,
+    "chatgptSourceAndArtifactBrowserCases": 40,
+    "typecheckAndBuildTasks": 34,
+    "lintFormattingBoundaries": "passed",
+    "reactDoctorWeb": "Full current-source pinned scan running locally; current-head CI is the merge gate. Previous incomplete scans are explicitly not passes.",
+    "independentPreservationReview": "passed source/account/quote policy, shared media, optional multi-preset takes, financial protections and test preservation",
+    "regressionRedProof": "Revoked restored seed access, refreshed URL use and delayed team response each failed on the incoming hook, then passed. Held processing placeholder and recovered session reads were independently demonstrated RED then GREEN. No production test seams or weakened assertions.",
+    "cleanCommittedRebuild": "matches tested bytes exactly",
+    "packagedResourceTransport": "passed all nine current/retained resources through actual MCP client/server handshake",
+    "retainedPublishedFiles": "24 retained files in eight published releases verified unchanged",
+    "mcpRuntimeTests": {
+      "count": 607,
+      "evidence": "Previous passing suite applies to unchanged MCP runtime; this batch replaces the unmerged UI package and provenance/docs only."
+    },
+    "backendIntegration": {
+      "commit": "c3c1b07d971778e7da614438e633e17278fe881d",
+      "tree": "6845713e51dce3fc4d76e29933b56b621451be50",
+      "devCommit": "42944341294959b4ce2e33d6c7c2f9183089cdd7",
+      "behavior": "Preserves branch financial, quote, media, shared Studio and recovery protections while integrating current dev Library assets/history. Canonical shared imports replace retired local modules. Restored Library seeds reauthorize row access before preview/attachment, use refreshed metadata, refuse delayed team changes and retain an in-flight selection through project persistence. URL helpers are unchanged, moved to satisfy the file-size gate."
+    },
+    "historicalFinancialFollowup": {
+      "commit": "9a1ad8b3f71dac745e76ab354f16aa805e84d7be",
+      "tree": "0fd47f9d77537fd0246ff5de4f07b7d2352b6c35",
+      "behavior": "Unstarted abandoned standalone claims expire with fenced admission/provider-start writes and idempotent credit-hold cleanup. Standalone hold reservation and durable attachment commit atomically under the claim row lock, including enterprise pilot funds. Possibly-started provider work remains protected. No wire contract or UI bytes changed.",
+      "databaseIntegrationTests": 149,
+      "webConfigurationAndQuoteTests": 24,
+      "nativeBrowserCases": 24,
+      "typecheckTasks": 28,
+      "lintFormattingBoundaries": "passed",
+      "independentPreservationReview": "passed final source, financial atomicity, lock ordering, TTS compatibility and regression value; no test-only production hooks",
+      "databaseIntegrationFiles": 6,
+      "regressionRedProof": "Actual pilot ledger tests failed before repair for a late reservation after claim expiry, failed hold attachment without cleanup, and competing expiry discarding admitted work. All pass after repair.",
+      "commands": [
+        "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/dubbing/translation-cost.integration.spec.ts src/modules/billing/enterprise-pilot-enforcement.integration.spec.ts src/modules/billing-v3/pilot-credit-ledger.integration.test.ts src/modules/tts/tts-jobs.integration.spec.ts --maxWorkers=2",
+        "pnpm typecheck",
+        "pnpm lint",
+        "pnpm check-boundaries"
+      ]
+    },
+    "liveAcceptance": "Historical private-plugin/provider completion, same-key retry, OAuth refresh, history playback and allowance evidence applies to named prior candidates. It is not exact-byte live acceptance of this bundle. No provider work or quota resets were performed in this batch.",
+    "remaining": "Current-head CI/reviews and independent MCP human approval. No merge/deploy.",
+    "preservedSafetyCheckpoint": {
+      "commit": "7ad6544eed77e62db7455a0db4a41ad29951b758",
+      "databaseTests": 159,
+      "databaseSuites": 7,
+      "commonTests": 526,
+      "nativeLifecycleAndQuoteTests": 126,
+      "integratedPresetCases": 2,
+      "nativeBrowserCases": 71,
+      "sourceAndArtifactBrowserCases": 40,
+      "scope": "Passed on prior integration. Protected financial/session/media owners are preserved in the latest integration; new Library seed accesses and import interactions are separately verified below."
+    },
+    "nativeStoreAndLauncherTests": 215,
+    "nativeStoreAndLauncherFiles": 11,
+    "assetHistoryDatabaseTests": 3,
+    "dialogueCutTests": 35,
+    "uploadUrlHelperExtraction": "Independent exact-body preservation review clear. Post-extraction34types/build,28actual uploader-stack tests and full lint/format/boundaries pass."
+  }
+}

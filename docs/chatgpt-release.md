@@ -7,33 +7,32 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [PR #6822, commit 7d62f7707](https://github.com/synchronicity-labs/sync-api-v2/commit/7d62f77070dc66d8f3e13e9789c07e18a5d3bb9f).
-- HTML SHA256: `a8d575b88cc3a29628a450ab672e2ec8cad3af078cf94bc4147a3e0d008ca8e6`; HTML size: 6,190,452 bytes.
-  Source and packaged artifact pass the same critical browser regressions.
-  A clean committed-source rebuild matches the tested bytes exactly.
-- Reopening an archived draft restores its own translation language and operation
-  state, including when optional fields were absent after JSON persistence.
-  Current draft operations remain archived with their original owner.
-- Matches Studio's shared free generation allowance and the server's duration
-  eligibility. Retired Sync 3 usage fields cannot create a separate UI quota.
-  Changing models cannot bypass a current server duration refusal.
-- Integrates dev `456065e97` while preserving standalone claim expiry, provider
-  uncertainty and atomic credit/pilot reservations. Invalid legacy history inputs
-  no longer hide valid sibling jobs; stored records remain unchanged. Reviewed
-  audio remains readable through its authorized draft-production route and is
-  refused through the standalone translation reader.
-- Verification: 100 real database-backed tests across seven suites, 12 critical
-  ChatGPT source/artifact browser cases, all 34 type/build tasks, lint, formatting,
-  boundaries and the pinned React gate at 100/100 pass. Native Studio also
-  passes 64 hook/component tests and 24 quote/browser cases. Regressions were
-  demonstrated before the repairs. Independent preservation, test-audit and
-  simplification review found no remaining issues. The clean committed-source rebuild matches the tested bundle.
-- The MCP runtime is unchanged; its prior 607 passing tests remain applicable.
-  All nine current/retained resources pass verification through an actual MCP
-  client/server handshake.
-- Only the current unmerged candidate is replaced. All 24 files in the eight
-  published retained releases remain byte-identical. The previous current
-  candidate is preserved locally for rollback.
+- Source: [PR #6822, commit c3c1b07d](https://github.com/synchronicity-labs/sync-api-v2/commit/c3c1b07d971778e7da614438e633e17278fe881d).
+- HTML SHA256: `35b4cfbc108fafa691209afa743194aded9a7760eb4d623bc012c0398e2aa4a7`; HTML size: 6,196,694 bytes.
+- Integrates dev `429443412` while preserving native optional voice-match takes,
+  exclusive shared playback, canonical quote policy, archived translation and
+  continuation ownership, server allowance policy and atomic credit/pilot reservations.
+- Native Library launches use canonical shared workflow modules. Restored seeds
+  recheck asset access before preview or attachment, use fresh metadata, refuse
+  stale team responses and retain recovery while project persistence is in flight.
+- Latest checks pass 215 store/launcher/upload/recovery tests across 11 files,
+  three real asset-history database tests, 35 dialogue-cut tests, all 34 type/build
+  tasks, full lint/format/boundaries, 14 native browser recovery/layout/URL cases
+  and 40 current ChatGPT source/artifact browser cases. The committed rebuild
+  matches the tested bytes exactly. After the upload-helper extraction, all 34
+  type/build tasks, 28 actual uploader-stack tests and lint/format/boundaries pass.
+  The extraction preserves URL probe, fallback and filename behavior and satisfies
+  the repository's file-size gate. The full pinned React scan and current-head
+  CI/reviews remain pending; incomplete local scans are not passes.
+- The preceding `7ad6544e` integration passed 159 real database tests across seven
+  suites, 526 common tests, 126 native lifecycle/quote tests plus two preset cases,
+  71 native browser cases and 40 source/artifact browser cases. Those protected
+  owners remain preserved; the latest integration checks above cover new changes.
+- Independent preservation/test-audit review found no remaining source issues.
+  MCP runtime is unchanged; its prior 607 passing tests remain applicable.
+  All nine current/retained resource reads pass through an actual MCP client/server handshake.
+- Only the current unmerged candidate is replaced. All 24 files in eight published
+  retained releases remain byte-identical. Earlier candidates are backed up locally.
 
 ## Earlier live acceptance
 
