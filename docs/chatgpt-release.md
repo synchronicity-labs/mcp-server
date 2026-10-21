@@ -8,6 +8,15 @@ Existing production origins and OAuth settings are kept.
 ## Included release candidate
 
 - Source: [PR #6822, commit 48247d3f](https://github.com/synchronicity-labs/sync-api-v2/commit/48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb).
+- Accepted API squash merge: `cf0b2d21805dc6877628d28e4f146acd02d37d7f`.
+  Comparing that merge with the recorded build source changes only CI, scripts
+  and docs; `apps/chatgpt` and `packages` are byte-identical. The source commit
+  remains the actual build provenance and the UI needs no rebuild for the squash.
+- The API changes reached production in [release PR #7029](https://github.com/synchronicity-labs/sync-api-v2/pull/7029),
+  commit `3e76c86d9fe3595a0cb2ea58772b717384b99464`.
+  [Production run 39591510089](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/39591510089)
+  completed successfully on October 21, 2026 at 11:36 UTC. MCP PR #88 is still
+  unmerged; merging it triggers its production deployment.
 - HTML SHA256: `a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672`; HTML size: 6,198,052 bytes.
 - The current follow-up supplies explicit image dimensions in history, matching
   the existing image-stage convention. Absolute full-stage containment and
@@ -28,10 +37,34 @@ Existing production origins and OAuth settings are kept.
   Its real-Toaster and image-history regressions demonstrated RED then GREEN.
   Earlier database/provider proofs remain separately named historical evidence,
   not rerun counts or exact-byte live acceptance of this candidate.
-- MCP runtime is unchanged; prior 607 passing tests remain applicable. All nine
+- At the image-dimension packaging checkpoint, MCP runtime was unchanged from
+  the earlier 607-test runtime checkpoint. The recovery follow-up below changes
+  MCP runtime and must pass the current revision's tests and CI. All nine
   actual MCP resource reads pass, and all 24 files in eight retained published
   releases remain byte-identical. Only the unmerged candidate is replaced and
-  backed up locally. Fresh CI/reviews and MCP human approval remain pending.
+  backed up locally. The latest review results are on PR #88; each follow-up
+  requires CI and reviews of its own revision plus independent human approval.
+
+## MCP recovery follow-up
+
+Submission lineage checks now verify only accessible project identity and exact
+parent/project membership. A deleted, unrelated parent asset or legacy parent
+settings cannot prevent an identical keyed request reaching the API's replay.
+The key, headers and submitted inputs remain unchanged. Missing, malformed or
+foreign parents and revoked project access still fail before a submission.
+The full `get-generation-continuation` read keeps its source-access checks and
+media projection. New generation inputs remain subject to API authorization.
+
+The focused HTTP regression covers response loss followed by deletion of an old
+parent source, legacy parent settings, unchanged replay inputs, rejected parent
+identities and access revoked before retry. The UI bytes and all retained
+resources are unchanged by this MCP runtime fix. Local verification passed all
+614 MCP tests, lint, typecheck, build, normal/burst memory checks, the upload
+browser test and all nine actual MCP resource reads. Full and production-only
+audits report zero vulnerabilities after updating the affected SDK, Hono and Vite
+lockfile resolutions within the existing declared ranges. CI and fresh reviews
+still apply to the pushed revision; none of these checks proves live ChatGPT
+acceptance.
 
 ## Earlier live acceptance
 

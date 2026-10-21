@@ -22,7 +22,7 @@
     "retainedPublishedFiles": "24 retained files in eight published releases verified unchanged",
     "mcpRuntimeTests": {
       "count": 607,
-      "evidence": "Previous passing suite applies to unchanged MCP runtime; this batch replaces the unmerged UI package and provenance/docs only."
+      "evidence": "Historical 607-test MCP runtime checkpoint before this UI packaging batch. The later MCP continuation-recovery change requires its own current-revision tests and CI; see docs/chatgpt-release.md and PR #88."
     },
     "backendIntegration": {
       "commit": "7513efccdba0d02fb9f9641fb37856a9245b96cb",
@@ -50,7 +50,7 @@
       ]
     },
     "liveAcceptance": "Historical private-plugin/provider completion, same-key retry, OAuth refresh, history playback and allowance evidence applies to named prior candidates. It is not exact-byte live acceptance of this bundle. No provider work or quota resets were performed in this batch.",
-    "remaining": "Fresh current-head CI/reviews and known independent MCP human approval. No merge/deploy.",
+    "remaining": "Current-revision MCP CI/reviews and independent human approval; exact-bundle real ChatGPT acceptance remains outstanding. API source has separately merged and reached production.",
     "preservedSafetyCheckpoint": {
       "commit": "7ad6544eed77e62db7455a0db4a41ad29951b758",
       "databaseTests": 159,
@@ -95,6 +95,22 @@
     "chatgptTypecheck": "passed",
     "fullAiFriendliness": "passed",
     "focusedLintAndFormatting": "passed",
-    "ciImageSizeFollowup": "Add explicit1920x1080 width/height to history original image, matching the existing image-stage convention; absolute full-stage object-contain styling remains unchanged. Full AI-friendliness and actual source/artifact image/video history browsers pass."
+    "ciImageSizeFollowup": "Add explicit1920x1080 width/height to history original image, matching the existing image-stage convention; absolute full-stage object-contain styling remains unchanged. Full AI-friendliness and actual source/artifact image/video history browsers pass.",
+    "mcpRecoveryFollowup": {
+      "behavior": "Submission lineage authorizes the accessible project and exact parent/project membership without reading unrelated parent media or settings. Full continuation reads retain source authorization. API new-admission input authorization and same-key payload/header identity are preserved.",
+      "regression": "Both deleted-parent-source replay and legacy-parent-settings cases failed before the fix and pass after it; foreign/missing/malformed parents and revoked access remain rejected.",
+      "mcpTests": 614,
+      "memoryChecks": "normal and burst passed",
+      "uploadBrowserTests": 1,
+      "packagedResources": 9,
+      "audits": "full and production-only: zero vulnerabilities; affected SDK/Hono/Vite lockfile versions updated within existing declared ranges",
+      "scope": "MCP runtime/docs/lockfile only; packaged UI HTML and manifest, release catalog and all 24 retained files remain byte-identical. Exact-bundle real ChatGPT acceptance remains outstanding."
+    }
+  },
+  "acceptedSource": {
+    "mergeCommit": "cf0b2d21805dc6877628d28e4f146acd02d37d7f",
+    "productionReleaseCommit": "3e76c86d9fe3595a0cb2ea58772b717384b99464",
+    "productionRun": "https://github.com/synchronicity-labs/sync-api-v2/actions/runs/39591510089",
+    "equivalence": "Recorded build source and accepted API squash merge differ only in CI/scripts/docs. apps/chatgpt and packages are byte-identical; original build commit/tree and UI bytes remain unchanged."
   }
 }

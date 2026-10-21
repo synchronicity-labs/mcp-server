@@ -167,11 +167,13 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This candidate includes the shared Studio frontend from sync-api-v2 PR #6822,
-with immutable bundle provenance and all previously packaged bundles retained. It has
-not been merged or deployed. Backend compatibility, current-head CI/reviews and
-the complete dev-plugin acceptance checklist remain release gates; see
-[frontend packaging](docs/chatgpt-release.md).
+This MCP candidate includes the shared Studio frontend from sync-api-v2 PR #6822,
+with immutable bundle provenance and all previously packaged bundles retained.
+The API changes are merged and reached production through release PR #7029 on
+October 21, 2026. MCP PR #88 remains unmerged; merging it triggers the MCP
+production deployment and selects the packaged frontend. Current-head CI/reviews,
+independent human approval and exact-bundle ChatGPT acceptance remain separate
+checks; see [frontend packaging](docs/chatgpt-release.md).
 
 ## Example Prompts
 
@@ -185,10 +187,11 @@ only to reconcile uncertain admission. Never synthesize again because saving the
 resulting audio asset failed. Project access and organization billing remain API
 authority; options expose only the fields needed for the speech quote.
 
-Release this capability with sync-api-v2 PR #6822: deploy the compatible backend
-first, then these MCP tools, then package the merged frontend while retaining
-published UI resources. Rescan publisher metadata and verify preview, attachment,
-reload recovery and playback in ChatGPT. This branch does not deploy or establish
+The compatible backend from sync-api-v2 PR #6822 is already in production.
+The packaged frontend's source is byte-identical to the accepted merge in
+ChatGPT and shared packages; all published UI resources remain retained.
+After the MCP release, rescan publisher metadata and verify preview, attachment,
+reload recovery and playback in ChatGPT. Local and package checks do not establish
 production acceptance; older APIs omit the speech tools and the UI fails closed.
 
 ### Embedded translation previews
@@ -562,8 +565,12 @@ admission must be reconciled from the voice list without automatically resending
 
 The embedded continuation adapters accept an optional `continuation` object on
 saved-asset lipsync, translation and dialogue generation: `{ workflow,
-parentGenerationId }`. They recheck the exact parent and source access through
-Studio's existing read endpoints, then forward the existing `x-sync-workflow`
+parentGenerationId }`. They recheck project access and the exact parent's project
+membership through Studio's existing read endpoints, then forward `x-sync-workflow`
 and `x-sync-parent-generation-id` headers to `/v2/generate`. Persist this context
 with the approved request and key. Older saved requests without it keep their
 original header set and idempotency fingerprint; do not add context on recovery.
+Submission checks do not read unrelated parent media or parse its settings, so
+deleting an old source does not block same-key reconciliation. The API still
+authorizes the inputs of a new submission. `get-generation-continuation` retains
+its full source-access checks before returning media or settings to the app.
