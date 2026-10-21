@@ -4,6 +4,7 @@ import { resolveChatgptRelease } from './chatgpt-release.js';
 export type SyncMcpConfig = {
   apiKey?: string;
   baseUrl: string;
+  oauthAuthorizationUrl?: string;
   transport: 'stdio' | 'http';
   port: number;
   chatgptApp?: {
@@ -44,6 +45,20 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
   return {
     apiKey: overrides.apiKey ?? process.env.SYNC_API_KEY,
     baseUrl: overrides.baseUrl ?? process.env.SYNC_BASE_URL ?? DEFAULT_CONFIG.baseUrl,
+    oauthAuthorizationUrl: z
+      .url()
+      .refine((value) => {
+        const url = new URL(value);
+        return (
+          (url.protocol === 'https:' || url.protocol === 'http:') &&
+          !url.username &&
+          !url.password &&
+          !url.search &&
+          !url.hash
+        );
+      }, 'OAuth authorization URL must use HTTP(S) without credentials, query or fragment')
+      .optional()
+      .parse(overrides.oauthAuthorizationUrl ?? process.env.SYNC_OAUTH_AUTHORIZATION_URL),
     transport: overrides.transport ?? DEFAULT_CONFIG.transport,
     port: overrides.port ?? DEFAULT_CONFIG.port,
     chatgptApp:

@@ -274,7 +274,7 @@ export async function startHttpServer(
   });
 
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
-  const oauthProvider = createOAuthProvider(config.baseUrl);
+  const oauthProvider = createOAuthProvider(config.baseUrl, config.oauthAuthorizationUrl);
 
   if (config.chatgptApp?.uploadStorageOrigin) {
     app.use(
@@ -410,7 +410,7 @@ export async function startHttpServer(
       }
       const credentials = mergeBasicClientCredentials(body, req.headers.authorization);
       controller.signal.throwIfAborted();
-      const upstream = await fetch(new URL(`/v2/oauth/${path}`, config.baseUrl), {
+      const upstream = await fetch(`${config.baseUrl.replace(/\/$/, '')}/v2/oauth/${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: encodeOAuthFormBody(credentials),

@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { resolveConfig } from '../config.js';
 import { startHttpServer } from '../http-server.js';
 import { closeFixtureServers } from './fixture-cleanup.js';
 
@@ -16,6 +17,8 @@ let dropUpstreamResponse = false;
 let userinfoStatus = 200;
 const calls: Array<{ path: string; body: URLSearchParams; authorization: string | undefined }> = [];
 const logs: string[] = [];
+const apiPrefix = '/api-proxy';
+const browserAuthorizationUrl = 'https://studio.fixture/api-proxy/v2/oauth/authorize';
 const events = ['SIGINT', 'SIGTERM', 'uncaughtExceptionMonitor', 'warning', 'exit'] as const;
 const emitter: EventEmitter = process;
 const previous = new Map<string, ReturnType<EventEmitter['listeners']>>();
@@ -39,13 +42,13 @@ beforeAll(async () => {
       return;
     }
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/v2/oauth/userinfo') {
+    if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
       res.statusCode = userinfoStatus;
       res.setHeader('Retry-After', '9');
       res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
       return;
     }
-    if (req.url?.startsWith('/v2/oauth/register/')) {
+    if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
       res.end(
         JSON.stringify({
           client_id: 'client',
@@ -72,13 +75,14 @@ beforeAll(async () => {
     hosted = listen.apply(this, args);
     return hosted;
   });
+  vi.stubEnv('SYNC_OAUTH_AUTHORIZATION_URL', browserAuthorizationUrl);
   await startHttpServer(
     { toolCount: 0, createServer: () => new McpServer({ name: 'auth-fixture', version: '1' }) },
-    {
-      baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
+    resolveConfig({
+      baseUrl: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}${apiPrefix}`,
       transport: 'http',
       port: 0,
-    },
+    }),
   );
   if (!hosted) throw new Error('Hosted fixture did not start');
   url = `http://127.0.0.1:${(hosted.address() as AddressInfo).port}`;
@@ -102,6 +106,7 @@ afterAll(async () => {
           if (!previous.get(event)?.includes(listener))
             emitter.removeListener(event, listener as (...args: unknown[]) => void);
       vi.restoreAllMocks();
+      vi.unstubAllEnvs();
     }
   }
 });
@@ -228,7 +233,7 @@ for (const path of ['/token', '/revoke']) {
     expect(res.status).toBe(200);
     expect(calls.length).toBe(before + 1);
     const sent = calls.at(-1);
-    expect(sent?.path).toBe(`/v2/oauth${path}`);
+    expect(sent?.path).toBe(`${apiPrefix}/v2/oauth${path}`);
     expect(sent?.body.get('client_id')).toBe('client');
     expect(sent?.body.get('client_secret')).toBe('fake-secret');
     expect(sent?.body.get('code_verifier')).toBe('fake-verifier');
@@ -246,6 +251,49 @@ for (const path of ['/token', '/revoke']) {
     }
   });
 }
+it('redirects browser authorization separately from server-side token and API traffic', async () => {
+  const parameters = new URLSearchParams({
+    response_type: 'code',
+    client_id: 'client',
+    redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+    code_challenge: 'n'.repeat(43),
+    code_challenge_method: 'S256',
+    state: 'fixture-state',
+  });
+  const response = await fetch(`${url}/authorize?${parameters}`, { redirect: 'manual' });
+  expect(response.status).toBe(302);
+  const location = new URL(response.headers.get('location') ?? '');
+  expect(`${location.origin}${location.pathname}`).toBe(browserAuthorizationUrl);
+  for (const [key, value] of parameters) expect(location.searchParams.get(key)).toBe(value);
+  expect(location.searchParams.has('client_secret')).toBe(false);
+
+  // A confidential refresh must still reach the API directly, with one exchange.
+  const before = calls.length;
+  const refreshed = await post(
+    '/token',
+    'grant_type=refresh_token&refresh_token=fixture-refresh',
+    basic(),
+  );
+  expect(refreshed.status).toBe(200);
+  expect(await refreshed.json()).toEqual({
+    access_token: 'fake-access-token',
+    token_type: 'Bearer',
+  });
+  expect(calls.slice(before).map((call) => call.path)).toEqual([`${apiPrefix}/v2/oauth/token`]);
+});
+it.each([
+  'javascript:alert(1)',
+  'https://user:password@studio.fixture/authorize',
+  'https://studio.fixture/authorize?client_secret=private',
+  'https://studio.fixture/authorize#fragment',
+])('rejects unsafe browser authorization configuration: %s', (authorizationUrl) => {
+  vi.stubEnv('SYNC_OAUTH_AUTHORIZATION_URL', authorizationUrl);
+  try {
+    expect(() => resolveConfig()).toThrow();
+  } finally {
+    vi.stubEnv('SYNC_OAUTH_AUTHORIZATION_URL', browserAuthorizationUrl);
+  }
+});
 it('advertises only the two supported confidential methods', async () => {
   const metadata = await (await fetch(`${url}/.well-known/oauth-authorization-server`)).json();
   expect(metadata).toMatchObject({

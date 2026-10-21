@@ -130,7 +130,10 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `generations_delete` | Delete a generation |
 | `assets_create-upload-url` | Get a presigned URL to upload a local file |
 | `assets_create` | Register a media URL as a reusable asset |
-| `assets_get-all` | List all assets in your organization |
+| `assets_get-all` / `assets_count` | List and count assets with authenticated project, creator, search and type filters |
+| `get-asset-creators` | Read creator labels for the connected organization without accepting an organization override |
+| `get-generation-continuation` | Read a generation’s source, public settings, segments and dialogue lineage through the existing Studio API after fresh project and source access checks; never starts work |
+| `get-playback-metadata` | Read user-authorized timing, dimensions and playback proxy metadata; API-key identity stays unsupported and missing metadata stays unknown |
 | `assets_get` | Get a specific asset by ID |
 | `assets_update` / `assets_delete` | Update or delete an asset |
 | `voices_get-voices` | List premade + cloned voices |
@@ -164,11 +167,55 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This adapter release does not package a new frontend. Build and package the
-merged ChatGPT frontend separately, retaining published UI bundles, then rescan
-publisher metadata and verify the actual ChatGPT flow before claiming acceptance.
+This MCP candidate includes the shared Studio frontend from sync-api-v2 PR #6822,
+with immutable bundle provenance and all previously packaged bundles retained.
+The API changes are merged and reached production through release PR #7029 on
+October 21, 2026. MCP PR #88 remains unmerged; merging it triggers the MCP
+production deployment and selects the packaged frontend. Current-head CI/reviews,
+independent human approval and exact-bundle ChatGPT acceptance remain separate
+checks; see [frontend packaging](docs/chatgpt-release.md).
 
 ## Example Prompts
+
+### Embedded speech previews
+
+When the API advertises durable `/v2/tts/jobs` creation and status endpoints,
+ChatGPT can check `get-speech-options`, create a confirmed `create-speech-preview`
+and read the same job with `get-speech-preview`. Creation requires a persisted
+UUID idempotency key and is potentially paid. Reuse the key and identical input
+only to reconcile uncertain admission. Never synthesize again because saving the
+resulting audio asset failed. Project access and organization billing remain API
+authority; options expose only the fields needed for the speech quote.
+
+The compatible backend from sync-api-v2 PR #6822 is already in production.
+The packaged frontend's source is byte-identical to the accepted merge in
+ChatGPT and shared packages; all published UI resources remain retained.
+After the MCP release, rescan publisher metadata and verify preview, attachment,
+reload recovery and playback in ChatGPT. Local and package checks do not establish
+production acceptance; older APIs omit the speech tools and the UI fails closed.
+
+### Embedded translation previews
+
+With saved-asset support deployed on the existing `/v2/integrations/dubbing` API,
+the server exposes
+`estimate-translation-preview`, `create-translation-preview` and
+`get-translation-preview`. These are separate from combined video dubbing.
+Creation requires a stable UUID key and an authorized saved audio asset; the API
+binds the key to immutable inputs before provider admission. A lost response
+reuses the same key or known job ID. `recoveryRequired` never permits a fresh
+paid request. Save/reconcile the resulting audio separately, then explicitly
+lip-sync that saved audio rather than submitting another combined dub.
+
+The API advertises versioned saved-source authorization and keyed recovery in
+its OpenAPI contract. Existing route presence alone does not enable these tools.
+Older APIs omit these tools; `get-translation-options.previewAvailable` reports
+that distinction. Deploy API support before MCP, package the matching shared
+Studio frontend, rescan, and verify the real ChatGPT workflow. Local fixtures
+establish neither production release nor provider output quality.
+
+`get-account-context` reads `/v2/oauth/account` for the connected account and
+organization. API keys retain a null signed-in account. The UI must not infer a
+personal asset scope or permissions from a client name or an API key's owner.
 
 ### Reusable voice cloning in ChatGPT
 
@@ -220,7 +267,8 @@ Options:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
-| `SYNC_BASE_URL` | API base URL | `https://api.sync.so` |
+| `SYNC_BASE_URL` | Direct API base URL for server-side calls, including token exchange | `https://api.sync.so` |
+| `SYNC_OAUTH_AUTHORIZATION_URL` | Optional browser-only authorization endpoint when Studio login uses another origin | `<SYNC_BASE_URL>/v2/oauth/authorize` |
 | `SYNC_CHATGPT_APP_RELEASES` | Release manifest selecting the current and retained UI bundles; set by the Docker image, no per-release Porter edit | `/app/chatgpt-dist/releases.json` in Docker; otherwise unset |
 | `SYNC_CHATGPT_APP_DIR` | Legacy/local frontend directory; packaged deployments select the release manifest instead | unset |
 | `SYNC_CHATGPT_APP_PREVIOUS_DIRS` | Legacy additional frontend directories; external mounts remain retained, packaged retention is managed by the release manifest | `[]` |
@@ -329,6 +377,14 @@ To test the HTTP transport (OAuth flow) locally:
    curl https://<ngrok-url>/health
    curl https://<ngrok-url>/.well-known/oauth-authorization-server
    ```
+When an isolated Studio login requires the same-origin web proxy, set
+`SYNC_OAUTH_AUTHORIZATION_URL` to its `/api-proxy/v2/oauth/authorize` URL, while
+keeping `SYNC_BASE_URL` on the direct isolated API listener. Only browser
+navigation uses the web proxy. Registration, code exchange, refresh, revocation,
+userinfo and tool calls use the direct API and retain existing deadlines,
+PKCE and confidential-client checks. The optional URL must use HTTP(S), with no
+credentials, query or fragment. Existing deployments need no new setting.
+
 6. Add `https://<ngrok-url>/mcp` as a custom connector in [Claude Web](https://claude.ai)
 
 ## Learn More
@@ -448,9 +504,12 @@ The resource requests camera and microphone access through MCP Apps
 `ui.permissions` for user-initiated recording. The host must delegate those
 permissions and the user must grant browser access. A declaration alone does
 not prove capture works in ChatGPT; verify with the paired recording UI release.
-Both CSP metadata formats include `blob:` for local recording review before upload.
-Configured network resource and connection origins still require exact HTTPS
-origins; the local scheme is not added to connection or frame permissions.
+Both CSP metadata formats include `blob:` for local recording review and
+`data:` for static assets embedded in the verified HTML, including Studio's font.
+These schemes apply to the host's static-resource policy, including scripts and
+styles; this is not a font-only exception. Configured network resource and
+connection origins still require exact HTTPS origins. Neither scheme is added
+to connection or frame permissions.
 
 Set the widget origin and the exact media origins for the target environment.
 Browser API connections are not allowed by this UI resource's CSP; backend
@@ -493,3 +552,25 @@ than blocking unrelated accounts or treating temporary errors as invalid tokens.
 `npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
 storage. Install Chromium with `npx playwright install chromium` first. This does not
 prove live authenticated storage delivery or authorize a production rollout.
+
+The hosted Studio asset library uses the existing authenticated asset update,
+delete and signed-download endpoints. These tools preserve upstream
+permission checks and write annotations; the UI requires an explicit asset
+rename or delete action and reconciles an interrupted response before offering
+another write. Connected account context includes only the displayed identity,
+organization and seat/voice-clone limits, with nullable identity fields preserved.
+Voice cloning accepts exactly one source form: a URL, saved asset, or sample URL
+list. A sample list creates one voice, not a voice per sample; uncertain clone
+admission must be reconciled from the voice list without automatically resending.
+
+The embedded continuation adapters accept an optional `continuation` object on
+saved-asset lipsync, translation and dialogue generation: `{ workflow,
+parentGenerationId }`. They recheck project access and the exact parent's project
+membership through Studio's existing read endpoints, then forward `x-sync-workflow`
+and `x-sync-parent-generation-id` headers to `/v2/generate`. Persist this context
+with the approved request and key. Older saved requests without it keep their
+original header set and idempotency fingerprint; do not add context on recovery.
+Submission checks do not read unrelated parent media or parse its settings, so
+deleting an old source does not block same-key reconciliation. The API still
+authorizes the inputs of a new submission. `get-generation-continuation` retains
+its full source-access checks before returning media or settings to the app.

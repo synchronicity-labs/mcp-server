@@ -1,0 +1,116 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb",
+  "tree": "ca4889de4b88e7cb20f56e5e4634cd0efbdf53a4",
+  "htmlSha256": "a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672",
+  "htmlBytes": 6198052,
+  "commands": [
+    "pnpm check-ai-friendliness",
+    "pnpm --filter @sync/chatgpt exec tsc --noEmit",
+    "pnpm exec oxlint apps/chatgpt/src/project-history-media.tsx",
+    "pnpm --filter @sync/chatgpt exec playwright test e2e/history-original-media.spec.ts --workers=1",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "chatgptSourceAndArtifactBrowserCases": 4,
+    "lintFormattingBoundaries": "passed",
+    "reactDoctorWeb": "Previous 7513efcc full scan:100/100,2403/2403 files,zero diagnostics; native web/shared files remain byte-identical in this two-attribute ChatGPT-only follow-up.",
+    "independentPreservationReview": "Clear final dialogue parity/preservation/test-audit/Ponytail review: face warning remains advisory, flag resolution and diarized-count refusal retained, shared loader status key and timeout cleanup unchanged. Previous error/audio/history/financial safeguards preserved.",
+    "regressionRedProof": "Previous 2e8fc6ca checkpoint: URL-only original-image history failed in both source/artifact before the shared image preview fix; video neighbors retained. Both incoming real-Toaster overlap/pending refusals failed under split module constructor identity, then passed through the canonical shared entry point. Existing Library access/late-team/processing recovery regressions remain preserved.",
+    "cleanCommittedRebuild": "matches tested bytes exactly",
+    "packagedResourceTransport": "passed all nine current/retained resources through actual MCP client/server handshake",
+    "retainedPublishedFiles": "24 retained files in eight published releases verified unchanged",
+    "mcpRuntimeTests": {
+      "count": 607,
+      "evidence": "Historical 607-test MCP runtime checkpoint before this UI packaging batch. The later MCP continuation-recovery change requires its own current-revision tests and CI; see docs/chatgpt-release.md and PR #88."
+    },
+    "backendIntegration": {
+      "commit": "7513efccdba0d02fb9f9641fb37856a9245b96cb",
+      "tree": "3a671fbfdaec094dd808cc05f334b27ac7ffe65d",
+      "devCommit": "dcc90dcd540816a1bb19ab6760003e7fda74412c",
+      "behavior": "Integrates honest multi-speaker refusal while retaining overlapping-audio repair and source/quote/account/financial recovery guards. Native analyzer faces remain a warning only under a resolved disabled flag; diarized count alone refuses. Native warning is hosted in the actual shared loader via an optional presentation slot; both hosts retain the shared timing/cleanup and checking-transcript stage."
+    },
+    "historicalFinancialFollowup": {
+      "commit": "9a1ad8b3f71dac745e76ab354f16aa805e84d7be",
+      "tree": "0fd47f9d77537fd0246ff5de4f07b7d2352b6c35",
+      "behavior": "Unstarted abandoned standalone claims expire with fenced admission/provider-start writes and idempotent credit-hold cleanup. Standalone hold reservation and durable attachment commit atomically under the claim row lock, including enterprise pilot funds. Possibly-started provider work remains protected. No wire contract or UI bytes changed.",
+      "databaseIntegrationTests": 149,
+      "webConfigurationAndQuoteTests": 24,
+      "nativeBrowserCases": 24,
+      "typecheckTasks": 28,
+      "lintFormattingBoundaries": "passed",
+      "independentPreservationReview": "passed final source, financial atomicity, lock ordering, TTS compatibility and regression value; no test-only production hooks",
+      "databaseIntegrationFiles": 6,
+      "regressionRedProof": "Actual pilot ledger tests failed before repair for a late reservation after claim expiry, failed hold attachment without cleanup, and competing expiry discarding admitted work. All pass after repair.",
+      "commands": [
+        "pnpm --filter @sync/api exec vitest run --config ./vitest.integration.config.ts src/modules/dubbing/dubbing-jobs.integration.spec.ts src/modules/dubbing/dubbing.controller.integration.spec.ts src/modules/dubbing/translation-cost.integration.spec.ts src/modules/billing/enterprise-pilot-enforcement.integration.spec.ts src/modules/billing-v3/pilot-credit-ledger.integration.test.ts src/modules/tts/tts-jobs.integration.spec.ts --maxWorkers=2",
+        "pnpm typecheck",
+        "pnpm lint",
+        "pnpm check-boundaries"
+      ]
+    },
+    "liveAcceptance": "Historical private-plugin/provider completion, same-key retry, OAuth refresh, history playback and allowance evidence applies to named prior candidates. It is not exact-byte live acceptance of this bundle. No provider work or quota resets were performed in this batch.",
+    "remaining": "Current-revision MCP CI/reviews and independent human approval; exact-bundle real ChatGPT acceptance remains outstanding. API source has separately merged and reached production.",
+    "preservedSafetyCheckpoint": {
+      "commit": "7ad6544eed77e62db7455a0db4a41ad29951b758",
+      "databaseTests": 159,
+      "databaseSuites": 7,
+      "commonTests": 526,
+      "nativeLifecycleAndQuoteTests": 126,
+      "integratedPresetCases": 2,
+      "nativeBrowserCases": 71,
+      "sourceAndArtifactBrowserCases": 40,
+      "scope": "Passed on prior integration. Protected financial/session/media owners are preserved in the latest integration; new Library seed accesses and import interactions are separately verified below."
+    },
+    "previousSixthCheckpoint": {
+      "commit": "c3c1b07d971778e7da614438e633e17278fe881d",
+      "nativeTests": 215,
+      "uploaderTests": 28,
+      "assetHistoryRealDbTests": 3,
+      "dialogueCutTests": 35,
+      "nativeBrowserCases": 14,
+      "pluginSourceAndArtifactCases": 40,
+      "scope": "Historical passing proof on preserved owners; new integrated overlap and history changes separately verified above."
+    },
+    "previousSeventhCheckpoint": {
+      "commit": "2e8fc6caaffeb30fc814c33a49443651b3732456",
+      "nativeTests": 493,
+      "nativeFiles": 13,
+      "commonTests": 526,
+      "nativeBrowserCases": 6,
+      "pluginHistoryBrowserCases": 14,
+      "scope": "Passed previous integration; error, audio, history and recovery owners remain unchanged in this dialogue-only integration."
+    },
+    "previousEighthCheckpoint": {
+      "commit": "7513efccdba0d02fb9f9641fb37856a9245b96cb",
+      "tree": "3a671fbfdaec094dd808cc05f334b27ac7ffe65d",
+      "nativeDialogueTests": 272,
+      "nativeDialogueFiles": 7,
+      "chatgptDialogueBrowserCases": 14,
+      "typeBuildTasks": 34,
+      "lintFormattingBoundaries": "passed",
+      "reactDoctorWeb": "100/100,2403/2403 files,zero diagnostics",
+      "scope": "Current follow-up changes only two HTML image-size attributes in the ChatGPT history preview. All native web/shared owners are unchanged."
+    },
+    "chatgptTypecheck": "passed",
+    "fullAiFriendliness": "passed",
+    "focusedLintAndFormatting": "passed",
+    "ciImageSizeFollowup": "Add explicit1920x1080 width/height to history original image, matching the existing image-stage convention; absolute full-stage object-contain styling remains unchanged. Full AI-friendliness and actual source/artifact image/video history browsers pass.",
+    "mcpRecoveryFollowup": {
+      "behavior": "Submission lineage authorizes the accessible project and exact parent/project membership without reading unrelated parent media or settings. Full continuation reads retain source authorization. API new-admission input authorization and same-key payload/header identity are preserved.",
+      "regression": "Both deleted-parent-source replay and legacy-parent-settings cases failed before the fix and pass after it; foreign/missing/malformed parents and revoked access remain rejected.",
+      "mcpTests": 614,
+      "memoryChecks": "normal and burst passed",
+      "uploadBrowserTests": 1,
+      "packagedResources": 9,
+      "audits": "full and production-only: zero vulnerabilities; affected SDK/Hono/Vite lockfile versions updated within existing declared ranges",
+      "scope": "MCP runtime/docs/lockfile only; packaged UI HTML and manifest, release catalog and all 24 retained files remain byte-identical. Exact-bundle real ChatGPT acceptance remains outstanding."
+    }
+  },
+  "acceptedSource": {
+    "mergeCommit": "cf0b2d21805dc6877628d28e4f146acd02d37d7f",
+    "productionReleaseCommit": "3e76c86d9fe3595a0cb2ea58772b717384b99464",
+    "productionRun": "https://github.com/synchronicity-labs/sync-api-v2/actions/runs/39591510089",
+    "equivalence": "Recorded build source and accepted API squash merge differ only in CI/scripts/docs. apps/chatgpt and packages are byte-identical; original build commit/tree and UI bytes remain unchanged."
+  }
+}

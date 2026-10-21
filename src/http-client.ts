@@ -2,16 +2,7 @@ import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
 
-/**
- * Flagship assistant surfaces are first-class `x-sync-source` values in Sync
- * analytics; every other MCP client rides the `mcp:<client>` namespace (which
- * collapses to `mcp` in reporting). Keys are the lowercased `clientInfo.name`
- * each host reports in the MCP `initialize` handshake — verify the exact string
- * against a real connection when onboarding a new host (see the publishing
- * runbook) and add it here.
- */
-// Keep openai-mcp namespaced: the deployed API selects bearer auth for mcp/mcp:*
-// sources. Its ChatGPT presentation profile is independent of this transport header.
+/** API-key analytics labels; bearer credentials use the API's MCP source namespace. */
 const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
   chatgpt: 'chatgpt',
   openai: 'chatgpt',
@@ -78,7 +69,7 @@ export function createHttpClient(
       );
       try {
         signal.throwIfAborted();
-        const url = new URL(path, baseUrl);
+        const url = new URL(path.replace(/^\//, ''), `${baseUrl.replace(/\/$/, '')}/`);
         if (options.query) {
           for (const [key, value] of Object.entries(options.query)) {
             if (value !== undefined && value !== '') {
@@ -94,7 +85,11 @@ export function createHttpClient(
           : { ...staticAuthHeaders };
 
         const clientName = getClientName() ?? stdioClientName?.();
-        const syncSource = resolveSyncSource(clientName);
+        const syncSource = authHeaders.Authorization?.startsWith('Bearer ')
+          ? clientName
+            ? `mcp:${clientName}`
+            : 'mcp'
+          : resolveSyncSource(clientName);
 
         const headers: Record<string, string> = {
           ...authHeaders,

@@ -9,6 +9,7 @@ import { type ClientProfile, resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import { createUploadSourceDispatcher, validatedUploadSourceUrl } from '../upload-source.js';
+import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
@@ -488,6 +489,7 @@ export function createAppTools(
         'The model defaults to sync-3. Supply projectId to use an existing project, or projectName to find or create one. When neither is supplied, an integration-specific default project is used. ' +
         'This starts an asynchronous generation and returns its id and status.',
       inputSchema: {
+        continuation: generationContextSchema.optional(),
         videoUrl: z
           .string()
           .describe(
@@ -638,6 +640,10 @@ export function createAppTools(
         };
 
         const options = modelOptionsSchema.optional().parse(args.options);
+        if (args.continuation !== undefined) {
+          generationContextSchema.parse(args.continuation);
+          z.uuid().parse(requestedProjectId);
+        }
         if (typeof options?.active_speaker_detection === 'boolean') {
           options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
         }
@@ -705,6 +711,13 @@ export function createAppTools(
           });
         }
 
+        const lineage = await generationContextHeaders(
+          httpClient,
+          args,
+          ['lipsync', 'image_to_video', 'translate_and_dub'],
+          signal,
+        );
+
         // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
         const driver = hasScript
           ? {
@@ -727,7 +740,14 @@ export function createAppTools(
         signal?.throwIfAborted();
         return httpClient.request('post', '/v2/generate', {
           signal,
-          ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+          ...(idempotencyKey || Object.keys(lineage).length
+            ? {
+                headers: {
+                  ...lineage,
+                  ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+                },
+              }
+            : {}),
           body: {
             model: resolvedModel,
             ...(options === undefined ? {} : { options }),

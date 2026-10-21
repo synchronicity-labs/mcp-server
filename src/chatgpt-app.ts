@@ -49,9 +49,9 @@ export async function loadChatgptApp(
 ): Promise<ChatgptApp | undefined> {
   if (!config) return undefined;
   const { directory, domain, resourceDomains, connectDomains } = configSchema.parse(config);
-  // Recording review uses a local object URL before the user accepts/upload the take.
-  // This is a resource source only; backend connection origins remain exact HTTPS.
-  const resourceSources = [...resourceDomains, 'blob:'];
+  // Recording previews use object URLs; the verified bundle embeds Studio's font.
+  // Resource schemes do not expand backend connection origins.
+  const resourceSources = [...resourceDomains, 'blob:', 'data:'];
   const manifest = manifestSchema.parse(
     JSON.parse((await readBounded(join(directory, 'manifest.json'), 4096)).toString('utf8')),
   );

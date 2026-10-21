@@ -7,31 +7,98 @@ Existing production origins and OAuth settings are kept.
 
 ## Included release candidate
 
-- Source: [frontend CI checkout 304093ed83](https://github.com/synchronicity-labs/sync-api-v2/commit/304093ed83e1b5eb1090968f8d9af9d7a8e17944).
-  Its Git tree `5061f9ee55b8af1d38c9c5dc6bb9a9e39f6bb688` is identical to
-  merged main release `812ec674f8b4e896812bca9d1924f93e45d58941` (PR #6722).
-- HTML SHA256: `670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
-- Container directory: `/app/chatgpt-dist/670c3e5456b066ac7c184fde21dfe5c28fce284bae155992e38f0b8c61fed5b7`.
-- Uses `create-lipsync-from-assets` for embedded generation, avoiding ChatGPT's
-  rejection of app calls to tools with file parameters (frontend PR #6723).
-- Explains definite pre-submission host refusals, preserves media and unlocks
-  inputs. Uncertain submissions retain their request identity and protection
-  against duplicate jobs; status recovery shows "Checking generation...".
-- Includes partial host-state restoration from PR #6657.
-- Retains all four earlier bundles unchanged for published and cached clients.
+- Source: [PR #6822, commit 48247d3f](https://github.com/synchronicity-labs/sync-api-v2/commit/48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb).
+- Accepted API squash merge: `cf0b2d21805dc6877628d28e4f146acd02d37d7f`.
+  Comparing that merge with the recorded build source changes only CI, scripts
+  and docs; `apps/chatgpt` and `packages` are byte-identical. The source commit
+  remains the actual build provenance and the UI needs no rebuild for the squash.
+- The API changes reached production in [release PR #7029](https://github.com/synchronicity-labs/sync-api-v2/pull/7029),
+  commit `3e76c86d9fe3595a0cb2ea58772b717384b99464`.
+  [Production run 39591510089](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/39591510089)
+  completed successfully on October 21, 2026 at 11:36 UTC. MCP PR #88 is still
+  unmerged; merging it triggers its production deployment.
+- HTML SHA256: `a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672`; HTML size: 6,198,052 bytes.
+- The current follow-up supplies explicit image dimensions in history, matching
+  the existing image-stage convention. Absolute full-stage containment and
+  original image/video selection remain unchanged. Full AI-friendliness,
+  ChatGPT typechecking, focused lint/formatting and four source/artifact browser
+  cases pass. Clean committed rebuild matches the tested bytes exactly.
+- The preceding `7513efcc` integration includes dev `dcc90dcd5` and passes 272
+  native dialogue tests, 14 dialogue source/artifact browser cases, all 34
+  type/build tasks and full lint/format/boundaries. Its full pinned native React
+  scan passes 100/100 with all 2,403 files analyzed and zero diagnostics. Native
+  web and shared owners are byte-identical in this ChatGPT-only attribute change.
+- Native multi-face analysis remains advisory; diarized speaker count alone
+  refuses unsupported dialogue. Shared loader timing and cleanup, the native
+  warning slot, overlap repair, quote/source/account/recovery fences and atomic
+  credit/pilot reservations remain preserved.
+- The earlier `2e8fc6ca` checkpoint passed 493 native tests, 526 common tests,
+  six native browser cases and 14 history/navigation source/artifact cases.
+  Its real-Toaster and image-history regressions demonstrated RED then GREEN.
+  Earlier database/provider proofs remain separately named historical evidence,
+  not rerun counts or exact-byte live acceptance of this candidate.
+- At the image-dimension packaging checkpoint, MCP runtime was unchanged from
+  the earlier 607-test runtime checkpoint. The recovery follow-up below changes
+  MCP runtime and must pass the current revision's tests and CI. All nine
+  actual MCP resource reads pass, and all 24 files in eight retained published
+  releases remain byte-identical. Only the unmerged candidate is replaced and
+  backed up locally. The latest review results are on PR #88; each follow-up
+  requires CI and reviews of its own revision plus independent human approval.
 
-The bytes come unchanged from [frontend CI run 38413950994](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/38413950994),
-which used a frozen lockfile and passed 250 source/artifact browser tests (four
-skipped). The checkout, tree, artifact ID, merged commit, and build commands are
-recorded in `release.json`. This is the tested CI artifact, not a local rebuild.
+## MCP recovery follow-up
 
-MCP PR #84 already provides the required companion tool; the publisher has
-registered it as Live. Packaging and fixture tests do not establish real
-ChatGPT generation success. Follow the [release acceptance checklist](../plans/multi-pr/frontend-recovery-release.md)
-after deployment. Paid generation requires explicit approval. This bundle
-update does not require publishing plugin package 2.0.2.
+Submission lineage checks now verify only accessible project identity and exact
+parent/project membership. A deleted, unrelated parent asset or legacy parent
+settings cannot prevent an identical keyed request reaching the API's replay.
+The key, headers and submitted inputs remain unchanged. Missing, malformed or
+foreign parents and revoked project access still fail before a submission.
+The full `get-generation-continuation` read keeps its source-access checks and
+media projection. New generation inputs remain subject to API authorization.
 
-### Initial project data
+The focused HTTP regression covers response loss followed by deletion of an old
+parent source, legacy parent settings, unchanged replay inputs, rejected parent
+identities and access revoked before retry. The UI bytes and all retained
+resources are unchanged by this MCP runtime fix. Local verification passed all
+614 MCP tests, lint, typecheck, build, normal/burst memory checks, the upload
+browser test and all nine actual MCP resource reads. Full and production-only
+audits report zero vulnerabilities after updating the affected SDK, Hono and Vite
+lockfile resolutions within the existing declared ranges. CI and fresh reviews
+still apply to the pushed revision; none of these checks proves live ChatGPT
+acceptance.
+
+## Earlier live acceptance
+
+The following records apply to their named candidates. They are historical
+acceptance, not exact-byte live acceptance of the current bundle.
+
+- The existing private test plugin was refreshed to the prior `7cc55ade` bytes.
+  It refuses exhausted free allowance and disables a fresh Sync submission while
+  preserving the accepted script, Bella voice and saved audio. Completed history
+  reopens and plays the real 6.32-second output without media error. The edited
+  dialogue preview also survives reload and plays all 11.35 seconds without
+  another synthesis. Final reads leave three completed generations, three speech
+  jobs, one dialogue preview job and zero credit transactions.
+- Earlier in the same acceptance session, private candidate `94c5fed2` verified
+  a real provider generation through completion, a definite 503 followed by an
+  explicit 201 retry with identical key/body fingerprints, and automatic OAuth
+  refresh followed by protected reads. The documented local completion bridge
+  forwarded the provider's real terminal status. Only the isolated fixture's
+  protected-result URL origin was repaired to the test tunnel; its path, token,
+  output, status and billing were retained. Both native Studio and the plugin
+  played that same output. These admission/refresh checks are distinct from
+  the final `7cc55ade` read/playback/allowance checks above.
+- Prior `17a21ffb` evidence covers its own continuation/translation browser and
+  private-plugin states; it is not exact-byte acceptance of this candidate.
+  Only the latest unmerged candidate is replaced. All 24 files across the eight
+  published retained releases remain unchanged, and private rollback files remain
+  available. Refresh the existing private connection in place.
+
+Current-head CI/reviews and MCP human approval remain merge gates. No purchase,
+quota reset, merge, publish or deployment was performed. Fixture browser checks,
+private-plugin reads and prior provider acceptance are distinct evidence; they
+are not a claim that every paid workflow or production configuration was tested.
+
+## Initial project data
 
 `open-sync-app` reads the canonical first project page using the same generated
 `projects_get-all` handler and request authentication as normal browsing. It
@@ -48,7 +115,7 @@ round trip; it does not change ChatGPT's time to dispatch the opening tool.
 `deploy/chatgpt/<HTML SHA256>/` contains deterministic gzip-compressed HTML,
 the frontend's original manifest, and source/build provenance in `release.json`.
 Compression keeps the generated artifact small; the manifest hashes the
-uncompressed HTML. The candidate package is identical to the verified CI artifact.
+uncompressed HTML. The manifest verifies the exact uncompressed bytes recorded in each release.
 
 `npm run build && npm run package:chatgpt` expands and validates every included
 release in `chatgpt-dist/`. Docker copies only that verified output to its final
@@ -132,3 +199,17 @@ move the newer hash into `previous`, and deploy through the normal workflow.
 No Porter variable change is needed. If rolling back the entire image, ensure
 that image also contains every UI resource still referenced by published or
 cached tool metadata; an older image may not contain the newest bundle.
+
+
+## Recovery behavior
+
+Explicit `IDEMPOTENCY_UNAVAILABLE` refusals use service-availability copy and
+Retry original request. Unknown outcomes keep recovery controls without assuming
+that a connection interruption occurred. Keys, frozen inputs and locks remain
+unchanged. A timeout during retry returns to unknown-outcome recovery.
+
+Translation into another language restores original audio only for matching
+project, visual and prepared-audio lineage; otherwise it retains submitted audio.
+Explicit cross-workflow switches clear unrelated editor state. The isolated
+private-plugin same-key retry described above is separate from historical
+Chrome-local manual tests and source/artifact recovery fixtures.

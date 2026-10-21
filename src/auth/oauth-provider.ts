@@ -34,7 +34,10 @@ function asConfidentialClient(client: OAuthClientInformationFull): OAuthClientIn
  * the API (RFC 7592) — otherwise every redeploy would invalidate every
  * already-connected client with `invalid_client`.
  */
-export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvider & {
+export function createOAuthProvider(
+  apiBaseUrl: string,
+  authorizationUrl = `${apiBaseUrl}/v2/oauth/authorize`,
+): ProxyOAuthServerProvider & {
   verifyAccessToken(token: string, signal?: AbortSignal): Promise<AuthInfo>;
   clearVerificationCache(): void;
 } {
@@ -86,7 +89,7 @@ export function createOAuthProvider(apiBaseUrl: string): ProxyOAuthServerProvide
 
   const provider = new ProxyOAuthServerProvider({
     endpoints: {
-      authorizationUrl: `${apiBaseUrl}/v2/oauth/authorize`,
+      authorizationUrl,
       tokenUrl: `${apiBaseUrl}/v2/oauth/token`,
       revocationUrl: `${apiBaseUrl}/v2/oauth/revoke`,
       registrationUrl,
