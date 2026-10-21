@@ -100,7 +100,7 @@ export function createTranslationPreviewTools(
       name: 'estimate-translation-preview',
       title: 'Estimate translated audio preview',
       description:
-        'Read the server quote for translating saved audio in an accessible project. Does not translate or create a video. If preview.quotedDurationSeconds is shorter than preview.sourceDurationSeconds, offer the bounded preview or an upgrade. Before admission, save a new trimmed audio asset and quote that asset; this estimate never trims the original. External provider charges must be disclosed separately.',
+        'Read the server quote for translating saved audio in an accessible project. Does not translate, create a video, modify saved audio, or incur provider charges. If preview.quotedDurationSeconds is shorter than preview.sourceDurationSeconds, explain the duration limit and offer the bounded preview. Before admission, save a new trimmed audio asset and quote that asset; this estimate never trims the original. External provider charges must be disclosed separately.',
       inputSchema: source.shape,
       outputSchema: quoteSchema.shape,
       annotations: {
