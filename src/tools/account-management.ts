@@ -123,7 +123,8 @@ export function createAccountManagementTools(http: HttpClient): McpToolDefinitio
             signal: context?.signal,
           }),
         );
-        if (result.id !== projectId) throw new Error('Could not verify the renamed project.');
+        if (result.id.toLowerCase() !== projectId.toLowerCase())
+          throw new Error('Could not verify the renamed project.');
         return result;
       },
     },

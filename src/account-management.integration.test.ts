@@ -7,7 +7,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
 
-const projectId = '00000000-0000-4000-8000-000000000001';
+const projectId = '00000000-0000-4000-8000-000000000abc';
 const writes: { token: string | undefined; body: unknown }[] = [];
 const upstream = createServer(async (req, res) => {
   res.setHeader('content-type', 'application/json');
@@ -27,7 +27,7 @@ const upstream = createServer(async (req, res) => {
     );
     return;
   }
-  if (req.url === `/v2/projects/${projectId}` && req.method === 'PATCH') {
+  if (req.url?.toLowerCase() === `/v2/projects/${projectId}` && req.method === 'PATCH') {
     let body = '';
     for await (const chunk of req) body += chunk;
     writes.push({ token: req.headers.authorization, body: JSON.parse(body) });
@@ -96,11 +96,19 @@ function call(token: string, name: string, args: Record<string, unknown> = {}) {
   return runWithAuth(token, 'openai-mcp', () => client.callTool({ name, arguments: args }));
 }
 
-it('renames only the requested project through the authenticated patch boundary', async () => {
-  const result = await call('member', 'rename-project', { projectId, name: '  Launch video  ' });
+it.each([
+  projectId,
+  projectId.toUpperCase(),
+])('renames only the requested project %s through the authenticated patch boundary', async (requestedId) => {
+  const before = writes.length;
+  const result = await call('member', 'rename-project', {
+    projectId: requestedId,
+    name: '  Launch video  ',
+  });
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toEqual({ id: projectId, name: 'Launch video' });
-  expect(writes).toEqual([{ token: 'Bearer member', body: { name: 'Launch video' } }]);
+  expect(writes).toHaveLength(before + 1);
+  expect(writes.at(-1)).toEqual({ token: 'Bearer member', body: { name: 'Launch video' } });
   expect(JSON.stringify(result)).not.toContain('secret');
 });
 

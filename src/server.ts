@@ -167,6 +167,19 @@ const toolErrorOutputSchema = z.toJSONSchema(
   }),
 );
 
+// The SDK wraps raw shapes on registration. Reuse immutable validators across
+// sessions while keeping handlers, authentication and client profiles local.
+const toolSchemas = new WeakMap<Record<string, z.ZodType>, z.ZodObject>();
+
+function toolSchema(shape: Record<string, z.ZodType>): z.ZodObject {
+  let schema = toolSchemas.get(shape);
+  if (!schema) {
+    schema = z.object(shape);
+    toolSchemas.set(shape, schema);
+  }
+  return schema;
+}
+
 export function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
     server.registerTool(
@@ -174,8 +187,8 @@ export function registerTools(server: McpServer, tools: McpToolDefinition[]): vo
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: tool.inputSchema,
-        outputSchema: tool.outputSchema,
+        inputSchema: toolSchema(tool.inputSchema),
+        outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
