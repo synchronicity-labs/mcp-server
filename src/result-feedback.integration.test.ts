@@ -40,6 +40,8 @@ const upstream = createServer(async (req, res) => {
       }),
     );
   if (req.url === `/v2/generations/${id}/feedback`) {
+    if (req.method === 'GET' && req.headers.authorization === 'Bearer new-member')
+      return void res.end('null');
     if (req.method === 'POST') {
       let body = '';
       for await (const chunk of req) body += chunk;
@@ -108,6 +110,11 @@ it('reads accessible feedback and forwards one canonical ChatGPT vote without in
     },
   ]);
   expect(JSON.stringify(write)).not.toContain('must-not-leak');
+});
+it('reads an unvoted result as an empty feedback state', async () => {
+  const response = await call('new-member', 'get-generation-feedback');
+  expect(response.isError).not.toBe(true);
+  expect(response.structuredContent).toEqual({ feedback: null });
 });
 it.each([
   'api-key',
