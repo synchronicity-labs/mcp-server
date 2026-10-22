@@ -11,6 +11,7 @@ const accountContext = z.object({
     voiceClone: z.number().finite().nonnegative(),
   }),
   organization: z.object({ id: z.uuid(), name: z.string().nullable(), role: z.string() }),
+  capabilities: z.object({ projectRenaming: z.literal(true) }),
 });
 
 export function createAccountContextTool(http: HttpClient): McpToolDefinition {
@@ -38,6 +39,7 @@ export function createAccountContextTool(http: HttpClient): McpToolDefinition {
           })
           .parse(identity),
         limits,
+        capabilities: { projectRenaming: true },
       });
     },
   };
