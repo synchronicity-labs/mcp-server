@@ -3,7 +3,6 @@ import type { HttpClient } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
 
 const accountContext = z.object({
-  capabilities: z.object({ studioDraftSync: z.boolean() }).optional(),
   account: z
     .object({ id: z.uuid(), email: z.string().nullable(), name: z.string().nullable() })
     .nullable(),
@@ -12,6 +11,10 @@ const accountContext = z.object({
     voiceClone: z.number().finite().nonnegative(),
   }),
   organization: z.object({ id: z.uuid(), name: z.string().nullable(), role: z.string() }),
+  capabilities: z.object({
+    projectRenaming: z.literal(true),
+    studioDraftSync: z.literal(true).optional(),
+  }),
 });
 
 export function createAccountContextTool(
@@ -42,7 +45,10 @@ export function createAccountContextTool(
           })
           .parse(identity),
         limits,
-        ...(studioDraftSync ? { capabilities: { studioDraftSync: true } } : {}),
+        capabilities: {
+          projectRenaming: true,
+          ...(studioDraftSync ? { studioDraftSync: true } : {}),
+        },
       });
     },
   };

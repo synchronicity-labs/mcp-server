@@ -22,6 +22,7 @@ import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAccountContextTool } from './tools/account-context.js';
+import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
@@ -59,6 +60,8 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'update-studio-draft',
   'save-studio-draft',
   'ack-studio-draft',
+  'get-account-usage',
+  'rename-project',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -107,6 +110,8 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'update-studio-draft',
   'save-studio-draft',
   'ack-studio-draft',
+  'get-account-usage',
+  'rename-project',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -416,6 +421,7 @@ function createTools(
     createUploadWidgetTool(),
     createAccountContextTool(httpClient, studioDraftOperations(operations).length > 0),
     ...createStudioDraftTools(operations, httpClient),
+    ...createAccountManagementTools(httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),

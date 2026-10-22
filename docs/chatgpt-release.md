@@ -17,8 +17,14 @@ project and draft. Chat updates remain pending until Studio validates the media,
 saves recovery state and acknowledges the exact revision. Conflicting local
 changes require a choice in Studio. No draft tool starts provider work.
 
+This companion is stacked on MCP #91, preserving its account usage and project
+renaming tools. Its unmerged UI package is superseded by this candidate, which
+includes the already merged frontend #7098. The deployed #93 memory fix is retained.
+The archived October 2 resource is also restored to the active catalog; no
+published resource is retired by this change.
+
 Release order: deploy the companion API/frontend PR and its additive migrations,
-then deploy this MCP PR. Discovery advertises synchronization only when all three
+then deploy the reviewed MCP #91 release branch with this companion included. Discovery advertises synchronization only when all three
 versioned API routes are available. Older servers keep local Studio editing.
 After deployment, rescan the ChatGPT connection and use a fresh Studio widget.
 No production rollout or paid generation has been performed for this candidate.
