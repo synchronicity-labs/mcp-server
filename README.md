@@ -194,8 +194,9 @@ resulting audio asset failed. Project access and organization billing remain API
 authority; options expose only the fields needed for the speech quote.
 
 The compatible backend from sync-api-v2 PR #6822 is already in production.
-The packaged frontend's source is byte-identical to the accepted merge in
-ChatGPT and shared packages; all published UI resources remain retained.
+The packaged frontend comes from the merged source recorded in its release
+provenance. The active catalog retains eight previous UIs; the retired October 2
+resource is archived rather than served, as detailed in the release guide.
 After the MCP release, rescan publisher metadata and verify preview, attachment,
 reload recovery and playback in ChatGPT. Local and package checks do not establish
 production acceptance; older APIs omit the speech tools and the UI fails closed.
