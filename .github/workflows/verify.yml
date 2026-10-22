@@ -10,6 +10,9 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --ipc=host
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +35,6 @@ jobs:
       - run: npm run verify:chatgpt-package
       - run: npm test -- --no-file-parallelism
       - run: npm test
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm audit
       - run: npm audit --omit=dev
