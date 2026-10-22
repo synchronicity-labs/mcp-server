@@ -2,7 +2,7 @@ name: Verify release candidate
 
 on:
   pull_request:
-    branches: [main, 'codex/mcp-release-*', 'codex/chatgpt-*', 'noah/craft-7246-complete-chatgpt-project-naming-and-account-usage-controls']
+    branches: [main, 'codex/mcp-release-*', 'codex/chatgpt-*']
 
 permissions:
   contents: read

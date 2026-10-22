@@ -9,7 +9,7 @@ Existing production origins and OAuth settings are kept.
 
 - Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `6c5283dd1ba19b54ea0788804fb0ef61ebdb2858`.
 - UI SHA256: `03eafc45fa1140e740539fb89226b081f7302eff9318dec0f937ce942106e2e9` (6215252 bytes).
-- All 27 files in the nine deployed/retained resources are unchanged.
+- All 27 files in the nine resources published by merged MCP #91 are unchanged.
 
 This candidate adds authenticated read/update draft tools and app-only save and
 acknowledgement tools. The API stores revisions per account, organization,
@@ -17,24 +17,28 @@ project and draft. Chat updates remain pending until Studio validates the media,
 saves recovery state and acknowledges the exact revision. Conflicting local
 changes require a choice in Studio. No draft tool starts provider work.
 
-This companion is stacked on MCP #91, preserving its account usage and project
-renaming tools. Its unmerged UI package is superseded by this candidate, which
-includes the already merged frontend #7098. The deployed #93 memory fix is retained.
-The archived October 2 resource is also restored to the active catalog; no
-published resource is retired by this change.
+MCP #91 merged externally as `8099c271c04c0c6671557c02c4fc169d1abef286` on
+October 22 at 20:40 UTC. This companion now targets main and preserves its account
+usage/project-renaming tools and published frontend resource `55adb4a8`. The
+October 2 resource remains archived exactly as approved in #91. This change
+introduces no further retirement. The deployed #93 memory fix is retained.
 
 Release order: deploy the companion API/frontend PR and its additive migrations,
-then deploy the reviewed MCP #91 release branch with this companion included. Discovery advertises synchronization only when all three
-versioned API routes are available. Older servers keep local Studio editing.
+then deploy this reviewed MCP companion. Discovery advertises synchronization
+only when all three versioned API routes are available. Older servers keep local Studio editing.
 After deployment, rescan the ChatGPT connection and use a fresh Studio widget.
 No production rollout or paid generation has been performed for this candidate.
 
 The retention ceiling increases by one previous bundle to retain the deployed
-current UI as well as all eight older resources when the new UI is packaged.
+current UI as well as all eight resources retained by #91 when the new UI is
+packaged.
 Existing resource bytes remain unchanged. The total remains bounded at ten,
 and the session memory guard, pressure GC and shared validators are unchanged.
 
-## Earlier included release candidate
+The dependency override requires `ip-address` 10.7.4 or later, and the lockfile
+selects 10.7.4 to address [GHSA-rxp7-6hxx-x8q5](https://github.com/advisories/GHSA-rxp7-6hxx-x8q5).
+
+## Earlier published release
 
 - Source: [PR #6822, commit 48247d3f](https://github.com/synchronicity-labs/sync-api-v2/commit/48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb).
 - Accepted API squash merge: `cf0b2d21805dc6877628d28e4f146acd02d37d7f`.
@@ -44,8 +48,10 @@ and the session memory guard, pressure GC and shared validators are unchanged.
 - The API changes reached production in [release PR #7029](https://github.com/synchronicity-labs/sync-api-v2/pull/7029),
   commit `3e76c86d9fe3595a0cb2ea58772b717384b99464`.
   [Production run 39591510089](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/39591510089)
-  completed successfully on October 21, 2026 at 11:36 UTC. MCP PR #88 is still
-  unmerged; merging it triggers its production deployment.
+  completed successfully on October 21, 2026 at 11:36 UTC. MCP PR #88
+  subsequently merged as `f5bec66267b5d065dc273928d10aa968eb249fe6`;
+  its production deployment succeeded. The later #90 metadata-only deployment
+  also succeeded and kept these frontend bytes.
 - HTML SHA256: `a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672`; HTML size: 6,198,052 bytes.
 - The current follow-up supplies explicit image dimensions in history, matching
   the existing image-stage convention. Absolute full-stage containment and
@@ -213,7 +219,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits ten releases total.
+while cached clients still need them. Packaging permits nine releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.
