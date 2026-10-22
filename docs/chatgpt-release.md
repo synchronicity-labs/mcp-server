@@ -7,8 +7,8 @@ Existing production origins and OAuth settings are kept.
 
 ## Chat and Studio draft synchronization candidate
 
-- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `46b5ac82716d2a79b577535c895f6e78bc87ee7f`.
-- UI SHA256: `fa896b867e32409b4d8ac57bb6a753e4e19dec26199a1e9c996458b0461d5573` (6215224 bytes).
+- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `2229ce8350b6dc0c014a1ffd2406233546e6916d`.
+- UI SHA256: `f5866028123de7ad70b806c1e3c24f59a111ab11e38ad2f8337cd56cae9dd811` (6215309 bytes).
 - All 27 files in the nine resources published by merged MCP #91 are unchanged.
 
 This candidate adds authenticated read/update draft tools and app-only save and
@@ -16,6 +16,12 @@ acknowledgement tools. The API stores revisions per account, organization,
 project and draft. Chat updates remain pending until Studio validates the media,
 saves recovery state and acknowledges the exact revision. Conflicting local
 changes require a choice in Studio. No draft tool starts provider work.
+
+Workflows, search and projects now use the web dashboard's centered 880px
+content limit while the viewport retains full-height scrolling. Six packaged
+layout cases pass across mobile, tablet and wide hosts in inline/fullscreen
+modes. The application JavaScript is unchanged from the preceding 40-case
+source/artifact functional acceptance at `46b5ac827`.
 
 MCP #91 merged externally as `8099c271c04c0c6671557c02c4fc169d1abef286` on
 October 22 at 20:40 UTC. This companion now targets main and preserves its account
