@@ -38,4 +38,4 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 ENV SYNC_CHATGPT_APP_RELEASES=/app/chatgpt-dist/releases.json
 
 EXPOSE 3002
-CMD ["node", "dist/cli.js", "--transport", "http", "--port", "3002"]
+CMD ["node", "--expose-gc", "dist/cli.js", "--transport", "http", "--port", "3002"]

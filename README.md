@@ -293,14 +293,18 @@ Options:
 New HTTP session initialization is also refused with HTTP 503 and `Retry-After: 60`
 when V8 heap usage reaches 60% of its actual heap limit. Existing sessions remain
 callable; no session is evicted and no paid action is replayed. Admission resumes
-when memory is available. `mcp_runtime.memory.heapLimitBytes` reports that limit
+when memory is available. The production image enables explicit garbage collection;
+at this threshold the server first collects reclaimable objects and rechecks the
+same bound. Collection is limited to once per 30 seconds during sustained pressure.
+Custom launchers should use `node --expose-gc dist/cli.js`; without that flag the
+guard remains conservative. `mcp_runtime.memory.heapLimitBytes` reports that limit
 alongside heap usage and session rejection counts. This guard bounds session
 admission, not all request/response or upload memory; size container resources
 with those workloads in mind.
 
 Tool schemas and stateless handlers are built once per HTTP factory. Discovery
-descriptions are cached for the four supported presentation profiles. Session
-profiles, transports and validation remain separate; credentials are resolved
+descriptions are cached for the four supported presentation profiles. Immutable schema validators are shared too. Session
+profiles, transports and request validation remain separate; credentials are resolved
 per request. After `npm run build`, `npm run test:memory` exercises local session
 load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
 `-- --burst` to defer initialization until all connections have reserved capacity,
