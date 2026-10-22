@@ -22,10 +22,12 @@ import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAccountContextTool } from './tools/account-context.js';
+import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
+import { createGenerationFeedbackTools } from './tools/generation-feedback.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
@@ -53,6 +55,10 @@ export const SERVER_INSTRUCTIONS =
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'get-generation-feedback',
+  'submit-generation-feedback',
+  'get-account-usage',
+  'rename-project',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -97,6 +103,11 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'get-generation-feedback',
+  'submit-generation-feedback',
+  'voices_clone-voice',
+  'get-account-usage',
+  'rename-project',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -162,6 +173,19 @@ const toolErrorOutputSchema = z.toJSONSchema(
   }),
 );
 
+// The SDK wraps raw shapes on registration. Reuse immutable validators across
+// sessions while keeping handlers, authentication and client profiles local.
+const toolSchemas = new WeakMap<Record<string, z.ZodType>, z.ZodObject>();
+
+function toolSchema(shape: Record<string, z.ZodType>): z.ZodObject {
+  let schema = toolSchemas.get(shape);
+  if (!schema) {
+    schema = z.object(shape);
+    toolSchemas.set(shape, schema);
+  }
+  return schema;
+}
+
 export function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
   for (const tool of tools) {
     server.registerTool(
@@ -169,8 +193,8 @@ export function registerTools(server: McpServer, tools: McpToolDefinition[]): vo
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: tool.inputSchema,
-        outputSchema: tool.outputSchema,
+        inputSchema: toolSchema(tool.inputSchema),
+        outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
@@ -389,7 +413,12 @@ function createTools(
         ]
       : []),
     createUploadWidgetTool(),
-    createAccountContextTool(httpClient),
+    createAccountContextTool(
+      httpClient,
+      generatedTools.some((tool) => tool.name === 'voices_clone-voice'),
+    ),
+    ...createGenerationFeedbackTools(httpClient),
+    ...createAccountManagementTools(httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),

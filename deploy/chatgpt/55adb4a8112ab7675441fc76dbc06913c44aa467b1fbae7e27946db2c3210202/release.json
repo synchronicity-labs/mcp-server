@@ -1,0 +1,30 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "a7c105159c1cd9a926f42f5dbd299ff758e9cdfa",
+  "tree": "18da5aef85874dd00aec5582901c13e87debce01",
+  "htmlSha256": "55adb4a8112ab7675441fc76dbc06913c44aa467b1fbae7e27946db2c3210202",
+  "htmlBytes": 6207421,
+  "commands": [
+    "pnpm exec turbo run build --filter='@sync/chatgpt^...'",
+    "pnpm --filter @sync/chatgpt build"
+  ],
+  "verification": {
+    "sourcePullRequest": 7098,
+    "mergedSource": true,
+    "cleanCommittedRebuild": "Exact merged-source build matches previously tested c63ccfbb0 artifact bytes.",
+    "previousSourceCommit": "c63ccfbb044c16a669af7c7de6646936846079f7",
+    "priorManagementBrowserCases": 16,
+    "priorNativeTitleTests": 13,
+    "mcpRuntimeTests": 621,
+    "scope": "Packaging only; MCP runtime remains 14e96b9. Current package/browser/image verification is recorded in PR #91.",
+    "productionAcceptance": "Pending coordinated deployment, publisher rescan and real ChatGPT checks. No paid provider work, merge or deployment.",
+    "packagedArtifactBrowserCases": 48,
+    "packagedArtifactBrowserFiles": 5,
+    "mcpTestFiles": 45,
+    "activeAndRetainedMcpResourceReads": 9,
+    "productionImageResourceReads": 9,
+    "retainedFilesByteIdentical": 24,
+    "archivedFilesByteIdentical": 3,
+    "independentPreservationReview": "Clear: provenance, deterministic bytes, all retained resources, explicit bounded retirement and unchanged runtime verified."
+  }
+}

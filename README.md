@@ -167,13 +167,19 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This MCP candidate includes the shared Studio frontend from sync-api-v2 PR #6822,
-with immutable bundle provenance and all previously packaged bundles retained.
-The API changes are merged and reached production through release PR #7029 on
-October 21, 2026. MCP PR #88 remains unmerged; merging it triggers the MCP
-production deployment and selects the packaged frontend. Current-head CI/reviews,
-independent human approval and exact-bundle ChatGPT acceptance remain separate
-checks; see [frontend packaging](docs/chatgpt-release.md).
+This candidate packages the merged ChatGPT frontend from
+[sync-api-v2 PR #7098](https://github.com/synchronicity-labs/sync-api-v2/pull/7098)
+with MCP PR #91's project naming and connected-account usage tools. The immutable
+UI comes from merge commit `a7c105159c1cd9a926f42f5dbd299ff758e9cdfa`.
+The current production frontend remains retained for rollback, along with seven
+other previous releases. The oldest October 2 resource is explicitly retired
+from the active catalog and its original files are archived; cached panels using
+that version may need reopening. See [frontend packaging](docs/chatgpt-release.md)
+for checksums, retirement evidence, release order and live acceptance.
+
+The existing workflow backend from PR #6822 is already in production. Merging
+#91 will select the new packaged frontend through the MCP production image;
+preparing this candidate does not deploy it or perform an EKS cutover.
 
 ## Example Prompts
 
@@ -188,8 +194,9 @@ resulting audio asset failed. Project access and organization billing remain API
 authority; options expose only the fields needed for the speech quote.
 
 The compatible backend from sync-api-v2 PR #6822 is already in production.
-The packaged frontend's source is byte-identical to the accepted merge in
-ChatGPT and shared packages; all published UI resources remain retained.
+The packaged frontend comes from the merged source recorded in its release
+provenance. The active catalog retains eight previous UIs; the retired October 2
+resource is archived rather than served, as detailed in the release guide.
 After the MCP release, rescan publisher metadata and verify preview, attachment,
 reload recovery and playback in ChatGPT. Local and package checks do not establish
 production acceptance; older APIs omit the speech tools and the UI fails closed.
@@ -212,6 +219,15 @@ Older APIs omit these tools; `get-translation-options.previewAvailable` reports
 that distinction. Deploy API support before MCP, package the matching shared
 Studio frontend, rescan, and verify the real ChatGPT workflow. Local fixtures
 establish neither production release nor provider output quality.
+
+`get-account-usage` reads the connected organization's billing projection and,
+for metered accounts, complete current-period usage. Available credits exclude
+in-flight holds. Missing usage is unavailable, never a zero total. Billing
+management requires an owner/admin role as well as the API billing flag.
+`rename-project` changes only the name through the existing authenticated project
+PATCH route; it cannot change visibility or submit work and never retries writes
+automatically. Embedded clients keep the title read-only when older MCP
+releases omit `get-account-context.capabilities.projectRenaming`.
 
 `get-account-context` reads `/v2/oauth/account` for the connected account and
 organization. API keys retain a null signed-in account. The UI must not infer a

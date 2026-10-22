@@ -176,8 +176,10 @@ it('advertises voice creation as a non-idempotent external write, without enabli
 });
 
 it('clones once from a saved sample and reuses the internal id for script generation', async () => {
-  const { calls, call } = await fixture();
+  const { client, calls, call } = await fixture();
   const result = await call('voices_clone-voice', input);
+  const tool = (await client.listTools()).tools.find((item) => item.name === 'voices_clone-voice');
+  expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toMatchObject({ id: voiceId, name: input.name });
   await call('voices_get-voices', {});

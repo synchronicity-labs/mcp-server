@@ -10,6 +10,9 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --ipc=host
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +24,9 @@ jobs:
           node-version: '22'
           cache: npm
       - name: Record exact revision
-        run: git rev-parse HEAD
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse HEAD
       - run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm run typecheck
@@ -32,7 +37,6 @@ jobs:
       - run: npm run verify:chatgpt-package
       - run: npm test -- --no-file-parallelism
       - run: npm test
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm audit
       - run: npm audit --omit=dev

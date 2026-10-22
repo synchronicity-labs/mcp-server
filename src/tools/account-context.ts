@@ -11,9 +11,17 @@ const accountContext = z.object({
     voiceClone: z.number().finite().nonnegative(),
   }),
   organization: z.object({ id: z.uuid(), name: z.string().nullable(), role: z.string() }),
+  capabilities: z.object({
+    projectRenaming: z.literal(true),
+    embeddedVoiceCloning: z.boolean(),
+    generationFeedback: z.literal(true),
+  }),
 });
 
-export function createAccountContextTool(http: HttpClient): McpToolDefinition {
+export function createAccountContextTool(
+  http: HttpClient,
+  embeddedVoiceCloning = false,
+): McpToolDefinition {
   return {
     name: 'get-account-context',
     title: 'Read connected Sync account',
@@ -38,6 +46,7 @@ export function createAccountContextTool(http: HttpClient): McpToolDefinition {
           })
           .parse(identity),
         limits,
+        capabilities: { projectRenaming: true, embeddedVoiceCloning, generationFeedback: true },
       });
     },
   };
