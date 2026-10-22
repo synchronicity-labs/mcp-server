@@ -22,6 +22,7 @@ import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import { createAccountContextTool } from './tools/account-context.js';
+import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
@@ -53,6 +54,8 @@ export const SERVER_INSTRUCTIONS =
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'get-account-usage',
+  'rename-project',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -97,6 +100,8 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'get-account-usage',
+  'rename-project',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -390,6 +395,7 @@ function createTools(
       : []),
     createUploadWidgetTool(),
     createAccountContextTool(httpClient),
+    ...createAccountManagementTools(httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),

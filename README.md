@@ -213,6 +213,15 @@ that distinction. Deploy API support before MCP, package the matching shared
 Studio frontend, rescan, and verify the real ChatGPT workflow. Local fixtures
 establish neither production release nor provider output quality.
 
+`get-account-usage` reads the connected organization's billing projection and,
+for metered accounts, complete current-period usage. Available credits exclude
+in-flight holds. Missing usage is unavailable, never a zero total. Billing
+management requires an owner/admin role as well as the API billing flag.
+`rename-project` changes only the name through the existing authenticated project
+PATCH route; it cannot change visibility or submit work and never retries writes
+automatically. Embedded clients keep the title read-only when older MCP
+releases omit `get-account-context.capabilities.projectRenaming`.
+
 `get-account-context` reads `/v2/oauth/account` for the connected account and
 organization. API keys retain a null signed-in account. The UI must not infer a
 personal asset scope or permissions from a client name or an API key's owner.
