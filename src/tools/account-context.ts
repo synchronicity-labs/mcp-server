@@ -3,6 +3,7 @@ import type { HttpClient } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
 
 const accountContext = z.object({
+  capabilities: z.object({ studioDraftSync: z.boolean() }).optional(),
   account: z
     .object({ id: z.uuid(), email: z.string().nullable(), name: z.string().nullable() })
     .nullable(),
@@ -13,7 +14,10 @@ const accountContext = z.object({
   organization: z.object({ id: z.uuid(), name: z.string().nullable(), role: z.string() }),
 });
 
-export function createAccountContextTool(http: HttpClient): McpToolDefinition {
+export function createAccountContextTool(
+  http: HttpClient,
+  studioDraftSync = false,
+): McpToolDefinition {
   return {
     name: 'get-account-context',
     title: 'Read connected Sync account',
@@ -38,6 +42,7 @@ export function createAccountContextTool(http: HttpClient): McpToolDefinition {
           })
           .parse(identity),
         limits,
+        ...(studioDraftSync ? { capabilities: { studioDraftSync: true } } : {}),
       });
     },
   };

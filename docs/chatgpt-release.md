@@ -5,7 +5,30 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
-## Included release candidate
+## Chat and Studio draft synchronization candidate
+
+- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `d4e6e305c26899821bc13e7fd760557941015837`.
+- UI SHA256: `a9982fff989b2c11d8570e5242751ff73f48c7fd71e81e27c14374282abf15fa` (6214837 bytes).
+- All 27 files in the nine deployed/retained resources are unchanged.
+
+This candidate adds authenticated read/update draft tools and app-only save and
+acknowledgement tools. The API stores revisions per account, organization,
+project and draft. Chat updates remain pending until Studio validates the media,
+saves recovery state and acknowledges the exact revision. Conflicting local
+changes require a choice in Studio. No draft tool starts provider work.
+
+Release order: deploy the companion API/frontend PR and its additive migrations,
+then deploy this MCP PR. Discovery advertises synchronization only when all three
+versioned API routes are available. Older servers keep local Studio editing.
+After deployment, rescan the ChatGPT connection and use a fresh Studio widget.
+No production rollout or paid generation has been performed for this candidate.
+
+The retention ceiling increases by one previous bundle to retain the deployed
+current UI as well as all eight older resources when the new UI is packaged.
+Existing resource bytes remain unchanged. The total remains bounded at ten,
+and the session memory guard, pressure GC and shared validators are unchanged.
+
+## Earlier included release candidate
 
 - Source: [PR #6822, commit 48247d3f](https://github.com/synchronicity-labs/sync-api-v2/commit/48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb).
 - Accepted API squash merge: `cf0b2d21805dc6877628d28e4f146acd02d37d7f`.
@@ -184,7 +207,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits nine releases total.
+while cached clients still need them. Packaging permits ten releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.

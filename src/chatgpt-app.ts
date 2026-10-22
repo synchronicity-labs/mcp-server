@@ -91,7 +91,7 @@ export async function loadChatgptAppReleases(
   if (!config) return [];
   const previous = z
     .array(z.string().min(1))
-    .max(8)
+    .max(9)
     .parse(config.previousDirectories ?? []);
   const apps = await Promise.all(
     [config.directory, ...previous].map((directory) => loadChatgptApp({ ...config, directory })),

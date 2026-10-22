@@ -31,6 +31,7 @@ import type { McpToolDefinition } from './tools/index.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
+import { createStudioDraftTools, studioDraftOperations } from './tools/studio-draft.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import {
   createTranslationPreviewTools,
@@ -49,10 +50,15 @@ export const SERVER_INSTRUCTIONS =
   'When create-translate-and-dub is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generate_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ' +
   'When standalone translation-preview tools are available, the app can translate saved audio before final lip-sync. Confirm the source audio, language and quote before create-translation-preview. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, estimate and confirm a separate create-lipsync-from-assets using that audio; do not send it through create-translate-and-dub again. ' +
   'When create-speech-preview is available, the app can synthesize a standalone audio preview for its video input. Confirm script, voice and estimated cost. Persist and reuse its idempotencyKey after uncertain admission, poll the same returned job, and never synthesize again because asset attachment failed. ' +
+  'When Studio publishes a draftId, use get-studio-draft and update-studio-draft to change its selections/settings. Chat prose does not select media in Studio. Use the current expectedRevision and confirm UI application only after appliedRevision equals revision. These tools do not start paid work. ' +
   'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'get-studio-draft',
+  'update-studio-draft',
+  'save-studio-draft',
+  'ack-studio-draft',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -97,6 +103,10 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'get-studio-draft',
+  'update-studio-draft',
+  'save-studio-draft',
+  'ack-studio-draft',
   'get-account-context',
   'get-asset-creators',
   'get-playback-metadata',
@@ -296,6 +306,7 @@ function isStructuredContent(result: unknown): result is Record<string, unknown>
 }
 
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
+  if (['save-studio-draft', 'ack-studio-draft'].includes(tool.name)) return profile.supportsAppUi;
   if (tool.name === 'create-lipsync-from-assets') return profile.supportsAppUi;
   if (tool.name === 'open-sync-app') return profile.supportsAppUi;
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
@@ -382,7 +393,8 @@ function createTools(
 ): McpToolDefinition[] {
   // These operations require the durable wrapper's admission key and public projection.
   const generatedOperations = operations.filter(
-    (operation) => translationPreviewOperations([operation]).length === 0,
+    (operation) =>
+      translationPreviewOperations([operation]).length === 0 && operation.studioDraftVersion !== 1,
   );
   const generatedTools = generateTools(
     config.transport === 'http'
@@ -402,7 +414,8 @@ function createTools(
         ]
       : []),
     createUploadWidgetTool(),
-    createAccountContextTool(httpClient),
+    createAccountContextTool(httpClient, studioDraftOperations(operations).length > 0),
+    ...createStudioDraftTools(operations, httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),
@@ -459,7 +472,10 @@ function createProfiledServer(
           handler: async (...parameters: Parameters<typeof tool.handler>) => {
             const [args] = parameters;
             if (!profile) throw new Error('Complete MCP initialization before calling tools.');
-            if (tool.name === 'open-sync-app' && !profile.supportsAppUi)
+            if (
+              ['open-sync-app', 'save-studio-draft', 'ack-studio-draft'].includes(tool.name) &&
+              !profile.supportsAppUi
+            )
               throw new Error(
                 'Open the Sync app in ChatGPT, or use the Sync tools in this client.',
               );
@@ -583,7 +599,8 @@ export async function createMcpServerFactory(
       translationOperation([operation]) !== undefined ||
       translationPreviewOperations([operation]).length > 0 ||
       dialogueOperations([operation]).length > 0 ||
-      speechOperations([operation]).length > 0,
+      speechOperations([operation]).length > 0 ||
+      operation.studioDraftVersion === 1,
   );
   const tools = createTools(
     config,

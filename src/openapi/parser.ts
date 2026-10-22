@@ -44,6 +44,7 @@ export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
         parameters,
         requestBody,
         isMultipart,
+        ...(operation['x-sync-studio-drafts'] === 1 ? { studioDraftVersion: 1 } : {}),
         ...(operation['x-sync-saved-asset-dubbing'] === 1 ? { savedAssetDubbingVersion: 1 } : {}),
       });
     }

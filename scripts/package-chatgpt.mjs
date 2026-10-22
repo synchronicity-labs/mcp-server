@@ -18,8 +18,8 @@ assert.deepEqual(
   'Every packaged directory must be declared in releases.json.',
 );
 assert(
-  releases.length > 0 && releases.length <= 9,
-  'Package one current and at most eight retained releases.',
+  releases.length > 0 && releases.length <= 10,
+  'Package one current and at most nine retained releases.',
 );
 // Rebuilding after pruning a retained release must not carry stale output forward.
 await rm(output, { recursive: true, force: true });
