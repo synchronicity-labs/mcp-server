@@ -211,7 +211,7 @@ describe('immutable client profiles', () => {
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
         const { tools } = await client.listTools();
-        expect(tools.length).toBe(supportsUploads ? 12 : 9);
+        expect(tools.length).toBe(supportsUploads ? 14 : 11);
         expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
         const create = tools.find((tool) => tool.name === 'create-lipsync')!;
@@ -371,6 +371,8 @@ describe('immutable client profiles', () => {
             ? [
                 'open-upload-widget',
                 'get-account-context',
+                'get-generation-feedback',
+                'submit-generation-feedback',
                 'get-account-usage',
                 'rename-project',
                 'get-asset-creators',
@@ -384,6 +386,8 @@ describe('immutable client profiles', () => {
               ]
             : [
                 'get-account-context',
+                'get-generation-feedback',
+                'submit-generation-feedback',
                 'get-account-usage',
                 'rename-project',
                 'get-asset-creators',
@@ -454,7 +458,7 @@ describe('immutable client profiles', () => {
     expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(3);
     // Repeated notifications cannot reconfigure the immutable session profile.
     sessions[0]!.server.server.oninitialized?.();
-    expect((await sessions[0]!.client.listTools()).tools).toHaveLength(12);
+    expect((await sessions[0]!.client.listTools()).tools).toHaveLength(14);
   });
 
   it.each([
@@ -570,12 +574,12 @@ it.each([
     vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
   );
   const factory = await createMcpServerFactory(config);
-  expect(factory.toolCount).toBe(10 + count);
+  expect(factory.toolCount).toBe(12 + count);
   const chatgpt = await connect(factory, 'chatgpt');
   const claude = await connect(factory, 'claude');
   const chatTools = (await chatgpt.client.listTools()).tools;
   const claudeTools = (await claude.client.listTools()).tools;
-  expect(chatTools).toHaveLength(10 + count);
-  expect(claudeTools).toHaveLength(7 + count);
+  expect(chatTools).toHaveLength(12 + count);
+  expect(claudeTools).toHaveLength(9 + count);
   expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
 });
