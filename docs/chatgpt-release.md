@@ -7,8 +7,8 @@ Existing production origins and OAuth settings are kept.
 
 ## Chat and Studio draft synchronization candidate
 
-- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `6c5283dd1ba19b54ea0788804fb0ef61ebdb2858`.
-- UI SHA256: `03eafc45fa1140e740539fb89226b081f7302eff9318dec0f937ce942106e2e9` (6215252 bytes).
+- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `46b5ac82716d2a79b577535c895f6e78bc87ee7f`.
+- UI SHA256: `fa896b867e32409b4d8ac57bb6a753e4e19dec26199a1e9c996458b0461d5573` (6215224 bytes).
 - All 27 files in the nine resources published by merged MCP #91 are unchanged.
 
 This candidate adds authenticated read/update draft tools and app-only save and
@@ -165,7 +165,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 ## Normal production release
 
 1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
-   `current` selects the active HTML hash; `previous` retains up to eight older hashes.
+   `current` selects the active HTML hash; `previous` retains up to nine older hashes.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
@@ -184,10 +184,10 @@ The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
 Stale pins to absent, pruned hash directories in the image are ignored.
 Existing legacy bundles remain readable, including mounts under the packaged
-root. The eight-retained-release budget applies to the deduplicated combined
+root. The nine-retained-release budget applies to the deduplicated combined
 manifest and legacy list. Configuration rejects overflow with an actionable
 error instead of silently dropping resources. Retire unused bundles explicitly
-before deploying if the combined list exceeds eight. Keep mounts until their
+before deploying if the combined list exceeds nine. Keep mounts until their
 published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;
@@ -219,7 +219,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits nine releases total.
+while cached clients still need them. Packaging permits ten releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.

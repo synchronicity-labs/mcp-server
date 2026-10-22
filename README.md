@@ -167,19 +167,17 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This candidate packages the merged ChatGPT frontend from
-[sync-api-v2 PR #7098](https://github.com/synchronicity-labs/sync-api-v2/pull/7098)
-with MCP PR #91's project naming and connected-account usage tools. The immutable
-UI comes from merge commit `a7c105159c1cd9a926f42f5dbd299ff758e9cdfa`.
-The current production frontend remains retained for rollback, along with seven
-other previous releases. The oldest October 2 resource is explicitly retired
-from the active catalog and its original files are archived; cached panels using
-that version may need reopening. See [frontend packaging](docs/chatgpt-release.md)
-for checksums, retirement evidence, release order and live acceptance.
+This candidate packages chat and Studio draft synchronization from
+[sync-api-v2 PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144).
+MCP #91 has merged; its project naming and connected-account usage tools remain
+included. The candidate retains all nine UI resources published by #91, plus
+its unchanged archive of the oldest October 2 resource. See
+[frontend packaging](docs/chatgpt-release.md) for the exact source commit,
+checksums, release order and live acceptance requirements.
 
-The existing workflow backend from PR #6822 is already in production. Merging
-#91 will select the new packaged frontend through the MCP production image;
-preparing this candidate does not deploy it or perform an EKS cutover.
+The existing workflow backend from PR #6822 is already in production. The draft
+API and its additive migrations must be released before this MCP candidate.
+Preparing the candidate does not deploy it or perform an EKS cutover.
 
 ## Example Prompts
 
@@ -195,7 +193,7 @@ authority; options expose only the fields needed for the speech quote.
 
 The compatible backend from sync-api-v2 PR #6822 is already in production.
 The packaged frontend comes from the merged source recorded in its release
-provenance. The active catalog retains eight previous UIs; the retired October 2
+provenance. The candidate catalog retains nine previous UIs; the retired October 2
 resource is archived rather than served, as detailed in the release guide.
 After the MCP release, rescan publisher metadata and verify preview, attachment,
 reload recovery and playback in ChatGPT. Local and package checks do not establish
