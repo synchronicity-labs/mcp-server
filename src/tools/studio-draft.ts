@@ -67,18 +67,24 @@ const edit = z.strictObject({
     .refine((patch) => Object.keys(patch).length > 0, 'Supply a draft change.'),
 });
 
-export function studioDraftOperations(operations: ParsedOperation[]): ParsedOperation[] {
-  const expected = [
+const save = z.object({
+  ...identity,
+  expectedRevision: z.number().int().nonnegative(),
+  state,
+  editable: z.boolean(),
+});
+const acknowledge = z.object({ ...identity, revision: z.number().int().positive() });
+
+export function supportsStudioDrafts(operations: ParsedOperation[]): boolean {
+  return [
     ['StudioDraftsController_get', 'get'],
     ['StudioDraftsController_save', 'put'],
     ['StudioDraftsController_acknowledge', 'post'],
-  ];
-  const found = expected.map(([id, method]) =>
-    operations.find(
+  ].every(([id, method]) =>
+    operations.some(
       (op) => op.operationId === id && op.method === method && op.studioDraftVersion === 1,
     ),
   );
-  return found.every(Boolean) ? (found as ParsedOperation[]) : [];
 }
 
 /** The API owns authorization, persistence and compare-and-set across MCP sessions/pods. */
@@ -86,7 +92,7 @@ export function createStudioDraftTools(
   operations: ParsedOperation[],
   http: HttpClient,
 ): McpToolDefinition[] {
-  if (!studioDraftOperations(operations).length) return [];
+  if (!supportsStudioDrafts(operations)) return [];
   const path = (args: { projectId: string; draftId: string }) =>
     `/v2/projects/${args.projectId}/studio-drafts/${args.draftId}`;
   async function read(args: { projectId: string; draftId: string }, signal?: AbortSignal) {
@@ -177,24 +183,12 @@ export function createStudioDraftTools(
       title: 'Save Studio draft',
       description:
         'Studio-only compare-and-set of the editable snapshot and current recovery lock. No provider work is performed.',
-      inputSchema: {
-        ...identity,
-        expectedRevision: z.number().int().nonnegative(),
-        state,
-        editable: z.boolean(),
-      },
+      inputSchema: save.shape,
       outputSchema: draft.shape,
       meta: appOnly,
       annotations: writeAnnotations,
       handler: async (args, context) => {
-        const input = z
-          .object({
-            ...identity,
-            expectedRevision: z.number().int().nonnegative(),
-            state,
-            editable: z.boolean(),
-          })
-          .parse(args);
+        const input = save.parse(args);
         return draft.parse(
           await http.request('put', path(input), {
             body: {
@@ -212,12 +206,12 @@ export function createStudioDraftTools(
       title: 'Acknowledge applied Studio draft',
       description:
         'Studio-only acknowledgement after validating, applying and persisting the exact revision. Does not edit settings or start jobs.',
-      inputSchema: { ...identity, revision: z.number().int().positive() },
+      inputSchema: acknowledge.shape,
       outputSchema: draft.shape,
       meta: appOnly,
       annotations: { ...writeAnnotations, idempotentHint: true },
       handler: async (args, context) => {
-        const input = z.object({ ...identity, revision: z.number().int().positive() }).parse(args);
+        const input = acknowledge.parse(args);
         return draft.parse(
           await http.request('post', `${path(input)}/acknowledgement`, {
             body: { revision: input.revision },

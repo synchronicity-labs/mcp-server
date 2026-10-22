@@ -7,7 +7,7 @@ Existing production origins and OAuth settings are kept.
 
 ## Chat and Studio draft synchronization candidate
 
-- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `2229ce8350b6dc0c014a1ffd2406233546e6916d`.
+- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `ab8edec11f3dc24061176cb45e25a75943d284b7`.
 - UI SHA256: `f5866028123de7ad70b806c1e3c24f59a111ab11e38ad2f8337cd56cae9dd811` (6215309 bytes).
 - All 27 files in the nine resources published by merged MCP #91 are unchanged.
 
@@ -40,6 +40,11 @@ current UI as well as all eight resources retained by #91 when the new UI is
 packaged.
 Existing resource bytes remain unchanged. The total remains bounded at ten,
 and the session memory guard, pressure GC and shared validators are unchanged.
+
+The draft tools reuse their save/acknowledgement schemas for discovery and
+validation. Capability checks return a boolean directly, preserving the same
+version, method and operation-ID requirements without collecting unused
+operation arrays. The API companion keeps policy in its draft service.
 
 The dependency override requires `ip-address` 10.7.4 or later, and the lockfile
 selects 10.7.4 to address [GHSA-rxp7-6hxx-x8q5](https://github.com/advisories/GHSA-rxp7-6hxx-x8q5).

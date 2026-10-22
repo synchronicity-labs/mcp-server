@@ -32,7 +32,7 @@ import type { McpToolDefinition } from './tools/index.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
-import { createStudioDraftTools, studioDraftOperations } from './tools/studio-draft.js';
+import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import {
   createTranslationPreviewTools,
@@ -419,7 +419,7 @@ function createTools(
         ]
       : []),
     createUploadWidgetTool(),
-    createAccountContextTool(httpClient, studioDraftOperations(operations).length > 0),
+    createAccountContextTool(httpClient, supportsStudioDrafts(operations)),
     ...createStudioDraftTools(operations, httpClient),
     ...createAccountManagementTools(httpClient),
     createAssetCreatorsTool(httpClient),
