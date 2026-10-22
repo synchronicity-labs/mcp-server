@@ -118,7 +118,10 @@ try {
   assert.equal(registry.stats().rejected, 1);
   const retained = heap() - baseline;
   if (!specPath)
-    assert(retained < 96 * 1024 ** 2, 'Per-session validators or descriptions exceeded heap budget');
+    assert(
+      retained < 96 * 1024 ** 2,
+      'Per-session validators or descriptions exceeded heap budget',
+    );
   assert(hasSessionHeapCapacity(), 'Deferred initialization consumed the request headroom');
   // Existing sessions remain callable when new initialization is refused.
   assert((await list(clients[0].client)).tools.length > 0);
