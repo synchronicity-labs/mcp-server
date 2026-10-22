@@ -5,7 +5,85 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
-## Included release candidate
+## Project/account release candidate
+
+| Item | Value |
+| --- | --- |
+| Source | [Merged frontend PR #7098](https://github.com/synchronicity-labs/sync-api-v2/pull/7098) |
+| Commit | `a7c105159c1cd9a926f42f5dbd299ff758e9cdfa` |
+| Tree | `18da5aef85874dd00aec5582901c13e87debce01` |
+| HTML SHA256 | `55adb4a8112ab7675441fc76dbc06913c44aa467b1fbae7e27946db2c3210202` |
+| HTML bytes | 6,207,421 |
+| MCP candidate | [PR #91](https://github.com/synchronicity-labs/mcp-server/pull/91) |
+| Previous production UI | `a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672` |
+
+The clean merged-source rebuild exactly matches the frontend bytes tested on
+`c63ccfbb0`. This package adds project naming, connected-account identity and
+canonical usage controls, plus the merged project-list height fix. It does not
+add embedded Appearance or Timeline editing. Billing checkout and administration
+remain web handoffs. MCP runtime remains the reviewed `14e96b9` implementation;
+this follow-up changes release artifacts and documentation only.
+
+The manifest selects the new bundle and retains the previous production UI plus
+seven older releases. [The oldest release is explicitly retired below](#october-2-resource-retirement).
+All 24 files in the eight retained releases remain byte-identical. The original
+frontend manifest is copied unchanged and gzip uses mtime zero.
+
+### Candidate verification
+
+- 48 artifact browser cases across project/account controls, original-media history,
+  layout, project recovery and result continuation pass on the merged-source bytes.
+- All 621 MCP tests across 45 files, typecheck, build and lint pass. Runtime code
+  remains unchanged; the original session-memory budgets and verifiers are retained.
+- Package verification reads the new and all eight retained resources through a
+  real MCP client/server handshake. The production Docker image builds and passes
+  the same nine-resource verification with networking disabled.
+- All 24 retained files and three archived files match their previous bytes.
+  Independent preservation and complexity review found no blocking findings.
+- Fresh CI and review must apply to the final PR head before release. Earlier
+  source review and exact-byte browser evidence remain identified separately.
+
+### Coordinated release and acceptance
+
+1. Keep this candidate unmerged while the EKS owner verifies the source release.
+   [Release candidate #7102](https://github.com/synchronicity-labs/sync-api-v2/pull/7102)
+   was created from the same `a7c10515` source. If it is refreshed, compare the
+   ChatGPT build inputs and verify artifact identity before accepting the new pairing.
+2. Obtain release approval, then deploy the reviewed MCP image through its normal
+   main/Porter workflow. This is a separate deployment in the coordinated release
+   window. It does not adopt the unmerged MCP EKS/session-routing PRs or move traffic.
+3. Verify the deployed revision, opening-tool URI, new resource hash and all eight
+   retained resource reads. Rescan publisher tool metadata and refresh the existing
+   ChatGPT connection.
+4. Verify project naming and reopen, usage/billing permissions, Studio opening,
+   history playback/download, dubbing estimates and reload/session recovery in the
+   actual host. Use existing results and read-only quotes; do not start paid jobs.
+
+The Docker package verifier and synthetic browser checks do not establish live
+OAuth, storage, provider or ChatGPT acceptance. No merge or deployment is part
+of preparation. Existing issuer, CSP, upload routing and API origins stay configured
+as before. API/web promotion and the EKS traffic/worker cutover retain their own gates.
+
+### October 2 resource retirement
+
+The catalog permits one active and eight retained bundles. Adding this release
+retires `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`,
+first packaged in MCP #67 on October 2. Its three files are moved unchanged to
+`deploy/chatgpt-retired/<hash>/`; this archive is not served by the production image.
+No retention guard or test is relaxed.
+
+At preparation, a read-only Porter historical-log search requested a 720-hour
+lookback for that full resource hash and returned no matching records. A positive
+control for `app_resource_served` returned 100 real records for the newer `670c3e54`
+and current `a2c7ca49` resources, both of which remain retained. An empty historical
+search does not prove that no cached conversation still references the old URI.
+Such a panel may need reopening after release. Review this retirement explicitly
+with the release; the archive remains available for a reviewed restoration.
+
+## Previous published release and historical verification
+
+The following evidence applies to the earlier bundle and named checkpoints,
+not the new project/account frontend.
 
 - Source: [PR #6822, commit 48247d3f](https://github.com/synchronicity-labs/sync-api-v2/commit/48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb).
 - Accepted API squash merge: `cf0b2d21805dc6877628d28e4f146acd02d37d7f`.
@@ -15,8 +93,10 @@ Existing production origins and OAuth settings are kept.
 - The API changes reached production in [release PR #7029](https://github.com/synchronicity-labs/sync-api-v2/pull/7029),
   commit `3e76c86d9fe3595a0cb2ea58772b717384b99464`.
   [Production run 39591510089](https://github.com/synchronicity-labs/sync-api-v2/actions/runs/39591510089)
-  completed successfully on October 21, 2026 at 11:36 UTC. MCP PR #88 is still
-  unmerged; merging it triggers its production deployment.
+  completed successfully on October 21, 2026 at 11:36 UTC. MCP PR #88
+  subsequently merged as `f5bec66267b5d065dc273928d10aa968eb249fe6`;
+  its production deployment succeeded. The later #90 metadata-only deployment
+  also succeeded and kept these frontend bytes.
 - HTML SHA256: `a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672`; HTML size: 6,198,052 bytes.
 - The current follow-up supplies explicit image dimensions in history, matching
   the existing image-stage convention. Absolute full-stage containment and
