@@ -7,8 +7,8 @@ Existing production origins and OAuth settings are kept.
 
 ## Chat and Studio draft synchronization candidate
 
-- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `d4e6e305c26899821bc13e7fd760557941015837`.
-- UI SHA256: `a9982fff989b2c11d8570e5242751ff73f48c7fd71e81e27c14374282abf15fa` (6214837 bytes).
+- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `6c5283dd1ba19b54ea0788804fb0ef61ebdb2858`.
+- UI SHA256: `03eafc45fa1140e740539fb89226b081f7302eff9318dec0f937ce942106e2e9` (6215252 bytes).
 - All 27 files in the nine deployed/retained resources are unchanged.
 
 This candidate adds authenticated read/update draft tools and app-only save and
