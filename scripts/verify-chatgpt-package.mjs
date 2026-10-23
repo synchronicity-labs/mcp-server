@@ -8,10 +8,13 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 // Also runs via stdin inside the final production image, without network or credentials.
 const { createMcpServerFactory } = await import(pathToFileURL(resolve('dist/server.js')));
+const { MAX_PREVIOUS_CHATGPT_RELEASES } = await import(
+  pathToFileURL(resolve('dist/chatgpt-release.js'))
+);
 const root = resolve(process.argv[2] ?? 'chatgpt-dist');
 const { current, previous } = JSON.parse(await readFile(resolve(root, 'releases.json'), 'utf8'));
 const releases = [current, ...previous];
-assert(releases.length > 0 && releases.length <= 11);
+assert(releases.length > 0 && releases.length <= MAX_PREVIOUS_CHATGPT_RELEASES + 1);
 globalThis.fetch = async () => Response.json({ openapi: '3.0.0', paths: {} });
 const { resolveConfig } = await import(pathToFileURL(resolve('dist/config.js')));
 if (process.argv.includes('--require-image-config')) {

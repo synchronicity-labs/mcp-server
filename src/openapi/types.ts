@@ -18,6 +18,7 @@ export type ParsedOperation = {
   isMultipart: boolean;
   savedAssetDubbingVersion?: number;
   studioDraftVersion?: number;
+  studioViewVersion?: number;
 };
 
 export type JsonSchema = Record<string, unknown>;
