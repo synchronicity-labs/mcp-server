@@ -2,11 +2,12 @@
 
 ## Mounted Studio handoff candidate
 
-Source: [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227),
-commit `57e2ab8558f02f70bcfe2c099cf6a16ad4598264`, tree
-`fca1e1ff1ea1c56700f7d17a2d801a06408b8c22`.
-UI SHA256: `ed360e359c0b64fa38103a28e5f9534cee8e5716090634d0a20d54a5767710df`
-(4,095,347 uncompressed bytes).
+Source: merged [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227)
+and the release follow-up [#7253](https://github.com/synchronicity-labs/sync-api-v2/pull/7253),
+commit `9636bdbf6d24f0544703b41ba4459e3920abb5de`, tree
+`c83f832b51eab4d9dc113c6e47694a9ca9c6e7bf`.
+UI SHA256: `92a96e6672b166d1779a7b23225a37b4460364b3fa8b11645c9392c0c098e32c`
+(4,095,177 uncompressed bytes).
 
 Chat reads the exact published `viewId` with `get-studio-view`, then requests a
 project open/refresh, media refresh, accepted-job/result selection or explicit
@@ -23,7 +24,7 @@ persisted receipt retries an uncertain acknowledgement without repeating the
 UI action. These tools never start generation or synthesis; explicit result
 continuation retains its existing media-registration recovery.
 
-Deploy the four `/v2/studio-views/:viewId` routes with capability version 1
+Deploy the four Studio-view operations under `/v2/studio-views/:viewId` with capability version 1
 before this MCP release. Capability
 discovery requires all four exact operation IDs/methods/version markers. No
 additional environment variable, migration, OAuth setting or paid provider
@@ -42,13 +43,53 @@ reproduce the original missing-context or disabled-Send/LOCKDOWN failures.
 Synthetic source/package tests exercise the fixed channel without broadcasts.
 They do not establish production acceptance of these new bytes.
 
-Release the source API through the normal dev-to-production process, then
-deploy this reviewed MCP image. Refresh publisher metadata and the connection;
+Release only the API prerequisites through the scoped main hotfix
+[sync-api-v2 #7255](https://github.com/synchronicity-labs/sync-api-v2/pull/7255),
+then deploy this reviewed MCP image. Do not promote the unrelated dev changes. Refresh publisher metadata and the connection;
 verify every action and accurate receipts in a fresh expanded Studio while chat
 remains usable. Paid acceptance needs the reviewer's approved media/budget.
 The source PR merged into `dev` as `06ec6799dd01d1f06394726f0a767e151e0925e4`.
-The production rollout and fresh ChatGPT acceptance remain unverified.
-No MCP merge, deployment or paid generation has been performed.
+At the packaging checkpoint, production rollout and fresh ChatGPT acceptance
+remain unverified. Packaging tests do not perform a deployment or paid generation.
+
+### Packaging verification checkpoint
+
+The clean committed source passes all 95 source/artifact browser checks, including
+all four headers, composer-safe layouts, draft recovery and exact mounted-view
+actions. The 16 focused default-model/header/recovery checks also pass.
+All 653 MCP tests across 49 files pass on Node 22, with the original tests intact.
+An initial shared-host run reset seven local transport sockets; the isolated
+transport cases and a fresh complete run pass without production or assertion
+changes. Build and lint pass. Actual MCP client reads verify all twelve packaged
+resources and their recorded hashes; all 36 earlier published/archive files are
+byte-identical.
+
+The API-only prerequisite #7255 merged as
+`95c4787ac3e496d043ac8e3fbcff80cabf4efb32` after all current checks and a 5/5
+review. Its production deployment must complete and advertise all four operations
+before this MCP image is released. Current-head MCP CI/review and fresh ChatGPT
+acceptance remain separate gates.
+
+### Finished companion changes
+
+This candidate includes the reviewed thumbnail-only guidance and branded asset
+placeholder from [#95](https://github.com/synchronicity-labs/mcp-server/pull/95),
+plus external dialogue-video registration from
+[#97](https://github.com/synchronicity-labs/mcp-server/pull/97). Only the current
+frontend candidate is replaced; the older packaging proposal in #95 is excluded.
+The frontend includes the merged external-source UI and full-height Studio fix.
+Asset preview collisions still stop above the reported composer inset.
+
+All four workflow titles align with the back control. The projects header no
+longer contains the Resume shortcut; saved projects and uncertain-request
+recovery remain available through their existing controls. New lipsync and
+image-to-video requests default to `sync-3`, the current latest model. The
+server instructions make that default explicit for ChatGPT; existing drafts
+and idempotent retries retain their chosen model.
+
+Voice/team controls in source #7123 and MCP #92 are deferred. Unrelated dev
+changes, Premiere/Resolve changes and unfinished MCP infrastructure are outside
+this release.
 
 The MCP production image includes the approved, self-contained frontend from
 Sync's monorepo. It does not build Studio or fetch another repository at deploy

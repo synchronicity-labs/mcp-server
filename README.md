@@ -187,9 +187,13 @@ for Edit Dialogue. It packages the merged expanded-Studio fixes from
 [#7222](https://github.com/synchronicity-labs/sync-api-v2/pull/7222) and
 [#7233](https://github.com/synchronicity-labs/sync-api-v2/pull/7233): active draft
 context publication, fullscreen height, draft/result controls and accessible
-current-result navigation. It retains all eleven UI resources published through
+current-result navigation. The release follow-up
+[#7253](https://github.com/synchronicity-labs/sync-api-v2/pull/7253) aligns all
+workflow titles, removes the projects-header Resume shortcut, and keeps previews
+above the composer. New lipsync/image-to-video requests default to `sync-3`;
+saved drafts and retries retain explicit model choices. It retains all eleven UI resources published through
 MCP #96 and the unchanged archive of the oldest October 2 resource. See
-[frontend packaging](docs/chatgpt-release.md) for the exact merged source commit,
+[frontend packaging](docs/chatgpt-release.md) for the exact source commit,
 checksums, release order and live acceptance requirements.
 
 The existing workflow backend from PR #6822 is already in production. The draft
