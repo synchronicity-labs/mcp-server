@@ -61,12 +61,12 @@ describe('packaged UI selection', () => {
   });
 
   it('enforces the shared retention budget before loading any bundles', () => {
-    const hashes = Array.from({ length: 9 }, (_, i) => String(i).repeat(64));
-    writeFileSync(catalog, JSON.stringify({ current, previous: hashes }));
+    const hashes = Array.from({ length: 10 }, (_, i) => String(i).repeat(64));
+    writeFileSync(catalog, JSON.stringify({ current, previous: hashes.slice(0, 9) }));
     vi.stubEnv('SYNC_CHATGPT_APP_DIR', '/mounted/legacy-ui');
-    expect(() => resolveConfig()).toThrow('retention exceeds nine previous bundles');
-    writeFileSync(catalog, JSON.stringify({ current, previous: hashes.slice(0, 8) }));
-    expect(resolveConfig().chatgptApp?.previousDirectories).toHaveLength(9);
+    expect(resolveConfig().chatgptApp?.previousDirectories).toHaveLength(10);
+    writeFileSync(catalog, JSON.stringify({ current, previous: hashes }));
+    expect(() => resolveConfig()).toThrow('retention exceeds ten previous bundles');
   });
 
   it('keeps API-only Docker deployments working without widget configuration', () => {

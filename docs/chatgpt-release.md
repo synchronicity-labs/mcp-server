@@ -5,7 +5,42 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
-## Chat and Studio draft synchronization candidate
+## Expanded Studio chat and result navigation candidate
+
+- Merged source: [#7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216), [#7220](https://github.com/synchronicity-labs/sync-api-v2/pull/7220) and [#7222](https://github.com/synchronicity-labs/sync-api-v2/pull/7222).
+- Build commit: `ea055f88ce863bb3a698d1c6057e5545e63509b0` (the #7222 merge, including both earlier fixes).
+- UI SHA256: `eb74c6c0c34eb1df35f88e8e58e4fa620e0aef3c8705c8aeb645dfd4729baa4c` (4,086,452 bytes).
+
+The expanded editor publishes its current project and draft through the standard
+MCP Apps model-context channel even when widget storage is available. The
+frontend serializes delivery, retries a rejected publication on a later draft
+refresh, and preserves private recovery when a host reuses the widget-state slot.
+No private recovery journal is included in model context.
+
+Fullscreen Studio uses the full reported height when the host reports no bottom
+inset. Positive composer insets retain their existing clearance. Editable drafts
+have no Source/Synced selector; completed results keep it. The history rail can
+return to the current result even when canonical history is empty or unavailable,
+with fresh project and generation authorization. Its accessible name, “Return
+to current result”, is distinct from the continuation recovery action. Upload
+and recovery locks still gate navigation.
+
+This is a clean build of the merged source and frozen lockfile, including its
+shared dependencies and translation-progress updates. It replaces only #96's
+unpublished candidate. All ten resources published through #94 and the archived
+October 2 resource remain unchanged. The retention bound remains ten previous
+resources, eleven total; session admission and memory limits are unchanged.
+No published bundle is retired by this release.
+
+The three source PRs are merged into dev. Deploy through the normal reviewed MCP
+main release after confirming the prerequisite draft API and migrations are
+released in the target environment. These UI fixes add no API route, migration,
+OAuth setting or provider operation. After deployment, refresh publisher metadata
+and the test connection, open a new expanded Studio, and confirm chat can select
+existing media with the published draft ID. Local host tests do not establish
+production ChatGPT acceptance.
+
+## Published draft synchronization release (#94)
 
 - Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `ab8edec11f3dc24061176cb45e25a75943d284b7`.
 - UI SHA256: `f5866028123de7ad70b806c1e3c24f59a111ab11e38ad2f8337cd56cae9dd811` (6215309 bytes).
@@ -176,7 +211,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 ## Normal production release
 
 1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
-   `current` selects the active HTML hash; `previous` retains up to nine older hashes.
+   `current` selects the active HTML hash; `previous` retains up to ten older hashes.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
@@ -195,10 +230,10 @@ The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
 Stale pins to absent, pruned hash directories in the image are ignored.
 Existing legacy bundles remain readable, including mounts under the packaged
-root. The nine-retained-release budget applies to the deduplicated combined
+root. The ten-retained-release budget applies to the deduplicated combined
 manifest and legacy list. Configuration rejects overflow with an actionable
 error instead of silently dropping resources. Retire unused bundles explicitly
-before deploying if the combined list exceeds nine. Keep mounts until their
+before deploying if the combined list exceeds ten. Keep mounts until their
 published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;
@@ -230,7 +265,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits ten releases total.
+while cached clients still need them. Packaging permits eleven releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.
