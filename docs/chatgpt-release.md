@@ -5,7 +5,32 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
-## Chat and Studio draft synchronization candidate
+## Draft model-context repair candidate
+
+- Source: [frontend PR #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216), commit `9da7a5c0c59d13386a1571221b60a9b4e3c42982`.
+- UI SHA256: `2ea2b5652e7667190961a3df11bb52df4b7a962cbcd3cf8657a59fa2639dacaa` (3,957,018 bytes).
+
+The expanded editor publishes its current project and draft through the standard
+MCP Apps model-context channel even when widget storage is available. The
+frontend serializes delivery, retries a rejected publication on a later draft
+refresh, and preserves private recovery when a host reuses the widget-state slot.
+No private recovery journal is included in model context.
+
+The new resource and all ten resources published through #94 pass actual MCP
+client reads. All 30 existing resource files and the three archived files remain
+byte-identical. The retention bound increases by one to ten previous resources,
+eleven total; session admission and memory limits remain unchanged. No bundle is
+retired by this release.
+
+Review and release the exact frontend source before this MCP package. Its base
+is current dev, so the coordinated release must account for its shared-package
+changes as well as the context fix. The draft API already advertises version 1;
+this repair adds no API route, migration, OAuth setting, or provider operation.
+After deployment, refresh publisher metadata and the test connection, open a
+new expanded Studio, and confirm chat can select existing media with the
+published draft ID. Local host tests do not establish production ChatGPT acceptance.
+
+## Published draft synchronization release (#94)
 
 - Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `ab8edec11f3dc24061176cb45e25a75943d284b7`.
 - UI SHA256: `f5866028123de7ad70b806c1e3c24f59a111ab11e38ad2f8337cd56cae9dd811` (6215309 bytes).
@@ -176,7 +201,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 ## Normal production release
 
 1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
-   `current` selects the active HTML hash; `previous` retains up to nine older hashes.
+   `current` selects the active HTML hash; `previous` retains up to ten older hashes.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
@@ -195,10 +220,10 @@ The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
 Stale pins to absent, pruned hash directories in the image are ignored.
 Existing legacy bundles remain readable, including mounts under the packaged
-root. The nine-retained-release budget applies to the deduplicated combined
+root. The ten-retained-release budget applies to the deduplicated combined
 manifest and legacy list. Configuration rejects overflow with an actionable
 error instead of silently dropping resources. Retire unused bundles explicitly
-before deploying if the combined list exceeds nine. Keep mounts until their
+before deploying if the combined list exceeds ten. Keep mounts until their
 published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;
@@ -230,7 +255,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits ten releases total.
+while cached clients still need them. Packaging permits eleven releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.

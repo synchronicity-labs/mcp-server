@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const chatgptReleaseSchema = z
-  .object({ current: digest, previous: z.array(digest).max(9) })
+  .object({ current: digest, previous: z.array(digest).max(10) })
   .strict()
   .refine(
     ({ current, previous }) => new Set([current, ...previous]).size === previous.length + 1,
@@ -29,9 +29,9 @@ export function resolveChatgptRelease(catalogPath: string, legacyDirectories: st
     ]),
   ].filter((path) => path !== directory);
   z.array(z.string())
-    .max(9, {
+    .max(10, {
       message:
-        'ChatGPT UI retention exceeds nine previous bundles across the release manifest and legacy settings. Retire unused releases explicitly before deploying.',
+        'ChatGPT UI retention exceeds ten previous bundles across the release manifest and legacy settings. Retire unused releases explicitly before deploying.',
     })
     .parse(previousDirectories);
   return { directory, previousDirectories };
