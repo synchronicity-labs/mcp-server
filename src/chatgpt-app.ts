@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { ResourceMetadata } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
+import { MAX_PREVIOUS_CHATGPT_RELEASES } from './chatgpt-release.js';
 import type { SyncMcpConfig } from './config.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { MCP_APP_RESOURCE_MIME_TYPE } from './tools/upload-widget.js';
@@ -91,7 +92,7 @@ export async function loadChatgptAppReleases(
   if (!config) return [];
   const previous = z
     .array(z.string().min(1))
-    .max(10)
+    .max(MAX_PREVIOUS_CHATGPT_RELEASES)
     .parse(config.previousDirectories ?? []);
   const apps = await Promise.all(
     [config.directory, ...previous].map((directory) => loadChatgptApp({ ...config, directory })),

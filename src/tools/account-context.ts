@@ -14,12 +14,14 @@ const accountContext = z.object({
   capabilities: z.object({
     projectRenaming: z.literal(true),
     studioDraftSync: z.literal(true).optional(),
+    studioViewSync: z.literal(true).optional(),
   }),
 });
 
 export function createAccountContextTool(
   http: HttpClient,
   studioDraftSync = false,
+  studioViewSync = false,
 ): McpToolDefinition {
   return {
     name: 'get-account-context',
@@ -48,6 +50,7 @@ export function createAccountContextTool(
         capabilities: {
           projectRenaming: true,
           ...(studioDraftSync ? { studioDraftSync: true } : {}),
+          ...(studioViewSync ? { studioViewSync: true } : {}),
         },
       });
     },

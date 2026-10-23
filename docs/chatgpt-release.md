@@ -1,5 +1,107 @@
 # ChatGPT frontend release
 
+## Mounted Studio handoff candidate
+
+Source: merged [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227)
+and the release follow-up [#7253](https://github.com/synchronicity-labs/sync-api-v2/pull/7253),
+commit `9636bdbf6d24f0544703b41ba4459e3920abb5de`, tree
+`c83f832b51eab4d9dc113c6e47694a9ca9c6e7bf`.
+UI SHA256: `92a96e6672b166d1779a7b23225a37b4460364b3fa8b11645c9392c0c098e32c`
+(4,095,177 uncompressed bytes).
+
+Chat reads the exact published `viewId` with `get-studio-view`, then requests a
+project open/refresh, media refresh, accepted-job/result selection or explicit
+continuation through `request-studio-view-action`. A successful backend write
+is separate from Studio's pending/applied/blocked/failed receipt. The widget
+polls the authenticated API mailbox; no unrelated tool-result broadcast is
+assumed. Existing draft tools still own selections, workflow/model/options,
+language and unsent speech.
+
+The API owns account/organization/widget scope, fresh project authorization,
+exact job membership, view revision CAS and replacement-mount ownership.
+Changed local edits and unresolved requests refuse application. A private
+persisted receipt retries an uncertain acknowledgement without repeating the
+UI action. These tools never start generation or synthesis; explicit result
+continuation retains its existing media-registration recovery.
+
+Deploy the four Studio-view operations under `/v2/studio-views/:viewId` with capability version 1
+before this MCP release. Capability
+discovery requires all four exact operation IDs/methods/version markers. No
+additional environment variable, migration, OAuth setting or paid provider
+operation is introduced. Older APIs keep the existing editor available.
+
+This candidate retains merged #96's expanded Studio resource unchanged,
+along with every earlier published and archived resource. The HTTP-response
+memory cleanup from #98 and its production SDK patch are retained. Retention increases by one to eleven
+previous resources, twelve total, with one shared bound for configuration,
+runtime loading and packaging. Session admission and heap limits are unchanged.
+
+The current live ChatGPT host opened the widget and shared an active draft ID
+after UI selection, but could not navigate the already-mounted project browser
+from a read-only chat request. That reproduces the navigation gap; it does not
+reproduce the original missing-context or disabled-Send/LOCKDOWN failures.
+Synthetic source/package tests exercise the fixed channel without broadcasts.
+They do not establish production acceptance of these new bytes.
+
+Release only the API prerequisites through the scoped main hotfix
+[sync-api-v2 #7255](https://github.com/synchronicity-labs/sync-api-v2/pull/7255),
+then deploy this reviewed MCP image. Do not promote the unrelated dev changes. Refresh publisher metadata and the connection;
+verify every action and accurate receipts in a fresh expanded Studio while chat
+remains usable. Paid acceptance needs the reviewer's approved media/budget.
+The source PR merged into `dev` as `06ec6799dd01d1f06394726f0a767e151e0925e4`.
+At the packaging checkpoint, production rollout and fresh ChatGPT acceptance
+remain unverified. Packaging tests do not perform a deployment or paid generation.
+
+### Packaging verification checkpoint
+
+The clean committed source passes all 95 source/artifact browser checks, including
+all four headers, composer-safe layouts, draft recovery and exact mounted-view
+actions. The 16 focused default-model/header/recovery checks also pass.
+All 653 MCP tests across 49 files pass on Node 22, with the original tests intact.
+An initial shared-host run reset seven local transport sockets; the isolated
+transport cases and a fresh complete run pass without production or assertion
+changes. Build and lint pass. Actual MCP client reads verify all twelve packaged
+resources and their recorded hashes; all 36 earlier published/archive files are
+byte-identical.
+
+The API-only prerequisite #7255 merged as
+`95c4787ac3e496d043ac8e3fbcff80cabf4efb32` after all current checks and a 5/5
+review. Its production deployment must complete and advertise all four operations
+before this MCP image is released. Current-head MCP CI/review and fresh ChatGPT
+acceptance remain separate gates.
+
+### Dependency audit correction
+
+The final CI audit reported
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
+updated October 23. Raise Zod's minimum from `^4.1.13` to `^4.6.6` and replace
+only its locked `4.3.6` resolution with the first patched version, `4.6.6`.
+All unrelated lockfile entries remain unchanged. A clean locked install,
+all 653 tests, build, lint and all twelve actual MCP resource reads pass after
+the update. Full and production-only audits now report zero vulnerabilities.
+The packaged frontend and every historical resource retain the same bytes.
+
+### Finished companion changes
+
+This candidate includes the reviewed thumbnail-only guidance and branded asset
+placeholder from [#95](https://github.com/synchronicity-labs/mcp-server/pull/95),
+plus external dialogue-video registration from
+[#97](https://github.com/synchronicity-labs/mcp-server/pull/97). Only the current
+frontend candidate is replaced; the older packaging proposal in #95 is excluded.
+The frontend includes the merged external-source UI and full-height Studio fix.
+Asset preview collisions still stop above the reported composer inset.
+
+All four workflow titles align with the back control. The projects header no
+longer contains the Resume shortcut; saved projects and uncertain-request
+recovery remain available through their existing controls. New lipsync and
+image-to-video requests default to `sync-3`, the current latest model. The
+server instructions make that default explicit for ChatGPT; existing drafts
+and idempotent retries retain their chosen model.
+
+Voice/team controls in source #7123 and MCP #92 are deferred. Unrelated dev
+changes, Premiere/Resolve changes and unfinished MCP infrastructure are outside
+this release.
+
 The MCP production image includes the approved, self-contained frontend from
 Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
@@ -211,7 +313,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 ## Normal production release
 
 1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
-   `current` selects the active HTML hash; `previous` retains up to ten older hashes.
+   `current` selects the active HTML hash; `previous` retains up to eleven older hashes.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
@@ -230,10 +332,10 @@ The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
 Stale pins to absent, pruned hash directories in the image are ignored.
 Existing legacy bundles remain readable, including mounts under the packaged
-root. The ten-retained-release budget applies to the deduplicated combined
+root. The twelve-release budget applies to the deduplicated combined
 manifest and legacy list. Configuration rejects overflow with an actionable
 error instead of silently dropping resources. Retire unused bundles explicitly
-before deploying if the combined list exceeds ten. Keep mounts until their
+before deploying if the combined list exceeds twelve. Keep mounts until their
 published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;
@@ -265,7 +367,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits eleven releases total.
+while cached clients still need them. Packaging permits twelve releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.

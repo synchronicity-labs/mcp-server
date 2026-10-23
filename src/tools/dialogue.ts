@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
+import { uploadRuntime } from '../upload-runtime.js';
 import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import { generateTools, type McpToolDefinition } from './generator.js';
+import { uploadMediaAsset } from './media-upload.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
 
@@ -53,11 +55,11 @@ export function createDialogueTools(
     if (project.id !== input.projectId) throw new Error('Could not verify project access.');
     signal?.throwIfAborted();
     const asset = z
-      .object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url() })
+      .object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url(), name: z.string().nullish() })
       .parse(await httpClient.request('get', `/v2/assets/${input.videoAssetId}`, { signal }));
     if (asset.id !== input.videoAssetId) throw new Error('Could not verify the source video.');
     signal?.throwIfAborted();
-    return { ...input, sourceVideoUrl: asset.url };
+    return { ...input, sourceVideoUrl: asset.url, sourceName: asset.name ?? 'dialogue-source.mp4' };
   }
   async function checkedJob(
     tool: McpToolDefinition,
@@ -109,12 +111,45 @@ export function createDialogueTools(
         'Check whether the connected API supports timed-word Edit Dialogue. Does not transcribe, synthesize or generate.',
       inputSchema: {},
       annotations: readHints,
-      handler: async () => ({ available: true, keyedPreview }),
+      handler: async () => ({ available: true, keyedPreview, sourceUpload: true }),
+    },
+    {
+      name: 'upload-dialogue-source',
+      description:
+        'Copy an accessible saved video into Sync storage when transcription rejects its external source URL. Returns a new asset; use its id as videoAssetId for transcription, preview, and final video generation. Does not transcribe or spend generation credits.',
+      inputSchema: sourceSchema.shape,
+      outputSchema: {
+        asset: z.object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url() }).passthrough(),
+      },
+      annotations: writeHints,
+      handler: async (args, context) => {
+        const input = await source(args, context?.signal);
+        const assetId = await uploadMediaAsset(
+          httpClient,
+          'video',
+          {
+            download_url: input.sourceVideoUrl,
+            file_id: input.videoAssetId,
+            file_name: input.sourceName,
+          },
+          uploadRuntime,
+          context?.signal,
+          { projectId: input.projectId, name: input.sourceName },
+        );
+        const asset = z
+          .object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url() })
+          .passthrough()
+          .parse(
+            await httpClient.request('get', `/v2/assets/${assetId}`, { signal: context?.signal }),
+          );
+        if (asset.id !== assetId) throw new Error('Could not verify the uploaded video.');
+        return { asset };
+      },
     },
     {
       name: 'create-dialogue-transcription',
       description:
-        'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. Does not replace dialogue or generate a video.',
+        'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. If the API rejects external storage, call upload-dialogue-source and use its returned asset id for the rest of the workflow. Does not replace dialogue or generate a video.',
       inputSchema: sourceSchema.shape,
       annotations: writeHints,
       handler: async (args, context) => {
