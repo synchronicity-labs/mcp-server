@@ -3,10 +3,10 @@
 ## Mounted Studio handoff candidate
 
 Source: [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227),
-commit `295fe5ec581c827b5633a0896515ce78b3bbd4fe`, tree
-`985d3b1595a4c2738b1294d72b0548a85bf169d0`.
-UI SHA256: `c07df590c222835ea91cbe43b7291abb705f46629ac24787d7b718f5a6f6ff50`
-(4,095,564 uncompressed bytes).
+commit `57e2ab8558f02f70bcfe2c099cf6a16ad4598264`, tree
+`fca1e1ff1ea1c56700f7d17a2d801a06408b8c22`.
+UI SHA256: `ed360e359c0b64fa38103a28e5f9534cee8e5716090634d0a20d54a5767710df`
+(4,095,347 uncompressed bytes).
 
 Chat reads the exact published `viewId` with `get-studio-view`, then requests a
 project open/refresh, media refresh, accepted-job/result selection or explicit

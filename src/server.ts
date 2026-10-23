@@ -57,6 +57,13 @@ export const SERVER_INSTRUCTIONS =
   'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
+const APP_UI_TOOLS = new Set([
+  'open-sync-app',
+  'save-studio-draft',
+  'ack-studio-draft',
+  'register-studio-view',
+  'ack-studio-view',
+]);
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'get-studio-view',
   'request-studio-view-action',
@@ -321,14 +328,8 @@ function isStructuredContent(result: unknown): result is Record<string, unknown>
 }
 
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
-  if (
-    ['save-studio-draft', 'ack-studio-draft', 'register-studio-view', 'ack-studio-view'].includes(
-      tool.name,
-    )
-  )
-    return profile.supportsAppUi;
+  if (APP_UI_TOOLS.has(tool.name)) return profile.supportsAppUi;
   if (tool.name === 'create-lipsync-from-assets') return profile.supportsAppUi;
-  if (tool.name === 'open-sync-app') return profile.supportsAppUi;
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
   return true;
 }
@@ -500,16 +501,7 @@ function createProfiledServer(
           handler: async (...parameters: Parameters<typeof tool.handler>) => {
             const [args] = parameters;
             if (!profile) throw new Error('Complete MCP initialization before calling tools.');
-            if (
-              [
-                'open-sync-app',
-                'save-studio-draft',
-                'ack-studio-draft',
-                'register-studio-view',
-                'ack-studio-view',
-              ].includes(tool.name) &&
-              !profile.supportsAppUi
-            )
+            if (APP_UI_TOOLS.has(tool.name) && !profile.supportsAppUi)
               throw new Error(
                 'Open the Sync app in ChatGPT, or use the Sync tools in this client.',
               );
