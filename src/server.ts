@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { relayUploadTool } from './app-upload-relay.js';
+import { ASSET_THUMBNAIL_INSTRUCTIONS } from './asset-thumbnail.js';
 import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { loadToken } from './auth/token-store.js';
@@ -46,6 +47,7 @@ const SERVER_DESCRIPTION =
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 export const SERVER_INSTRUCTIONS =
+  ASSET_THUMBNAIL_INSTRUCTIONS +
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
   'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
   'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
@@ -83,6 +85,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'create-speech-preview',
   'get-speech-preview',
   'get-dialogue-options',
+  'upload-dialogue-source',
   'create-dialogue-transcription',
   'get-dialogue-transcription',
   'create-dialogue-preview',
@@ -137,6 +140,7 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'create-speech-preview',
   'get-speech-preview',
   'get-dialogue-options',
+  'upload-dialogue-source',
   'create-dialogue-transcription',
   'get-dialogue-transcription',
   'create-dialogue-preview',

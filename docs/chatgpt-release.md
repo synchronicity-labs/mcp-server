@@ -23,7 +23,8 @@ persisted receipt retries an uncertain acknowledgement without repeating the
 UI action. These tools never start generation or synthesis; explicit result
 continuation retains its existing media-registration recovery.
 
-Deploy the four version-1 Studio view routes before this MCP release. Capability
+Deploy the four `/v2/studio-views/:viewId` routes with capability version 1
+before this MCP release. Capability
 discovery requires all four exact operation IDs/methods/version markers. No
 additional environment variable, migration, OAuth setting or paid provider
 operation is introduced. Older APIs keep the existing editor available.
@@ -45,7 +46,9 @@ Release the source API through the normal dev-to-production process, then
 deploy this reviewed MCP image. Refresh publisher metadata and the connection;
 verify every action and accurate receipts in a fresh expanded Studio while chat
 remains usable. Paid acceptance needs the reviewer's approved media/budget.
-No PR merge, deployment or paid generation has been performed.
+The source PR merged into `dev` as `06ec6799dd01d1f06394726f0a767e151e0925e4`.
+The production rollout and fresh ChatGPT acceptance remain unverified.
+No MCP merge, deployment or paid generation has been performed.
 
 The MCP production image includes the approved, self-contained frontend from
 Sync's monorepo. It does not build Studio or fetch another repository at deploy
@@ -258,7 +261,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 ## Normal production release
 
 1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
-   `current` selects the active HTML hash; `previous` retains up to ten older hashes.
+   `current` selects the active HTML hash; `previous` retains up to eleven older hashes.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
@@ -277,10 +280,10 @@ The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
 Stale pins to absent, pruned hash directories in the image are ignored.
 Existing legacy bundles remain readable, including mounts under the packaged
-root. The ten-retained-release budget applies to the deduplicated combined
+root. The twelve-release budget applies to the deduplicated combined
 manifest and legacy list. Configuration rejects overflow with an actionable
 error instead of silently dropping resources. Retire unused bundles explicitly
-before deploying if the combined list exceeds ten. Keep mounts until their
+before deploying if the combined list exceeds twelve. Keep mounts until their
 published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;

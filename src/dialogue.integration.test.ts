@@ -7,11 +7,14 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { routeUploadSourceToFixture } from './test-fixtures/upload-source.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const videoAssetId = '00000000-0000-4000-8000-000000000002';
 const transcriptionId = '00000000-0000-4000-8000-000000000003';
 const dialogueEditId = '00000000-0000-4000-8000-000000000004';
+const uploadedAssetId = '00000000-0000-4000-8000-000000000006';
+const externalUrl = 'http://93.184.216.34/external.mp4';
 const source = { projectId, videoAssetId };
 const sourceVideoUrl = 'https://cdn.sync.so/saved-source.mp4';
 const transcript = {
@@ -90,6 +93,8 @@ afterEach(async () => {
 async function fixture(
   options: {
     denied?: boolean;
+    external?: boolean;
+    uploadRejected?: boolean;
     mismatched?: boolean;
     lostPreview?: boolean;
     keyedPreview?: boolean;
@@ -117,6 +122,20 @@ async function fixture(
       res.end(JSON.stringify(current));
       return;
     }
+    if (req.url === '/external.mp4') {
+      calls.push({ path: req.url });
+      res.setHeader('Content-Type', 'video/mp4');
+      res.end('external video bytes');
+      return;
+    }
+    if (req.url === '/storage') {
+      let bytes = '';
+      for await (const chunk of req) bytes += chunk.toString();
+      calls.push({ path: req.url, body: { bytes } });
+      res.statusCode = options.uploadRejected ? 403 : 200;
+      res.end();
+      return;
+    }
     let raw = '';
     for await (const chunk of req) raw += chunk.toString();
     const body = raw ? JSON.parse(raw) : undefined;
@@ -137,16 +156,40 @@ async function fixture(
       value = {
         id: videoAssetId,
         type: 'VIDEO',
-        url: options.rotatingAssetUrl ? `${sourceVideoUrl}?read=${calls.length}` : sourceVideoUrl,
+        url: options.external
+          ? externalUrl
+          : options.rotatingAssetUrl
+            ? `${sourceVideoUrl}?read=${calls.length}`
+            : sourceVideoUrl,
       };
-    else if (req.url?.startsWith('/v2/transcriptions'))
+    else if (req.url === '/v2/assets/upload')
+      value = { uploadUrl: `http://${req.headers.host}/storage`, url: sourceVideoUrl };
+    else if (req.url === '/v2/assets' || req.url === `/v2/assets/${uploadedAssetId}`)
+      value = {
+        id: uploadedAssetId,
+        type: 'VIDEO',
+        url: sourceVideoUrl,
+        name: 'Interview.mp4',
+        durationSeconds: 2,
+      };
+    else if (req.url?.startsWith('/v2/transcriptions')) {
+      if (req.method === 'POST' && body.sourceVideoUrl !== sourceVideoUrl) {
+        res.statusCode = 422;
+        res.end(
+          JSON.stringify({
+            message:
+              'Transcription sources must be hosted in sync. labs storage. Upload the file via POST /v2/assets/upload first, then transcribe the returned url.',
+          }),
+        );
+        return;
+      }
       value = {
         id: transcriptionId,
         status: 'COMPLETED',
         sourceVideoUrl: options.mismatched ? 'https://cdn.sync.so/other.mp4' : sourceVideoUrl,
         transcript,
       };
-    else if (req.url?.startsWith('/v2/dialogue-edits')) {
+    } else if (req.url?.startsWith('/v2/dialogue-edits')) {
       if (req.method === 'POST' && options.lostPreview) {
         res.statusCode = 503;
         res.end(JSON.stringify({ message: 'Unknown outcome' }));
@@ -186,7 +229,7 @@ async function fixture(
   await client.connect(ct);
   const call = (name: string, args: Record<string, unknown>) =>
     runWithAuth('dialogue-reader', 'openai-mcp', () => client.callTool({ name, arguments: args }));
-  return { calls, client, call };
+  return { calls, client, call, port: (upstream.address() as AddressInfo).port };
 }
 it.each([
   undefined,
@@ -335,4 +378,79 @@ it('refuses keyed preview admission when the upstream has no idempotency contrac
   expect((await call('get-dialogue-options', {})).structuredContent).toMatchObject({
     keyedPreview: false,
   });
+});
+
+it('uploads an external dialogue source before transcribing and uses the uploaded asset through generation', async () => {
+  const { calls, call, port } = await fixture({ external: true });
+  const transport = routeUploadSourceToFixture(port);
+  try {
+    expect((await call('create-dialogue-transcription', source)).isError).toBe(true);
+    const uploaded = await call('upload-dialogue-source', source);
+    expect(uploaded.isError).not.toBe(true);
+    expect(uploaded.structuredContent).toMatchObject({
+      asset: { id: uploadedAssetId, url: sourceVideoUrl },
+    });
+    const hosted = { projectId, videoAssetId: uploadedAssetId };
+    expect((await call('create-dialogue-transcription', hosted)).isError).not.toBe(true);
+    expect(
+      (await call('get-dialogue-transcription', { ...hosted, id: transcriptionId })).isError,
+    ).not.toBe(true);
+    expect(
+      (await call('create-dialogue-preview', { ...hosted, transcriptionId, edits })).isError,
+    ).not.toBe(true);
+    expect(
+      (
+        await call('create-dialogue-video', {
+          ...hosted,
+          dialogueEditId,
+          model: 'sync-3',
+          idempotencyKey: 'external-dialogue',
+        })
+      ).isError,
+    ).not.toBe(true);
+    expect(calls.find((c) => c.path === '/storage')?.body).toEqual({
+      bytes: 'external video bytes',
+    });
+    expect(calls.find((c) => c.path === '/v2/assets')?.body).toMatchObject({
+      url: sourceVideoUrl,
+      type: 'VIDEO',
+      projectId,
+    });
+    expect(
+      calls.filter((c) => c.path === '/v2/transcriptions').map((c) => c.body?.sourceVideoUrl),
+    ).toEqual([externalUrl, sourceVideoUrl]);
+    expect(calls.findIndex((c) => c.path === '/storage')).toBeLessThan(
+      calls.findIndex((c) => c.path === '/v2/assets'),
+    );
+    expect(calls.find((c) => c.path === '/v2/generate')?.body?.input).toEqual([
+      { type: 'video', assetId: uploadedAssetId },
+    ]);
+    expect(
+      calls
+        .filter((c) => c.path.startsWith('/v2/'))
+        .every((c) => c.token === 'Bearer dialogue-reader'),
+    ).toBe(true);
+  } finally {
+    transport.restore();
+  }
+});
+it('does not save an external dialogue source when storage rejects its upload', async () => {
+  const { calls, call, port } = await fixture({ external: true, uploadRejected: true });
+  const transport = routeUploadSourceToFixture(port);
+  try {
+    expect((await call('upload-dialogue-source', source)).isError).toBe(true);
+    expect(calls.some((c) => c.path === '/storage')).toBe(true);
+    expect(calls.some((c) => c.path === '/v2/assets' || c.path === '/v2/transcriptions')).toBe(
+      false,
+    );
+  } finally {
+    transport.restore();
+  }
+});
+it('checks source access before downloading an external dialogue video', async () => {
+  const { calls, call } = await fixture({ external: true, denied: true });
+  expect((await call('upload-dialogue-source', source)).isError).toBe(true);
+  expect(calls.some((c) => c.path === '/external.mp4' || c.path === '/v2/assets/upload')).toBe(
+    false,
+  );
 });
