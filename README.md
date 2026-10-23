@@ -318,6 +318,24 @@ alongside heap usage and session rejection counts. This guard bounds session
 admission, not all request/response or upload memory; size container resources
 with those workloads in mind.
 
+The SDK is pinned to `1.32.1` with a small JSON-response cleanup patch in
+`scripts/patch-mcp-sdk.mjs`. Completed responses must release their stream entry
+immediately; retaining its resolver also retains the serialized response until
+the session closes. The install hook patches both ESM and CommonJS builds and
+rejects an unexpected SDK version or source layout. Installs that disable scripts
+must run `npm run patch:mcp-sdk` explicitly, as CI does. The patch script is also
+included in the published npm package and both Docker install stages. Remove it
+only after an SDK upgrade passes the HTTP retention regressions.
+
+After `npm run build && npm run package:chatgpt`, run `npm run test:memory:http`
+to exercise the actual HTTP transport and every packaged widget release in a
+512 MiB old-space process. It checks retained heap while sessions remain live,
+then expires sessions and repeats the workload to verify recovery. It uses only
+loopback HTTP and fixture API metadata; no credentials or generation calls are
+needed. `src/http-response-cleanup.test.ts` also checks successful and failed RPC
+responses, concurrent requests, and completion after a client disconnect without
+cancelling or repeating the tool operation.
+
 Tool schemas and stateless handlers are built once per HTTP factory. Discovery
 descriptions are cached for the four supported presentation profiles. Immutable schema validators are shared too. Session
 profiles, transports and request validation remain separate; credentials are resolved
