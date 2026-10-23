@@ -1,10 +1,10 @@
 {
   "repository": "synchronicity-labs/sync-api-v2",
-  "commit": "54f7cbd1c22e10f3eedda5ea673f192ab664b91b",
-  "tree": "8b7f3b54fc84ea33cb51627c50790ad3deccd0ee",
+  "commit": "295fe5ec581c827b5633a0896515ce78b3bbd4fe",
+  "tree": "985d3b1595a4c2738b1294d72b0548a85bf169d0",
   "sourcePullRequest": "https://github.com/synchronicity-labs/sync-api-v2/pull/7227",
-  "htmlSha256": "c18a32c19121f80deb7a0393078ce9a66715f00fedfb3307e6552c64311f3c44",
-  "htmlBytes": 4095474,
+  "htmlSha256": "c07df590c222835ea91cbe43b7291abb705f46629ac24787d7b718f5a6f6ff50",
+  "htmlBytes": 4095564,
   "nodeVersion": "24.21.0",
   "packageManager": "pnpm@12.14.0",
   "buildCommands": [
