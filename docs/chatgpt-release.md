@@ -7,8 +7,8 @@ Existing production origins and OAuth settings are kept.
 
 ## Draft model-context repair candidate
 
-- Source: [frontend PR #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216), commit `9da7a5c0c59d13386a1571221b60a9b4e3c42982`.
-- UI SHA256: `2ea2b5652e7667190961a3df11bb52df4b7a962cbcd3cf8657a59fa2639dacaa` (3,957,018 bytes).
+- Source: [frontend PR #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216), commit `c779121ba7e00bd3e7c38200c79a09b4ddf6a2f5`.
+- UI SHA256: `f0dd696d03bfdae09580de317d4cb9a9ecf8f4b761dffc77111f0c02d17617ab` (3,957,179 bytes).
 
 The expanded editor publishes its current project and draft through the standard
 MCP Apps model-context channel even when widget storage is available. The
