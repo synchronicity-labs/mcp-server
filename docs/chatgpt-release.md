@@ -70,6 +70,17 @@ review. Its production deployment must complete and advertise all four operation
 before this MCP image is released. Current-head MCP CI/review and fresh ChatGPT
 acceptance remain separate gates.
 
+### Dependency audit correction
+
+The final CI audit reported
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
+updated October 23. Raise Zod's minimum from `^4.1.13` to `^4.6.6` and replace
+only its locked `4.3.6` resolution with the first patched version, `4.6.6`.
+All unrelated lockfile entries remain unchanged. A clean locked install,
+all 653 tests, build, lint and all twelve actual MCP resource reads pass after
+the update. Full and production-only audits now report zero vulnerabilities.
+The packaged frontend and every historical resource retain the same bytes.
+
 ### Finished companion changes
 
 This candidate includes the reviewed thumbnail-only guidance and branded asset
