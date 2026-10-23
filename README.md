@@ -143,6 +143,13 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `projects_create` | Create a project to group generations + assets |
 | `projects_get-all` / `projects_get` | List / get projects |
 | `projects_update` / `projects_delete` | Update or delete a project |
+| `get-studio-view` | Read the exact mounted Studio view and its action receipt |
+| `open-studio-project` | Open an existing project and optional workflow in Studio |
+| `refresh-studio-project` | Refresh Studio after a project rename or details change |
+| `refresh-studio-assets` | Refresh Studio after uploads or asset registration |
+| `show-studio-generation` | Display an already accepted generation or result |
+| `continue-studio-generation` | Stage an explicit source/output continuation in a new draft; archives the prior draft and may register existing output as media |
+| `get-studio-draft` / `update-studio-draft` | Read or replace specified draft selections/settings with revision checks; updates are marked destructive |
 
 `create-translate-and-dub` requires a saved video asset, accessible project,
 model, target language and persistent idempotency key. Confirm the paid action
@@ -179,6 +186,11 @@ from [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/
 Backend success is separate from its pending/applied/blocked/failed display
 receipt. Existing draft synchronization and paid-operation recovery remain in
 place; these view tools do not generate or synthesize media.
+Each model-callable view operation has its own tool, flat input schema and
+annotations. The generic `request-studio-view-action` tool is no longer exposed.
+Draft updates/saves and continuation declare destructive effects; receipt
+acknowledgements remain non-destructive. Cached Studio resources retain the
+existing app-only registration and acknowledgement tools.
 
 This candidate includes thumbnail-only asset previews and hosted-video recovery
 for Edit Dialogue. It packages the merged expanded-Studio fixes from

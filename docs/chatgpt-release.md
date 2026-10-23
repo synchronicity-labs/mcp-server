@@ -9,9 +9,26 @@ commit `9636bdbf6d24f0544703b41ba4459e3920abb5de`, tree
 UI SHA256: `92a96e6672b166d1779a7b23225a37b4460364b3fa8b11645c9392c0c098e32c`
 (4,095,177 uncompressed bytes).
 
-Chat reads the exact published `viewId` with `get-studio-view`, then requests a
-project open/refresh, media refresh, accepted-job/result selection or explicit
-continuation through `request-studio-view-action`. A successful backend write
+Chat reads the exact published `viewId` with `get-studio-view`, then uses an
+individually exposed tool for each operation:
+
+| Tool | Operation | Destructive |
+| --- | --- | --- |
+| `open-studio-project` | Open an existing project and optional workflow | No |
+| `refresh-studio-project` | Refresh project details after a backend change | No |
+| `refresh-studio-assets` | Refresh media after upload/registration | No |
+| `show-studio-generation` | Display an accepted generation/result | No |
+| `continue-studio-generation` | Stage source/output in a new draft, archiving the previous state; may register existing output as media | Yes |
+
+Each tool has its own flat input schema, description and annotations. The generic
+`request-studio-view-action` tool is removed from discovery and invocation.
+The internal API command envelope stays unchanged. `update-studio-draft` and the
+app-only `save-studio-draft` truthfully declare `destructiveHint: true` because
+they can overwrite draft selections/settings/unsent speech. Acknowledgements
+remain non-destructive. Revision checks, authorization, recovery and the immutable
+frontend resources are unchanged. Refresh publisher tool metadata after deployment.
+
+A successful backend write
 is separate from Studio's pending/applied/blocked/failed receipt. The widget
 polls the authenticated API mailbox; no unrelated tool-result broadcast is
 assumed. Existing draft tools still own selections, workflow/model/options,

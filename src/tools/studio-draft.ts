@@ -103,7 +103,7 @@ export function createStudioDraftTools(
   }
   const writeAnnotations = {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
     openWorldHint: false,
   };
@@ -128,7 +128,7 @@ export function createStudioDraftTools(
       name: 'update-studio-draft',
       title: 'Change Studio selections and settings',
       description:
-        'Update only the open editable Studio draft, using its published draftId/projectId and the expectedRevision returned by get-studio-draft. Supports media IDs, workflow, model options, language and unsent speech settings. This does not generate, translate, clone, upload, or spend credits. On a conflict, read the draft and reconcile; never automatically overwrite newer edits. A successful save is awaiting Studio until appliedRevision equals revision; only then claim the UI applied it.',
+        'Update only the open editable Studio draft, using its published draftId/projectId and the expectedRevision returned by get-studio-draft. Replaces the specified media selections, workflow, model options, language or unsent speech settings; changing the visual can clear audio derived from the previous visual. Only make changes requested by the user. This does not generate, translate, clone, upload, or spend credits. On a conflict, read the draft and reconcile; never automatically overwrite newer edits. A successful save is awaiting Studio until appliedRevision equals revision; only then claim the UI applied it.',
       inputSchema: edit.shape,
       outputSchema: draft.shape,
       annotations: writeAnnotations,
@@ -182,7 +182,7 @@ export function createStudioDraftTools(
       name: 'save-studio-draft',
       title: 'Save Studio draft',
       description:
-        'Studio-only compare-and-set of the editable snapshot and current recovery lock. No provider work is performed.',
+        'Studio-only replacement of the editable snapshot and current recovery lock, guarded by compare-and-set. Overwrites existing draft selections and settings. No provider work is performed.',
       inputSchema: save.shape,
       outputSchema: draft.shape,
       meta: appOnly,
@@ -209,7 +209,7 @@ export function createStudioDraftTools(
       inputSchema: acknowledge.shape,
       outputSchema: draft.shape,
       meta: appOnly,
-      annotations: { ...writeAnnotations, idempotentHint: true },
+      annotations: { ...writeAnnotations, destructiveHint: false, idempotentHint: true },
       handler: async (args, context) => {
         const input = acknowledge.parse(args);
         return draft.parse(
