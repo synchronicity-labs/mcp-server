@@ -6,6 +6,7 @@ import {
   AcknowledgeStudioViewSchema,
   RegisterStudioViewSchema,
   RequestStudioViewActionSchema,
+  StudioViewCommandSchema,
   StudioViewSchema,
 } from './studio-view-contract.js';
 
@@ -27,49 +28,121 @@ export function createStudioViewTools(
 ): McpToolDefinition[] {
   if (!supportsStudioViews(operations)) return [];
   const viewId = z.uuid();
-  return (
+  const instructions =
+    ' First get-studio-view for the exact published viewId, use its expectedRevision and a fresh UUID id; retry an uncertain handoff with the SAME id/body. Do not replace unresolved actions, guess a widget, or overwrite stale edits. This never repeats backend creation or paid work. Check the action receipt through get-studio-view: only applied confirms UI display; pending/blocked/failed do not. Draft selection/settings edits use get-studio-draft and update-studio-draft.';
+  const actions = {
+    'open-project': {
+      name: 'open-studio-project',
+      title: 'Open a project in Studio',
+      description:
+        'Open an existing project in the mounted Studio, optionally selecting its workflow. Can replace the active editor state, archiving the prior draft. Does not create a project or generate media.',
+    },
+    'refresh-project': {
+      name: 'refresh-studio-project',
+      title: 'Refresh Studio project details',
+      description:
+        'Refresh an existing project in the mounted Studio after its backend details change, such as a rename. Does not rename or create the project.',
+    },
+    'refresh-assets': {
+      name: 'refresh-studio-assets',
+      title: 'Refresh Studio media',
+      description:
+        'Refresh an existing project’s media in the mounted Studio after an upload or asset registration succeeds. Does not upload, register, delete or select media.',
+    },
+    'open-generation': {
+      name: 'show-studio-generation',
+      title: 'Show an existing Studio generation',
+      description:
+        'Display an already accepted generation or its result in the mounted Studio, opening its project if needed. Replaces the active editor state and archives the prior draft. Does not submit or retry generation.',
+    },
+    'continue-generation': {
+      name: 'continue-studio-generation',
+      title: 'Continue an existing Studio generation',
+      description:
+        'For an explicit user request, stage an existing generation’s source input or output as a new editable draft in the selected workflow. Replaces the active draft and archives its prior state; output continuation may register existing output as Sync media. Does not generate or synthesize media.',
+    },
+  };
+  const actionTools = StudioViewCommandSchema.options.map((command) => {
+    const { type: discriminator, ...fields } = command.shape;
+    const type = discriminator.value;
+    const schema = RequestStudioViewActionSchema.omit({ command: true }).extend(fields);
+    return {
+      ...actions[type],
+      description: actions[type].description + instructions,
+      schema,
+      bodySchema: schema.transform(({ id, expectedRevision, ...fields }) => ({
+        id,
+        expectedRevision,
+        command: command.parse({ ...fields, type }),
+      })),
+      suffix: '/actions',
+      method: 'post' as const,
+      appOnly: false,
+      destructive: type !== 'refresh-project' && type !== 'refresh-assets',
+    };
+  });
+  const tools = [
     [
-      ['get-studio-view', 'Read mounted Studio view', z.object({}), '', 'get', false],
-      [
-        'request-studio-view-action',
-        'Request a mounted Studio action',
-        RequestStudioViewActionSchema,
-        '/actions',
-        'post',
-        false,
-      ],
-      [
-        'register-studio-view',
-        'Register mounted Studio view',
-        RegisterStudioViewSchema,
-        '',
-        'put',
-        true,
-      ],
-      [
-        'ack-studio-view',
-        'Acknowledge displayed Studio action',
-        AcknowledgeStudioViewSchema,
-        '/acknowledgement',
-        'post',
-        true,
-      ],
-    ] as const
-  ).map(
-    ([name, title, schema, suffix, method, appOnly]): McpToolDefinition => ({
+      'get-studio-view',
+      'Read mounted Studio view',
+      z.object({}),
+      '',
+      'get',
+      false,
+      'Read the exact viewId published by the mounted Studio, including its current revision and last action receipt. No view list or inferred latest widget. pending means not displayed; blocked needs the UI action/recovery completed; failed was not confirmed; applied confirms that action was displayed. An unavailable view must be reopened.',
+    ],
+    [
+      'register-studio-view',
+      'Register mounted Studio view',
+      RegisterStudioViewSchema,
+      '',
+      'put',
+      true,
+      'Studio-only view ownership/context registration. No provider work.',
+    ],
+    [
+      'ack-studio-view',
+      'Acknowledge displayed Studio action',
+      AcknowledgeStudioViewSchema,
+      '/acknowledgement',
+      'post',
+      true,
+      'Studio-only application receipt. No provider work.',
+    ],
+  ] as const;
+  return [
+    ...tools.map(([name, title, schema, suffix, method, appOnly, description]) => ({
       name,
       title,
-      description:
-        method === 'get'
-          ? 'Read the exact viewId published by the mounted Studio, including its current revision and last action receipt. No view list or inferred latest widget. pending means not displayed; blocked needs the UI action/recovery completed; failed was not confirmed; applied confirms that action was displayed. An unavailable view must be reopened.'
-          : appOnly
-            ? 'Studio-only view ownership/context and application receipt. No provider work.'
-            : 'After a backend create/open/rename/upload/generation succeeds, request navigation or refresh in the exact published viewId. First get-studio-view, use its expectedRevision and a fresh UUID id; retry an uncertain handoff with the SAME id/body. This never repeats backend creation or paid work. Use open-project for creation/opening, refresh-project after rename, refresh-assets after upload/registration, open-generation for the already accepted generationId, and continue-generation for an explicit result continuation (may register existing output as media, never generate). Media selection, workflow/model/options/language/unsent speech edits use get-studio-draft and update-studio-draft with revision checks. Do not infer UI success from backend success: check this action receipt through get-studio-view and report pending/blocked/failed until applied. Do not replace unresolved actions, guess a widget, or automatically overwrite stale edits.',
+      schema,
+      bodySchema: schema,
+      suffix,
+      method,
+      appOnly,
+      description,
+      destructive: false,
+    })),
+    ...actionTools,
+  ].map(
+    ({
+      name,
+      title,
+      schema,
+      bodySchema,
+      suffix,
+      method,
+      appOnly,
+      description,
+      destructive,
+    }): McpToolDefinition => ({
+      name,
+      title,
+      description,
       inputSchema: { viewId, ...schema.shape },
       outputSchema: StudioViewSchema.shape,
       annotations: {
         readOnlyHint: method === 'get',
-        destructiveHint: false,
+        destructiveHint: destructive,
         idempotentHint: true,
         openWorldHint: false,
       },
@@ -79,7 +152,7 @@ export function createStudioViewTools(
         const id = viewId.parse(rawId);
         return StudioViewSchema.refine((view) => view.id === id).parse(
           await http.request(method, `/v2/studio-views/${id}${suffix}`, {
-            body: method === 'get' ? undefined : schema.parse(body),
+            body: method === 'get' ? undefined : bodySchema.parse(body),
             signal: context?.signal,
           }),
         );

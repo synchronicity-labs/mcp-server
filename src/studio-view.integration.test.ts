@@ -11,6 +11,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
   const viewId = '00000000-0000-4000-8000-000000000001';
   const projectId = '00000000-0000-4000-8000-000000000002';
   const id = '00000000-0000-4000-8000-000000000003';
+  const generationId = '00000000-0000-4000-8000-000000000004';
   const calls: { path?: string; auth?: string; body: unknown }[] = [];
   const view = {
     id: viewId,
@@ -86,34 +87,72 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
   await client.connect(ct);
   try {
     const tools = (await client.listTools()).tools;
-    expect(tools.find((tool) => tool.name === 'request-studio-view-action')).toBeDefined();
+    expect(tools.some((tool) => tool.name === 'request-studio-view-action')).toBe(false);
     expect(tools.find((tool) => tool.name === 'register-studio-view')?._meta?.ui).toMatchObject({
       visibility: ['app'],
     });
-    const result = await runWithAuth('view-user', 'openai-mcp', () =>
+    const actions = [
+      ['open-studio-project', { type: 'open-project', projectId, workflow: 'lipsync' }, true],
+      ['refresh-studio-project', { type: 'refresh-project', projectId }, false],
+      ['refresh-studio-assets', { type: 'refresh-assets', projectId }, false],
+      ['show-studio-generation', { type: 'open-generation', projectId, generationId }, true],
+      [
+        'continue-studio-generation',
+        {
+          type: 'continue-generation',
+          projectId,
+          generationId,
+          workflow: 'lipsync',
+          seedSource: 'output',
+        },
+        true,
+      ],
+    ] as const;
+    for (const [name, { type, ...fields }, destructiveHint] of actions) {
+      const tool = tools.find((tool) => tool.name === name);
+      expect(tool?.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+      expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(
+        [...Object.keys(fields), 'viewId', 'id', 'expectedRevision'].sort(),
+      );
+      const input = { viewId, id, expectedRevision: 1, ...fields };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await runWithAuth('view-user', 'openai-mcp', () =>
+          client.callTool({ name, arguments: input }),
+        );
+        expect(result.isError).not.toBe(true);
+        expect(result.structuredContent).toMatchObject({
+          id: viewId,
+          action: { id, status: 'pending', command: { type, ...fields } },
+        });
+        expect(calls.at(-1)).toEqual({
+          path: `/v2/studio-views/${viewId}/actions`,
+          auth: 'Bearer view-user',
+          body: { id, expectedRevision: 1, command: { type, ...fields } },
+        });
+        expect(result.structuredContent).not.toHaveProperty('mountId');
+      }
+    }
+    expect(calls).toHaveLength(10);
+    const invalid = await runWithAuth('view-user', 'openai-mcp', () =>
       client.callTool({
-        name: 'request-studio-view-action',
+        name: 'continue-studio-generation',
         arguments: {
           viewId,
           id,
           expectedRevision: 1,
-          command: { type: 'open-project', projectId },
+          projectId,
+          generationId,
+          workflow: 'lipsync',
         },
       }),
     );
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({
-      id: viewId,
-      action: { id, status: 'pending' },
-    });
-    expect(calls).toEqual([
-      {
-        path: `/v2/studio-views/${viewId}/actions`,
-        auth: 'Bearer view-user',
-        body: { id, expectedRevision: 1, command: { type: 'open-project', projectId } },
-      },
-    ]);
-    expect(result.structuredContent).not.toHaveProperty('mountId');
+    expect(invalid.isError).toBe(true);
+    expect(calls).toHaveLength(10);
     const nonUiServer = factory.createServer();
     const nonUi = new Client({ name: 'cli', version: 'test' });
     const [nct, nst] = InMemoryTransport.createLinkedPair();
@@ -130,7 +169,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
         }),
       );
       expect(rejected.isError).toBe(true);
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(10);
     } finally {
       await nonUi.close();
       await nonUiServer.close();

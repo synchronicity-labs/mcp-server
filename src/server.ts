@@ -56,7 +56,7 @@ export const SERVER_INSTRUCTIONS =
   'When standalone translation-preview tools are available, the app can translate saved audio before final lip-sync. Confirm the source audio, language and quote before create-translation-preview. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, estimate and confirm a separate create-lipsync-from-assets using that audio; do not send it through create-translate-and-dub again. ' +
   'When create-speech-preview is available, the app can synthesize a standalone audio preview for its video input. Confirm script, voice and estimated cost. Persist and reuse its idempotencyKey after uncertain admission, poll the same returned job, and never synthesize again because asset attachment failed. ' +
   'When Studio publishes a draftId, use get-studio-draft and update-studio-draft to change its selections/settings. Chat prose does not select media in Studio. Use the current expectedRevision and confirm UI application only after appliedRevision equals revision. These tools do not start paid work. ' +
-  'When Studio publishes a viewId, finish backend changes with get-studio-view and request-studio-view-action to open the project, refresh renamed projects/uploaded assets, or display the already accepted job/result. Only an applied receipt confirms UI display. Never repeat backend or paid work to refresh the UI. ' +
+  'When Studio publishes a viewId, read get-studio-view, then use open-studio-project to open a project, refresh-studio-project after a rename, refresh-studio-assets after uploads, show-studio-generation to display an accepted job/result, or continue-studio-generation for an explicitly requested continuation. Only an applied receipt confirms UI display. Never repeat backend or paid work to refresh the UI. ' +
   'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
@@ -69,7 +69,11 @@ const APP_UI_TOOLS = new Set([
 ]);
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'get-studio-view',
-  'request-studio-view-action',
+  'open-studio-project',
+  'refresh-studio-project',
+  'refresh-studio-assets',
+  'show-studio-generation',
+  'continue-studio-generation',
   'register-studio-view',
   'ack-studio-view',
   'get-studio-draft',
@@ -124,7 +128,11 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'get-studio-view',
-  'request-studio-view-action',
+  'open-studio-project',
+  'refresh-studio-project',
+  'refresh-studio-assets',
+  'show-studio-generation',
+  'continue-studio-generation',
   'register-studio-view',
   'ack-studio-view',
   'get-studio-draft',

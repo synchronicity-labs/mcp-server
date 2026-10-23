@@ -75,11 +75,16 @@ it.each(cases)('advertises Studio view tools/capability only for a complete API:
     const names = (await client.listTools()).tools.map((tool) => tool.name);
     for (const name of [
       'get-studio-view',
-      'request-studio-view-action',
+      'open-studio-project',
+      'refresh-studio-project',
+      'refresh-studio-assets',
+      'show-studio-generation',
+      'continue-studio-generation',
       'register-studio-view',
       'ack-studio-view',
     ])
       expect(names.includes(name)).toBe(enabled);
+    expect(names).not.toContain('request-studio-view-action');
     const result = await runWithAuth('view-user', 'openai-mcp', () =>
       client.callTool({ name: 'get-account-context', arguments: {} }),
     );
