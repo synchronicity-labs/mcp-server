@@ -167,13 +167,20 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This candidate packages the active draft model-context repair from
-[sync-api-v2 PR #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216),
-on top of the chat and Studio synchronization published by MCP #94.
-MCP #91 has merged; its project naming and connected-account usage tools remain
-included. The current draft-context candidate retains all ten UI resources published through #94, plus
-its unchanged archive of the oldest October 2 resource. See
-[frontend packaging](docs/chatgpt-release.md) for the exact source commit,
+This candidate adds authenticated chat delivery to the exact mounted Studio view
+from [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227).
+Backend success is separate from its pending/applied/blocked/failed display
+receipt. Existing draft synchronization and paid-operation recovery remain in
+place; these view tools do not generate or synthesize media.
+
+This candidate packages the merged expanded-Studio fixes from
+[sync-api-v2 #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216),
+[#7220](https://github.com/synchronicity-labs/sync-api-v2/pull/7220) and
+[#7222](https://github.com/synchronicity-labs/sync-api-v2/pull/7222): active draft
+context publication, fullscreen height, draft/result controls and accessible
+current-result navigation. It retains all ten UI resources published through
+MCP #94 and the unchanged archive of the oldest October 2 resource. See
+[frontend packaging](docs/chatgpt-release.md) for the exact merged source commit,
 checksums, release order and live acceptance requirements.
 
 The existing workflow backend from PR #6822 is already in production. The draft
@@ -316,6 +323,24 @@ guard remains conservative. `mcp_runtime.memory.heapLimitBytes` reports that lim
 alongside heap usage and session rejection counts. This guard bounds session
 admission, not all request/response or upload memory; size container resources
 with those workloads in mind.
+
+The SDK is pinned to `1.32.1` with a small JSON-response cleanup patch in
+`scripts/patch-mcp-sdk.mjs`. Completed responses must release their stream entry
+immediately; retaining its resolver also retains the serialized response until
+the session closes. The install hook patches both ESM and CommonJS builds and
+rejects an unexpected SDK version or source layout. Installs that disable scripts
+must run `npm run patch:mcp-sdk` explicitly, as CI does. The patch script is also
+included in the published npm package and both Docker install stages. Remove it
+only after an SDK upgrade passes the HTTP retention regressions.
+
+After `npm run build && npm run package:chatgpt`, run `npm run test:memory:http`
+to exercise the actual HTTP transport and every packaged widget release in a
+512 MiB old-space process. It checks retained heap while sessions remain live,
+then expires sessions and repeats the workload to verify recovery. It uses only
+loopback HTTP and fixture API metadata; no credentials or generation calls are
+needed. `src/http-response-cleanup.test.ts` also checks successful and failed RPC
+responses, concurrent requests, and completion after a client disconnect without
+cancelling or repeating the tool operation.
 
 Tool schemas and stateless handlers are built once per HTTP factory. Discovery
 descriptions are cached for the four supported presentation profiles. Immutable schema validators are shared too. Session
