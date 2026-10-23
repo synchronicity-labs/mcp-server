@@ -167,13 +167,14 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This candidate packages the active draft model-context repair from
-[sync-api-v2 PR #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216),
-on top of the chat and Studio synchronization published by MCP #94.
-MCP #91 has merged; its project naming and connected-account usage tools remain
-included. The current draft-context candidate retains all ten UI resources published through #94, plus
-its unchanged archive of the oldest October 2 resource. See
-[frontend packaging](docs/chatgpt-release.md) for the exact source commit,
+This candidate packages the merged expanded-Studio fixes from
+[sync-api-v2 #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216),
+[#7220](https://github.com/synchronicity-labs/sync-api-v2/pull/7220) and
+[#7222](https://github.com/synchronicity-labs/sync-api-v2/pull/7222): active draft
+context publication, fullscreen height, draft/result controls and accessible
+current-result navigation. It retains all ten UI resources published through
+MCP #94 and the unchanged archive of the oldest October 2 resource. See
+[frontend packaging](docs/chatgpt-release.md) for the exact merged source commit,
 checksums, release order and live acceptance requirements.
 
 The existing workflow backend from PR #6822 is already in production. The draft

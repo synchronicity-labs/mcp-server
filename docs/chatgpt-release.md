@@ -5,10 +5,11 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
-## Draft model-context repair candidate
+## Expanded Studio chat and result navigation candidate
 
-- Source: [frontend PR #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216), commit `c779121ba7e00bd3e7c38200c79a09b4ddf6a2f5`.
-- UI SHA256: `f0dd696d03bfdae09580de317d4cb9a9ecf8f4b761dffc77111f0c02d17617ab` (3,957,179 bytes).
+- Merged source: [#7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216), [#7220](https://github.com/synchronicity-labs/sync-api-v2/pull/7220) and [#7222](https://github.com/synchronicity-labs/sync-api-v2/pull/7222).
+- Build commit: `ea055f88ce863bb3a698d1c6057e5545e63509b0` (the #7222 merge, including both earlier fixes).
+- UI SHA256: `eb74c6c0c34eb1df35f88e8e58e4fa620e0aef3c8705c8aeb645dfd4729baa4c` (4,086,452 bytes).
 
 The expanded editor publishes its current project and draft through the standard
 MCP Apps model-context channel even when widget storage is available. The
@@ -16,19 +17,28 @@ frontend serializes delivery, retries a rejected publication on a later draft
 refresh, and preserves private recovery when a host reuses the widget-state slot.
 No private recovery journal is included in model context.
 
-The new resource and all ten resources published through #94 pass actual MCP
-client reads. All 30 existing resource files and the three archived files remain
-byte-identical. The retention bound increases by one to ten previous resources,
-eleven total; session admission and memory limits remain unchanged. No bundle is
-retired by this release.
+Fullscreen Studio uses the full reported height when the host reports no bottom
+inset. Positive composer insets retain their existing clearance. Editable drafts
+have no Source/Synced selector; completed results keep it. The history rail can
+return to the current result even when canonical history is empty or unavailable,
+with fresh project and generation authorization. Its accessible name, “Return
+to current result”, is distinct from the continuation recovery action. Upload
+and recovery locks still gate navigation.
 
-Review and release the exact frontend source before this MCP package. Its base
-is current dev, so the coordinated release must account for its shared-package
-changes as well as the context fix. The draft API already advertises version 1;
-this repair adds no API route, migration, OAuth setting, or provider operation.
-After deployment, refresh publisher metadata and the test connection, open a
-new expanded Studio, and confirm chat can select existing media with the
-published draft ID. Local host tests do not establish production ChatGPT acceptance.
+This is a clean build of the merged source and frozen lockfile, including its
+shared dependencies and translation-progress updates. It replaces only #96's
+unpublished candidate. All ten resources published through #94 and the archived
+October 2 resource remain unchanged. The retention bound remains ten previous
+resources, eleven total; session admission and memory limits are unchanged.
+No published bundle is retired by this release.
+
+The three source PRs are merged into dev. Deploy through the normal reviewed MCP
+main release after confirming the prerequisite draft API and migrations are
+released in the target environment. These UI fixes add no API route, migration,
+OAuth setting or provider operation. After deployment, refresh publisher metadata
+and the test connection, open a new expanded Studio, and confirm chat can select
+existing media with the published draft ID. Local host tests do not establish
+production ChatGPT acceptance.
 
 ## Published draft synchronization release (#94)
 
