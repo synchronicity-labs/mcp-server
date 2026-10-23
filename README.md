@@ -154,7 +154,14 @@ for the remaining combined-pricing and embedded UI work.
 ### Edit Dialogue
 
 When the API exposes transcription and dialogue-edit endpoints, `get-dialogue-options`
-enables the embedded timed-word editor. `create-dialogue-transcription` and
+enables the embedded timed-word editor. When transcription refuses a source URL
+because it is not in Sync storage, `upload-dialogue-source` copies the accessible
+saved video through the bounded upload pipeline and returns a new project asset.
+Use that asset's ID for the remaining dialogue calls. The widget performs this
+recovery when `get-dialogue-options` advertises `sourceUpload: true`, and retains
+the uploaded selection through reload, preview, and generation. Other 422 errors
+do not initiate an upload, and a rejected uploaded copy does not trigger another
+automatic upload. `create-dialogue-transcription` and
 `get-dialogue-transcription` obtain the single-speaker transcript. Users edit or
 remove timed words, then explicitly request `create-dialogue-preview` and poll
 `get-dialogue-preview`. The adapter reads the server-owned transcript and keeps
