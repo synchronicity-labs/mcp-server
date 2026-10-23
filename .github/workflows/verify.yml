@@ -28,6 +28,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git rev-parse HEAD
       - run: npm ci --ignore-scripts
+      - run: npm run patch:mcp-sdk
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
@@ -35,6 +36,7 @@ jobs:
       - run: npm run test:memory -- --burst
       - run: npm run package:chatgpt
       - run: npm run verify:chatgpt-package
+      - run: npm run test:memory:http
       - run: npm test -- --no-file-parallelism
       - run: npm test
       - run: npm run test:browser
@@ -53,3 +55,9 @@ jobs:
         run: docker build -t sync-mcp-release-candidate .
       - name: Read packaged UI through MCP in the final image
         run: docker run --rm -i --network none --entrypoint node sync-mcp-release-candidate --input-type=module - /app/chatgpt-dist --require-image-config < scripts/verify-chatgpt-package.mjs
+      - name: Verify HTTP memory recovery in the final image
+        run: >-
+          docker run --rm --network none
+          --mount type=bind,source="$PWD/scripts/verify-http-memory.mjs",target=/app/scripts/verify-http-memory.mjs,readonly
+          --entrypoint node sync-mcp-release-candidate
+          --expose-gc --max-old-space-size=512 /app/scripts/verify-http-memory.mjs
