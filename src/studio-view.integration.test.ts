@@ -92,10 +92,10 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
       visibility: ['app'],
     });
     const actions = [
-      ['open-studio-project', { type: 'open-project', projectId, workflow: 'lipsync' }],
-      ['refresh-studio-project', { type: 'refresh-project', projectId }],
-      ['refresh-studio-assets', { type: 'refresh-assets', projectId }],
-      ['show-studio-generation', { type: 'open-generation', projectId, generationId }],
+      ['open-studio-project', { type: 'open-project', projectId, workflow: 'lipsync' }, true],
+      ['refresh-studio-project', { type: 'refresh-project', projectId }, false],
+      ['refresh-studio-assets', { type: 'refresh-assets', projectId }, false],
+      ['show-studio-generation', { type: 'open-generation', projectId, generationId }, true],
       [
         'continue-studio-generation',
         {
@@ -105,13 +105,14 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
           workflow: 'lipsync',
           seedSource: 'output',
         },
+        true,
       ],
     ] as const;
-    for (const [name, { type, ...fields }] of actions) {
+    for (const [name, { type, ...fields }, destructiveHint] of actions) {
       const tool = tools.find((tool) => tool.name === name);
       expect(tool?.annotations).toMatchObject({
         readOnlyHint: false,
-        destructiveHint: name === 'continue-studio-generation',
+        destructiveHint,
         idempotentHint: true,
         openWorldHint: false,
       });

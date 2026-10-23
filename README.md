@@ -188,7 +188,8 @@ receipt. Existing draft synchronization and paid-operation recovery remain in
 place; these view tools do not generate or synthesize media.
 Each model-callable view operation has its own tool, flat input schema and
 annotations. The generic `request-studio-view-action` tool is no longer exposed.
-Draft updates/saves and continuation declare destructive effects; receipt
+Draft updates/saves, project/workflow switches, result selection and continuation
+declare destructive effects; receipt
 acknowledgements remain non-destructive. Cached Studio resources retain the
 existing app-only registration and acknowledgement tools.
 

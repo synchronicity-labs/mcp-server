@@ -14,10 +14,10 @@ individually exposed tool for each operation:
 
 | Tool | Operation | Destructive |
 | --- | --- | --- |
-| `open-studio-project` | Open an existing project and optional workflow | No |
+| `open-studio-project` | Open an existing project and optional workflow; can replace active editor state and archive the prior draft | Yes |
 | `refresh-studio-project` | Refresh project details after a backend change | No |
 | `refresh-studio-assets` | Refresh media after upload/registration | No |
-| `show-studio-generation` | Display an accepted generation/result | No |
+| `show-studio-generation` | Display an accepted generation/result, replacing active editor state and archiving the prior draft | Yes |
 | `continue-studio-generation` | Stage source/output in a new draft, archiving the previous state; may register existing output as media | Yes |
 
 Each tool has its own flat input schema, description and annotations. The generic
@@ -27,6 +27,9 @@ app-only `save-studio-draft` truthfully declare `destructiveHint: true` because
 they can overwrite draft selections/settings/unsent speech. Acknowledgements
 remain non-destructive. Revision checks, authorization, recovery and the immutable
 frontend resources are unchanged. Refresh publisher tool metadata after deployment.
+Project/workflow switches and result selection also declare destructive effects:
+archiving the prior draft does not make replacing editor state an additive write.
+See the [official annotation guidance](https://developers.openai.com/plugins/plugin-guidelines#correct-annotation).
 
 A successful backend write
 is separate from Studio's pending/applied/blocked/failed receipt. The widget

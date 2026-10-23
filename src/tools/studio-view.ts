@@ -35,7 +35,7 @@ export function createStudioViewTools(
       name: 'open-studio-project',
       title: 'Open a project in Studio',
       description:
-        'Open an existing project in the mounted Studio, optionally selecting its workflow. Preserves saved drafts; does not create a project or generate media.',
+        'Open an existing project in the mounted Studio, optionally selecting its workflow. Can replace the active editor state, archiving the prior draft. Does not create a project or generate media.',
     },
     'refresh-project': {
       name: 'refresh-studio-project',
@@ -53,7 +53,7 @@ export function createStudioViewTools(
       name: 'show-studio-generation',
       title: 'Show an existing Studio generation',
       description:
-        'Display an already accepted generation or its result in the mounted Studio, opening its project if needed. Does not submit or retry generation.',
+        'Display an already accepted generation or its result in the mounted Studio, opening its project if needed. Replaces the active editor state and archives the prior draft. Does not submit or retry generation.',
     },
     'continue-generation': {
       name: 'continue-studio-generation',
@@ -78,7 +78,7 @@ export function createStudioViewTools(
       suffix: '/actions',
       method: 'post' as const,
       appOnly: false,
-      destructive: type === 'continue-generation',
+      destructive: type !== 'refresh-project' && type !== 'refresh-assets',
     };
   });
   const tools = [
