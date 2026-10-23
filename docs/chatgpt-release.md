@@ -5,85 +5,51 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
-## Project/account release candidate
+## Chat and Studio draft synchronization candidate
 
-| Item | Value |
-| --- | --- |
-| Source | [Merged frontend PR #7098](https://github.com/synchronicity-labs/sync-api-v2/pull/7098) |
-| Commit | `a7c105159c1cd9a926f42f5dbd299ff758e9cdfa` |
-| Tree | `18da5aef85874dd00aec5582901c13e87debce01` |
-| HTML SHA256 | `55adb4a8112ab7675441fc76dbc06913c44aa467b1fbae7e27946db2c3210202` |
-| HTML bytes | 6,207,421 |
-| MCP candidate | [PR #91](https://github.com/synchronicity-labs/mcp-server/pull/91) |
-| Previous production UI | `a2c7ca49387511cc2d73a107b0bdd9a7e724fa29ad15e65c4c2a75b538305672` |
+- Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `ab8edec11f3dc24061176cb45e25a75943d284b7`.
+- UI SHA256: `f5866028123de7ad70b806c1e3c24f59a111ab11e38ad2f8337cd56cae9dd811` (6215309 bytes).
+- All 27 files in the nine resources published by merged MCP #91 are unchanged.
 
-The clean merged-source rebuild exactly matches the frontend bytes tested on
-`c63ccfbb0`. This package adds project naming, connected-account identity and
-canonical usage controls, plus the merged project-list height fix. It does not
-add embedded Appearance or Timeline editing. Billing checkout and administration
-remain web handoffs. MCP runtime remains the reviewed `14e96b9` implementation;
-this follow-up changes release artifacts and documentation only.
+This candidate adds authenticated read/update draft tools and app-only save and
+acknowledgement tools. The API stores revisions per account, organization,
+project and draft. Chat updates remain pending until Studio validates the media,
+saves recovery state and acknowledges the exact revision. Conflicting local
+changes require a choice in Studio. No draft tool starts provider work.
 
-The manifest selects the new bundle and retains the previous production UI plus
-seven older releases. [The oldest release is explicitly retired below](#october-2-resource-retirement).
-All 24 files in the eight retained releases remain byte-identical. The original
-frontend manifest is copied unchanged and gzip uses mtime zero.
+Workflows, search and projects now use the web dashboard's centered 880px
+content limit while the viewport retains full-height scrolling. Six packaged
+layout cases pass across mobile, tablet and wide hosts in inline/fullscreen
+modes. The application JavaScript is unchanged from the preceding 40-case
+source/artifact functional acceptance at `46b5ac827`.
 
-### Candidate verification
+MCP #91 merged externally as `8099c271c04c0c6671557c02c4fc169d1abef286` on
+October 22 at 20:40 UTC. This companion now targets main and preserves its account
+usage/project-renaming tools and published frontend resource `55adb4a8`. The
+October 2 resource remains archived exactly as approved in #91. This change
+introduces no further retirement. The deployed #93 memory fix is retained.
 
-- 48 artifact browser cases across project/account controls, original-media history,
-  layout, project recovery and result continuation pass on the merged-source bytes.
-- All 621 MCP tests across 45 files, typecheck, build and lint pass. Runtime code
-  remains unchanged; the original session-memory budgets and verifiers are retained.
-- Package verification reads the new and all eight retained resources through a
-  real MCP client/server handshake. The production Docker image builds and passes
-  the same nine-resource verification with networking disabled.
-- All 24 retained files and three archived files match their previous bytes.
-  Independent preservation and complexity review found no blocking findings.
-- Fresh CI and review must apply to the final PR head before release. Earlier
-  source review and exact-byte browser evidence remain identified separately.
+Release order: deploy the companion API/frontend PR and its additive migrations,
+then deploy this reviewed MCP companion. Discovery advertises synchronization
+only when all three versioned API routes are available. Older servers keep local Studio editing.
+After deployment, rescan the ChatGPT connection and use a fresh Studio widget.
+No production rollout or paid generation has been performed for this candidate.
 
-### Coordinated release and acceptance
+The retention ceiling increases by one previous bundle to retain the deployed
+current UI as well as all eight resources retained by #91 when the new UI is
+packaged.
+Existing resource bytes remain unchanged. The total remains bounded at ten,
+and the session memory guard, pressure GC and shared validators are unchanged.
 
-1. Keep this candidate unmerged while the EKS owner verifies the source release.
-   [Release candidate #7102](https://github.com/synchronicity-labs/sync-api-v2/pull/7102)
-   was created from the same `a7c10515` source. If it is refreshed, compare the
-   ChatGPT build inputs and verify artifact identity before accepting the new pairing.
-2. Obtain release approval, then deploy the reviewed MCP image through its normal
-   main/Porter workflow. This is a separate deployment in the coordinated release
-   window. It does not adopt the unmerged MCP EKS/session-routing PRs or move traffic.
-3. Verify the deployed revision, opening-tool URI, new resource hash and all eight
-   retained resource reads. Rescan publisher tool metadata and refresh the existing
-   ChatGPT connection.
-4. Verify project naming and reopen, usage/billing permissions, Studio opening,
-   history playback/download, dubbing estimates and reload/session recovery in the
-   actual host. Use existing results and read-only quotes; do not start paid jobs.
+The draft tools reuse their save/acknowledgement schemas for discovery and
+validation. Capability checks return a boolean directly, preserving the same
+version, method and operation-ID requirements without collecting unused
+operation arrays. The API companion keeps policy in its draft service.
 
-The Docker package verifier and synthetic browser checks do not establish live
-OAuth, storage, provider or ChatGPT acceptance. No merge or deployment is part
-of preparation. Existing issuer, CSP, upload routing and API origins stay configured
-as before. API/web promotion and the EKS traffic/worker cutover retain their own gates.
+The dependency override requires `ip-address` 10.7.4 or later, and the lockfile
+selects 10.7.4 to address [GHSA-rxp7-6hxx-x8q5](https://github.com/advisories/GHSA-rxp7-6hxx-x8q5).
 
-### October 2 resource retirement
-
-The catalog permits one active and eight retained bundles. Adding this release
-retires `5c28555d1843dfb74841ff1af3f5fff5cf8204f4ce52a8f6dabccbfc02d9c861`,
-first packaged in MCP #67 on October 2. Its three files are moved unchanged to
-`deploy/chatgpt-retired/<hash>/`; this archive is not served by the production image.
-No retention guard or test is relaxed.
-
-At preparation, a read-only Porter historical-log search requested a 720-hour
-lookback for that full resource hash and returned no matching records. A positive
-control for `app_resource_served` returned 100 real records for the newer `670c3e54`
-and current `a2c7ca49` resources, both of which remain retained. An empty historical
-search does not prove that no cached conversation still references the old URI.
-Such a panel may need reopening after release. Review this retirement explicitly
-with the release; the archive remains available for a reviewed restoration.
-
-## Previous published release and historical verification
-
-The following evidence applies to the earlier bundle and named checkpoints,
-not the new project/account frontend.
+## Earlier published release
 
 - Source: [PR #6822, commit 48247d3f](https://github.com/synchronicity-labs/sync-api-v2/commit/48247d3f6e2b97ec1793b21a5eb9eecaf036b3cb).
 - Accepted API squash merge: `cf0b2d21805dc6877628d28e4f146acd02d37d7f`.
@@ -210,7 +176,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 ## Normal production release
 
 1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
-   `current` selects the active HTML hash; `previous` retains up to eight older hashes.
+   `current` selects the active HTML hash; `previous` retains up to nine older hashes.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
@@ -229,10 +195,10 @@ The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
 Stale pins to absent, pruned hash directories in the image are ignored.
 Existing legacy bundles remain readable, including mounts under the packaged
-root. The eight-retained-release budget applies to the deduplicated combined
+root. The nine-retained-release budget applies to the deduplicated combined
 manifest and legacy list. Configuration rejects overflow with an actionable
 error instead of silently dropping resources. Retire unused bundles explicitly
-before deploying if the combined list exceeds eight. Keep mounts until their
+before deploying if the combined list exceeds nine. Keep mounts until their
 published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;
@@ -264,7 +230,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits nine releases total.
+while cached clients still need them. Packaging permits ten releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.

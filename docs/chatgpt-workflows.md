@@ -85,3 +85,24 @@ The embedded language form reads `get-translation-options`, an authenticated,
 read-only tool whose lists come from the same public schema as submission. It
 creates no job and makes no billing request. Older servers leave translation
 unavailable; the form additionally requires a combined estimate breakdown.
+
+## Chat and Studio draft selections
+
+When an editable Studio is open, its model context includes the canonical
+`projectId`, `draftId`, revision, editable status and current inputs. Use
+`get-studio-draft` to read the latest document before `update-studio-draft`.
+The update accepts a revision and a partial patch of media IDs, workflow,
+model/options, languages and unsent speech settings. It never starts a job.
+
+A successful update means the change is saved for Studio. Report it as applied
+only when `appliedRevision` equals `revision`. Studio performs fresh media reads,
+saves its local recovery journal, applies the inputs, and acknowledges that
+revision. If both chat and Studio changed the draft, Studio asks the user which
+changes to keep. A closed widget or active recovery can leave changes pending.
+Never retry a stale revision by automatically overwriting the newer draft.
+
+The save and acknowledgement tools are app-only. Provider request keys,
+accepted requests, signed URLs and recovery receipts are not editable through
+the chat draft patch. Appearance and timeline editing remain excluded.
+Synchronization tools are advertised only when the companion API capability is
+available; older API releases retain local Studio editing.

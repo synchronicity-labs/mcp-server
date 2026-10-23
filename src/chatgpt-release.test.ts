@@ -61,12 +61,12 @@ describe('packaged UI selection', () => {
   });
 
   it('enforces the shared retention budget before loading any bundles', () => {
-    const hashes = Array.from({ length: 8 }, (_, i) => String(i).repeat(64));
+    const hashes = Array.from({ length: 9 }, (_, i) => String(i).repeat(64));
     writeFileSync(catalog, JSON.stringify({ current, previous: hashes }));
     vi.stubEnv('SYNC_CHATGPT_APP_DIR', '/mounted/legacy-ui');
-    expect(() => resolveConfig()).toThrow('retention exceeds eight previous bundles');
-    writeFileSync(catalog, JSON.stringify({ current, previous: hashes.slice(0, 7) }));
-    expect(resolveConfig().chatgptApp?.previousDirectories).toHaveLength(8);
+    expect(() => resolveConfig()).toThrow('retention exceeds nine previous bundles');
+    writeFileSync(catalog, JSON.stringify({ current, previous: hashes.slice(0, 8) }));
+    expect(resolveConfig().chatgptApp?.previousDirectories).toHaveLength(9);
   });
 
   it('keeps API-only Docker deployments working without widget configuration', () => {
@@ -111,7 +111,7 @@ describe('packaged UI selection', () => {
     { current: '../outside', previous: [] },
     { current, previous: [current] },
     { current, previous: [previous, previous] },
-    { current, previous: Array(9).fill(previous) },
+    { current, previous: Array(10).fill(previous) },
   ])('rejects unsafe or ambiguous release manifests: %j', (value) => {
     expect(chatgptReleaseSchema.safeParse(value).success).toBe(false);
   });
