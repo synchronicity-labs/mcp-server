@@ -3,10 +3,10 @@
 ## Mounted Studio handoff candidate
 
 Source: [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227),
-commit `3574623fa1bbf36b90d97014dc3f11c23ca6359f`, tree
-`a67ca4081af976c3fd48c8dfaaa7c47463bc15d1`.
-UI SHA256: `0b4b836ea07ed38c3e5343c33e9e2f67f2c97473203e4ed16b7b299fb3df5626`
-(3,969,030 uncompressed bytes).
+commit `54f7cbd1c22e10f3eedda5ea673f192ab664b91b`, tree
+`8b7f3b54fc84ea33cb51627c50790ad3deccd0ee`.
+UI SHA256: `c18a32c19121f80deb7a0393078ce9a66715f00fedfb3307e6552c64311f3c44`
+(4,095,474 uncompressed bytes).
 
 Chat reads the exact published `viewId` with `get-studio-view`, then requests a
 project open/refresh, media refresh, accepted-job/result selection or explicit
@@ -45,7 +45,7 @@ Release the source API through the normal dev-to-production process, then
 deploy this reviewed MCP image. Refresh publisher metadata and the connection;
 verify every action and accurate receipts in a fresh expanded Studio while chat
 remains usable. Paid acceptance needs the reviewer's approved media/budget.
-No merge, deployment or paid generation has been performed.
+No PR merge, deployment or paid generation has been performed.
 
 The MCP production image includes the approved, self-contained frontend from
 Sync's monorepo. It does not build Studio or fetch another repository at deploy
