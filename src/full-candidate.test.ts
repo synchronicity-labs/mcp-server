@@ -227,6 +227,26 @@ beforeEach(async () => {
       return;
     }
     if (
+      token === 'Bearer thumbnails' &&
+      req.method === 'GET' &&
+      ['/v2/assets', '/v2/assets/asset-thumbnail'].includes(path)
+    ) {
+      const asset = {
+        id: 'asset-thumbnail',
+        name: 'Fixture clip',
+        thumbnailUrl: 'https://fixture.invalid/thumbnail.png?Signature=a%2Fb%2Bc',
+        url: 'https://fixture.invalid/source.mp4',
+      };
+      res.end(
+        JSON.stringify(
+          path === '/v2/assets'
+            ? { items: [asset, { id: 'asset-missing', thumbnailUrl: null }] }
+            : asset,
+        ),
+      );
+      return;
+    }
+    if (
       [
         '/v2/models',
         '/v2/assets',
@@ -686,4 +706,37 @@ it.each([
   expect(
     calls.filter((call) => call.token === `Bearer ${token}` && call.path === '/v2/generate'),
   ).toHaveLength(1);
+});
+
+it('serves a local branded asset placeholder and tells clients not to substitute web images', async () => {
+  const before = calls.length;
+  const response = await fetch(new URL('/asset-placeholder.svg', url));
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toContain('image/svg+xml');
+  const svg = await response.text();
+  expect(svg).toContain('<title>Sync asset thumbnail unavailable</title>');
+  expect(svg).toContain('fill="black"');
+  expect(svg).not.toMatch(/<image|<script|href=/);
+  expect(calls).toHaveLength(before);
+  const client = await connect('chatgpt', 'thumbnails');
+  expect(client.getInstructions()).toContain('Never search the web');
+  const tools = (await client.listTools()).tools;
+  for (const name of ['assets_get', 'assets_get-all']) {
+    expect(tools.find((tool) => tool.name === name)?.description).toContain('thumbnailUrl');
+    expect(tools.find((tool) => tool.name === name)?.description).toContain(
+      'https://mcp.sync.so/asset-placeholder.svg',
+    );
+  }
+  const single = await client.callTool({
+    name: 'assets_get',
+    arguments: { id: 'asset-thumbnail' },
+  });
+  expect(single.structuredContent).toMatchObject({
+    id: 'asset-thumbnail',
+    thumbnailUrl: 'https://fixture.invalid/thumbnail.png?Signature=a%2Fb%2Bc',
+  });
+  const list = await client.callTool({ name: 'assets_get-all', arguments: {} });
+  expect(list.structuredContent).toMatchObject({
+    items: [single.structuredContent, { id: 'asset-missing', thumbnailUrl: null }],
+  });
 });

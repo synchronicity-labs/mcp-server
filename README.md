@@ -167,8 +167,9 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This candidate packages chat and Studio draft synchronization from
-[sync-api-v2 PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144).
+This candidate packages thumbnail-only asset cards from
+[sync-api-v2 PR #7213](https://github.com/synchronicity-labs/sync-api-v2/pull/7213),
+including the chat and Studio draft synchronization from merged PR #7144.
 MCP #91 has merged; its project naming and connected-account usage tools remain
 included. The candidate retains all nine UI resources published by #91, plus
 its unchanged archive of the oldest October 2 resource. See
@@ -192,8 +193,8 @@ resulting audio asset failed. Project access and organization billing remain API
 authority; options expose only the fields needed for the speech quote.
 
 The compatible backend from sync-api-v2 PR #6822 is already in production.
-The packaged frontend comes from the merged source recorded in its release
-provenance. The candidate catalog retains nine previous UIs; the retired October 2
+The packaged frontend comes from the candidate source recorded in its release
+provenance; PR #7213 still needs review and merge. The candidate catalog retains nine previous UIs; the retired October 2
 resource is archived rather than served, as detailed in the release guide.
 After the MCP release, rescan publisher metadata and verify preview, attachment,
 reload recovery and playback in ChatGPT. Local and package checks do not establish
@@ -592,3 +593,11 @@ Submission checks do not read unrelated parent media or parse its settings, so
 deleting an old source does not block same-key reconciliation. The API still
 authorizes the inputs of a new submission. `get-generation-continuation` retains
 its full source-access checks before returning media or settings to the app.
+
+Asset previews must use only the exact `thumbnailUrl` returned by Sync for the same
+asset. The server instructions and asset discovery tools prohibit web-image
+search, generated images and source-media substitutions. Missing or failed
+thumbnails use `/asset-placeholder.svg`, a static black image with the Sync logo.
+Hosts that cannot display it should report an unavailable thumbnail. This guidance
+does not control arbitrary model prose; the embedded Studio library enforces the
+thumbnail-only rule and its loading/error fallback directly.

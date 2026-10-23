@@ -12,6 +12,7 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { appUploadHandler, createAppUploadCors } from './app-upload-relay.js';
+import { ASSET_THUMBNAIL_PLACEHOLDER } from './asset-thumbnail.js';
 import { runWithAuth } from './auth/async-context.js';
 import { requireBearerAuth } from './auth/bearer-auth.js';
 import {
@@ -360,6 +361,11 @@ export async function startHttpServer(
     // after the authenticated assets/upload call has checked the account's limits.
     app.put('/app-upload', appUploadHandler);
   }
+
+  app.get('/asset-placeholder.svg', (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.type('image/svg+xml').send(ASSET_THUMBNAIL_PLACEHOLDER);
+  });
 
   // Health check (unauthenticated)
   app.get('/health', (_req, res) => {
