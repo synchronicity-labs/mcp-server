@@ -5,6 +5,20 @@ Sync's monorepo. It does not build Studio or fetch another repository at deploy
 time. The checked-in release manifest selects the active UI with each deployment.
 Existing production origins and OAuth settings are kept.
 
+## Thumbnail provenance follow-up candidate
+
+- Source: [API/frontend PR #7213](https://github.com/synchronicity-labs/sync-api-v2/pull/7213), commit `a416aaace83d22ac367367a9e109126b8c752afa`.
+- UI SHA256: `efd425fa88b87461f26d2617d5830621b4cb96180a19d127c5083ce9c3e62a0a` (3957135 bytes).
+- Stacks on unmerged MCP #94 and retains its chat/Studio synchronization tools. Merge #94 and release its API prerequisites first. This PR is not a deployment.
+- Only the unmerged #94 UI candidate is replaced. All 27 files in the nine published resources and the retained archive remain unchanged.
+
+Library grid and list cards use only Sync's returned thumbnail, with a black
+Sync-logo fallback on missing/failed images. Explicit source-media playback
+remains available. The server instructions and asset tools prohibit web-image
+substitutions in chat; `/asset-placeholder.svg` supplies the branded fallback.
+ChatGPT prose remains model-controlled, so deployed-host acceptance still
+requires a rescan and a fresh asset lookup after release. No paid job is needed.
+
 ## Chat and Studio draft synchronization candidate
 
 - Source: [API/frontend PR #7144](https://github.com/synchronicity-labs/sync-api-v2/pull/7144), commit `ab8edec11f3dc24061176cb45e25a75943d284b7`.
