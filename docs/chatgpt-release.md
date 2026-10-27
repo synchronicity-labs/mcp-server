@@ -3,9 +3,9 @@
 ## Supported-workflow completion candidate
 
 Source: [sync-api-v2 #7123](https://github.com/synchronicity-labs/sync-api-v2/pull/7123),
-commit `ed6844a39c12db19a803687519eadbb712ac0cc5`, tree `653236eb845865199b934f887c6369a39acbe128`.
-UI SHA256: `69c6d0ab1d5fc4650b49f554a983971bafe5ebacffd64e4ea1c4db8a9b463ad9`
-(3,779,927 uncompressed bytes). This is a review candidate; no merge or deployment is performed.
+commit `3f2b1390844a150657c99c75c5ea2fcd79adedf5`, tree `653f0e3522b7f1859a847a8d3aea711bb04d14bc`.
+UI SHA256: `f58f547193051ded8336cc06add4f71b7a1752f15b473b05fc366bfb1afe86a4`
+(3,780,067 uncompressed bytes). This is a review candidate; no merge or deployment is performed.
 
 The candidate adds clone recovery exit with fresh reads and explicit duplicate-charge
 acknowledgement, confirmed voice deletion with durable uncertain-response recovery,
