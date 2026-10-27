@@ -1,5 +1,29 @@
 # ChatGPT frontend release
 
+## Supported-workflow completion candidate
+
+Source: [sync-api-v2 #7123](https://github.com/synchronicity-labs/sync-api-v2/pull/7123),
+commit `ed6844a39c12db19a803687519eadbb712ac0cc5`, tree `653236eb845865199b934f887c6369a39acbe128`.
+UI SHA256: `69c6d0ab1d5fc4650b49f554a983971bafe5ebacffd64e4ea1c4db8a9b463ad9`
+(3,779,927 uncompressed bytes). This is a review candidate; no merge or deployment is performed.
+
+The candidate adds clone recovery exit with fresh reads and explicit duplicate-charge
+acknowledgement, confirmed voice deletion with durable uncertain-response recovery,
+platform-link preview/import/status/cancel/explicit retry, and serial multi-file
+upload with per-file results. It includes the existing voice, team, speaker and
+result feedback controls and preserves current Studio draft/view synchronization.
+
+All twelve previously published current/retained resources stay byte-identical
+and addressable. Retention increases by one to twelve previous resources,
+thirteen total, with one shared configuration/packaging bound. No published
+resource is retired by this candidate. The historical candidates below describe
+their own source, counts and verification, rather than this candidate's results.
+
+See [embedded controls](chatgpt-embedded-controls.md) for authorization and
+uncertain-write contracts. Local synthetic proof does not establish production
+ChatGPT/OAuth/storage acceptance or provider-backed clone quality. Review both
+PRs before release, refresh tools and open a fresh panel after approved deployment.
+
 ## Mounted Studio handoff candidate
 
 Source: merged [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227)
@@ -333,7 +357,7 @@ delivery and protocol wiring, not production OAuth, storage, or generation.
 ## Normal production release
 
 1. Include the approved frontend bytes and update `deploy/chatgpt/releases.json`:
-   `current` selects the active HTML hash; `previous` retains up to eleven older hashes.
+   `current` selects the active HTML hash; `previous` retains up to twelve older hashes.
 2. Merge the reviewed PR. The existing main/Porter workflow deploys the image,
    and the image's `SYNC_CHATGPT_APP_RELEASES` points to the packaged manifest.
    No per-release Porter edit is needed. This release automatically activates the
@@ -352,10 +376,10 @@ The release manifest takes precedence over `SYNC_CHATGPT_APP_DIR`. Existing
 Porter pins to packaged hash directories no longer select the active release.
 Stale pins to absent, pruned hash directories in the image are ignored.
 Existing legacy bundles remain readable, including mounts under the packaged
-root. The twelve-release budget applies to the deduplicated combined
+root. The thirteen-release budget applies to the deduplicated combined
 manifest and legacy list. Configuration rejects overflow with an actionable
 error instead of silently dropping resources. Retire unused bundles explicitly
-before deploying if the combined list exceeds twelve. Keep mounts until their
+before deploying if the combined list exceeds thirteen. Keep mounts until their
 published resources can be retired.
 
 Production already has widget-domain, CSP origins, API, and OAuth settings;
@@ -387,7 +411,7 @@ the source repository, full commit/tree, HTML SHA256/byte count, and build
 commands in `release.json`, following the included release. Compare the
 uncompressed hash to the approved artifact before review. Never replace an
 existing directory with different bytes. Retain previous published directories
-while cached clients still need them. Packaging permits twelve releases total.
+while cached clients still need them. Packaging permits thirteen releases total.
 
 Update `deploy/chatgpt/releases.json` to select the new hash and retain published
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.

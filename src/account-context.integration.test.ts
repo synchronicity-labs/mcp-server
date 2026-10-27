@@ -117,6 +117,8 @@ it('projects the authenticated account and keeps API-key identity null across th
         capabilities: {
           projectRenaming: true,
           embeddedVoiceCloning: false,
+          voiceDeletion: false,
+          platformImports: false,
           generationFeedback: true,
         },
       });

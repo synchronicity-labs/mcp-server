@@ -213,6 +213,14 @@ The existing workflow backend from PR #6822 is already in production. The draft
 API is already published; the new Studio view API routes must be released before this MCP candidate.
 Preparing the candidate does not deploy it or perform an EKS cutover.
 
+The supported-workflow completion candidate in [MCP #92](https://github.com/synchronicity-labs/mcp-server/pull/92)
+adds clone recovery, confirmed voice deletion, platform-link imports with explicit
+cancel/retry, result feedback and multi-file upload controls from
+[frontend #7123](https://github.com/synchronicity-labs/sync-api-v2/pull/7123).
+It retains all twelve previously published UI resources and packages the exact
+frontend source/hash recorded in the release guide. Both companion PRs require
+review before release; preparing the candidate performs no deployment.
+
 ## Example Prompts
 
 ### Embedded speech previews
@@ -227,7 +235,7 @@ authority; options expose only the fields needed for the speech quote.
 
 The compatible backend from sync-api-v2 PR #6822 is already in production.
 The packaged frontend comes from the merged source recorded in its release
-provenance. The candidate catalog retains eleven previous UIs; the retired October 2
+provenance. The candidate catalog retains twelve previous UIs; the retired October 2
 resource is archived rather than served, as detailed in the release guide.
 After the MCP release, rescan publisher metadata and verify preview, attachment,
 reload recovery and playback in ChatGPT. Local and package checks do not establish

@@ -3,7 +3,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { z } from 'zod';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-export const MAX_PREVIOUS_CHATGPT_RELEASES = 11;
+export const MAX_PREVIOUS_CHATGPT_RELEASES = 12;
 export const chatgptReleaseSchema = z
   .object({ current: digest, previous: z.array(digest).max(MAX_PREVIOUS_CHATGPT_RELEASES) })
   .strict()
@@ -32,7 +32,7 @@ export function resolveChatgptRelease(catalogPath: string, legacyDirectories: st
   z.array(z.string())
     .max(MAX_PREVIOUS_CHATGPT_RELEASES, {
       message:
-        'ChatGPT UI retention exceeds eleven previous bundles across the release manifest and legacy settings. Retire unused releases explicitly before deploying.',
+        'ChatGPT UI retention exceeds twelve previous bundles across the release manifest and legacy settings. Retire unused releases explicitly before deploying.',
     })
     .parse(previousDirectories);
   return { directory, previousDirectories };
