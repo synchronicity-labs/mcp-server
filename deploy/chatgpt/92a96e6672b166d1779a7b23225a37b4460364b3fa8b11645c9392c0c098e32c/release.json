@@ -1,0 +1,16 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "9636bdbf6d24f0544703b41ba4459e3920abb5de",
+  "tree": "c83f832b51eab4d9dc113c6e47694a9ca9c6e7bf",
+  "sourcePullRequest": "https://github.com/synchronicity-labs/sync-api-v2/pull/7253",
+  "htmlSha256": "92a96e6672b166d1779a7b23225a37b4460364b3fa8b11645c9392c0c098e32c",
+  "htmlBytes": 4095177,
+  "nodeVersion": "24.21.0",
+  "packageManager": "pnpm@12.14.0",
+  "buildCommands": [
+    "pnpm install:local --frozen-lockfile",
+    "pnpm exec turbo run build --filter='@sync/chatgpt^...'",
+    "pnpm --filter @sync/validators build",
+    "pnpm --filter @sync/chatgpt build"
+  ]
+}

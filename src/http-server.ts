@@ -12,6 +12,7 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { appUploadHandler, createAppUploadCors } from './app-upload-relay.js';
+import { ASSET_THUMBNAIL_PLACEHOLDER } from './asset-thumbnail.js';
 import { runWithAuth } from './auth/async-context.js';
 import { requireBearerAuth } from './auth/bearer-auth.js';
 import {
@@ -64,8 +65,37 @@ const MAX_REQUEST_ID_LENGTH = 128;
 
 // Leave room for existing requests, JSON/UI responses and GC. Never evict an
 // active session or replay an operation merely to admit a new connection.
-export function hasSessionHeapCapacity(heap = getHeapStatistics()): boolean {
+export function hasSessionHeapCapacity(
+  heap: Pick<
+    ReturnType<typeof getHeapStatistics>,
+    'used_heap_size' | 'heap_size_limit'
+  > = getHeapStatistics(),
+): boolean {
   return heap.used_heap_size < heap.heap_size_limit * 0.6;
+}
+
+// Collect reclaimable objects before refusing new sessions. Bound full-GC work
+// during sustained pressure; keep the same headroom and never evict live work.
+export function createSessionHeapAdmission({
+  readHeap = getHeapStatistics,
+  collect = global.gc,
+  now = Date.now,
+}: {
+  readHeap?: () => Pick<ReturnType<typeof getHeapStatistics>, 'used_heap_size' | 'heap_size_limit'>;
+  collect?: () => void;
+  now?: () => number;
+} = {}): () => boolean {
+  let lastCollection = Number.NEGATIVE_INFINITY;
+  return () => {
+    if (hasSessionHeapCapacity(readHeap())) return true;
+    const time = now();
+    if (collect && time - lastCollection >= 30_000) {
+      lastCollection = time;
+      collect();
+      return hasSessionHeapCapacity(readHeap());
+    }
+    return false;
+  };
 }
 
 type SessionRuntimeConfig = {
@@ -332,6 +362,11 @@ export async function startHttpServer(
     app.put('/app-upload', appUploadHandler);
   }
 
+  app.get('/asset-placeholder.svg', (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.type('image/svg+xml').send(ASSET_THUMBNAIL_PLACEHOLDER);
+  });
+
   // Health check (unauthenticated)
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
@@ -517,7 +552,7 @@ export async function startHttpServer(
   const sessions = new SessionRegistry<StreamableHTTPServerTransport>({
     idleTtlMs: sessionRuntimeConfig.idleTtlMs,
     maxSessions: sessionRuntimeConfig.maxSessions,
-    canAdmit: hasSessionHeapCapacity,
+    canAdmit: createSessionHeapAdmission(),
     onRemove: (sessionId) => sessionClientNames.delete(sessionId),
     onCloseError: (error) => {
       logEvent('mcp_session_close_error', { error: serializeError(error) });

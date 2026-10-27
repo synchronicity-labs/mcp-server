@@ -4,7 +4,7 @@ import { getHeapStatistics } from 'node:v8';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { hasSessionHeapCapacity } from '../dist/http-server.js';
+import { createSessionHeapAdmission, hasSessionHeapCapacity } from '../dist/http-server.js';
 import { createMcpServerFactory } from '../dist/server.js';
 import { SessionRegistry } from '../dist/session-registry.js';
 
@@ -65,7 +65,7 @@ const registry = new SessionRegistry({
   idleTtlMs: 1,
   maxSessions: 1000,
   now: () => now,
-  canAdmit: hasSessionHeapCapacity,
+  canAdmit: createSessionHeapAdmission(),
 });
 let clients = [];
 // Use the low-level request to avoid counting the SDK client's cached tool-output
@@ -118,7 +118,10 @@ try {
   assert.equal(registry.stats().rejected, 1);
   const retained = heap() - baseline;
   if (!specPath)
-    assert(retained < 128 * 1024 ** 2, 'Discovery descriptions were duplicated per session');
+    assert(
+      retained < 96 * 1024 ** 2,
+      'Per-session validators or descriptions exceeded heap budget',
+    );
   assert(hasSessionHeapCapacity(), 'Deferred initialization consumed the request headroom');
   // Existing sessions remain callable when new initialization is refused.
   assert((await list(clients[0].client)).tools.length > 0);

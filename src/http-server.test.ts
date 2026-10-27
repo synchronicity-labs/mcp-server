@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   closeHttpServerWithGrace,
   createRequestId,
+  createSessionHeapAdmission,
   encodeOAuthFormBody,
   extractBasicClientCredentials,
   getSessionRuntimeConfig,
@@ -237,5 +238,46 @@ describe('MCP session runtime config', () => {
       shutdownGraceMs: 10_000,
       telemetryIntervalMs: 15_000,
     });
+  });
+});
+
+describe('MCP heap admission', () => {
+  it('collects reclaimable memory before refusing and avoids GC under normal load', () => {
+    let used = 61;
+    const collect = vi.fn(() => {
+      used = 40;
+    });
+    const admit = createSessionHeapAdmission({
+      readHeap: () => ({ used_heap_size: used, heap_size_limit: 100 }),
+      collect,
+    });
+    expect(admit()).toBe(true);
+    expect(collect).toHaveBeenCalledOnce();
+    expect(admit()).toBe(true);
+    expect(collect).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the heap bound and rate-limits collection during retained pressure', () => {
+    let time = 0;
+    const collect = vi.fn();
+    const admit = createSessionHeapAdmission({
+      readHeap: () => ({ used_heap_size: 60, heap_size_limit: 100 }),
+      collect,
+      now: () => time,
+    });
+    expect(admit()).toBe(false);
+    time = 29_999;
+    expect(admit()).toBe(false);
+    expect(collect).toHaveBeenCalledOnce();
+    time = 30_000;
+    expect(admit()).toBe(false);
+    expect(collect).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses conservatively when explicit collection is unavailable', () => {
+    const admit = createSessionHeapAdmission({
+      readHeap: () => ({ used_heap_size: 61, heap_size_limit: 100 }),
+    });
+    expect(admit()).toBe(false);
   });
 });

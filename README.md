@@ -143,6 +143,13 @@ Tools are dynamically generated from the Sync API. Core tools include:
 | `projects_create` | Create a project to group generations + assets |
 | `projects_get-all` / `projects_get` | List / get projects |
 | `projects_update` / `projects_delete` | Update or delete a project |
+| `get-studio-view` | Read the exact mounted Studio view and its action receipt |
+| `open-studio-project` | Open an existing project and optional workflow in Studio |
+| `refresh-studio-project` | Refresh Studio after a project rename or details change |
+| `refresh-studio-assets` | Refresh Studio after uploads or asset registration |
+| `show-studio-generation` | Display an already accepted generation or result |
+| `continue-studio-generation` | Stage an explicit source/output continuation in a new draft; archives the prior draft and may register existing output as media |
+| `get-studio-draft` / `update-studio-draft` | Read or replace specified draft selections/settings with revision checks; updates are marked destructive |
 
 `create-translate-and-dub` requires a saved video asset, accessible project,
 model, target language and persistent idempotency key. Confirm the paid action
@@ -154,7 +161,14 @@ for the remaining combined-pricing and embedded UI work.
 ### Edit Dialogue
 
 When the API exposes transcription and dialogue-edit endpoints, `get-dialogue-options`
-enables the embedded timed-word editor. `create-dialogue-transcription` and
+enables the embedded timed-word editor. When transcription refuses a source URL
+because it is not in Sync storage, `upload-dialogue-source` copies the accessible
+saved video through the bounded upload pipeline and returns a new project asset.
+Use that asset's ID for the remaining dialogue calls. The widget performs this
+recovery when `get-dialogue-options` advertises `sourceUpload: true`, and retains
+the uploaded selection through reload, preview, and generation. Other 422 errors
+do not initiate an upload, and a rejected uploaded copy does not trigger another
+automatic upload. `create-dialogue-transcription` and
 `get-dialogue-transcription` obtain the single-speaker transcript. Users edit or
 remove timed words, then explicitly request `create-dialogue-preview` and poll
 `get-dialogue-preview`. The adapter reads the server-owned transcript and keeps
@@ -167,19 +181,37 @@ normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
 read-only. Partial completion must be shown to the user.
 
-This candidate packages the merged ChatGPT frontend from
-[sync-api-v2 PR #7098](https://github.com/synchronicity-labs/sync-api-v2/pull/7098)
-with MCP PR #91's project naming and connected-account usage tools. The immutable
-UI comes from merge commit `a7c105159c1cd9a926f42f5dbd299ff758e9cdfa`.
-The current production frontend remains retained for rollback, along with seven
-other previous releases. The oldest October 2 resource is explicitly retired
-from the active catalog and its original files are archived; cached panels using
-that version may need reopening. See [frontend packaging](docs/chatgpt-release.md)
-for checksums, retirement evidence, release order and live acceptance.
+This candidate adds authenticated chat delivery to the exact mounted Studio view
+from [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227).
+Backend success is separate from its pending/applied/blocked/failed display
+receipt. Existing draft synchronization and paid-operation recovery remain in
+place; these view tools do not generate or synthesize media.
+Each model-callable view operation has its own tool, flat input schema and
+annotations. The generic `request-studio-view-action` tool is no longer exposed.
+Draft updates/saves, project/workflow switches, result selection and continuation
+declare destructive effects; receipt
+acknowledgements remain non-destructive. Cached Studio resources retain the
+existing app-only registration and acknowledgement tools.
 
-The existing workflow backend from PR #6822 is already in production. Merging
-#91 will select the new packaged frontend through the MCP production image;
-preparing this candidate does not deploy it or perform an EKS cutover.
+This candidate includes thumbnail-only asset previews and hosted-video recovery
+for Edit Dialogue. It packages the merged expanded-Studio fixes from
+[sync-api-v2 #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216),
+[#7220](https://github.com/synchronicity-labs/sync-api-v2/pull/7220) and
+[#7222](https://github.com/synchronicity-labs/sync-api-v2/pull/7222) and
+[#7233](https://github.com/synchronicity-labs/sync-api-v2/pull/7233): active draft
+context publication, fullscreen height, draft/result controls and accessible
+current-result navigation. The release follow-up
+[#7253](https://github.com/synchronicity-labs/sync-api-v2/pull/7253) aligns all
+workflow titles, removes the projects-header Resume shortcut, and keeps previews
+above the composer. New lipsync/image-to-video requests default to `sync-3`;
+saved drafts and retries retain explicit model choices. It retains all eleven UI resources published through
+MCP #96 and the unchanged archive of the oldest October 2 resource. See
+[frontend packaging](docs/chatgpt-release.md) for the exact source commit,
+checksums, release order and live acceptance requirements.
+
+The existing workflow backend from PR #6822 is already in production. The draft
+API is already published; the new Studio view API routes must be released before this MCP candidate.
+Preparing the candidate does not deploy it or perform an EKS cutover.
 
 ## Example Prompts
 
@@ -195,7 +227,7 @@ authority; options expose only the fields needed for the speech quote.
 
 The compatible backend from sync-api-v2 PR #6822 is already in production.
 The packaged frontend comes from the merged source recorded in its release
-provenance. The active catalog retains eight previous UIs; the retired October 2
+provenance. The candidate catalog retains eleven previous UIs; the retired October 2
 resource is archived rather than served, as detailed in the release guide.
 After the MCP release, rescan publisher metadata and verify preview, attachment,
 reload recovery and playback in ChatGPT. Local and package checks do not establish
@@ -309,14 +341,36 @@ Options:
 New HTTP session initialization is also refused with HTTP 503 and `Retry-After: 60`
 when V8 heap usage reaches 60% of its actual heap limit. Existing sessions remain
 callable; no session is evicted and no paid action is replayed. Admission resumes
-when memory is available. `mcp_runtime.memory.heapLimitBytes` reports that limit
+when memory is available. The production image enables explicit garbage collection;
+at this threshold the server first collects reclaimable objects and rechecks the
+same bound. Collection is limited to once per 30 seconds during sustained pressure.
+Custom launchers should use `node --expose-gc dist/cli.js`; without that flag the
+guard remains conservative. `mcp_runtime.memory.heapLimitBytes` reports that limit
 alongside heap usage and session rejection counts. This guard bounds session
 admission, not all request/response or upload memory; size container resources
 with those workloads in mind.
 
+The SDK is pinned to `1.32.1` with a small JSON-response cleanup patch in
+`scripts/patch-mcp-sdk.mjs`. Completed responses must release their stream entry
+immediately; retaining its resolver also retains the serialized response until
+the session closes. The install hook patches both ESM and CommonJS builds and
+rejects an unexpected SDK version or source layout. Installs that disable scripts
+must run `npm run patch:mcp-sdk` explicitly, as CI does. The patch script is also
+included in the published npm package and both Docker install stages. Remove it
+only after an SDK upgrade passes the HTTP retention regressions.
+
+After `npm run build && npm run package:chatgpt`, run `npm run test:memory:http`
+to exercise the actual HTTP transport and every packaged widget release in a
+512 MiB old-space process. It checks retained heap while sessions remain live,
+then expires sessions and repeats the workload to verify recovery. It uses only
+loopback HTTP and fixture API metadata; no credentials or generation calls are
+needed. `src/http-response-cleanup.test.ts` also checks successful and failed RPC
+responses, concurrent requests, and completion after a client disconnect without
+cancelling or repeating the tool operation.
+
 Tool schemas and stateless handlers are built once per HTTP factory. Discovery
-descriptions are cached for the four supported presentation profiles. Session
-profiles, transports and validation remain separate; credentials are resolved
+descriptions are cached for the four supported presentation profiles. Immutable schema validators are shared too. Session
+profiles, transports and request validation remain separate; credentials are resolved
 per request. After `npm run build`, `npm run test:memory` exercises local session
 load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
 `-- --burst` to defer initialization until all connections have reserved capacity,
@@ -590,3 +644,11 @@ Submission checks do not read unrelated parent media or parse its settings, so
 deleting an old source does not block same-key reconciliation. The API still
 authorizes the inputs of a new submission. `get-generation-continuation` retains
 its full source-access checks before returning media or settings to the app.
+
+Asset previews must use only the exact `thumbnailUrl` returned by Sync for the same
+asset. The server instructions and asset discovery tools prohibit web-image
+search, generated images and source-media substitutions. Missing or failed
+thumbnails use `/asset-placeholder.svg`, a static black image with the Sync logo.
+Hosts that cannot display it should report an unavailable thumbnail. This guidance
+does not control arbitrary model prose; the embedded Studio library enforces the
+thumbnail-only rule and its loading/error fallback directly.

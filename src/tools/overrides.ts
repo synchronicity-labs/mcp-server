@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { ASSET_THUMBNAIL_INSTRUCTIONS } from '../asset-thumbnail.js';
 import { generationOutputSchema } from './output-schemas.js';
 
 type ToolOverride = {
@@ -33,10 +34,11 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'assets_get-all': {
     description:
-      'List assets (video/audio/image) in your organization. Use to find an existing assetId.',
+      'List assets (video/audio/image) in your organization. Use to find an existing assetId. ' +
+      ASSET_THUMBNAIL_INSTRUCTIONS,
   },
   assets_get: {
-    description: 'Get one asset by id (details + URL).',
+    description: 'Get one asset by id (details + URL). ' + ASSET_THUMBNAIL_INSTRUCTIONS,
   },
   assets_update: {
     description: "Update an asset's name or visibility by id.",

@@ -3,7 +3,7 @@ import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promi
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { loadChatgptApp } from '../dist/chatgpt-app.js';
-import { chatgptReleaseSchema } from '../dist/chatgpt-release.js';
+import { chatgptReleaseSchema, MAX_PREVIOUS_CHATGPT_RELEASES } from '../dist/chatgpt-release.js';
 
 // Check in the approved bytes so production builds need no cross-repository credentials.
 const source = new URL('../deploy/chatgpt/', import.meta.url);
@@ -18,8 +18,8 @@ assert.deepEqual(
   'Every packaged directory must be declared in releases.json.',
 );
 assert(
-  releases.length > 0 && releases.length <= 9,
-  'Package one current and at most eight retained releases.',
+  releases.length > 0 && releases.length <= MAX_PREVIOUS_CHATGPT_RELEASES + 1,
+  'Package one current and at most eleven retained releases.',
 );
 // Rebuilding after pruning a retained release must not carry stale output forward.
 await rm(output, { recursive: true, force: true });
