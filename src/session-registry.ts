@@ -33,7 +33,7 @@ type SessionEntry<T extends ClosableTransport> = {
   inFlight: number;
 };
 
-type SessionRemovalReason = 'closed' | 'expired' | 'shutdown';
+type SessionRemovalReason = 'closed' | 'expired' | 'evicted' | 'shutdown' | 'initialization_failed';
 
 type SessionRegistryOptions = {
   idleTtlMs: number;
@@ -57,6 +57,10 @@ type SessionStats = {
   expired: number;
   closed: number;
   rejected: number;
+  rejectedCapacity: number;
+  rejectedMemory: number;
+  evicted: number;
+  limit: number;
 };
 
 export class SessionRegistry<T extends ClosableTransport> {
@@ -73,6 +77,9 @@ export class SessionRegistry<T extends ClosableTransport> {
   #expired = 0;
   #closed = 0;
   #rejected = 0;
+  #rejectedCapacity = 0;
+  #rejectedMemory = 0;
+  #evicted = 0;
 
   constructor(options: SessionRegistryOptions) {
     this.#idleTtlMs = options.idleTtlMs;
@@ -98,8 +105,29 @@ export class SessionRegistry<T extends ClosableTransport> {
       }
     | undefined {
     if (!this.#accepting) return undefined;
-    if (this.#entries.size + this.#pending >= this.#maxSessions || !this.#canAdmit()) {
-      this.#rejected += 1;
+    // Remove expired entries before admission, even between scheduled sweeps.
+    // remove() deletes synchronously; transport shutdown completes independently.
+    const now = this.#now();
+    for (const [id, entry] of this.#entries) {
+      if (entry.inFlight === 0 && now - entry.lastSeenAt > this.#idleTtlMs)
+        void this.remove(id, 'expired');
+    }
+    if (this.#entries.size + this.#pending >= this.#maxSessions) {
+      let oldest: [string, SessionEntry<T>] | undefined;
+      for (const candidate of this.#entries) {
+        const entry = candidate[1];
+        // Leave time for initialize/initialized/tool handshakes and brief pauses.
+        if (entry.inFlight > 0 || now - entry.lastSeenAt < 30_000) continue;
+        if (!oldest || entry.lastSeenAt < oldest[1].lastSeenAt) oldest = candidate;
+      }
+      if (oldest) void this.remove(oldest[0], 'evicted');
+    }
+    if (this.#entries.size + this.#pending >= this.#maxSessions) {
+      this.recordRejection('capacity');
+      return undefined;
+    }
+    if (!this.#canAdmit()) {
+      this.recordRejection('memory');
       return undefined;
     }
 
@@ -143,6 +171,10 @@ export class SessionRegistry<T extends ClosableTransport> {
       entry.owner.organizationId !== owner.organizationId
     )
       return undefined;
+    if (entry.inFlight === 0 && this.#now() - entry.lastSeenAt > this.#idleTtlMs) {
+      void this.remove(sessionId, 'expired');
+      return undefined;
+    }
     return this.#createLease(entry);
   }
 
@@ -173,6 +205,7 @@ export class SessionRegistry<T extends ClosableTransport> {
     this.#entries.delete(sessionId);
     if (reason === 'expired') this.#expired += 1;
     if (reason === 'closed') this.#closed += 1;
+    if (reason === 'evicted') this.#evicted += 1;
     try {
       this.#onRemove(sessionId, reason);
     } catch (error) {
@@ -213,6 +246,12 @@ export class SessionRegistry<T extends ClosableTransport> {
     );
   }
 
+  recordRejection(reason: 'capacity' | 'memory'): void {
+    this.#rejected += 1;
+    if (reason === 'capacity') this.#rejectedCapacity += 1;
+    else this.#rejectedMemory += 1;
+  }
+
   stats(): SessionStats {
     return {
       active: this.#entries.size,
@@ -222,6 +261,10 @@ export class SessionRegistry<T extends ClosableTransport> {
       expired: this.#expired,
       closed: this.#closed,
       rejected: this.#rejected,
+      rejectedCapacity: this.#rejectedCapacity,
+      rejectedMemory: this.#rejectedMemory,
+      evicted: this.#evicted,
+      limit: this.#maxSessions,
     };
   }
 }

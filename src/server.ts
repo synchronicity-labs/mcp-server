@@ -509,9 +509,10 @@ function createProfiledServer(
     tools: McpToolDefinition[];
     descriptors: Map<ClientProfile['name'], Tool[]>;
   },
+  httpClientName?: string,
 ): McpServer {
   let profile: ClientProfile | undefined;
-  let clientName: string | undefined;
+  let clientName: string | undefined = httpClientName;
   const getProfile = () => profile ?? resolveClientProfile();
   const httpClient = createHttpClient(
     config.baseUrl,
@@ -573,7 +574,7 @@ function createProfiledServer(
         if (!getProfile().supportsAppUi)
           throw new Error('This interface requires an app-compatible client.');
         process.stderr.write(
-          `${JSON.stringify({ event: 'app_resource_served', timestamp: new Date().toISOString(), clientName, resource: app.uri, bytes: Buffer.byteLength(app.html) })}\n`,
+          `${JSON.stringify({ event: 'app_resource_served', timestamp: new Date().toISOString(), clientProfile: getProfile().name, resource: app.uri, bytes: Buffer.byteLength(app.html) })}\n`,
         );
         return {
           contents: [
@@ -601,7 +602,7 @@ function createProfiledServer(
   const onInitialized = server.server.oninitialized;
   server.server.oninitialized = () => {
     if (!profile) {
-      clientName = server.server.getClientVersion()?.name;
+      clientName ??= server.server.getClientVersion()?.name;
       const initializedProfile = resolveClientProfile(clientName);
       profile = initializedProfile;
       const cached = sharedCatalog?.descriptors.get(initializedProfile.name);
@@ -637,6 +638,7 @@ function createProfiledServer(
     }
     onInitialized?.();
   };
+  if (httpClientName !== undefined) server.server.oninitialized();
   return server;
 }
 
@@ -652,7 +654,7 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
 
 export async function createMcpServerFactory(
   config: SyncMcpConfig,
-): Promise<{ createServer: () => McpServer; toolCount: number }> {
+): Promise<{ createServer: (clientName?: string) => McpServer; toolCount: number }> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
   // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
@@ -678,8 +680,16 @@ export async function createMcpServerFactory(
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: new Set(tools.map((tool) => tool.name)).size,
-    createServer: () =>
-      createProfiledServer(config, operations, {}, chatgptApp, previousApps, sharedCatalog),
+    createServer: (clientName) =>
+      createProfiledServer(
+        config,
+        operations,
+        {},
+        chatgptApp,
+        previousApps,
+        sharedCatalog,
+        clientName,
+      ),
   };
 }
 

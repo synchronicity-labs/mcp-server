@@ -347,9 +347,9 @@ Options:
 | `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
 | `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
 | `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
-| `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `1800000` (30 min) |
+| `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `120000` (2 min) |
 | `MCP_MAX_SESSIONS` | Maximum active and initializing HTTP sessions | `1000` |
-| `MCP_SESSION_SWEEP_INTERVAL_MS` | Interval for idle-session cleanup | `60000` (1 min) |
+| `MCP_SESSION_SWEEP_INTERVAL_MS` | Interval for idle-session cleanup | `15000` (15 sec) |
 | `MCP_SHUTDOWN_GRACE_MS` | Time to drain active requests before forced shutdown cleanup | `10000` (10 sec) |
 | `MCP_RUNTIME_TELEMETRY_INTERVAL_MS` | Interval for structured memory, CPU, event-loop, session, request, and upload telemetry | `15000` (15 sec) |
 | `MCP_UPLOAD_MAX_BYTES` | Maximum declared or streamed size for a re-hosted upload | `536870912` (512 MiB) |
@@ -359,8 +359,8 @@ Options:
 | `MCP_UPLOAD_TIMEOUT_MS` | End-to-end deadline for a queued or active re-host upload | `900000` (15 min) |
 
 New HTTP session initialization is also refused with HTTP 503 and `Retry-After: 60`
-when V8 heap usage reaches 60% of its actual heap limit. Existing sessions remain
-callable; no session is evicted and no paid action is replayed. Admission resumes
+when V8 heap usage reaches 60% of its actual heap limit. In-flight sessions remain
+protected and no paid action is replayed. Admission resumes
 when memory is available. The production image enables explicit garbage collection;
 at this threshold the server first collects reclaimable objects and rechecks the
 same bound. Collection is limited to once per 30 seconds during sustained pressure.
@@ -396,7 +396,7 @@ load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
 `-- --burst` to defer initialization until all connections have reserved capacity,
 covering clients that complete discovery after an initialization burst.
 
-HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. When capacity is exhausted, new session initialization returns `503` with `Retry-After`; existing sessions continue normally.
+HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. Admission first expires idle sessions, then reclaims the oldest session idle for at least 30 seconds when the session-count limit is reached. In-flight requests and pending initializations are protected. Expired/evicted IDs return 404 so clients can initialize again. If no eligible capacity remains or heap admission fails, new initialization returns `503` with `Retry-After: 60`.
 
 Host-provided upload source URLs must use HTTP(S) on the protocol default port, without credentials. IP literals and every DNS answer used by a source connection must be public unicast destinations. Private, loopback, link-local, reserved, mapped and transition addresses are rejected. Source redirects are rejected; hosts must provide the final download URL. Source connections use a dedicated direct dispatcher rather than an environment or global proxy.
 
@@ -693,3 +693,12 @@ thumbnails use `/asset-placeholder.svg`, a static black image with the Sync logo
 Hosts that cannot display it should report an unavailable thumbnail. This guidance
 does not control arbitrary model prose; the embedded Studio library enforces the
 thumbnail-only rule and its loading/error fallback directly.
+
+### Availability monitoring
+
+`npm run monitor:mcp` exercises authenticated initialization, tool discovery,
+a read-only account call and aggregate `/status`, then deletes the probe session.
+See [MCP availability](docs/mcp-availability.md) for credential lifecycle, exit
+codes, alert thresholds and rollout verification. `/health` remains liveness only.
+
+HTTP session IDs retain only isolation metadata; SDK servers and transports close after each request. See [session lifecycle and stateless compatibility](docs/session-lifecycle.md).

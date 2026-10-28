@@ -1,5 +1,18 @@
 # ChatGPT frontend release
 
+## Session resilience candidate #7444
+
+Source: [sync-api-v2 hotfix #7444](https://github.com/synchronicity-labs/sync-api-v2/pull/7444),
+commit `5f79ab181d3da32600a15c371b57106704d5ddfd`, tree `a0d1b78996ca5df566be8adc04903950d1c3b66a`.
+UI SHA256: `e6703543820fda6e4a83200bde29341c84a546bd310b645a440efad33a27ac8c` (3,666,965 uncompressed bytes).
+Two builds from the frozen-lockfile production-based checkout produced identical bytes.
+The widget reduces unchanged polling, pauses hidden views, and respects failure backoff
+while retaining Studio's heartbeat and draft recovery. No paid operation is replayed.
+The oldest retained bundle, `0f4f4547…`, moves to `deploy/chatgpt-retired/`.
+
+This is a prepared candidate, not evidence of deployment or ChatGPT acceptance.
+See [availability and rollout](mcp-availability.md) and [the lifecycle decision](session-lifecycle.md).
+
 ## Release candidate #7407 refresh
 
 Source: the head of [sync-api-v2 release candidate #7407](https://github.com/synchronicity-labs/sync-api-v2/pull/7407),

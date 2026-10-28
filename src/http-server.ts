@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -29,9 +30,11 @@ import {
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import type { SyncMcpConfig } from './config.js';
+import { HttpSession } from './http-session.js';
 import { readOAuthResponseText } from './oauth-response.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry, sessionOwner } from './session-registry.js';
+import { SessionTelemetry } from './session-telemetry.js';
 import { uploadRuntime } from './upload-runtime.js';
 
 export {
@@ -57,9 +60,9 @@ const OAUTH_FORM_FIELDS = [
 ] as const;
 const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN || 'npwmwee4nxi0N3Rm14jmmsldnkv27qSnU3mY5rFCc5E';
-const DEFAULT_SESSION_IDLE_TTL_MS = 30 * 60_000;
+const DEFAULT_SESSION_IDLE_TTL_MS = 2 * 60_000;
 const DEFAULT_MAX_SESSIONS = 1_000;
-const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 60_000;
+const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 15_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
 const DEFAULT_RUNTIME_TELEMETRY_INTERVAL_MS = 15_000;
 const MAX_REQUEST_ID_LENGTH = 128;
@@ -102,6 +105,7 @@ export function createSessionHeapAdmission({
 type SessionRuntimeConfig = {
   idleTtlMs: number;
   maxSessions: number;
+  maxInFlightRequests: number;
   sweepIntervalMs: number;
   shutdownGraceMs: number;
   telemetryIntervalMs: number;
@@ -119,6 +123,7 @@ export function getSessionRuntimeConfig(
   return {
     idleTtlMs: positiveInteger(env.MCP_SESSION_IDLE_TTL_MS, DEFAULT_SESSION_IDLE_TTL_MS),
     maxSessions: positiveInteger(env.MCP_MAX_SESSIONS, DEFAULT_MAX_SESSIONS),
+    maxInFlightRequests: positiveInteger(env.MCP_MAX_IN_FLIGHT_REQUESTS, 32),
     sweepIntervalMs: positiveInteger(
       env.MCP_SESSION_SWEEP_INTERVAL_MS,
       DEFAULT_SESSION_SWEEP_INTERVAL_MS,
@@ -271,7 +276,7 @@ export function createHttpMcpTransport(
 }
 
 export async function startHttpServer(
-  serverFactory: { createServer: () => McpServer; toolCount: number },
+  serverFactory: { createServer: (clientName?: string) => McpServer; toolCount: number },
   config: SyncMcpConfig,
 ): Promise<void> {
   const log = (message: string) => {
@@ -550,13 +555,15 @@ export async function startHttpServer(
   const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
 
   const sessionRuntimeConfig = getSessionRuntimeConfig();
-  const sessionClientNames = new Map<string, string>();
-  const pendingTransports = new Set<StreamableHTTPServerTransport>();
-  const sessions = new SessionRegistry<StreamableHTTPServerTransport>({
+  const canAdmitRequest = createSessionHeapAdmission();
+  const sessionTelemetry = new SessionTelemetry(logEvent);
+  const sessions = new SessionRegistry<HttpSession>({
     idleTtlMs: sessionRuntimeConfig.idleTtlMs,
     maxSessions: sessionRuntimeConfig.maxSessions,
-    canAdmit: createSessionHeapAdmission(),
-    onRemove: (sessionId) => sessionClientNames.delete(sessionId),
+    canAdmit: canAdmitRequest,
+    onRemove: (sessionId, reason) => {
+      sessionTelemetry.close(sessionId, reason === 'closed' ? 'client_delete' : reason);
+    },
     onCloseError: (error) => {
       logEvent('mcp_session_close_error', { error: serializeError(error) });
     },
@@ -564,6 +571,20 @@ export async function startHttpServer(
 
   const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
   eventLoopDelay.enable();
+  app.get('/status', mcpRateLimit, bearerAuth, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      sessions: sessions.stats(),
+      requests: {
+        inFlight: sessions.stats().inFlight,
+        limit: sessionRuntimeConfig.maxInFlightRequests,
+      },
+      memory: {
+        heapUsedBytes: process.memoryUsage().heapUsed,
+        heapLimitBytes: getHeapStatistics().heap_size_limit,
+      },
+    });
+  });
   const logRuntimeTelemetry = () => {
     const memory = process.memoryUsage();
     const resourceUsage = process.resourceUsage();
@@ -584,7 +605,6 @@ export async function startHttpServer(
       pid: process.pid,
       uptimeSeconds: Math.round(process.uptime()),
       sessions: sessions.stats(),
-      pendingTransports: pendingTransports.size,
       requests: requestMetrics.snapshot(),
       uploads: uploadRuntime.snapshot(),
       memory: {
@@ -651,94 +671,92 @@ export async function startHttpServer(
     let reservation: ReturnType<typeof sessions.reserve>;
     let lease: ReturnType<typeof sessions.acquire>;
     let initializedSessionId: string | undefined;
-    let unregisteredTransport: StreamableHTTPServerTransport | undefined;
-
     try {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      let transport: StreamableHTTPServerTransport;
-
+      const suppliedId = req.headers['mcp-session-id'];
+      if (suppliedId !== undefined && typeof suppliedId !== 'string') {
+        res.status(400).json({ error: 'Invalid session header' });
+        return;
+      }
+      let sessionId = suppliedId;
+      let session: HttpSession;
+      const rpcBody = asRecord(req.body);
+      const rpcParams = asRecord(rpcBody.params);
       if (sessionId) {
         lease = sessions.acquire(sessionId, owner);
         if (!lease) {
           res.status(404).json({ error: 'Session not found' });
           return;
         }
-        transport = lease.transport;
+        session = lease.transport;
       } else {
+        if (req.method !== 'POST') {
+          res.setHeader('Allow', 'POST, DELETE');
+          res.status(405).end();
+          return;
+        }
+        const init = InitializeRequestSchema.safeParse(req.body);
+        if (!init.success) {
+          res.status(400).json({ error: 'Initialize an MCP session before sending requests' });
+          return;
+        }
         reservation = sessions.reserve();
         if (!reservation) {
           res.setHeader('Retry-After', '60');
           res.status(503).json({ error: 'MCP session capacity reached' });
           return;
         }
-
-        transport = createHttpMcpTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (sessionId) => {
-            if (!reservation) {
-              throw new Error('MCP session initialized without a capacity reservation');
-            }
-            lease = reservation.commit(sessionId, transport, owner);
-            reservation = undefined;
-            pendingTransports.delete(transport);
-            unregisteredTransport = undefined;
-            initializedSessionId = sessionId;
-          },
+        const id = randomUUID();
+        sessionId = id;
+        initializedSessionId = id;
+        session = new HttpSession(
+          init.data.params.clientInfo.name.slice(0, 160),
+          serverFactory.createServer,
+          (version) => sessionTelemetry.protocol(id, version),
+        );
+        lease = reservation.commit(id, session, owner);
+        reservation = undefined;
+        sessionTelemetry.start(id, session.clientName, init.data.params.protocolVersion);
+        res.setHeader('Mcp-Session-Id', id);
+        logEvent('mcp_session_created', {
+          sessionRef: sessionTelemetry.reference(id),
+          requestId: res.locals.requestId,
         });
-        const send = transport.send.bind(transport);
-        transport.send = async (message, options) => {
-          if ('error' in message) {
-            logEvent('mcp_rpc_error', {
-              code: message.error.code,
-              category: /not found/i.test(message.error.message) ? 'not_found' : 'protocol_error',
-            });
-          }
-          return send(message, options);
-        };
-        pendingTransports.add(transport);
-        unregisteredTransport = transport;
-        transport.onclose = () => {
-          pendingTransports.delete(transport);
-          if (transport.sessionId) {
-            void sessions.remove(transport.sessionId, 'closed', false);
-          }
-        };
-        const sessionServer = serverFactory.createServer();
-        const onInitialized = sessionServer.server.oninitialized;
-        sessionServer.server.oninitialized = () => {
-          onInitialized?.();
-          const clientVersion = sessionServer.server.getClientVersion();
-          // Identify host compatibility without logging credentials.
-          logEvent('mcp_client_initialized', {
-            clientName: clientVersion?.name?.slice(0, 160),
-            clientVersion: clientVersion?.version?.slice(0, 80),
-            capabilityNames: Object.keys(sessionServer.server.getClientCapabilities() ?? {}),
-          });
-          if (clientVersion?.name && transport.sessionId) {
-            sessionClientNames.set(transport.sessionId, clientVersion.name);
-          }
-        };
-        await sessionServer.connect(transport);
       }
-
-      const clientName = transport.sessionId
-        ? sessionClientNames.get(transport.sessionId)
-        : undefined;
-      const rpcBody = asRecord(req.body);
-      const rpcParams = asRecord(rpcBody.params);
+      const correlation = initializedSessionId
+        ? { sessionRef: sessionTelemetry.reference(sessionId) }
+        : sessionTelemetry.request(
+            sessionId,
+            typeof rpcBody.method === 'string' ? rpcBody.method : undefined,
+          );
+      if (req.method === 'DELETE') {
+        await sessions.remove(sessionId, 'closed');
+        res.status(200).end();
+        return;
+      }
+      // Let cancellation and lifecycle notifications through under pressure.
+      if (req.method === 'POST' && ('id' in rpcBody || Array.isArray(req.body))) {
+        const refusal =
+          sessions.stats().inFlight > sessionRuntimeConfig.maxInFlightRequests
+            ? 'capacity'
+            : !canAdmitRequest()
+              ? 'memory'
+              : undefined;
+        if (refusal) {
+          sessions.recordRejection(refusal);
+          if (initializedSessionId) {
+            await sessions.remove(initializedSessionId, 'initialization_failed');
+            res.removeHeader('Mcp-Session-Id');
+          }
+          res.setHeader('Retry-After', '60');
+          res.status(503).json({ error: 'MCP request capacity reached' });
+          return;
+        }
+      }
       if (typeof rpcBody.method === 'string') {
         logEvent('mcp_rpc_request', {
+          requestId: res.locals.requestId,
           method: rpcBody.method.slice(0, 80),
-          clientName,
-          ...(rpcBody.method === 'resources/read'
-            ? {
-                resource:
-                  typeof rpcParams.uri === 'string' &&
-                  /^ui:\/\/sync\/[a-zA-Z0-9.-]+$/.test(rpcParams.uri)
-                    ? rpcParams.uri
-                    : '<other resource>',
-              }
-            : {}),
+          ...correlation,
           ...(rpcBody.method === 'tools/call'
             ? {
                 tool:
@@ -749,30 +767,19 @@ export async function startHttpServer(
             : {}),
         });
       }
-      await runWithAuth(token, clientName, () => transport.handleRequest(req, res, req.body));
-
-      if (reservation) {
-        await transport.close();
-        unregisteredTransport = undefined;
-      }
+      await runWithAuth(token, session.clientName, () =>
+        session.handleRequest(req, res, !!initializedSessionId),
+      );
+      if (initializedSessionId && res.statusCode >= 400)
+        await sessions.remove(initializedSessionId, 'initialization_failed');
     } catch (error) {
-      if (initializedSessionId) {
-        await sessions.remove(initializedSessionId, 'closed');
-      } else if (unregisteredTransport) {
-        if (unregisteredTransport.sessionId) {
-          sessionClientNames.delete(unregisteredTransport.sessionId);
-        }
-        await unregisteredTransport.close().catch((closeError) => {
-          logEvent('mcp_session_close_error', { error: serializeError(closeError) });
-        });
-      }
+      if (initializedSessionId)
+        await sessions.remove(initializedSessionId, 'initialization_failed');
       logEvent('mcp_handler_error', {
         requestId: res.locals.requestId,
         error: serializeError(error),
       });
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
-      }
+      if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
     } finally {
       lease?.release();
       reservation?.release();
@@ -835,7 +842,6 @@ export async function startHttpServer(
     logEvent('shutdown_started', {
       reason,
       sessions: sessions.stats(),
-      pendingTransports: pendingTransports.size,
       requests: requestMetrics.snapshot(),
     });
     logRuntimeTelemetry();
@@ -860,8 +866,6 @@ export async function startHttpServer(
 
     // Freeze reservations before taking final snapshots so late initialization cannot escape cleanup.
     sessions.stopAccepting();
-    await Promise.allSettled([...pendingTransports].map((transport) => transport.close()));
-    pendingTransports.clear();
     await sessions.closeAll();
     const httpServerClose = await httpServerClosing;
     logEvent('shutdown_completed', {

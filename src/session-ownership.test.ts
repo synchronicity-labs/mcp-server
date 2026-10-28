@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { startHttpServer } from './http-server.js';
 
 const heap = vi.hoisted(() => ({ used_heap_size: 20, heap_size_limit: 100 }));
@@ -26,8 +27,13 @@ function deferred<T>() {
 }
 let started = deferred<void>();
 let aborted = false;
+let activeHolds = 0;
+let clockOffset = 0;
 let release = deferred<void>();
 beforeAll(async () => {
+  vi.stubEnv('MCP_MAX_IN_FLIGHT_REQUESTS', '2');
+  const realNow = Date.now;
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffset);
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   upstream = createServer(async (req, res) => {
@@ -72,6 +78,7 @@ beforeAll(async () => {
       createServer: () => {
         const server = new McpServer({ name: 'ownership-fixture', version: '1' });
         server.registerTool('hold', { inputSchema: {} }, async (_args, context) => {
+          activeHolds++;
           started.resolve();
           const onAbort = () => {
             aborted = true;
@@ -82,6 +89,7 @@ beforeAll(async () => {
             await release.promise;
             return { content: [{ type: 'text' as const, text: 'completed' }] };
           } finally {
+            activeHolds--;
             context.signal.removeEventListener('abort', onAbort);
           }
         });
@@ -113,6 +121,7 @@ afterAll(async () => {
         if (!previous.get(event)?.includes(listener))
           emitter.removeListener(event, listener as (...args: unknown[]) => void);
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   }
 });
 
@@ -235,7 +244,7 @@ it('treats an absent organization as an exact legacy identity, never a wildcard'
   await (await request(id, 'missing-org', 'DELETE')).text();
 });
 
-it('returns retryable 503 before allocation under heap pressure, while existing sessions keep working', async () => {
+it('returns retryable 503 before allocation under heap pressure, and refuses new request graphs on existing sessions', async () => {
   const id = await initialize();
   try {
     heap.used_heap_size = 60;
@@ -253,8 +262,8 @@ it('returns retryable 503 before allocation under heap pressure, while existing 
     expect(response.headers.get('retry-after')).toBe('60');
     expect(await response.json()).toEqual({ error: 'MCP session capacity reached' });
     const existing = await request(id, 'owner-refreshed', 'POST', list);
-    expect(existing.status).toBe(200);
-    expect(await existing.text()).toContain('hold');
+    expect(existing.status).toBe(503);
+    expect(await existing.json()).toEqual({ error: 'MCP request capacity reached' });
   } finally {
     heap.used_heap_size = 20;
   }
@@ -263,5 +272,110 @@ it('returns retryable 503 before allocation under heap pressure, while existing 
     const response = await request(sessionId, 'owner', 'DELETE');
     expect(response.status).toBe(200);
     await response.text();
+  }
+});
+
+it('exposes authenticated aggregate capacity without leaking session identities', async () => {
+  const endpoint = url.replace(/\/mcp$/, '/status');
+  expect((await fetch(endpoint)).status).toBe(401);
+  const response = await fetch(endpoint, { headers: { Authorization: 'Bearer owner' } });
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  const status = await response.json();
+  expect(status).toMatchObject({
+    sessions: {
+      limit: 1000,
+      rejectedCapacity: expect.any(Number),
+      rejectedMemory: expect.any(Number),
+    },
+    memory: { heapLimitBytes: expect.any(Number) },
+  });
+  expect(JSON.stringify(status)).not.toMatch(/subject|organization|clientId|token/);
+});
+
+it('expires abandoned HTTP sessions while preserving a running tool and allowing reinitialization', async () => {
+  started = deferred<void>();
+  release = deferred<void>();
+  aborted = false;
+  const idle = await initialize();
+  const active = await initialize();
+  const pending = request(active, 'owner', 'POST', {
+    jsonrpc: '2.0',
+    id: 30,
+    method: 'tools/call',
+    params: { name: 'hold', arguments: {} },
+  });
+  await started.promise;
+  clockOffset = 120_001;
+  try {
+    const expired = await request(idle, 'owner', 'POST', list);
+    expect(expired.status).toBe(404);
+    await expired.text();
+    const replacement = await initialize();
+    expect(aborted).toBe(false);
+    release.resolve();
+    const completed = await pending;
+    expect(completed.status).toBe(200);
+    expect(await completed.text()).toContain('completed');
+    const resumed = await request(active, 'owner', 'POST', list);
+    expect(resumed.status).toBe(200);
+    await resumed.text();
+    for (const id of [active, replacement]) await (await request(id, 'owner', 'DELETE')).text();
+  } finally {
+    release.resolve();
+    clockOffset = 0;
+  }
+});
+
+it('does not allocate sessions for invalid initialization or unsolicited streams', async () => {
+  const stats = async () => {
+    const response = await fetch(new URL('/status', url), {
+      headers: { Authorization: 'Bearer owner' },
+    });
+    return z
+      .object({ sessions: z.object({ created: z.number(), inFlight: z.number() }) })
+      .parse(await response.json());
+  };
+  const before = await stats();
+  for (const [method, body, status] of [
+    ['GET', undefined, 405],
+    ['POST', list, 400],
+    ['POST', { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }, 400],
+  ] as const) {
+    const response = await request(undefined, 'owner', method, body);
+    expect(response.status).toBe(status);
+    await response.text();
+  }
+  expect((await stats()).sessions.created).toBe(before.sessions.created);
+  const id = await initialize();
+  const response = await request(id, 'owner', 'GET');
+  expect(response.status).toBe(405);
+  await response.text();
+  expect((await stats()).sessions.inFlight).toBe(0);
+  await (await request(id, 'owner', 'DELETE')).text();
+});
+
+it('bounds concurrent request graphs without aborting work already admitted', async () => {
+  release = deferred<void>();
+  const id = await initialize();
+  const pending = [40, 41].map((requestId) =>
+    request(id, 'owner', 'POST', {
+      jsonrpc: '2.0',
+      id: requestId,
+      method: 'tools/call',
+      params: { name: 'hold', arguments: {} },
+    }).then((response) => response.text()),
+  );
+  try {
+    await vi.waitFor(() => expect(activeHolds).toBe(2));
+    const refused = await request(id, 'owner', 'POST', list);
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get('retry-after')).toBe('60');
+    await refused.text();
+    expect(activeHolds).toBe(2);
+  } finally {
+    release.resolve();
+    await Promise.all(pending);
+    await (await request(id, 'owner', 'DELETE')).text();
   }
 });

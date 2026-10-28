@@ -41,3 +41,20 @@ const files = await Promise.all(
 for (const { path, source, patched } of files) {
   if (source !== patched) await writeFile(path, patched);
 }
+
+// The SDK treats request ID 0 as absent, although JSON-RPC explicitly permits it.
+// Keep cancellation scoped to the named request, including inside legacy batches.
+for (const format of ['esm', 'cjs']) {
+  const path = resolve(root, `dist/${format}/shared/protocol.js`);
+  const source = await readFile(path, 'utf8');
+  const before = 'if (!notification.params.requestId) {';
+  const after = 'if (notification.params.requestId === undefined) {';
+  assert(
+    source.includes(before) || source.includes(after),
+    `Unexpected cancellation SDK source: ${path}`,
+  );
+  if (source.includes(before)) {
+    assert.equal(source.split(before).length, 2);
+    await writeFile(path, source.replace(before, after));
+  }
+}

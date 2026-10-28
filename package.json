@@ -1,7 +1,7 @@
 {
   "name": "@sync.so/mcp-server",
   "version": "0.1.4",
-  "description": "MCP server for the Sync API — give AI agents the ability to create lipsync videos, manage assets, and more",
+  "description": "MCP server for the Sync API \u2014 give AI agents the ability to create lipsync videos, manage assets, and more",
   "keywords": [
     "mcp",
     "sync",
@@ -59,7 +59,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
     "prepublishOnly": "npm run build",
-    "test:browser": "vitest run --config vitest.browser.config.ts"
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "monitor:mcp": "node scripts/check-mcp.mjs",
+    "test:monitor": "node --test scripts/check-mcp.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
