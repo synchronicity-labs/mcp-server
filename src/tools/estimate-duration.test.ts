@@ -56,6 +56,21 @@ describe('replacement speech estimates', () => {
     expect(resolveEstimateDuration({ audioDuration: 3.5 }).args.duration).toBe(3.5);
   });
 
+  it.each(['cut_off', 'silence'])('prices image input with %s by speech duration', (syncMode) => {
+    expect(
+      resolveEstimateDuration({ visualType: 'image', audioDuration: 3.5, syncMode }).args,
+    ).toEqual({ duration: 3.5 });
+    expect(resolveEstimateDuration({ visualType: 'image', script, syncMode }).args).toEqual({
+      duration: 2.25,
+    });
+  });
+
+  it('refuses contradictory image and video inputs', () => {
+    expect(() =>
+      resolveEstimateDuration({ visualType: 'image', audioDuration: 2.5, videoDuration: 30 }),
+    ).toThrow(/Omit videoDuration/);
+  });
+
   it('counts speech without whitespace and long unspaced text', () => {
     expect(resolveEstimateDuration({ script: '你好世界' }).args.duration).toBe(1.5);
     expect(resolveEstimateDuration({ script: 'a'.repeat(160) }).args.duration).toBe(10);
@@ -78,6 +93,9 @@ describe('replacement speech estimates', () => {
     expect(() => resolveEstimateDuration({ audioDuration: 2.5, syncMode })).toThrow(
       /videoDuration/,
     );
+    expect(() =>
+      resolveEstimateDuration({ visualType: 'video', audioDuration: 2.5, syncMode }),
+    ).toThrow(/videoDuration/);
   });
 
   it('keeps translation on its combined source-duration pricing path', () => {
@@ -167,7 +185,18 @@ describe.each([
         estimatedGenerationCost: 0.29,
         durationEstimate: { durationSeconds: 2.25, source: 'script', approximate: true },
       });
-      expect(request).toHaveBeenCalledOnce();
+      for (const syncMode of ['cut_off', 'silence']) {
+        const imageResult = await client.callTool({
+          name: toolName,
+          arguments: { model: 'sync-3', visualType: 'image', audioDuration: 3.5, syncMode },
+        });
+        expect(imageResult.isError).not.toBe(true);
+        expect(imageResult.structuredContent).toMatchObject({
+          durationEstimate: { durationSeconds: 3.5, source: 'audio', approximate: false },
+        });
+        expect(request.mock.lastCall?.[2].body).toEqual({ model: 'sync-3', duration: 3.5 });
+      }
+      expect(request).toHaveBeenCalledTimes(3);
       expect(request.mock.calls[0]?.[2].body).toEqual({ model: 'sync-3', duration: 2.25 });
     } finally {
       await client.close();

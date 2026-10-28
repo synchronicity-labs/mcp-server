@@ -173,7 +173,9 @@ Once replacement audio exists, pass its measured `audioDuration` instead. This
 wins over `script` and the legacy `duration` input. For videos, also pass
 `videoDuration` and the generation's `syncMode` when using `cut_off` (shorter
 input) or `silence` (longer input). Other modes follow the audio duration;
-image inputs need only the script or audio duration.
+image inputs need only the script or audio duration. Set `visualType: "image"`
+when quoting an image with any sync mode; images always follow speech duration
+and must omit `videoDuration`.
 
 The response preserves API pricing fields and adds `durationEstimate` with
 `durationSeconds`, `audioDurationSeconds`, `source` (`script` or `audio`),

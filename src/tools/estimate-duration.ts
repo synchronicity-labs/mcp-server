@@ -4,6 +4,7 @@ const positiveSeconds = z.number().finite().positive();
 const contextSchema = z.object({
   script: z.string().trim().min(1).max(5000).optional(),
   audioDuration: positiveSeconds.optional(),
+  visualType: z.enum(['image', 'video']).optional(),
   videoDuration: positiveSeconds.optional(),
   syncMode: z.enum(['bounce', 'loop', 'cut_off', 'silence', 'remap']).optional(),
 });
@@ -15,11 +16,14 @@ export const estimateDurationInputs = {
   audioDuration: contextSchema.shape.audioDuration.describe(
     'Measured replacement audio duration in seconds. Prefer this over a script estimate once speech audio exists.',
   ),
+  visualType: contextSchema.shape.visualType.describe(
+    'Visual input type. Set image for image-to-video quotes; images always follow speech duration, including with cut_off or silence. Videos require videoDuration for those modes.',
+  ),
   videoDuration: contextSchema.shape.videoDuration.describe(
     'Source video duration in seconds, used with syncMode to account for cut_off or silence. Omit for an image.',
   ),
   syncMode: contextSchema.shape.syncMode.describe(
-    'The same sync_mode selected for generation. cut_off uses the shorter input; silence uses the longer input; other modes follow replacement audio duration.',
+    'The same sync_mode selected for generation. For videos, cut_off uses the shorter input and silence the longer input. Images and other modes follow replacement audio duration.',
   ),
 };
 
@@ -40,10 +44,11 @@ function scriptDuration(script: string): number {
 }
 
 export function resolveEstimateDuration(args: Record<string, unknown>) {
-  const { script, audioDuration, videoDuration, syncMode } = contextSchema.parse(args);
+  const { script, audioDuration, visualType, videoDuration, syncMode } = contextSchema.parse(args);
   const {
     script: _script,
     audioDuration: _audio,
+    visualType: _visualType,
     videoDuration: _video,
     syncMode: _mode,
     ...body
@@ -55,7 +60,13 @@ export function resolveEstimateDuration(args: Record<string, unknown>) {
   }
   if (args.workflow === 'translate-and-dub')
     throw new Error('Translation estimates use source duration, not replacement script or audio.');
-  if ((syncMode === 'cut_off' || syncMode === 'silence') && videoDuration === undefined)
+  if (visualType === 'image' && videoDuration !== undefined)
+    throw new Error('Omit videoDuration for an image input.');
+  if (
+    visualType !== 'image' &&
+    (syncMode === 'cut_off' || syncMode === 'silence') &&
+    videoDuration === undefined
+  )
     throw new Error('Supply videoDuration to estimate cut_off or silence accurately.');
 
   const driverDuration = positiveSeconds.parse(audioDuration ?? scriptDuration(script ?? ''));
