@@ -48,6 +48,8 @@ const SERVER_DESCRIPTION =
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 export const SERVER_INSTRUCTIONS =
+  'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. ' +
+  'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ' +
   ASSET_THUMBNAIL_INSTRUCTIONS +
   'In ChatGPT, default new lipsync and image-to-video requests to sync-3, the latest lipsync model, unless the user explicitly chooses another model. Preserve the selected model on an existing draft or an idempotent retry. ' +
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
@@ -189,10 +191,15 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
 export function createToolDescriptorMeta(
   meta: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  return {
+  const descriptorMeta: Record<string, unknown> = {
     ...meta,
     securitySchemes: meta?.securitySchemes ?? TOOL_SECURITY_SCHEMES,
   };
+  for (const key of ['openai/toolInvocation/invoking', 'openai/toolInvocation/invoked']) {
+    const text = descriptorMeta[key];
+    if (typeof text === 'string') descriptorMeta[key] = text.toLowerCase();
+  }
+  return descriptorMeta;
 }
 
 // SDK clients validate structured errors too. Retained widgets require this
@@ -237,7 +244,7 @@ export function registerTools(
     server.registerTool(
       tool.name,
       {
-        title: tool.title,
+        title: tool.title?.toLowerCase(),
         description: tool.description,
         inputSchema: toolSchema(tool.inputSchema),
         outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
@@ -620,7 +627,7 @@ function createProfiledServer(
               .map((tool) => presentTool(tool, initializedProfile));
       descriptors = visible.map((tool) => ({
         name: tool.name,
-        title: tool.title,
+        title: tool.title?.toLowerCase(),
         description: tool.description,
         inputSchema: z.toJSONSchema(z.object(tool.inputSchema)) as Tool['inputSchema'],
         ...(tool.outputSchema
