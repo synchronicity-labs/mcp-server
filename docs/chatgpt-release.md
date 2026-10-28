@@ -1,5 +1,17 @@
 # ChatGPT frontend release
 
+## Project destination safety candidate
+
+Source commit `060dd77ee5b78aaf37a95ba464665e4d726bcdf2`, tree `1ecc50583dc64c64edd27d32f7f542259a8d72c7` (local source commit; publish it with the UI source change before release).
+UI SHA256: `b7c35f1ba339e6c97dcea262730e5caa05b0a085df5481242f1c010f09439233` (3668003 uncompressed bytes).
+Two builds produced identical bytes. The updated transport declares explicit
+project selection on scoped writes; model context defaults new workflow requests
+to new projects. This bundle must ship with the MCP project-intent guard.
+The oldest retained bundle, `670c3e54…`, moves to `deploy/chatgpt-retired/`.
+
+This is a prepared candidate, not a deployment or ChatGPT host acceptance.
+Refresh published tool metadata and reopen old widgets after release.
+
 ## Session resilience candidate #7444
 
 Source: [sync-api-v2 hotfix #7444](https://github.com/synchronicity-labs/sync-api-v2/pull/7444),

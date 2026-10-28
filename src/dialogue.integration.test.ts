@@ -228,7 +228,9 @@ async function fixture(
   clients.push(client);
   await client.connect(ct);
   const call = (name: string, args: Record<string, unknown>) =>
-    runWithAuth('dialogue-reader', 'openai-mcp', () => client.callTool({ name, arguments: args }));
+    runWithAuth('dialogue-reader', 'openai-mcp', () =>
+      client.callTool({ name, arguments: { ...args, projectIntent: 'explicit' } }),
+    );
   return { calls, client, call, port: (upstream.address() as AddressInfo).port };
 }
 it.each([

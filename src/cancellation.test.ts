@@ -32,12 +32,9 @@ afterEach(() => {
 });
 
 describe('explicit MCP cancellation', () => {
-  it.each([
-    true,
-    false,
-  ])('stops after project search even if the upstream ignores abort (existing=%s)', async (existing) => {
+  it('stops after project creation even if the upstream ignores abort', async () => {
     const started = deferred<AbortSignal>();
-    const result = deferred<{ items: Array<{ id: string; name: string }> }>();
+    const result = deferred<{ id: string }>();
     const finished = deferred<void>();
     const request = vi.fn<HttpClient['request']>(async (_method, path, options) => {
       if (path === '/v2/projects') {
@@ -81,10 +78,10 @@ describe('explicit MCP cancellation', () => {
       cancel.abort(new Error('user cancelled'));
       await rejected;
       expect(upstreamSignal.aborted).toBe(true);
-      result.resolve({ items: existing ? [{ id: 'project', name: 'Sync generations' }] : [] });
+      result.resolve({ id: 'project' });
       await finished.promise;
       expect(request.mock.calls.map(([method, path]) => [method, path])).toEqual([
-        ['get', '/v2/projects'],
+        ['post', '/v2/projects'],
       ]);
     } finally {
       await client.close();

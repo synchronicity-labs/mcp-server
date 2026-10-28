@@ -110,11 +110,14 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   expect(tool._meta?.securitySchemes).toEqual([{ type: 'oauth2', scopes: [] }]);
   const invalid = await client.callTool({
     name: tool.name,
-    arguments: { ...translationInput, targetLang: 'invalid' },
+    arguments: { ...translationInput, targetLang: 'invalid', projectIntent: 'explicit' },
   });
   expect(invalid.isError).toBe(true);
   expect(calls).toEqual([]);
-  const result = await client.callTool({ name: tool.name, arguments: translationInput });
+  const result = await client.callTool({
+    name: tool.name,
+    arguments: { ...translationInput, projectIntent: 'explicit' },
+  });
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toEqual({
     id: '00000000-0000-4000-8000-000000000003',
@@ -151,7 +154,7 @@ it('carries the combined estimate through the authenticated MCP boundary without
   expect(tool._meta?.['openai/widgetAccessible']).toBe(true);
   const args = { model: 'sync-3', duration: 12, fps: 25, workflow: 'translate-and-dub' };
   const result = await runWithAuth('estimate-reader', 'openai-mcp', () =>
-    client.callTool({ name: tool.name, arguments: args }),
+    client.callTool({ name: tool.name, arguments: { ...args, projectIntent: 'explicit' } }),
   );
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toEqual(externalEstimate);

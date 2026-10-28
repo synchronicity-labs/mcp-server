@@ -124,12 +124,12 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   projects_create: {
     title: 'Create a project',
     description:
-      'Create a project to group related generations and assets. Pass the returned `id` as `projectId` to create-lipsync or assets_create so they show up together in Studio. Use only when the user wants a new project.',
+      'Create a project to group related generations and assets. Pass the returned `id` as `projectId` to create-lipsync or assets_create so they show up together in Studio. Use by default for a new workflow request, even if an existing project has the same name. Supply a fresh UUID id and preserve it on retries. Project names never select existing work.',
   },
   'projects_get-all': {
     title: 'List projects',
     description:
-      'Search and paginate your accessible Sync projects. Each result includes recent generations and assets, so pass a small `limit` and use `searchQuery` to find a project by name. Use the returned id as projectId in create-lipsync to work in the same project as the Sync web app.',
+      'Search and paginate your accessible Sync projects. Each result includes recent generations and assets, so pass a small `limit` and use `searchQuery` only when the user explicitly refers to an existing project. Workflow names are not project references. Never choose the first match when names are ambiguous. Use the returned id as projectId in create-lipsync to work in the same project as the Sync web app.',
   },
   projects_get: {
     title: 'Get a project',

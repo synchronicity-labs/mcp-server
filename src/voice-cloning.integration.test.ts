@@ -155,7 +155,7 @@ async function fixture(
   await client.connect(clientTransport);
   const call = (name: string, args: Record<string, unknown>) =>
     runWithAuth('fixture-account-token', 'openai-mcp', () =>
-      client.callTool({ name, arguments: args }),
+      client.callTool({ name, arguments: { ...args, projectIntent: 'explicit' } }),
     );
   return { client, calls, call };
 }

@@ -15,9 +15,7 @@ import {
 } from './media-upload.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
-
-type ProjectSummary = { id: string; name: string | null };
-type ProjectsPage = { items: ProjectSummary[]; nextCursor?: string };
+import { createProjectId, newProjectFields } from './project-destination.js';
 
 function providedCount(...values: unknown[]): number {
   return values.filter(Boolean).length;
@@ -29,75 +27,6 @@ function assertSingleSource(kind: MediaKind, count: number): void {
       `Provide only one ${kind} source — use either ${kind}Url, ${kind}AssetId, or the uploaded ${kind} file param.`,
     );
   }
-}
-
-function normalizedProjectName(name: string): string {
-  return name.trim().toLocaleLowerCase();
-}
-
-async function findProjectIdByName(
-  httpClient: HttpClient,
-  projectName: string,
-  signal?: AbortSignal,
-): Promise<string | undefined> {
-  let cursor: string | undefined;
-  const seenCursors = new Set<string>();
-
-  do {
-    signal?.throwIfAborted();
-    const result = (await httpClient.request('get', '/v2/projects', {
-      signal,
-      query: {
-        searchQuery: projectName,
-        sortBy: 'name',
-        limit: '100',
-        ...(cursor ? { cursor } : {}),
-      },
-    })) as ProjectsPage;
-
-    if (!Array.isArray(result?.items)) {
-      throw new Error('Sync returned an invalid projects list.');
-    }
-
-    const normalizedName = normalizedProjectName(projectName);
-    const existing = result.items.find(
-      (project) =>
-        typeof project.id === 'string' &&
-        typeof project.name === 'string' &&
-        normalizedProjectName(project.name) === normalizedName,
-    );
-    if (existing) return existing.id;
-
-    cursor = typeof result.nextCursor === 'string' ? result.nextCursor : undefined;
-    if (cursor && seenCursors.has(cursor)) {
-      throw new Error('Sync returned a repeated projects cursor.');
-    }
-    if (cursor) seenCursors.add(cursor);
-  } while (cursor);
-
-  return undefined;
-}
-
-async function getOrCreateProjectId(
-  httpClient: HttpClient,
-  requestedProjectName: string | undefined,
-  defaultName: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const projectName = requestedProjectName?.trim() || defaultName;
-  const existingProjectId = await findProjectIdByName(httpClient, projectName, signal);
-  if (existingProjectId) return existingProjectId;
-
-  signal?.throwIfAborted();
-  const created = (await httpClient.request('post', '/v2/projects', {
-    signal,
-    body: { name: projectName },
-  })) as { id?: unknown };
-  if (typeof created?.id !== 'string') {
-    throw new Error('Sync created a project without returning its id.');
-  }
-
-  return created.id;
 }
 
 /**
@@ -198,7 +127,7 @@ export function createAppTools(
         'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
         'For translating spoken video into another language, use create-translate-and-dub when available. Do not use for subtitles only, standalone audio, or general video editing. ' +
         'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
-        'The model defaults to sync-3. Supply projectId to use an existing project, or projectName to find or create one. When neither is supplied, an integration-specific default project is used. ' +
+        'The model defaults to sync-3. New requests create a new project, even when its name matches another project. projectName names the new project; it never selects existing work. Supply projectId only for an explicit user selection or a project just created for this request. Keyed new-project requests require a fresh projectCreationKey, preserved on retries. ' +
         'Before confirming, estimate using the replacement script or measured audio duration, not the source video length. Script-based quotes are approximate and exclude speech synthesis. ' +
         'This starts an asynchronous generation and returns its id and status.',
       inputSchema: {
@@ -277,9 +206,10 @@ export function createAppTools(
           .string()
           .regex(/^[A-Za-z0-9._~-]{1,128}$/)
           .describe(
-            'Unique key for one generation action. Persist and reuse the same key, projectId, model, and inputs when retrying after a lost response. Use durable asset IDs or stable URLs; upload files before starting the keyed action. A new intentional generation needs a new key. Passed as the Sync API Idempotency-Key header.',
+            'Unique key for one generation action. Persist and reuse the same key, projectCreationKey (for new projects) or explicit projectId, model, and inputs when retrying after a lost response. Use durable asset IDs or stable URLs; upload files before starting the keyed action. A new intentional generation needs a new key. Passed as the Sync API Idempotency-Key header.',
           )
           .optional(),
+        ...newProjectFields,
         projectId: z
           .string()
           .trim()
@@ -293,7 +223,7 @@ export function createAppTools(
           .trim()
           .min(1)
           .describe(
-            'Project name to find or create. Cannot be combined with projectId. When both are omitted, the tool uses an integration-specific default. An existing project with the same name is reused, or a new one is created.',
+            'Name for a NEW project only. Never search or reuse a matching name. Cannot be combined with projectId.',
           )
           .optional(),
       },
@@ -331,6 +261,7 @@ export function createAppTools(
           projectName,
           projectId: requestedProjectId,
           idempotencyKey,
+          projectCreationKey,
         } = args as {
           videoUrl?: string;
           videoAssetId?: string;
@@ -350,6 +281,7 @@ export function createAppTools(
           projectName?: string;
           projectId?: string;
           idempotencyKey?: string;
+          projectCreationKey?: string;
         };
 
         const options = modelOptionsSchema.optional().parse(args.options);
@@ -400,6 +332,9 @@ export function createAppTools(
         if (requestedProjectId !== undefined && projectName !== undefined) {
           throw new Error('Provide either projectId or projectName, not both.');
         }
+        if (requestedProjectId !== undefined && projectCreationKey !== undefined) {
+          throw new Error('Provide either projectId or projectCreationKey, not both.');
+        }
         if (projectName !== undefined && !projectName.trim()) {
           throw new Error('projectName must not be empty.');
         }
@@ -411,10 +346,15 @@ export function createAppTools(
 
         const projectId =
           requestedProjectId?.trim() ??
-          (await getOrCreateProjectId(
+          (await createProjectId(
             httpClient,
-            projectName,
-            (context?.clientProfile ?? getProfile()).defaultProjectName,
+            {
+              name:
+                projectName?.trim() || (context?.clientProfile ?? getProfile()).defaultProjectName,
+              projectCreationKey,
+              idempotencyKey,
+              defaultWorkflow: hasImage ? 'image_to_video' : 'lipsync',
+            },
             signal,
           ));
         if (requestedProjectId !== undefined) {

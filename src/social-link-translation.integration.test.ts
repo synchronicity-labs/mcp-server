@@ -99,7 +99,9 @@ async function fixture(importReplies: Reply[]) {
   clients.push(client);
   await client.connect(clientTransport);
   const call = (name: string, args: Record<string, unknown>) =>
-    runWithAuth('social-link-user', 'openai-mcp', () => client.callTool({ name, arguments: args }));
+    runWithAuth('social-link-user', 'openai-mcp', () =>
+      client.callTool({ name, arguments: { ...args, projectIntent: 'explicit' } }),
+    );
   return { client, calls, call };
 }
 
@@ -131,6 +133,12 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
   expect(client.getInstructions()).toContain('do not submit a generation while importing');
 
   const args = { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', type: 'VIDEO', projectId };
+  const inferred = await runWithAuth('social-link-user', 'openai-mcp', () =>
+    client.callTool({ name: 'assets_create', arguments: args }),
+  );
+  expect(inferred.isError).toBe(true);
+  expect(inferred.structuredContent).toMatchObject({ error: { code: 'PROJECT_INTENT_REQUIRED' } });
+  expect(calls).toEqual([]);
   for (const [index, importStatus] of stages.entries()) {
     const result = await call('assets_create', args);
     expect(result.isError).toBe(true);
