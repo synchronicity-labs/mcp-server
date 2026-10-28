@@ -35,7 +35,7 @@ export function createTranslationTools(
       videoAssetId: z
         .uuid()
         .describe(
-          'Existing Sync VIDEO asset in the connected organization. Import or upload the video first.',
+          'Existing Sync VIDEO asset in the connected organization. For a YouTube, TikTok, Instagram or Facebook link, call assets_create with type=VIDEO and this projectId first; wait for it to return the saved asset id.',
         ),
       projectId: z
         .uuid()
@@ -58,7 +58,7 @@ export function createTranslationTools(
       name: 'create-translate-and-dub',
       title: 'Translate and dub a video',
       description:
-        'Use this when the user wants to translate and dub a video into another language with matching lip movements. Not for subtitles only or translating a text document. Requires a saved video asset, selected project, model, and persistent idempotency key. ' +
+        'Use this when the user wants to translate and dub a video into another language with matching lip movements. Not for subtitles only or translating a text document. Requires a saved video asset, selected project, model, and persistent idempotency key. For social video URLs, import through assets_create and wait for the saved asset before estimating or calling this tool. ' +
         'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generate_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. ' +
         'The API manages dubbing and final rendering under the returned generation id. Poll generate_get-generation for that same id until COMPLETED; do not create another job to finish or recover it.',
       inputSchema: schema.shape,
