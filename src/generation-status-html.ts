@@ -153,6 +153,17 @@ export const GENERATION_STATUS_HTML = `<!doctype html>
       ]);
     } finally { clearTimeout(timeout); }
   }
+  async function openLink(event) {
+    event.preventDefault();
+    const href = event.currentTarget.href;
+    try {
+      if (window.openai?.openExternal) await window.openai.openExternal({ href, redirectUrl: false });
+      else { await connect(); await request('ui/open-link', { url: href }); }
+    } catch (cause) {
+      error.textContent = cause?.message || 'Unable to open this link. Try again.';
+      error.hidden = false;
+    }
+  }
   async function check() {
     if (!generationId || busy) return;
     clearTimeout(timer);
@@ -201,6 +212,8 @@ export const GENERATION_STATUS_HTML = `<!doctype html>
     if (!document.hidden && generationId && !terminal.has(generation?.status)) void check();
   });
   checkButton.addEventListener('click', check);
+  studio.addEventListener('click', openLink);
+  resultLink.addEventListener('click', openLink);
   new ResizeObserver(notifySize).observe(document.body);
   setInterval(renderEstimate, 1000);
   setTheme(window.openai);

@@ -87,6 +87,9 @@ show unavailable; overdue jobs show a delay message instead of zero or a new ETA
 Terminal jobs hide the estimate. Playback links are exposed only after a fresh
 authorized status read, and signed result URLs remain intact. `projectId` is
 included in the safe generation projection for the exact Open in Sync fallback.
+Link clicks use the host's `ui/open-link` request or legacy `openExternal` bridge,
+so navigation works inside a sandbox without popup permission. Legacy navigation
+disables redirect rewriting to preserve signed video URLs.
 
 The card is compiled into MCP and does not require a Studio bundle release.
 Deploy MCP and refresh the ChatGPT publisher/tool metadata so existing cached

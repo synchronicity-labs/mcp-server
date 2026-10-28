@@ -26,6 +26,8 @@ it.each([
   const signedUrl = 'https://fixture.invalid/result.mp4?Signature=a%2Fb%2Bc&Expires=123';
   let current = { id: generationId, projectId, status: 'PROCESSING', generationEstimate: estimate };
   let refused = false;
+  let holdRead = false;
+  let releaseRead;
   const calls = [];
   vi.stubGlobal('fetch', async (input, init) => {
     const path = new URL(input).pathname;
@@ -75,6 +77,9 @@ it.each([
   const context = await browser.newContext({
     viewport: { width: bridge === 'standard' ? 360 : 720, height: 500 },
   });
+  await context.route(/^https:\/\/(sync\.so|fixture\.invalid)\//, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<title>Fixture destination</title>' }),
+  );
   await context.tracing.start({ screenshots: true, snapshots: true });
   await mkdir('.cache/status-card', { recursive: true });
   try {
@@ -102,7 +107,14 @@ it.each([
     page.on('pageerror', (error) => pageErrors.push(error.message));
     // Deliberately wrong local clock: ETA must follow the server's timestamp.
     await page.clock.install({ time: new Date('2040-01-01T00:00:00Z') });
-    await page.exposeFunction('callSync', (request) => client.callTool(request));
+    await page.exposeFunction('callSync', async (request) => {
+      const result = await client.callTool(request);
+      if (!holdRead) return result;
+      holdRead = false;
+      return new Promise((resolve) => {
+        releaseRead = () => resolve(result);
+      });
+    });
     await page.setContent(
       '<iframe title="Sync status" sandbox="allow-scripts allow-same-origin" style="border:0;width:100%;height:350px"></iframe>',
     );
@@ -136,6 +148,9 @@ it.each([
               },
               '*',
             );
+          } else if (message.method === 'ui/open-link') {
+            window.open(message.params.url, '_blank', 'noopener,noreferrer');
+            event.source.postMessage({ jsonrpc: '2.0', id: message.id, result: {} }, '*');
           } else if (message.method === 'tools/call') {
             const result = await window.callSync(message.params);
             event.source.postMessage({ jsonrpc: '2.0', id: message.id, result }, '*');
@@ -146,7 +161,7 @@ it.each([
             '<script>',
             '<script>window.openai = { theme: "light", toolOutput: ' +
               JSON.stringify(accepted.structuredContent) +
-              ', callTool: (name, args) => window.parent.callSync({name, arguments: args}), notifyIntrinsicHeight: height => { window.frameElement.style.height = height + "px"; } };</script><script>',
+              ', callTool: (name, args) => window.parent.callSync({name, arguments: args}), openExternal: options => { if (options.redirectUrl !== false) throw new Error("Signed links must not be rewritten"); window.parent.open(options.href, "_blank", "noopener,noreferrer"); }, notifyIntrinsicHeight: height => { window.frameElement.style.height = height + "px"; } };</script><script>',
           );
         iframe.srcdoc = html;
       },
@@ -161,6 +176,13 @@ it.each([
       'href',
       `https://sync.so/projects/${projectId}/studio?notification=generation&generationId=${generationId}`,
     );
+    const studioOpened = context.waitForEvent('page');
+    await frame.getByRole('link', { name: 'Open in Sync' }).click();
+    const studioPage = await studioOpened;
+    await studioPage.waitForURL(
+      `https://sync.so/projects/${projectId}/studio?notification=generation&generationId=${generationId}`,
+    );
+    await studioPage.close();
     await page.clock.fastForward(6000);
     await browserExpect(frame.getByText('Estimated time remaining: about 2 minutes')).toBeVisible();
     await frame.getByRole('main').screenshot({ path: `.cache/status-card/${bridge}.png` });
@@ -202,6 +224,14 @@ it.each([
     };
     await check.click();
     await browserExpect(frame.locator('#estimate')).toContainText('longer than estimated');
+    // Both bridges must recover when a host never answers, then ignore its late reply.
+    holdRead = true;
+    await check.click();
+    await browserExpect(frame.getByRole('button', { name: 'Checking status…' })).toBeDisabled();
+    await browserExpect.poll(() => Boolean(releaseRead)).toBe(true);
+    await page.clock.fastForward(15001);
+    await browserExpect(frame.getByRole('alert')).toContainText('Sync did not respond');
+    await browserExpect(check).toBeEnabled();
     current = { id: generationId, projectId, status: 'COMPLETED', outputUrl: signedUrl };
     await check.click();
     await browserExpect(frame.getByRole('status')).toHaveText('Completed');
@@ -211,8 +241,15 @@ it.each([
     );
     await browserExpect(frame.locator('#estimate')).toBeHidden();
     await browserExpect(check).toBeEnabled();
+    releaseRead();
+    const resultOpened = context.waitForEvent('page');
+    await frame.getByRole('link', { name: 'View video' }).click();
+    const resultPage = await resultOpened;
+    await resultPage.waitForURL(signedUrl);
+    await resultPage.close();
     const reads = calls.length;
     await page.clock.fastForward(30000);
+    await browserExpect(frame.getByRole('status')).toHaveText('Completed');
     expect(calls).toHaveLength(reads);
     expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(1);
     expect(
