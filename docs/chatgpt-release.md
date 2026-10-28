@@ -1,5 +1,42 @@
 # ChatGPT frontend release
 
+## ChatGPT analytics candidate (CRAFT-7540)
+
+The widget is built from merged `dev` commit
+`f3f243f19466896e22f55d174d1a8cb3c1af4aa1`, tree
+`696326a78ae9c7d73b8f693ade0047ddde3c472a`, recorded by
+[sync-api-v2 #7454](https://github.com/synchronicity-labs/sync-api-v2/pull/7454).
+It includes the analytics implementation from
+[#7439](https://github.com/synchronicity-labs/sync-api-v2/pull/7439) and the
+Studio heartbeat/recovery reconciliation from
+[#7450](https://github.com/synchronicity-labs/sync-api-v2/pull/7450).
+UI SHA256: `8d38553f892d53804d8d3337cae0cc15570ea4df4974d930409624adad21804e`
+(3,359,465 uncompressed bytes). Two builds from the frozen-lockfile checkout
+produced identical HTML and manifest bytes. This replaces only the unreleased
+analytics candidate. All published bundles remain byte-for-byte unchanged; `670c3e54…`
+moves to `deploy/chatgpt-retired/`, retaining one current and eleven previous resources.
+
+The server discovers the authenticated analytics collector from OpenAPI and exposes
+`track-chatgpt-event` only to the ChatGPT app. Explicit widget interactions carry
+journey and action IDs; calls without that evidence remain `unknown`, and background
+polling is excluded from tool-activity counts. Host conversation identifiers are
+hashed. Prompts, media, URLs, credentials and client-supplied user identities are
+not event properties. Analytics failures do not fail generation. The capability
+is absent against an older API and coexists with audio trimming.
+
+**Release prerequisite:** promote the API changes through the normal release-candidate
+workflow and deploy that release before merging/deploying this MCP candidate.
+The source above is merged into `dev`; it is not evidence of a production API release.
+The earlier manually assembled API PR #7440 is closed and is not a release source.
+No database migration or new browser PostHog SDK is needed.
+
+After API and MCP deployment, refresh publisher tool metadata and open a fresh
+ChatGPT widget. Verify widget actions and generation attribution in the existing
+[PostHog dashboard](https://us.posthog.com/project/85326/dashboard/2272139).
+These are event counts, not inferred conversation-to-UI conversion rates; raw
+ChatGPT typing and clicks outside the Sync widget are unavailable. Production
+ChatGPT acceptance remains a post-deployment check.
+
 ## Session resilience candidate #7444
 
 Source: [sync-api-v2 hotfix #7444](https://github.com/synchronicity-labs/sync-api-v2/pull/7444),

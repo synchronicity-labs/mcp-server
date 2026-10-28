@@ -9,6 +9,7 @@ import { createMcpServerFactory } from './server.js';
 
 it.each([
   'complete',
+  'complete-with-analytics',
   'missing-create',
   'missing-get',
   'missing-key',
@@ -50,6 +51,10 @@ it.each([
     paths['/v2/audio-trims/{id}'] = {
       get: { operationId: 'AudioTrimsController_get', tags: ['Audio trims'] },
     };
+  if (scenario === 'complete-with-analytics')
+    paths['/v2/analytics/chatgpt-events'] = {
+      post: { operationId: 'analytics_captureChatgptEvent', tags: ['Analytics'] },
+    };
   const writes: { key: string | string[] | undefined; body: string }[] = [];
   const upstream = createServer(async (req, res) => {
     res.setHeader('content-type', 'application/json');
@@ -90,13 +95,16 @@ it.each([
   await client.connect(ct);
   try {
     const names = (await client.listTools()).tools.map((tool) => tool.name);
-    const enabled = scenario === 'complete';
+    const enabled = scenario.startsWith('complete');
     expect(names.includes('trim-audio')).toBe(enabled);
     expect(names.includes('get-audio-trim')).toBe(enabled);
     expect(names).not.toContain('audio-trims_create');
     const account = await runWithAuth('trim-user', 'openai-mcp', () =>
       client.callTool({ name: 'get-account-context', arguments: {} }),
     );
+    if (scenario === 'complete-with-analytics')
+      expect(account.structuredContent).toHaveProperty('capabilities.chatgptAnalytics', true);
+    else expect(account.structuredContent).not.toHaveProperty('capabilities.chatgptAnalytics');
     if (enabled) {
       expect(account.structuredContent).toMatchObject({ capabilities: { audioTrimming: true } });
       const trim = await runWithAuth('trim-user', 'openai-mcp', () =>

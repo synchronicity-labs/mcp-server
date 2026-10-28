@@ -26,7 +26,11 @@ export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
       if (!operation) continue;
 
       const tags = operation.tags ?? [];
-      if (!tags.some((t) => ALLOWED_TAGS.has(t.toLowerCase()))) continue;
+      const isChatgptCollector =
+        path === '/v2/analytics/chatgpt-events' &&
+        method === 'post' &&
+        operation.operationId === 'analytics_captureChatgptEvent';
+      if (!isChatgptCollector && !tags.some((t) => ALLOWED_TAGS.has(t.toLowerCase()))) continue;
 
       const operationId = operation.operationId;
       if (!operationId) continue;

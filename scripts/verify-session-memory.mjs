@@ -79,7 +79,7 @@ async function initialize(connection) {
       Object.keys(
         catalog.tools.find((tool) => tool.name === 'projects_create').inputSchema.properties,
       ).length,
-      40,
+      41, // Forty fixture properties plus optional UI attribution.
     );
   connection.reservation.commit(connection.id, connection.server, owner).release();
 }
