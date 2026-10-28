@@ -30,7 +30,7 @@ import {
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import type { SyncMcpConfig } from './config.js';
-import { HttpSession } from './http-session.js';
+import { HttpSession, isSessionControlRequest } from './http-session.js';
 import { readOAuthResponseText } from './oauth-response.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry, sessionOwner } from './session-registry.js';
@@ -679,8 +679,7 @@ export async function startHttpServer(
       }
       let sessionId = suppliedId;
       let session: HttpSession;
-      const rpcBody = asRecord(req.body);
-      const rpcParams = asRecord(rpcBody.params);
+      const rpcMessages = (Array.isArray(req.body) ? req.body : [req.body]).map(asRecord);
       if (sessionId) {
         lease = sessions.acquire(sessionId, owner);
         if (!lease) {
@@ -712,6 +711,11 @@ export async function startHttpServer(
           init.data.params.clientInfo.name.slice(0, 160),
           serverFactory.createServer,
           (version) => sessionTelemetry.protocol(id, version),
+          (details) =>
+            logEvent('mcp_rpc_error', {
+              ...details,
+              sessionRef: sessionTelemetry.reference(id),
+            }),
         );
         lease = reservation.commit(id, session, owner);
         reservation = undefined;
@@ -726,7 +730,9 @@ export async function startHttpServer(
         ? { sessionRef: sessionTelemetry.reference(sessionId) }
         : sessionTelemetry.request(
             sessionId,
-            typeof rpcBody.method === 'string' ? rpcBody.method : undefined,
+            rpcMessages.flatMap((message) =>
+              typeof message.method === 'string' ? [message.method] : [],
+            ),
           );
       if (req.method === 'DELETE') {
         await sessions.remove(sessionId, 'closed');
@@ -734,7 +740,7 @@ export async function startHttpServer(
         return;
       }
       // Let cancellation and lifecycle notifications through under pressure.
-      if (req.method === 'POST' && ('id' in rpcBody || Array.isArray(req.body))) {
+      if (req.method === 'POST' && !isSessionControlRequest(req.body)) {
         const refusal =
           sessions.stats().inFlight > sessionRuntimeConfig.maxInFlightRequests
             ? 'capacity'
@@ -752,7 +758,9 @@ export async function startHttpServer(
           return;
         }
       }
-      if (typeof rpcBody.method === 'string') {
+      for (const rpcBody of rpcMessages) {
+        if (typeof rpcBody.method !== 'string') continue;
+        const rpcParams = asRecord(rpcBody.params);
         logEvent('mcp_rpc_request', {
           requestId: res.locals.requestId,
           method: rpcBody.method.slice(0, 80),

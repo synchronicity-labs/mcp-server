@@ -53,14 +53,16 @@ export class SessionTelemetry {
     });
     this.request(id, 'initialize');
   }
-  request(id: string, method: string | undefined): Record<string, unknown> {
+  request(id: string, method: string | readonly string[] | undefined): Record<string, unknown> {
     const entry = this.#entries.get(id);
     if (!entry) return { sessionRef: this.reference(id) };
     entry.requests += 1;
     entry.lastRequest = this.now();
-    if (method === 'tools/call') entry.toolCalls += 1;
-    if (['tools/list', 'resources/list', 'server/discover'].includes(method ?? ''))
-      entry.discoveries += 1;
+    for (const item of typeof method === 'string' ? [method] : (method ?? [])) {
+      if (item === 'tools/call') entry.toolCalls += 1;
+      if (['tools/list', 'resources/list', 'server/discover'].includes(item))
+        entry.discoveries += 1;
+    }
     return {
       sessionRef: this.reference(id),
       sessionRequest: entry.requests,

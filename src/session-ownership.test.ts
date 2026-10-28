@@ -364,7 +364,9 @@ it('bounds concurrent request graphs without aborting work already admitted', as
       id: requestId,
       method: 'tools/call',
       params: { name: 'hold', arguments: {} },
-    }).then((response) => response.text()),
+    })
+      .then((response) => response.text())
+      .catch(() => undefined),
   );
   try {
     await vi.waitFor(() => expect(activeHolds).toBe(2));
@@ -373,6 +375,22 @@ it('bounds concurrent request graphs without aborting work already admitted', as
     expect(refused.headers.get('retry-after')).toBe('60');
     await refused.text();
     expect(activeHolds).toBe(2);
+    const notification = await request(id, 'owner', 'POST', {
+      jsonrpc: '2.0',
+      method: 'notifications/unknown',
+    });
+    expect(notification.status).toBe(503);
+    await notification.text();
+    const cleanup = await request(id, 'owner', 'POST', [
+      {
+        jsonrpc: '2.0',
+        method: 'notifications/cancelled',
+        params: { requestId: 40 },
+      },
+    ]);
+    expect(cleanup.status).toBe(202);
+    await cleanup.text();
+    await vi.waitFor(() => expect(activeHolds).toBe(0));
   } finally {
     release.resolve();
     await Promise.all(pending);

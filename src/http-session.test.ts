@@ -47,8 +47,14 @@ it('releases every SDK graph and isolates request-zero cancellation between tabs
     );
     return server;
   };
+  const errors: Record<string, unknown>[] = [];
   const tabs = [
-    new HttpSession('chatgpt', factory, () => {}),
+    new HttpSession(
+      'chatgpt',
+      factory,
+      () => {},
+      (event) => errors.push(event),
+    ),
     new HttpSession('chatgpt', factory, () => {}),
   ];
   const app = express();
@@ -93,6 +99,9 @@ it('releases every SDK graph and isolates request-zero cancellation between tabs
       }
     }
     expect(names.filter((name) => name === 'chatgpt')).toHaveLength(20);
+    const invalid = await post(0, { id: 55, method: 'unknown/private-value' });
+    await invalid.text();
+    expect(errors).toEqual([{ requestId: undefined, category: 'protocol', code: -32601 }]);
     const batch = [0, 2].map((slot) => ({
       jsonrpc: '2.0',
       id: slot,
@@ -123,9 +132,49 @@ it('releases every SDK graph and isolates request-zero cancellation between tabs
     expect(cancelled.has(2)).toBe(false);
     finish.get(2)?.();
     finish.get(1)?.();
-    stops[0]!.abort();
-    await Promise.all(pending);
+    const [batchResult] = await Promise.all(pending);
+    expect(JSON.parse(batchResult!)).toEqual(
+      expect.arrayContaining([
+        { jsonrpc: '2.0', id: 0, error: { code: -32800, message: 'Request cancelled' } },
+        { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '2' }] } },
+      ]),
+    );
     await expect.poll(() => closed).toBe(created);
+    // A client need not abort its original HTTP request after cancelling or DELETE.
+    for (const [slot, action] of [
+      [3, 'cancel'],
+      [4, 'disconnect'],
+      [5, 'delete'],
+    ] as const) {
+      let settled = false;
+      const disconnect = new AbortController();
+      const request = post(
+        1,
+        {
+          id: slot,
+          method: 'tools/call',
+          params: { name: 'hold', arguments: { slot } },
+        },
+        AbortSignal.any([disconnect.signal, AbortSignal.timeout(5000)]),
+      )
+        .catch(() => undefined)
+        .finally(() => {
+          settled = true;
+        });
+      await expect.poll(() => started.has(slot)).toBe(true);
+      if (action === 'cancel') {
+        const cancellation = await post(1, {
+          method: 'notifications/cancelled',
+          params: { requestId: slot },
+        });
+        expect(cancellation.status).toBe(202);
+        await cancellation.text();
+      } else if (action === 'disconnect') disconnect.abort();
+      else await tabs[1]!.close();
+      await expect.poll(() => settled, { timeout: 1000 }).toBe(true);
+      await request;
+      expect(cancelled.has(slot)).toBe(true);
+    }
   } finally {
     for (const stop of stops) stop.abort();
     for (const resolve of finish.values()) resolve();

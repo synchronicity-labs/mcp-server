@@ -26,9 +26,11 @@ initialization gets its own random ID, never one shared session per user.
 
 The server creates one SDK server and stateless transport for a request, uses the
 session's established client profile, then closes them in `finally`. Cancellation
-aborts only the named handler, including ID `0` inside a legacy batch. A
-disconnected response always closes the SDK graph, even when a cancelled batch
-can no longer produce every response.
+aborts only the named handler, including ID `0` inside a legacy batch. Single cancellation and session DELETE also close the pending HTTP response;
+they never depend on the client disconnecting. For legacy JSON batches, a cancelled
+slot returns a cancellation error so unrelated responses can still complete. Late
+cancellation of an already completed slot is ignored. A disconnected response
+always closes its SDK graph and aborts remaining handlers.
 Paid work already accepted upstream is not undone or replayed. DELETE explicitly
 closes the context and its active requests. A rejected initialization is removed.
 Active SDK requests have a separate default limit of 32 (`MCP_MAX_IN_FLIGHT_REQUESTS`).

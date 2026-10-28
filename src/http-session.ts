@@ -9,19 +9,33 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Request, Response } from 'express';
 
+export function isSessionControlRequest(body: unknown): boolean {
+  const messages: unknown[] = Array.isArray(body) ? body : [body];
+  return (
+    messages.length > 0 &&
+    messages.every(
+      (message) =>
+        JSONRPCNotificationSchema.safeParse(message).success &&
+        (InitializedNotificationSchema.safeParse(message).success ||
+          CancelledNotificationSchema.safeParse(message).success),
+    )
+  );
+}
+
 /** Only handshake metadata survives between requests; SDK graphs never do. */
 export class HttpSession {
   readonly #active = new Map<
     string | number,
     { cancel: (notification: unknown) => Promise<void> }
   >();
-  readonly #running = new Set<McpServer>();
+  readonly #running = new Map<McpServer, Response>();
   #initialized = false;
   #closed = false;
   constructor(
     readonly clientName: string,
     private readonly createServer: (clientName?: string) => McpServer,
     private readonly reportProtocol: (version: string) => void,
+    private readonly reportError: (details: Record<string, unknown>) => void = () => {},
   ) {}
 
   async handleRequest(req: Request, res: Response, initialize = false): Promise<void> {
@@ -78,6 +92,10 @@ export class HttpSession {
       if (cancelled.success && cancelled.data.params.requestId !== undefined)
         await this.#active.get(cancelled.data.params.requestId)?.cancel(notification.data);
     }
+    if (isSessionControlRequest(body)) {
+      res.status(202).end();
+      return;
+    }
     if (!initialize && !this.#initialized) {
       res.status(400).json({ error: 'Complete MCP initialization before sending requests' });
       return;
@@ -100,21 +118,41 @@ export class HttpSession {
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
+    const completed = new Set<string | number>();
     const send = transport.send.bind(transport);
     transport.send = async (reply, options) => {
+      if ('id' in reply && reply.id !== undefined && ('result' in reply || 'error' in reply))
+        completed.add(reply.id);
+      if ('error' in reply || ('result' in reply && reply.result.isError === true)) {
+        this.reportError({
+          requestId: res.locals.requestId,
+          category: 'error' in reply ? 'protocol' : 'tool',
+          ...('error' in reply ? { code: reply.error.code } : {}),
+        });
+      }
       if (initialize && 'result' in reply && typeof reply.result.protocolVersion === 'string')
         this.reportProtocol(reply.result.protocolVersion);
       return send(reply, options);
     };
-    this.#running.add(server);
+    this.#running.set(server, res);
     if (!initialize)
       for (const id of ids)
         this.#active.set(id, {
           cancel: async (notification) => {
+            if (completed.has(id)) return;
             const parsed = JSONRPCNotificationSchema.parse(notification);
             transport.onmessage?.(parsed);
-            // A legacy batch can contain unrelated work: abort only its target.
-            if (ids.length === 1) await server.close();
+            if (ids.length === 1) {
+              res.destroy();
+              await server.close();
+            } else {
+              // Legacy JSON batches need a terminal slot to deliver unrelated results.
+              await transport.send({
+                jsonrpc: '2.0',
+                id,
+                error: { code: -32800, message: 'Request cancelled' },
+              });
+            }
           },
         });
     let disconnected!: () => void;
@@ -128,8 +166,8 @@ export class HttpSession {
     try {
       await server.connect(transport);
       if (req.aborted || res.destroyed) return;
-      // Cancelled JSON batches may never produce every response. A disconnected
-      // client must still release the SDK graph and abort remaining handlers.
+      // A disconnected client must release the SDK graph and abort its handlers,
+      // even when no JSON response can finish.
       await Promise.race([transport.handleRequest(req, res, req.body), closedResponse]);
     } finally {
       res.off('close', onClose);
@@ -141,6 +179,11 @@ export class HttpSession {
 
   async close(): Promise<void> {
     this.#closed = true;
-    await Promise.allSettled([...this.#running].map((server) => server.close()));
+    await Promise.allSettled(
+      [...this.#running].map(async ([server, response]) => {
+        response.destroy();
+        await server.close();
+      }),
+    );
   }
 }

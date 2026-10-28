@@ -9,7 +9,11 @@ it('correlates reuse and closure without logging identities, arguments or raw ID
   const first = telemetry.request('secret-session-one', 'notifications/initialized');
   telemetry.request('secret-session-one', 'tools/list');
   now = 1000;
-  const call = telemetry.request('secret-session-one', 'tools/call');
+  const call = telemetry.request('secret-session-one', [
+    'tools/call',
+    'tools/call',
+    'resources/list',
+  ]);
   expect(call.sessionRef).toBe(first.sessionRef);
   expect(call.sessionRequest).toBe(4);
   now = 121000;
@@ -21,8 +25,8 @@ it('correlates reuse and closure without logging identities, arguments or raw ID
     clientProfile: 'chatgpt',
     protocol: '2025-03-26',
     requests: 4,
-    toolCalls: 1,
-    discoveries: 1,
+    toolCalls: 2,
+    discoveries: 2,
     lifetimeMs: 121000,
     idleMs: 120000,
   });
