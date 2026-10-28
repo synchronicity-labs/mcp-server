@@ -95,8 +95,11 @@ Before merging, record the deployed image, current widget digest, green checks
 and reviewer approval. The baseline observed on 2026-10-28 was image
 `mcp-server:8a922e289d5488c7f50f258e1ca4d6ce25e925ad` and UI
 `fc578cad600cf392a971ad28d2e6e591c84466d0bfb1521727d90e25eefe5e43`.
+Preflight later found the independent cost-estimate fix #108 deployed as
+`mcp-server:2b2a5bf9c6cf1ff7267f5beb9c7e7e22cd5be710`; it retains the same UI.
+That newer image is the rollback target, and this candidate includes its changes.
 If the candidate regresses authentication, discovery, cancellation or uploads,
-redeploy that known image through Porter (or revert the release merge through
+redeploy that latest known image through Porter (or revert the release merge through
 the normal reviewed workflow). Existing transport IDs may need reinitialization;
 check any accepted paid job by its existing ID, never resubmit automatically.
 The previous UI remains in the retained catalog for rollback and older widgets.
