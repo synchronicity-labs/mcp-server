@@ -21,6 +21,12 @@ export function resolveSyncSource(clientName?: string): string {
 // Bound upstream calls independently of the API-defined polling window. No write retries.
 export const UPSTREAM_REQUEST_TIMEOUT_MS = 65_000;
 
+const importErrorDetailsSchema = z.object({
+  importJobId: z.uuid().optional(),
+  importStatus: z.enum(['queued', 'downloading', 'processing', 'completed', 'failed']).optional(),
+  progress: z.number().min(0).max(100).optional(),
+});
+
 export class ApiRequestError extends Error {
   constructor(
     message: string,
@@ -28,6 +34,7 @@ export class ApiRequestError extends Error {
     readonly code?: string,
     readonly retryAfterMs?: number,
     readonly generationId?: string,
+    readonly importDetails?: z.infer<typeof importErrorDetailsSchema>,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -143,12 +150,17 @@ export function createHttpClient(
                 ? parsed.generationId
                 : undefined,
             );
+          const importDetails =
+            code === 'import_in_progress' || code === 'import_failed'
+              ? importErrorDetailsSchema.safeParse(parsed)
+              : undefined;
           throw new ApiRequestError(
             `API request failed: ${response.status} ${response.statusText} - ${message}`,
             response.status,
             code,
             retryAfterMs,
             knownId.success ? knownId.data : undefined,
+            importDetails?.success ? importDetails.data : undefined,
           );
         }
 

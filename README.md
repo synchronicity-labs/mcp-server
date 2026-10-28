@@ -158,6 +158,26 @@ before calling it, then poll its generation ID through completion. The current
 charges. See the [workflow integration and release plan](docs/chatgpt-workflows.md)
 for the remaining combined-pricing and embedded UI work.
 
+### Translate a social video link
+
+For “Translate this YouTube link to Spanish”, use the existing asset and translation tools:
+
+1. Select a project and call `assets_create` with the link, `type: "VIDEO"`,
+   and `projectId`. YouTube, TikTok, Instagram and Facebook video links are supported.
+2. A `409 import_in_progress` response includes `importJobId`, `importStatus`,
+   `progress`, and `retryAfterMs`. Wait that interval (15 seconds if absent), then
+   repeat the identical asset request. The API reuses the import and eventually
+   returns the saved asset; no separate download or asset registration is needed.
+3. Use the returned asset `id` as `videoAssetId`. Discover supported languages/models,
+   estimate the translation, confirm its cost and configuration, then call
+   `create-translate-and-dub` with `targetLang: "es"` and a persistent idempotency key.
+   Poll the returned generation ID through completion.
+
+Never submit translation while the import is pending or use `importJobId` as an
+asset ID. Stop on import failure, disabled imports, unavailable service or import
+limits, explain the returned reason and offer uploading a file. Account feature
+flags, platform restrictions and daily import limits remain enforced by the API.
+
 ### Edit Dialogue
 
 When the API exposes transcription and dialogue-edit endpoints, `get-dialogue-options`

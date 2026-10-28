@@ -35,7 +35,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   assets_create: {
     title: 'Register a media asset',
     description:
-      'Register a media URL as a reusable asset (e.g. the `url` from assets_create-upload-url, or any public URL). Returns an asset `id` to use as `input[].assetId` in a generation, or as a voice-clone sample.',
+      'Register a direct media URL or import a YouTube, TikTok, Instagram or Facebook video link as a reusable asset. For a social link, pass url, type=VIDEO and the selected projectId. A 409 import_in_progress means the download is running: wait retryAfterMs (15 seconds if absent), then repeat this exact request with the same URL and project. The API reuses the import and returns its saved VIDEO asset when ready. Never use importJobId as an asset ID. Stop on import_failed, import_not_enabled, import_unavailable or import limits and explain the error; do not automatically restart. Returns an asset id for generation inputs or videoAssetId in create-translate-and-dub when available. Import first, then estimate and confirm translation. Link imports have daily limits.',
   },
   'assets_get-all': {
     title: 'List assets',
