@@ -20,6 +20,12 @@ import {
   UNSUPPORTED_UPLOAD_MESSAGE,
 } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
+import {
+  GENERATION_STATUS_METADATA,
+  GENERATION_STATUS_URI,
+  withGenerationStatusCard,
+} from './generation-status.js';
+import { GENERATION_STATUS_HTML } from './generation-status-html.js';
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
@@ -502,9 +508,10 @@ function createTools(
         : tool,
     ),
   ];
+  const tools = allTools.map(withGenerationStatusCard);
   return config.transport === 'http'
-    ? allTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-    : allTools;
+    ? tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
+    : tools;
 }
 
 function createProfiledServer(
@@ -563,6 +570,30 @@ function createProfiledServer(
     config.transport === 'http' ? resourceMetadataUrl(config.port) : undefined,
   );
   const resources: Resource[] = [];
+  resources.push({
+    name: 'sync-generation-status',
+    uri: GENERATION_STATUS_URI,
+    ...GENERATION_STATUS_METADATA,
+  });
+  server.registerResource(
+    'sync-generation-status',
+    GENERATION_STATUS_URI,
+    GENERATION_STATUS_METADATA,
+    async () => {
+      if (!getProfile().supportsAppUi)
+        throw new Error('This interface requires an app-compatible client.');
+      return {
+        contents: [
+          {
+            uri: GENERATION_STATUS_URI,
+            mimeType: GENERATION_STATUS_METADATA.mimeType,
+            text: GENERATION_STATUS_HTML,
+            _meta: GENERATION_STATUS_METADATA._meta,
+          },
+        ],
+      };
+    },
+  );
   registerUploadWidgetResource({
     registerResource: (name, uri, metadata, read) => {
       resources.push({ name, uri, ...metadata });
@@ -604,7 +635,9 @@ function createProfiledServer(
   });
   server.server.setRequestHandler(ListResourcesRequestSchema, () => ({
     resources: resources.filter((resource) =>
-      resource.name === 'sync-app' ? getProfile().supportsAppUi : getProfile().supportsUploads,
+      resource.name === 'sync-app' || resource.name === 'sync-generation-status'
+        ? getProfile().supportsAppUi
+        : getProfile().supportsUploads,
     ),
   }));
   const onInitialized = server.server.oninitialized;

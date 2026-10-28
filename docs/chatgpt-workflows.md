@@ -66,6 +66,34 @@ findings and environment acceptance remain independent release gates.
 that OAuth is accepted or rejected. Do not bypass authentication or expose
 internal/debug endpoints to satisfy tool discovery.
 
+## Generation status cards
+
+Video submission tools attach `ui://sync/generation-status-v1.html` directly,
+including lipsync/image-to-video, Translate & Dub, Edit Dialogue and the stdio
+public generation tool. The host renders this resource from the returned job;
+it does not depend on ChatGPT suggesting a follow-up or choosing another render
+tool. Rejected submissions without a known job cannot offer a status read.
+
+The card pins its originating generation ID and uses only
+`generate_get-generation` for manual checks and ten-second automatic updates.
+Polling stops on terminal states, read errors or hidden documents. Foregrounding
+an active card rechecks it. A known job ID in an uncertain submission error is
+read back without replaying the write. Both MCP Apps and ChatGPT's legacy
+bridge keep a bounded read timeout and a usable Check status action after errors.
+
+Time remaining is derived from `generationEstimate.estimatedFinishAt` and the
+returned `serverTime`, advancing with a monotonic clock. Missing/invalid estimates
+show unavailable; overdue jobs show a delay message instead of zero or a new ETA.
+Terminal jobs hide the estimate. Playback links are exposed only after a fresh
+authorized status read, and signed result URLs remain intact. `projectId` is
+included in the safe generation projection for the exact Open in Sync fallback.
+
+The card is compiled into MCP and does not require a Studio bundle release.
+Deploy MCP and refresh the ChatGPT publisher/tool metadata so existing cached
+descriptors acquire the resource link. The embedded Studio's corresponding
+status card ships through its normal frontend bundle release. Local protocol
+and browser fixtures do not establish deployment or live ChatGPT rendering.
+
 ## Verification and batch release
 
 The translation adapter tests cover public-schema discovery, request shape,
