@@ -1,5 +1,18 @@
 # ChatGPT frontend release
 
+## Release candidate #7407 refresh
+
+Source: the head of [sync-api-v2 release candidate #7407](https://github.com/synchronicity-labs/sync-api-v2/pull/7407),
+commit `f4564f24a0cf7481745952acf8bb0ff1136c8674`, tree `d1a7a98432180961ac383b7b23304285422f39f2`.
+UI SHA256: `fc578cad600cf392a971ad28d2e6e591c84466d0bfb1521727d90e25eefe5e43`
+(3,665,914 uncompressed bytes). Two clean builds produced identical bytes.
+
+The candidate was cut from `d80d4aad85`, the source of the previous bundle. Its only
+ChatGPT-visible change is [#7229](https://github.com/synchronicity-labs/sync-api-v2/pull/7229):
+the shared video player's context menu gains icons and shows "Unmute" while muted.
+The minified bundles differ only in those elements. The oldest retained bundle,
+`a39e27ca…`, moves to `deploy/chatgpt-retired/`. Tool metadata is unchanged.
+
 ## Connected account and project preview candidate
 
 Source: merged [sync-api-v2 #7404](https://github.com/synchronicity-labs/sync-api-v2/pull/7404)
