@@ -30,6 +30,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run patch:mcp-sdk
       - run: npm run lint
+      - run: npm run test:monitor
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:memory

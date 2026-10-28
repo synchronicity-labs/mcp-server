@@ -100,6 +100,7 @@ describe('ChatGPT tool descriptors', () => {
     for (const tool of tools) {
       const mechanical = tool.name.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
       expect(tool.title, tool.name).toBeTruthy();
+      expect(tool.title, tool.name).toBe(tool.title?.toLowerCase());
       expect(tool.title, tool.name).not.toBe(mechanical);
     }
   });

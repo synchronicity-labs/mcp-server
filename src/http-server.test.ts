@@ -198,9 +198,10 @@ describe('MCP session sweeping', () => {
 describe('MCP session runtime config', () => {
   it('uses bounded defaults', () => {
     expect(getSessionRuntimeConfig({})).toEqual({
-      idleTtlMs: 30 * 60_000,
+      idleTtlMs: 2 * 60_000,
       maxSessions: 1_000,
-      sweepIntervalMs: 60_000,
+      maxInFlightRequests: 32,
+      sweepIntervalMs: 15_000,
       shutdownGraceMs: 10_000,
       telemetryIntervalMs: 15_000,
     });
@@ -218,6 +219,7 @@ describe('MCP session runtime config', () => {
     ).toEqual({
       idleTtlMs: 900_000,
       maxSessions: 250,
+      maxInFlightRequests: 32,
       sweepIntervalMs: 15_000,
       shutdownGraceMs: 5_000,
       telemetryIntervalMs: 7_500,
@@ -232,9 +234,10 @@ describe('MCP session runtime config', () => {
         MCP_RUNTIME_TELEMETRY_INTERVAL_MS: '0',
       }),
     ).toEqual({
-      idleTtlMs: 30 * 60_000,
+      idleTtlMs: 2 * 60_000,
       maxSessions: 1_000,
-      sweepIntervalMs: 60_000,
+      maxInFlightRequests: 32,
+      sweepIntervalMs: 15_000,
       shutdownGraceMs: 10_000,
       telemetryIntervalMs: 15_000,
     });

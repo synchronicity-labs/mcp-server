@@ -28,6 +28,7 @@ import { createAccountContextTool } from './tools/account-context.js';
 import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
+import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
@@ -49,9 +50,12 @@ const SERVER_DESCRIPTION =
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 export const SERVER_INSTRUCTIONS =
+  'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. ' +
+  'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ' +
   ASSET_THUMBNAIL_INSTRUCTIONS +
   'In ChatGPT, default new lipsync and image-to-video requests to sync-3, the latest lipsync model, unless the user explicitly chooses another model. Preserve the selected model on an existing draft or an idempotent retry. ' +
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
+  'When trim-audio is available, offer prefix audio preparation for an over-limit lip-sync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lip-sync uses cut_off and preserves the original media. ' +
   'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
   'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
   'For a request such as “Translate this YouTube link to Spanish”, first call assets_create with the social URL, type=VIDEO and the selected projectId. YouTube, TikTok, Instagram and Facebook video links are imported into saved assets. A 409 import_in_progress means the import is running: wait retryAfterMs (15 seconds if absent), then repeat the identical assets_create request until it returns an asset. Keep the URL and project unchanged; do not submit a generation while importing or treat importJobId as an asset ID. On import_failed, import_not_enabled, import_unavailable or an import limit error, explain the returned reason and stop; offer a file upload instead of repeatedly starting imports. Once ready, estimate and confirm the paid translation before calling create-translate-and-dub when available with the returned asset id as videoAssetId. ' +
@@ -113,6 +117,8 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'estimate-translation-preview',
   'create-translation-preview',
   'get-translation-preview',
+  'trim-audio',
+  'get-audio-trim',
   'voices_get-voices',
   'voices_clone-voice',
   'generate_get-generation',
@@ -171,6 +177,8 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'estimate-translation-preview',
   'create-translation-preview',
   'get-translation-preview',
+  'trim-audio',
+  'get-audio-trim',
   'voices_get-voices',
   'generate_get-generation',
   'models_get',
@@ -193,10 +201,15 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
 export function createToolDescriptorMeta(
   meta: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  return {
+  const descriptorMeta: Record<string, unknown> = {
     ...meta,
     securitySchemes: meta?.securitySchemes ?? TOOL_SECURITY_SCHEMES,
   };
+  for (const key of ['openai/toolInvocation/invoking', 'openai/toolInvocation/invoked']) {
+    const text = descriptorMeta[key];
+    if (typeof text === 'string') descriptorMeta[key] = text.toLowerCase();
+  }
+  return descriptorMeta;
 }
 
 // SDK clients validate structured errors too. Retained widgets require this
@@ -257,7 +270,7 @@ export function registerTools(
     server.registerTool(
       tool.name,
       {
-        title: tool.title,
+        title: tool.title?.toLowerCase(),
         description: tool.description,
         inputSchema: toolInputSchema(tool.inputSchema),
         outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
@@ -314,7 +327,11 @@ export function createToolErrorResult(error: unknown, authMetadataUrl?: string):
   }
   const retryableError =
     error && typeof error === 'object'
-      ? (error as { code?: unknown; retryable?: unknown; retryAfterMs?: unknown })
+      ? (error as {
+          code?: unknown;
+          retryable?: unknown;
+          retryAfterMs?: unknown;
+        })
       : {};
   if (
     typeof retryableError.code === 'string' &&
@@ -472,6 +489,7 @@ function createTools(
     (operation) =>
       operation.operationId !== 'analytics_captureChatgptEvent' &&
       translationPreviewOperations([operation]).length === 0 &&
+      !operation.path.startsWith('/v2/audio-trims') &&
       operation.studioDraftVersion !== 1 &&
       operation.studioViewVersion !== 1,
   );
@@ -501,6 +519,7 @@ function createTools(
       httpClient,
       supportsStudioDrafts(operations),
       supportsStudioViews(operations),
+      supportsAudioTrimming(operations),
       analyticsAvailable,
     ),
     ...createStudioViewTools(operations, httpClient),
@@ -513,6 +532,7 @@ function createTools(
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
     ...createTranslationPreviewTools(operations, httpClient),
+    ...createAudioTrimTools(operations, httpClient),
     ...createDialogueTools(operations, httpClient),
     ...createSpeechTools(operations, httpClient),
     ...generatedTools.map((tool) =>
@@ -536,9 +556,10 @@ function createProfiledServer(
     tools: McpToolDefinition[];
     descriptors: Map<ClientProfile['name'], Tool[]>;
   },
+  httpClientName?: string,
 ): McpServer {
   let profile: ClientProfile | undefined;
-  let clientName: string | undefined;
+  let clientName: string | undefined = httpClientName;
   const getProfile = () => profile ?? resolveClientProfile();
   const httpClient = createHttpClient(
     config.baseUrl,
@@ -611,7 +632,7 @@ function createProfiledServer(
         if (!getProfile().supportsAppUi)
           throw new Error('This interface requires an app-compatible client.');
         process.stderr.write(
-          `${JSON.stringify({ event: 'app_resource_served', timestamp: new Date().toISOString(), clientName, resource: app.uri, bytes: Buffer.byteLength(app.html) })}\n`,
+          `${JSON.stringify({ event: 'app_resource_served', timestamp: new Date().toISOString(), clientProfile: getProfile().name, resource: app.uri, bytes: Buffer.byteLength(app.html) })}\n`,
         );
         return {
           contents: [
@@ -639,7 +660,7 @@ function createProfiledServer(
   const onInitialized = server.server.oninitialized;
   server.server.oninitialized = () => {
     if (!profile) {
-      clientName = server.server.getClientVersion()?.name;
+      clientName ??= server.server.getClientVersion()?.name;
       const initializedProfile = resolveClientProfile(clientName);
       profile = initializedProfile;
       const cached = sharedCatalog?.descriptors.get(initializedProfile.name);
@@ -656,7 +677,7 @@ function createProfiledServer(
               .map((tool) => presentTool(tool, initializedProfile));
       descriptors = visible.map((tool) => ({
         name: tool.name,
-        title: tool.title,
+        title: tool.title?.toLowerCase(),
         description: tool.description,
         inputSchema: z.toJSONSchema(toolInputSchema(tool.inputSchema)) as Tool['inputSchema'],
         ...(tool.outputSchema
@@ -675,6 +696,7 @@ function createProfiledServer(
     }
     onInitialized?.();
   };
+  if (httpClientName !== undefined) server.server.oninitialized();
   return server;
 }
 
@@ -690,7 +712,7 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
 
 export async function createMcpServerFactory(
   config: SyncMcpConfig,
-): Promise<{ createServer: () => McpServer; toolCount: number }> {
+): Promise<{ createServer: (clientName?: string) => McpServer; toolCount: number }> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
   // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
@@ -699,6 +721,8 @@ export async function createMcpServerFactory(
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
       translationOperation([operation]) !== undefined ||
       translationPreviewOperations([operation]).length > 0 ||
+      operation.path === '/v2/audio-trims' ||
+      operation.path === '/v2/audio-trims/{id}' ||
       dialogueOperations([operation]).length > 0 ||
       speechOperations([operation]).length > 0 ||
       operation.studioDraftVersion === 1 ||
@@ -713,12 +737,23 @@ export async function createMcpServerFactory(
   );
 
   // Four presentation profiles at most; never key this by untrusted client names.
-  const sharedCatalog = { tools, descriptors: new Map<ClientProfile['name'], Tool[]>() };
+  const sharedCatalog = {
+    tools,
+    descriptors: new Map<ClientProfile['name'], Tool[]>(),
+  };
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: new Set(tools.map((tool) => tool.name)).size,
-    createServer: () =>
-      createProfiledServer(config, operations, {}, chatgptApp, previousApps, sharedCatalog),
+    createServer: (clientName) =>
+      createProfiledServer(
+        config,
+        operations,
+        {},
+        chatgptApp,
+        previousApps,
+        sharedCatalog,
+        clientName,
+      ),
   };
 }
 

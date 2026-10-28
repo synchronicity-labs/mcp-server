@@ -81,6 +81,7 @@ it.each([
       client.callTool({ name: 'get-account-context', arguments: {} }),
     );
     expect(account.structuredContent).toMatchObject({ capabilities: { chatgptAnalytics: true } });
+    expect(account.structuredContent).not.toHaveProperty('capabilities.audioTrimming');
     const event = {
       event: 'chatgpt_ui_loaded',
       event_id: id,

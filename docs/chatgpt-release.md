@@ -1,14 +1,54 @@
 # ChatGPT frontend release
 
-## Interaction analytics candidate (CRAFT-7540)
+## ChatGPT analytics candidate (CRAFT-7540)
 
-Deploy [API release #7440](https://github.com/synchronicity-labs/sync-api-v2/pull/7440) before this MCP release, then refresh publisher tool metadata and open a fresh ChatGPT widget. API development PR: [#7439](https://github.com/synchronicity-labs/sync-api-v2/pull/7439).
+The widget is built from merged `dev` commit
+`f3f243f19466896e22f55d174d1a8cb3c1af4aa1`, tree
+`696326a78ae9c7d73b8f693ade0047ddde3c472a`, recorded by
+[sync-api-v2 #7454](https://github.com/synchronicity-labs/sync-api-v2/pull/7454).
+It includes the analytics implementation from
+[#7439](https://github.com/synchronicity-labs/sync-api-v2/pull/7439) and the
+Studio heartbeat/recovery reconciliation from
+[#7450](https://github.com/synchronicity-labs/sync-api-v2/pull/7450).
+UI SHA256: `8d38553f892d53804d8d3337cae0cc15570ea4df4974d930409624adad21804e`
+(3,359,465 uncompressed bytes). Two builds from the frozen-lockfile checkout
+produced identical HTML and manifest bytes. This replaces only the unreleased
+analytics candidate. All published bundles remain byte-for-byte unchanged; `670c3e54…`
+moves to `deploy/chatgpt-retired/`, retaining one current and eleven previous resources.
 
-The widget is built from `3f048c07dae1b75d63f25b6c7d0f248222599e95` (tree `9da987d3b16f0320b8038f5a85c957f7a5797ca3`). SHA-256: `546f3181240c82735440a747cccf1c12a09618437b850510082772c89ff1e71e`; 3668141 uncompressed bytes. Two builds produced identical bytes. The source and packaged browser suite covers both bridges, account recovery, old servers, analytics outages, idle polling and Studio view/draft recovery. This candidate includes the session resilience changes from main PR #7444, preserving their bounded polling and retry behavior. The oldest retained bundle `0f4f454753a88e6264cf1393500c9d9dac8673040459642407230a0e1ddbb258` moves unchanged to `deploy/chatgpt-retired/`; eleven previous resources remain available.
+The server discovers the authenticated analytics collector from OpenAPI and exposes
+`track-chatgpt-event` only to the ChatGPT app. Explicit widget interactions carry
+journey and action IDs; calls without that evidence remain `unknown`, and background
+polling is excluded from tool-activity counts. Host conversation identifiers are
+hashed. Prompts, media, URLs, credentials and client-supplied user identities are
+not event properties. Analytics failures do not fail generation. The capability
+is absent against an older API and coexists with audio trimming.
 
-The collector is discovered from OpenAPI before advertising `chatgptAnalytics`. The app-only `track-chatgpt-event` tool accepts five bounded event types. Optional `syncAnalytics` tool arguments are removed before business handlers; authenticated API requests receive attribution in `x-sync-analytics`. Polling is background; unmarked calls remain unknown. We cannot count raw ChatGPT prompts or infer that unknown calls came from typed chat. Host conversation correlation is SHA-256 hashed when supplied. No prompts, media, URLs or credentials enter event properties.
+**Release prerequisite:** promote the API changes through the normal release-candidate
+workflow and deploy that release before merging/deploying this MCP candidate.
+The source above is merged into `dev`; it is not evidence of a production API release.
+The earlier manually assembled API PR #7440 is closed and is not a release source.
+No database migration or new browser PostHog SDK is needed.
 
-[PostHog dashboard](https://us.posthog.com/project/85326/dashboard/2272139) shows UI milestones, generation source and generation lifecycle counts. After deployment, verify a fresh connected session emits one load, one project open, two asset selections and one Generate click; confirm the admitted generation retains the same action ID through completion. Use a dedicated test account for any paid generation. No production generation was started during fixture validation.
+After API and MCP deployment, refresh publisher tool metadata and open a fresh
+ChatGPT widget. Verify widget actions and generation attribution in the existing
+[PostHog dashboard](https://us.posthog.com/project/85326/dashboard/2272139).
+These are event counts, not inferred conversation-to-UI conversion rates; raw
+ChatGPT typing and clicks outside the Sync widget are unavailable. Production
+ChatGPT acceptance remains a post-deployment check.
+
+## Session resilience candidate #7444
+
+Source: [sync-api-v2 hotfix #7444](https://github.com/synchronicity-labs/sync-api-v2/pull/7444),
+commit `5f79ab181d3da32600a15c371b57106704d5ddfd`, tree `a0d1b78996ca5df566be8adc04903950d1c3b66a`.
+UI SHA256: `e6703543820fda6e4a83200bde29341c84a546bd310b645a440efad33a27ac8c` (3,666,965 uncompressed bytes).
+Two builds from the frozen-lockfile production-based checkout produced identical bytes.
+The widget reduces unchanged polling, pauses hidden views, and respects failure backoff
+while retaining Studio's heartbeat and draft recovery. No paid operation is replayed.
+The oldest retained bundle, `0f4f4547…`, moves to `deploy/chatgpt-retired/`.
+
+This is a prepared candidate, not evidence of deployment or ChatGPT acceptance.
+See [availability and rollout](mcp-availability.md) and [the lifecycle decision](session-lifecycle.md).
 
 ## Release candidate #7407 refresh
 
@@ -58,6 +98,23 @@ Tool metadata for ChatGPT, with names, input schemas and annotations unchanged:
 
 The duplicated thumbnail rule in `assets_get-all` and `assets_get` stays, so
 clients that ignore server instructions still get it.
+
+## Brand voice and command labels
+
+Tool titles and existing invocation status labels are lowercased when descriptors
+are sent to clients, for both registered tools and cached per-client catalogs.
+For example, `projects_get-all` displays the title `list projects`. Tool names,
+schemas, result data and resource URLs keep their original case.
+
+Server instructions request concise, friendly, lowercase prose and at most one
+relevant optional follow-up after a successful task. Suggestions must use
+capabilities available in the current connection and require a user request before
+execution. User style requests and exact identifiers take precedence. These
+instructions guide the host model; the host controls final rendering and replies.
+
+After deployment, scan tools in the publisher dashboard and verify the refreshed
+titles, invocation metadata and server instructions before publishing the update.
+Check a fresh installed connection: published metadata may lag the live server.
 
 ## Mounted Studio handoff candidate
 
