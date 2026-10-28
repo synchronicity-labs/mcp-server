@@ -13,6 +13,7 @@ import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { loadToken } from './auth/token-store.js';
+import { createAnalyticsTool, trackToolExecution, uiAnalyticsSchema } from './chatgpt-analytics.js';
 import { type ChatgptApp, createOpenSyncAppTool, loadChatgptAppReleases } from './chatgpt-app.js';
 import {
   type ClientProfile,
@@ -63,6 +64,7 @@ export const SERVER_INSTRUCTIONS =
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
+  'track-chatgpt-event',
   'open-sync-app',
   'save-studio-draft',
   'ack-studio-draft',
@@ -70,6 +72,7 @@ const APP_UI_TOOLS = new Set([
   'ack-studio-view',
 ]);
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'track-chatgpt-event',
   'get-studio-view',
   'open-studio-project',
   'refresh-studio-project',
@@ -129,6 +132,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'track-chatgpt-event',
   'get-studio-view',
   'open-studio-project',
   'refresh-studio-project',
@@ -216,6 +220,22 @@ const toolErrorOutputSchema = z.toJSONSchema(
 
 // The SDK wraps raw shapes on registration. Reuse immutable validators across
 // sessions while keeping handlers, authentication and client profiles local.
+const toolInputSchemas = new WeakMap<Record<string, z.ZodType>, z.ZodObject>();
+
+function toolInputSchema(shape: Record<string, z.ZodType>): z.ZodObject {
+  let schema = toolInputSchemas.get(shape);
+  if (!schema) {
+    schema = z.object({
+      ...shape,
+      syncAnalytics: uiAnalyticsSchema
+        .optional()
+        .describe('Private UI instrumentation. Omit when calling from conversation.'),
+    });
+    toolInputSchemas.set(shape, schema);
+  }
+  return schema;
+}
+
 const toolSchemas = new WeakMap<Record<string, z.ZodType>, z.ZodObject>();
 
 function toolSchema(shape: Record<string, z.ZodType>): z.ZodObject {
@@ -238,7 +258,7 @@ export function registerTools(
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: toolSchema(tool.inputSchema),
+        inputSchema: toolInputSchema(tool.inputSchema),
         outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
@@ -449,6 +469,7 @@ function createTools(
   // These operations require the durable wrapper's admission key and public projection.
   const generatedOperations = operations.filter(
     (operation) =>
+      operation.operationId !== 'analytics_captureChatgptEvent' &&
       translationPreviewOperations([operation]).length === 0 &&
       operation.studioDraftVersion !== 1 &&
       operation.studioViewVersion !== 1,
@@ -461,7 +482,11 @@ function createTools(
       : generatedOperations,
     httpClient,
   );
+  const analyticsAvailable = operations.some(
+    (operation) => operation.operationId === 'analytics_captureChatgptEvent',
+  );
   const allTools = [
+    ...(analyticsAvailable ? [createAnalyticsTool(httpClient)] : []),
     ...(chatgptApp
       ? [
           createOpenSyncAppTool(
@@ -475,6 +500,7 @@ function createTools(
       httpClient,
       supportsStudioDrafts(operations),
       supportsStudioViews(operations),
+      analyticsAvailable,
     ),
     ...createStudioViewTools(operations, httpClient),
     ...createStudioDraftTools(operations, httpClient),
@@ -547,7 +573,18 @@ function createProfiledServer(
             ) {
               throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
             }
-            return tool.handler(args, { ...parameters[1], clientProfile: profile });
+            return trackToolExecution(
+              tool.name,
+              args,
+              parameters[1]?._meta,
+              profile.name,
+              httpClient,
+              (businessArgs) =>
+                tool.handler(businessArgs, { ...parameters[1], clientProfile: profile }),
+              operations.some(
+                (operation) => operation.operationId === 'analytics_captureChatgptEvent',
+              ),
+            );
           },
         }) as McpToolDefinition,
     ),
@@ -620,7 +657,7 @@ function createProfiledServer(
         name: tool.name,
         title: tool.title,
         description: tool.description,
-        inputSchema: z.toJSONSchema(z.object(tool.inputSchema)) as Tool['inputSchema'],
+        inputSchema: z.toJSONSchema(toolInputSchema(tool.inputSchema)) as Tool['inputSchema'],
         ...(tool.outputSchema
           ? {
               outputSchema: {
@@ -657,6 +694,7 @@ export async function createMcpServerFactory(
   // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
+      operation.operationId === 'analytics_captureChatgptEvent' ||
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
       translationOperation([operation]) !== undefined ||
       translationPreviewOperations([operation]).length > 0 ||

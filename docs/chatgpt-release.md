@@ -1,5 +1,15 @@
 # ChatGPT frontend release
 
+## Interaction analytics candidate (CRAFT-7540)
+
+Deploy [API release #7440](https://github.com/synchronicity-labs/sync-api-v2/pull/7440) before this MCP release, then refresh publisher tool metadata and open a fresh ChatGPT widget. API development PR: [#7439](https://github.com/synchronicity-labs/sync-api-v2/pull/7439).
+
+The widget is built from `9b84834afe3ae678f5023af6b4de7ab8de47cae8` (tree `bb79ce2ab150433402c0213fc5529b8942f43242`). SHA-256: `95d77ec2810875f9d7977fb5faeea752b1ef53ab0c6c69d21783a9b0d3e1f165`; 3667090 uncompressed bytes. Two builds produced identical bytes. The source browser suite covers both bridges, account recovery, old servers and analytics outages. The oldest retained bundle `0f4f454753a88e6264cf1393500c9d9dac8673040459642407230a0e1ddbb258` moves unchanged to `deploy/chatgpt-retired/`; eleven previous resources remain available.
+
+The collector is discovered from OpenAPI before advertising `chatgptAnalytics`. The app-only `track-chatgpt-event` tool accepts five bounded event types. Optional `syncAnalytics` tool arguments are removed before business handlers; authenticated API requests receive attribution in `x-sync-analytics`. Polling is background; unmarked calls remain unknown. We cannot count raw ChatGPT prompts or infer that unknown calls came from typed chat. Host conversation correlation is SHA-256 hashed when supplied. No prompts, media, URLs or credentials enter event properties.
+
+[PostHog dashboard](https://us.posthog.com/project/85326/dashboard/2272139) shows UI milestones, generation source and generation lifecycle counts. After deployment, verify a fresh connected session emits one load, one project open, two asset selections and one Generate click; confirm the admitted generation retains the same action ID through completion. Use a dedicated test account for any paid generation. No production generation was started during fixture validation.
+
 ## Release candidate #7407 refresh
 
 Source: the head of [sync-api-v2 release candidate #7407](https://github.com/synchronicity-labs/sync-api-v2/pull/7407),

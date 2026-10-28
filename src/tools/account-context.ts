@@ -15,6 +15,7 @@ const accountContext = z.object({
   organization: z.object({ id: z.uuid(), name: z.string().nullable(), role: z.string() }),
   capabilities: z.object({
     projectRenaming: z.literal(true),
+    chatgptAnalytics: z.literal(true).optional(),
     studioDraftSync: z.literal(true).optional(),
     studioViewSync: z.literal(true).optional(),
   }),
@@ -24,6 +25,7 @@ export function createAccountContextTool(
   http: HttpClient,
   studioDraftSync = false,
   studioViewSync = false,
+  chatgptAnalytics = false,
 ): McpToolDefinition {
   return {
     name: 'get-account-context',
@@ -58,6 +60,9 @@ export function createAccountContextTool(
         ...(limits === undefined ? {} : { limits }),
         capabilities: {
           projectRenaming: true,
+          ...(chatgptAnalytics && context?.clientProfile?.name === 'chatgpt'
+            ? { chatgptAnalytics: true }
+            : {}),
           ...(studioDraftSync ? { studioDraftSync: true } : {}),
           ...(studioViewSync ? { studioViewSync: true } : {}),
         },
