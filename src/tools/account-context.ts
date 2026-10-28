@@ -1,15 +1,17 @@
 import { z } from 'zod';
-import type { HttpClient } from '../http-client.js';
+import { ApiRequestError, type HttpClient } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
 
 const accountContext = z.object({
   account: z
     .object({ id: z.uuid(), email: z.string().nullable(), name: z.string().nullable() })
     .nullable(),
-  limits: z.object({
-    seats: z.number().finite().nonnegative(),
-    voiceClone: z.number().finite().nonnegative(),
-  }),
+  limits: z
+    .object({
+      seats: z.number().finite().nonnegative(),
+      voiceClone: z.number().finite().nonnegative(),
+    })
+    .optional(),
   organization: z.object({ id: z.uuid(), name: z.string().nullable(), role: z.string() }),
   capabilities: z.object({
     projectRenaming: z.literal(true),
@@ -38,7 +40,14 @@ export function createAccountContextTool(
     },
     handler: async (_args, context) => {
       const identity = await http.request('get', '/v2/oauth/account', { signal: context?.signal });
-      const limits = await http.request('get', '/v2/plans/limits', { signal: context?.signal });
+      let limits: unknown;
+      try {
+        limits = await http.request('get', '/v2/plans/limits', { signal: context?.signal });
+      } catch (error) {
+        context?.signal?.throwIfAborted();
+        // A limits outage must not erase verified identity; expired credentials still need linking.
+        if (error instanceof ApiRequestError && error.status === 401) throw error;
+      }
       return accountContext.parse({
         ...z
           .object({
@@ -46,7 +55,7 @@ export function createAccountContextTool(
             organization: accountContext.shape.organization,
           })
           .parse(identity),
-        limits,
+        ...(limits === undefined ? {} : { limits }),
         capabilities: {
           projectRenaming: true,
           ...(studioDraftSync ? { studioDraftSync: true } : {}),

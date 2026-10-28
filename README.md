@@ -619,6 +619,27 @@ provider's cache. Revocation elsewhere can take up to 15 seconds to affect this 
 Userinfo rate limits trigger token-specific backoff capped at 15 seconds, rather
 than blocking unrelated accounts or treating temporary errors as invalid tokens.
 
+Downstream tool responses with status 401 include `mcp/www_authenticate` pointing
+to the same protected-resource metadata as the HTTP authentication middleware.
+Tool descriptors expose `securitySchemes` and its compatibility metadata mirror.
+403 permission failures and service outages do not request another sign-in.
+`get-account-context` preserves verified account/workspace identity when optional
+seat and voice-clone limits are unavailable; a limits 401 still requests linking.
+
+To verify account recovery across the packaged UI and the real MCP HTTP server:
+
+```bash
+npm run build
+node scripts/verify-account-recovery.mjs /path/to/sync-api-v2/apps/chatgpt/dist/app.html
+```
+
+Build the ChatGPT workspace first and install Playwright Chromium. The check uses
+a local fixture for the Sync API and OAuth provider, exchanges a fixture code
+through the actual MCP token proxy, and verifies the connected identity despite
+a usage outage. It asserts that recovery makes no paid requests. Screenshots and
+a browser trace are written to `temp/account-recovery/`. This proves the local
+cross-service flow; the live ChatGPT consent UI still needs release acceptance.
+
 `npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
 storage. Install Chromium with `npx playwright install chromium` first. This does not
 prove live authenticated storage delivery or authorize a production rollout.
