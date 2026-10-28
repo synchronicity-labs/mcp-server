@@ -256,10 +256,33 @@ export function createDialogueTools(
       name: 'create-dialogue-video',
       title: 'Create the edited dialogue video',
       description:
-        'Generate the final video from an approved completed audio preview matching the current edits. Confirm the estimate first. Reuse the same idempotency key and inputs for recovery; poll generate_get-generation for the returned ID.',
+        'Create a new lip-synced video from a saved single-speaker video and its completed, user-approved Edit Dialogue audio preview. Use this to render targeted corrections or removals of spoken words while preserving the original speaker voice. Not for translation, whole-script replacement, or choosing a different voice. ' +
+        "This is a paid action that starts a generation job and consumes Sync credits. First use estimate-dialogue-video with the same source, preview and model, then obtain the user's approval of the preview, configuration and estimated cost. Requires a project and source video accessible to the connected account, and a completed dialogue preview for that same source. Creates a new output without overwriting the source video. " +
+        'Returns a generation ID, not a finished video. Poll generate_get-generation with that ID until completion. Persist one idempotency key for the approved request; on an uncertain response, reuse that key with identical inputs instead of starting a second paid job.',
       inputSchema: generationSchema.extend({
-        continuation: generationContextSchema.optional(),
-        idempotencyKey: z.string().regex(/^[A-Za-z0-9._~-]{1,128}$/),
+        projectId: sourceSchema.shape.projectId.describe(
+          'Accessible Sync project for the new output. Keep unchanged on retries.',
+        ),
+        videoAssetId: sourceSchema.shape.videoAssetId.describe(
+          'Saved VIDEO asset used for the approved dialogue preview, accessible to the connected account.',
+        ),
+        dialogueEditId: generationSchema.shape.dialogueEditId.describe(
+          'Completed Edit Dialogue audio preview ID for this source video and the current user-approved edits. Not a transcription or generation ID.',
+        ),
+        model: generationSchema.shape.model.describe(
+          'Lip-sync model returned by models_get, matching the approved estimate.',
+        ),
+        continuation: generationContextSchema
+          .optional()
+          .describe(
+            'Only for an explicitly requested continuation of an existing generation in this project. The workflow must be edit_dialogue.',
+          ),
+        idempotencyKey: z
+          .string()
+          .regex(/^[A-Za-z0-9._~-]{1,128}$/)
+          .describe(
+            'Persist one unique key per approved generation. Reuse the exact key and unchanged inputs when recovering an uncertain response; never automatically generate a replacement key.',
+          ),
       }).shape,
       outputSchema: generationOutputSchema,
       annotations: writeHints,
