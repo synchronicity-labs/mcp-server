@@ -676,6 +676,8 @@ export async function createMcpServerFactory(
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
       translationOperation([operation]) !== undefined ||
       translationPreviewOperations([operation]).length > 0 ||
+      operation.path === '/v2/audio-trims' ||
+      operation.path === '/v2/audio-trims/{id}' ||
       dialogueOperations([operation]).length > 0 ||
       speechOperations([operation]).length > 0 ||
       operation.studioDraftVersion === 1 ||
