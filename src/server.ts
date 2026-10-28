@@ -27,6 +27,7 @@ import { createAccountContextTool } from './tools/account-context.js';
 import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
+import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
@@ -51,6 +52,7 @@ export const SERVER_INSTRUCTIONS =
   ASSET_THUMBNAIL_INSTRUCTIONS +
   'In ChatGPT, default new lipsync and image-to-video requests to sync-3, the latest lipsync model, unless the user explicitly chooses another model. Preserve the selected model on an existing draft or an idempotent retry. ' +
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
+  'When trim-audio is available, offer prefix audio preparation for an over-limit lip-sync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lip-sync uses cut_off and preserves the original media. ' +
   'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
   'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
   'For a request such as “Translate this YouTube link to Spanish”, first call assets_create with the social URL, type=VIDEO and the selected projectId. YouTube, TikTok, Instagram and Facebook video links are imported into saved assets. A 409 import_in_progress means the import is running: wait retryAfterMs (15 seconds if absent), then repeat the identical assets_create request until it returns an asset. Keep the URL and project unchanged; do not submit a generation while importing or treat importJobId as an asset ID. On import_failed, import_not_enabled, import_unavailable or an import limit error, explain the returned reason and stop; offer a file upload instead of repeatedly starting imports. Once ready, estimate and confirm the paid translation before calling create-translate-and-dub when available with the returned asset id as videoAssetId. ' +
@@ -109,6 +111,8 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'estimate-translation-preview',
   'create-translation-preview',
   'get-translation-preview',
+  'trim-audio',
+  'get-audio-trim',
   'voices_get-voices',
   'voices_clone-voice',
   'generate_get-generation',
@@ -166,6 +170,8 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'estimate-translation-preview',
   'create-translation-preview',
   'get-translation-preview',
+  'trim-audio',
+  'get-audio-trim',
   'voices_get-voices',
   'generate_get-generation',
   'models_get',
@@ -293,7 +299,11 @@ export function createToolErrorResult(error: unknown, authMetadataUrl?: string):
   }
   const retryableError =
     error && typeof error === 'object'
-      ? (error as { code?: unknown; retryable?: unknown; retryAfterMs?: unknown })
+      ? (error as {
+          code?: unknown;
+          retryable?: unknown;
+          retryAfterMs?: unknown;
+        })
       : {};
   if (
     typeof retryableError.code === 'string' &&
@@ -450,6 +460,7 @@ function createTools(
   const generatedOperations = operations.filter(
     (operation) =>
       translationPreviewOperations([operation]).length === 0 &&
+      !operation.path.startsWith('/v2/audio-trims') &&
       operation.studioDraftVersion !== 1 &&
       operation.studioViewVersion !== 1,
   );
@@ -475,6 +486,7 @@ function createTools(
       httpClient,
       supportsStudioDrafts(operations),
       supportsStudioViews(operations),
+      supportsAudioTrimming(operations),
     ),
     ...createStudioViewTools(operations, httpClient),
     ...createStudioDraftTools(operations, httpClient),
@@ -486,6 +498,7 @@ function createTools(
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
     ...createTranslationPreviewTools(operations, httpClient),
+    ...createAudioTrimTools(operations, httpClient),
     ...createDialogueTools(operations, httpClient),
     ...createSpeechTools(operations, httpClient),
     ...generatedTools.map((tool) =>
@@ -547,7 +560,10 @@ function createProfiledServer(
             ) {
               throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
             }
-            return tool.handler(args, { ...parameters[1], clientProfile: profile });
+            return tool.handler(args, {
+              ...parameters[1],
+              clientProfile: profile,
+            });
           },
         }) as McpToolDefinition,
     ),
@@ -674,7 +690,10 @@ export async function createMcpServerFactory(
   );
 
   // Four presentation profiles at most; never key this by untrusted client names.
-  const sharedCatalog = { tools, descriptors: new Map<ClientProfile['name'], Tool[]>() };
+  const sharedCatalog = {
+    tools,
+    descriptors: new Map<ClientProfile['name'], Tool[]>(),
+  };
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: new Set(tools.map((tool) => tool.name)).size,
