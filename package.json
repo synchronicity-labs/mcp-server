@@ -35,6 +35,7 @@
   },
   "files": [
     "dist",
+    "deploy/generation-status",
     "scripts/patch-mcp-sdk.mjs",
     "README.md",
     "LICENSE"

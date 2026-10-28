@@ -25,6 +25,7 @@ RUN npm ci --omit=dev
 COPY --from=build /app/scripts/check-mcp.mjs ./scripts/check-mcp.mjs
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/chatgpt-dist ./chatgpt-dist
+COPY --from=build /app/deploy/generation-status ./deploy/generation-status
 
 # Strip tooling the runtime never uses but that AWS Inspector flags via the
 # base image. The server starts with `node dist/cli.js`, so neither is needed

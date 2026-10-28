@@ -91,7 +91,12 @@ Link clicks use the host's `ui/open-link` request or legacy `openExternal` bridg
 so navigation works inside a sandbox without popup permission. Legacy navigation
 disables redirect rewriting to preserve signed video URLs.
 
-The card is compiled into MCP and does not require a Studio bundle release.
+The card is built from the companion workspace's `GenerationStatusPanel`, using
+actual `@sync/ui` cards, badges, buttons and skeletons, the Sync logo, Satoshi,
+and shared light/dark tokens. `deploy/generation-status` contains its compressed
+HTML plus source-commit and SHA-256 provenance; the loader verifies the bytes.
+The resource CSP permits the bundled data font and no external connections.
+The MCP image and npm package carry this artifact independently of Studio's bundle.
 Deploy MCP and refresh the ChatGPT publisher/tool metadata so existing cached
 descriptors acquire the resource link. The embedded Studio's corresponding
 status card ships through its normal frontend bundle release. Local protocol

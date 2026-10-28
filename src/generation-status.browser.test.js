@@ -19,6 +19,18 @@ it.each([
   const projectId = '00000000-0000-4000-8000-000000000001';
   const serverNow = Date.parse('2026-10-28T12:00:00Z');
   const estimate = {
+    estimatedDurationSeconds: 125,
+    estimatedAt: new Date(serverNow).toISOString(),
+    calibrationAsOf: new Date(serverNow).toISOString(),
+    supportAt: new Date(serverNow + 1200000).toISOString(),
+    estimatorVersion: 'fixture',
+    confidence: 'fallback',
+    source: 'fallback',
+    sampleCount: 0,
+    scope: 'non_studio',
+    durationBand: 'fixture',
+    resolutionBand: 'fixture',
+    resolutionSource: 'unknown',
     serverTime: new Date(serverNow).toISOString(),
     estimatedFinishAt: new Date(serverNow + 125000).toISOString(),
     delayedAt: new Date(serverNow + 600000).toISOString(),
@@ -26,6 +38,8 @@ it.each([
   const signedUrl = 'https://fixture.invalid/result.mp4?Signature=a%2Fb%2Bc&Expires=123';
   let current = { id: generationId, projectId, status: 'PROCESSING', generationEstimate: estimate };
   let refused = false;
+  let malformed = false;
+  let refuseLinks = false;
   let holdRead = false;
   let releaseRead;
   const calls = [];
@@ -107,8 +121,10 @@ it.each([
     page.on('pageerror', (error) => pageErrors.push(error.message));
     // Deliberately wrong local clock: ETA must follow the server's timestamp.
     await page.clock.install({ time: new Date('2040-01-01T00:00:00Z') });
+    await page.exposeFunction('canOpenSyncLink', () => !refuseLinks);
     await page.exposeFunction('callSync', async (request) => {
       const result = await client.callTool(request);
+      if (malformed) return { content: [], structuredContent: { id: generationId, status: 123 } };
       if (!holdRead) return result;
       holdRead = false;
       return new Promise((resolve) => {
@@ -119,7 +135,11 @@ it.each([
       '<iframe title="Sync status" sandbox="allow-scripts allow-same-origin" style="border:0;width:100%;height:350px"></iframe>',
     );
     await page.evaluate(
-      ({ html, accepted, bridge }) => {
+      ({ html, accepted, bridge, fontSources }) => {
+        html = html.replace(
+          '<head>',
+          `<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src ${fontSources.join(' ')}">`,
+        );
         const iframe = document.querySelector('iframe');
         window.addEventListener('message', async (event) => {
           if (event.source !== iframe.contentWindow) return;
@@ -128,7 +148,7 @@ it.each([
             iframe.style.height = `${message.params.height}px`;
             return;
           }
-          if (!message.id) return;
+          if (message.id === undefined) return;
           if (message.method === 'ui/initialize') {
             // Deliver immediately, including before initialization has finished.
             event.source.postMessage(
@@ -149,6 +169,17 @@ it.each([
               '*',
             );
           } else if (message.method === 'ui/open-link') {
+            if (!(await window.canOpenSyncLink())) {
+              event.source.postMessage(
+                {
+                  jsonrpc: '2.0',
+                  id: message.id,
+                  error: { code: -32000, message: 'Fixture host refused navigation' },
+                },
+                '*',
+              );
+              return;
+            }
             window.open(message.params.url, '_blank', 'noopener,noreferrer');
             event.source.postMessage({ jsonrpc: '2.0', id: message.id, result: {} }, '*');
           } else if (message.method === 'tools/call') {
@@ -161,15 +192,30 @@ it.each([
             '<script>',
             '<script>window.openai = { theme: "light", toolOutput: ' +
               JSON.stringify(accepted.structuredContent) +
-              ', callTool: (name, args) => window.parent.callSync({name, arguments: args}), openExternal: options => { if (options.redirectUrl !== false) throw new Error("Signed links must not be rewritten"); window.parent.open(options.href, "_blank", "noopener,noreferrer"); }, notifyIntrinsicHeight: height => { window.frameElement.style.height = height + "px"; } };</script><script>',
+              ', callTool: (name, args) => window.parent.callSync({name, arguments: args}), openExternal: async options => { if (!await window.parent.canOpenSyncLink()) throw new Error("Fixture host refused navigation"); if (options.redirectUrl !== false) throw new Error("Signed links must not be rewritten"); window.parent.open(options.href, "_blank", "noopener,noreferrer"); }, notifyIntrinsicHeight: height => { window.frameElement.style.height = height + "px"; } };</script><script>',
           );
         iframe.srcdoc = html;
       },
-      { html: resource.contents[0].text, accepted, bridge },
+      {
+        html: resource.contents[0].text,
+        accepted,
+        bridge,
+        fontSources: resource.contents[0]._meta.ui.csp.resourceDomains,
+      },
     );
     const frame = page.frameLocator('iframe');
     await browserExpect(frame.getByRole('status')).toHaveText('Processing');
-    await browserExpect(frame.getByText('Estimated time remaining: about 3 minutes')).toBeVisible();
+    await browserExpect
+      .poll(() =>
+        frame.locator('body').evaluate(async () => {
+          await document.fonts.ready;
+          return [...document.fonts].some(
+            (font) => font.family === 'Sync Satoshi' && font.status === 'loaded',
+          );
+        }),
+      )
+      .toBe(true);
+    await browserExpect(frame.getByText('3 minutes remaining')).toBeVisible();
     const check = frame.getByRole('button', { name: 'Check status', exact: true });
     await browserExpect(check).toBeEnabled();
     await browserExpect(frame.getByRole('link', { name: 'Open in Sync' })).toHaveAttribute(
@@ -184,7 +230,7 @@ it.each([
     );
     await studioPage.close();
     await page.clock.fastForward(6000);
-    await browserExpect(frame.getByText('Estimated time remaining: about 2 minutes')).toBeVisible();
+    await browserExpect(frame.getByText('2 minutes remaining')).toBeVisible();
     await frame.getByRole('main').screenshot({ path: `.cache/status-card/${bridge}.png` });
     const cardBounds = await frame.getByRole('main').boundingBox();
     expect(cardBounds.width).toBeLessThanOrEqual(bridge === 'standard' ? 360 : 720);
@@ -215,6 +261,13 @@ it.each([
     current = { id: generationId, projectId, status: 'PROCESSING' };
     await check.click();
     await browserExpect(frame.getByText('Estimated time remaining is unavailable.')).toBeVisible();
+    malformed = true;
+    await check.click();
+    await browserExpect(frame.getByRole('alert')).toHaveText(
+      'Unable to read this generation. Check status again.',
+    );
+    await browserExpect(check).toBeEnabled();
+    malformed = false;
     current = {
       ...current,
       generationEstimate: {
@@ -247,6 +300,13 @@ it.each([
     const resultPage = await resultOpened;
     await resultPage.waitForURL(signedUrl);
     await resultPage.close();
+    refuseLinks = true;
+    await frame.getByRole('link', { name: 'View video' }).click();
+    await browserExpect(frame.getByRole('alert')).toHaveText(
+      'Unable to open this link. Try again.',
+    );
+    await browserExpect(frame.getByRole('status')).toHaveText('Completed');
+    await browserExpect(frame.getByRole('link', { name: 'View video' })).toBeVisible();
     const reads = calls.length;
     await page.clock.fastForward(30000);
     await browserExpect(frame.getByRole('status')).toHaveText('Completed');

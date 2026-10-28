@@ -33,9 +33,9 @@ export const GENERATION_STATUS_METADATA: ResourceMetadata = {
   description,
   mimeType: MCP_APP_RESOURCE_MIME_TYPE,
   _meta: {
-    ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } },
+    ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: ['data:'] } },
     'openai/widgetDescription': description,
     'openai/widgetPrefersBorder': true,
-    'openai/widgetCSP': { connect_domains: [], resource_domains: [] },
+    'openai/widgetCSP': { connect_domains: [], resource_domains: ['data:'] },
   },
 };
