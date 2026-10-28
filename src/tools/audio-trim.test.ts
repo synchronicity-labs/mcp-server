@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { parseSpec } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import { createAudioTrimTools } from './audio-trim.js';
 
@@ -40,6 +41,42 @@ const operations: ParsedOperation[] = [
   },
 ];
 describe('audio preparation tools', () => {
+  it('discovers the deployed audio-trim tag through the OpenAPI parser', () => {
+    const parsed = parseSpec({
+      openapi: '3.0.0',
+      paths: {
+        '/v2/audio-trims': {
+          post: {
+            operationId: 'AudioTrimsController_create',
+            tags: ['Audio trims'],
+            parameters: [
+              { in: 'header', name: 'Idempotency-Key', required: true, schema: { type: 'string' } },
+            ],
+            requestBody: {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      assetId: { type: 'string', format: 'uuid' },
+                      durationSeconds: { type: 'number' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        '/v2/audio-trims/{id}': {
+          get: { operationId: 'AudioTrimsController_get', tags: ['Audio trims'] },
+        },
+      },
+    });
+    expect(createAudioTrimTools(parsed, { request: vi.fn() }).map((tool) => tool.name)).toEqual([
+      'trim-audio',
+      'get-audio-trim',
+    ]);
+  });
   it('fails closed until keyed trim routes are advertised', () => {
     expect(createAudioTrimTools([], { request: vi.fn() })).toEqual([]);
     expect(createAudioTrimTools(operations.slice(0, 1), { request: vi.fn() })).toEqual([]);
