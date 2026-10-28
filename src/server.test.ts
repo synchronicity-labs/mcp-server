@@ -1,9 +1,13 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describe, expect, it } from 'vitest';
 import { resolveClientProfile } from './client-profile.js';
 import {
   createJsonToolResult,
   createToolDescriptorMeta,
   createToolErrorResult,
+  registerTools,
   SERVER_INSTRUCTIONS,
   selectHostedHttpTools,
 } from './server.js';
@@ -19,6 +23,39 @@ function tool(name: string): McpToolDefinition {
     handler: async () => ({}),
   };
 }
+
+describe('registered tool labels', () => {
+  it('advertises lowercase labels while preserving tool names and result data', async () => {
+    const server = new McpServer({ name: 'sync', version: 'test' });
+    const result = { outputUrl: 'https://Example.com/Video.mp4?Token=AbC' };
+    registerTools(server, [
+      {
+        ...tool('projects_get-all'),
+        resultFormat: 'json',
+        title: 'List Sync Projects',
+        meta: { 'openai/toolInvocation/invoking': 'Loading Sync Projects…' },
+        handler: async () => result,
+      },
+    ]);
+    const client = new Client({ name: 'test', version: 'test' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    try {
+      await client.connect(clientTransport);
+      expect((await client.listTools()).tools[0]).toMatchObject({
+        name: 'projects_get-all',
+        title: 'list sync projects',
+        _meta: { 'openai/toolInvocation/invoking': 'loading sync projects…' },
+      });
+      expect((await client.callTool({ name: 'projects_get-all' })).structuredContent).toEqual(
+        result,
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
 
 describe('createToolErrorResult', () => {
   it('preserves retry metadata in client-visible upload errors', () => {
@@ -43,6 +80,22 @@ describe('createToolErrorResult', () => {
 });
 
 describe('createToolDescriptorMeta', () => {
+  it('lowercases invocation labels without changing other metadata or the source', () => {
+    const meta = {
+      'openai/toolInvocation/invoking': 'Creating Your Lipsync Video…',
+      'openai/toolInvocation/invoked': 'Lipsync Generation Started.',
+      'openai/outputTemplate': 'ui://Sync/Studio.html',
+      'openai/fileParams': ['sourceVideo'],
+    };
+    expect(createToolDescriptorMeta(meta)).toMatchObject({
+      'openai/toolInvocation/invoking': 'creating your lipsync video…',
+      'openai/toolInvocation/invoked': 'lipsync generation started.',
+      'openai/outputTemplate': 'ui://Sync/Studio.html',
+      'openai/fileParams': ['sourceVideo'],
+    });
+    expect(meta['openai/toolInvocation/invoking']).toBe('Creating Your Lipsync Video…');
+  });
+
   it('adds OAuth security schemes for ChatGPT tool descriptors', () => {
     expect(createToolDescriptorMeta(undefined)).toEqual({
       securitySchemes: [{ type: 'oauth2', scopes: [] }],

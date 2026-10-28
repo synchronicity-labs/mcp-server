@@ -62,6 +62,23 @@ Tool metadata for ChatGPT, with names, input schemas and annotations unchanged:
 The duplicated thumbnail rule in `assets_get-all` and `assets_get` stays, so
 clients that ignore server instructions still get it.
 
+## Brand voice and command labels
+
+Tool titles and existing invocation status labels are lowercased when descriptors
+are sent to clients, for both registered tools and cached per-client catalogs.
+For example, `projects_get-all` displays the title `list projects`. Tool names,
+schemas, result data and resource URLs keep their original case.
+
+Server instructions request concise, friendly, lowercase prose and at most one
+relevant optional follow-up after a successful task. Suggestions must use
+capabilities available in the current connection and require a user request before
+execution. User style requests and exact identifiers take precedence. These
+instructions guide the host model; the host controls final rendering and replies.
+
+After deployment, scan tools in the publisher dashboard and verify the refreshed
+titles, invocation metadata and server instructions before publishing the update.
+Check a fresh installed connection: published metadata may lag the live server.
+
 ## Mounted Studio handoff candidate
 
 Source: merged [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227)
