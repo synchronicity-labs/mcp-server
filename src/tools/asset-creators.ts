@@ -19,7 +19,9 @@ export function createAssetCreatorsTool(http: HttpClient): McpToolDefinition {
     name: 'get-asset-creators',
     title: 'Read Sync asset creators',
     description:
-      'Read creator names and avatars for asset filters in the connected organization. Organization scope is resolved from the authenticated connection.',
+      "Read the connected organization's members (display name, email and avatar) for the Sync interface's asset creator filter. Organization scope is resolved from the authenticated connection.",
+    // The creator filter needs member emails; keep them out of the model's context.
+    meta: { ui: { visibility: ['app'] } },
     inputSchema: {},
     outputSchema: { members: member.array() },
     annotations: {

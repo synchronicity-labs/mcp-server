@@ -107,6 +107,7 @@ export function createDialogueTools(
   return [
     {
       name: 'get-dialogue-options',
+      title: 'Check Edit Dialogue availability',
       description:
         'Check whether the connected API supports timed-word Edit Dialogue. Does not transcribe, synthesize or generate.',
       inputSchema: {},
@@ -115,6 +116,7 @@ export function createDialogueTools(
     },
     {
       name: 'upload-dialogue-source',
+      title: 'Copy a video for Edit Dialogue',
       description:
         'Copy an accessible saved video into Sync storage when transcription rejects its external source URL. Returns a new asset; use its id as videoAssetId for transcription, preview, and final video generation. Does not transcribe or spend generation credits.',
       inputSchema: sourceSchema.shape,
@@ -148,6 +150,7 @@ export function createDialogueTools(
     },
     {
       name: 'create-dialogue-transcription',
+      title: 'Transcribe a video for Edit Dialogue',
       description:
         'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. If the API rejects external storage, call upload-dialogue-source and use its returned asset id for the rest of the workflow. Does not replace dialogue or generate a video.',
       inputSchema: sourceSchema.shape,
@@ -166,6 +169,7 @@ export function createDialogueTools(
     },
     {
       name: 'get-dialogue-transcription',
+      title: 'Check an Edit Dialogue transcription',
       description:
         'Read the same transcription job until complete. Requires its original saved video and accessible project.',
       inputSchema: sourceSchema.extend({ id: z.uuid() }).shape,
@@ -174,6 +178,7 @@ export function createDialogueTools(
     },
     {
       name: 'create-dialogue-preview',
+      title: 'Preview dialogue edits',
       description:
         'Preview timed word changes/removals in the original speaker’s voice. This is a synthesis action. Use a completed transcription, or a prior preview of this source when reopening. Confirm edits first. Persist an idempotencyKey before creating when get-dialogue-options advertises keyedPreview. Recover only through an explicit retry of identical input with that same key; never retry an ambiguous creation automatically. This is not arbitrary full-transcript replacement.',
       inputSchema: sourceSchema.extend({
@@ -227,6 +232,7 @@ export function createDialogueTools(
     },
     {
       name: 'get-dialogue-preview',
+      title: 'Check a dialogue edit preview',
       description:
         'Read one existing Edit Dialogue audio preview. Partial completion must be disclosed, not described as every edit succeeding.',
       inputSchema: sourceSchema.extend({ id: z.uuid() }).shape,
@@ -235,6 +241,7 @@ export function createDialogueTools(
     },
     {
       name: 'estimate-dialogue-video',
+      title: 'Estimate an edited dialogue video',
       description:
         'Estimate final video cost using the completed dialogue preview and canonical server retiming. Does not generate or reserve credits.',
       inputSchema: generationSchema.shape,
@@ -247,6 +254,7 @@ export function createDialogueTools(
     },
     {
       name: 'create-dialogue-video',
+      title: 'Create the edited dialogue video',
       description:
         'Generate the final video from an approved completed audio preview matching the current edits. Confirm the estimate first. Reuse the same idempotency key and inputs for recovery; poll generate_get-generation for the returned ID.',
       inputSchema: generationSchema.extend({

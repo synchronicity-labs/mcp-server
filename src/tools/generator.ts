@@ -102,7 +102,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
 
   return {
     name,
-    title: titleForToolName(name),
+    title: override?.title ?? titleForToolName(name),
     description,
     inputSchema,
     outputSchema: override?.outputSchema,
