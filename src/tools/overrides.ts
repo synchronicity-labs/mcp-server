@@ -104,7 +104,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   'generate_estimate-cost': {
     title: 'Estimate generation cost',
     description:
-      'Estimate Sync cost before generating. Supply model, duration in seconds, optional fps and reasoningEnabled. If the schema supports workflow=translate-and-dub, use it for both stages and show the returned breakdown; disclose excluded external provider charges. Otherwise this prices lip-sync only. Does not create jobs or reserve credits.',
+      'Estimate Sync cost before generating. For replacement speech, supply model and script (approximate spoken duration), or audioDuration (measured seconds once audio exists). These override duration; do not quote the full source video length for a shorter replacement script. For video cut_off or silence supply videoDuration and the selected syncMode; for images set visualType=image and omit videoDuration. Otherwise supply billable output duration in seconds, optional fps and reasoningEnabled. Explain returned durationEstimate, label script estimates approximate, and disclose that speech synthesis is excluded. If the schema supports workflow=translate-and-dub, use it for both stages and show the returned breakdown; disclose excluded external provider charges. Otherwise this prices lip-sync only. Does not create jobs or reserve credits.',
   },
   'generations_get-by-id': {
     description:
@@ -117,7 +117,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generations_estimate-cost': {
     description:
-      'Estimate the credit cost of a generation before creating it. Returns estimated credits.',
+      'Estimate generation cost before creating it. For replacement speech supply script for an approximate spoken-duration quote, or measured audioDuration once audio exists, instead of source video duration. For video cut_off or silence supply videoDuration and the selected syncMode; for images set visualType=image and omit videoDuration. Explain returned durationEstimate; speech synthesis is excluded. For translate-and-dub use source duration and disclose excluded external provider charges.',
   },
 
   // --- Projects (group generations + assets) ---
