@@ -1,5 +1,41 @@
 # ChatGPT frontend release
 
+## Connected account and project preview candidate
+
+Source: merged [sync-api-v2 #7404](https://github.com/synchronicity-labs/sync-api-v2/pull/7404)
+(project previews and generation counts) and [#7403](https://github.com/synchronicity-labs/sync-api-v2/pull/7403)
+(connected account and expired-session recovery), built at `dev` commit
+`d80d4aad852092b088ffd17ef66d6b26e0feed93`, tree `eaa6db833eb9fdb71015f130ee6656bc265cab19`.
+UI SHA256: `f0e460a9f17c477721b5c55476db9410c84779d1cf43908a041a57ceb017d352`
+(3,665,762 uncompressed bytes). Two clean builds with the recorded commands
+produced identical bytes. The ChatGPT bundle differs from production `main`
+(`4b9d1d61a0`, release #7405) only by these two PRs, and neither needs an API change.
+#7403's server half shipped in MCP #101.
+
+The oldest retained bundle, `c048cd48…`, moves to `deploy/chatgpt-retired/` so the
+catalog stays at one current plus eleven previous releases.
+
+Tool metadata for ChatGPT, with names, input schemas and annotations unchanged:
+
+- `get-asset-creators` is app-only (`ui.visibility: ['app']`). The asset creator
+  filter needs member emails, so they stay out of the model's context instead of
+  leaving the payload. Its description now states what it returns.
+- `projects_create` no longer points at `generate_create-generation`, which ChatGPT
+  can't call. A descriptor test fails if any hosted description or the server
+  instructions name a hidden generated tool.
+- `models_get` says that some listed models serve other workflows and only a
+  non-deprecated lipsync model works with `create-lipsync`.
+- Generated tools get written titles ("List projects", not "Projects Get All"),
+  `assets_count` and `assets_get-download-url` get real descriptions, and the
+  eight Edit Dialogue tools get titles.
+- `projects_get-all`, `assets_get-all` and `generate_get-generations` ask for a
+  small `limit` and filters; a default project page is about 26 KB because each
+  project embeds recent generations and assets. Result shapes are unchanged because
+  the widget and retained bundles parse them.
+
+The duplicated thumbnail rule in `assets_get-all` and `assets_get` stays, so
+clients that ignore server instructions still get it.
+
 ## Mounted Studio handoff candidate
 
 Source: merged [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227)

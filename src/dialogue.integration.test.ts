@@ -246,6 +246,8 @@ it.each([
       'openai/widgetAccessible'
     ],
   ).toBe(true);
+  for (const tool of tools.filter((candidate) => candidate.name.includes('dialogue')))
+    expect(tool.title, tool.name).toBeTruthy();
   expect((await call('create-dialogue-transcription', source)).isError).not.toBe(true);
   expect(calls.find((c) => c.path === '/v2/transcriptions')?.body).toEqual({
     sourceVideoUrl,
