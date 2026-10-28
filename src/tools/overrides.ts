@@ -99,7 +99,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   'generate_get-generations': {
     title: 'List generations',
     description:
-      'List recent generations for your organization to find generation ids or check status. Pass a small `limit`, or narrow with `projectId` or `status`; for one project, prefer projects_get-generations.',
+      'List recent generations for your organization to find generation ids or check status. Pass a small `limit`, or narrow with its filters; for the history of one project, prefer projects_get-generations when available.',
   },
   'generate_estimate-cost': {
     title: 'Estimate generation cost',
@@ -134,7 +134,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   projects_get: {
     title: 'Get a project',
     description:
-      'Get one accessible project by id. For its generation history, use projects_get-generations.',
+      'Get one accessible project by id. For its generation history, use projects_get-generations when available.',
   },
   projects_update: {
     description: "Update a project's name, description, visibility, or mode.",
