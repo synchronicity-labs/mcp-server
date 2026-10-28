@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
+import { estimateDurationInputs, resolveEstimateDuration } from './estimate-duration.js';
 import { getOverride } from './overrides.js';
 
 type McpToolBaseDefinition = {
@@ -94,6 +95,17 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
   const description = override?.description ?? truncate(operation.summary, 200);
 
   const inputSchema = buildInputSchema(operation);
+  const estimatesCost = ['generate_estimate-cost', 'generations_estimate-cost'].includes(name);
+  if (estimatesCost) {
+    if (inputSchema.duration) {
+      inputSchema.duration = inputSchema.duration
+        .optional()
+        .describe(
+          'Billable output seconds, or source seconds for translate-and-dub. For replacement speech, supply script or measured audioDuration instead. Never use the source video length for a shorter replacement script.',
+        );
+    }
+    Object.assign(inputSchema, estimateDurationInputs);
+  }
   if (name === 'voices_clone-voice') {
     // Flattening the API's allOf/oneOf alternatives makes both sources required.
     // Keep the descriptor flat, then enforce the exclusive choice before writing.
@@ -109,11 +121,24 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     annotations: deriveAnnotations(operation.method, name),
     handler: async (args, context) => {
       if (name === 'voices_clone-voice') voiceCloneSourceSchema.parse(args);
-      const path = buildPath(operation.path, args);
-      const query = buildQuery(operation.parameters, args);
-      const body = buildBody(operation, args);
+      const estimate = estimatesCost ? resolveEstimateDuration(args) : undefined;
+      const requestArgs = estimate?.args ?? args;
+      if (estimatesCost && inputSchema.duration && requestArgs.duration === undefined)
+        throw new Error('Supply duration, script or audioDuration for a cost estimate.');
+      const path = buildPath(operation.path, requestArgs);
+      const query = buildQuery(operation.parameters, requestArgs);
+      const body = buildBody(operation, requestArgs);
 
-      return httpClient.request(operation.method, path, { query, body, signal: context?.signal });
+      const result = await httpClient.request(operation.method, path, {
+        query,
+        body,
+        signal: context?.signal,
+      });
+      if (!estimate?.durationEstimate) return result;
+      return {
+        ...z.record(z.string(), z.unknown()).parse(result),
+        durationEstimate: estimate.durationEstimate,
+      };
     },
   };
 }
