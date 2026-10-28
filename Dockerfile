@@ -22,6 +22,7 @@ RUN apt-get update \
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/scripts/patch-mcp-sdk.mjs ./scripts/patch-mcp-sdk.mjs
 RUN npm ci --omit=dev
+COPY --from=build /app/scripts/check-mcp.mjs ./scripts/check-mcp.mjs
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/chatgpt-dist ./chatgpt-dist
 

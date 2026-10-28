@@ -4,13 +4,13 @@ import { Readable } from 'node:stream';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import * as tokenStore from './auth/token-store.js';
 import { resolveClientProfile } from './client-profile.js';
+import { HttpSession } from './http-session.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { UPLOAD_WIDGET_URI } from './tools/upload-widget.js';
 
@@ -81,13 +81,21 @@ async function connect(
   const client = new Client({ name, version: 'test' });
   connections.push(client);
   if (overHttp) {
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: randomUUID });
-    await server.connect(transport);
+    const session = new HttpSession(name, factory.createServer, () => {});
+    connections.push(session);
+    const id = randomUUID();
     const app = express();
     app.use(rateLimit({ windowMs: 60_000, limit: 1000 }));
     app.use(express.json());
     app.all('/mcp', async (req, res) => {
-      await runWithAuth(`token-${name}`, name, () => transport.handleRequest(req, res, req.body));
+      if (req.method === 'DELETE') {
+        await session.close();
+        res.status(200).end();
+        return;
+      }
+      const initialize = req.body?.method === 'initialize';
+      if (initialize) res.setHeader('Mcp-Session-Id', id);
+      await runWithAuth(`token-${name}`, name, () => session.handleRequest(req, res, initialize));
     });
     const http = app.listen(0, '127.0.0.1');
     await new Promise<void>((resolve) => http.once('listening', resolve));
@@ -107,7 +115,7 @@ async function connect(
     await server.connect(serverTransport);
     await client.connect(clientTransport);
   }
-  expect(onInitialized).toHaveBeenCalledOnce();
+  if (!overHttp) expect(onInitialized).toHaveBeenCalledOnce();
   return { client, server };
 }
 
