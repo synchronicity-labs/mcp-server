@@ -10,5 +10,6 @@
     "pnpm install:local --filter @sync/chatgpt...",
     "pnpm --filter '@sync/chatgpt^...' build",
     "pnpm --filter @sync/chatgpt build"
-  ]
+  ],
+  "sourcePullRequest": "https://github.com/synchronicity-labs/sync-api-v2/pull/7455"
 }

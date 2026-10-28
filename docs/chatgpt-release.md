@@ -2,7 +2,7 @@
 
 ## Project destination safety candidate
 
-Source commit `060dd77ee5b78aaf37a95ba464665e4d726bcdf2`, tree `1ecc50583dc64c64edd27d32f7f542259a8d72c7` (local source commit; publish it with the UI source change before release).
+Source commit `060dd77ee5b78aaf37a95ba464665e4d726bcdf2`, tree `1ecc50583dc64c64edd27d32f7f542259a8d72c7` ([UI source PR #7455](https://github.com/synchronicity-labs/sync-api-v2/pull/7455)).
 UI SHA256: `b7c35f1ba339e6c97dcea262730e5caa05b0a085df5481242f1c010f09439233` (3668003 uncompressed bytes).
 Two builds produced identical bytes. The updated transport declares explicit
 project selection on scoped writes; model context defaults new workflow requests
