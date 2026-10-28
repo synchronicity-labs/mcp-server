@@ -27,7 +27,13 @@ afterEach(async () => {
 });
 
 async function fixture(
-  options: { available?: boolean; status?: number; code?: string; dropResponse?: boolean } = {},
+  options: {
+    singleRead?: boolean;
+    available?: boolean;
+    status?: number;
+    code?: string;
+    dropResponse?: boolean;
+  } = {},
 ) {
   const calls: Array<{
     method: string;
@@ -44,6 +50,36 @@ async function fixture(
         JSON.stringify({
           openapi: '3.0.0',
           paths: {
+            '/v2/voices/{id}': {
+              parameters: [],
+              get:
+                options.singleRead === false
+                  ? undefined
+                  : {
+                      operationId: 'VoicesController_getVoice',
+                      tags: ['Voices'],
+                      parameters: [
+                        {
+                          name: 'id',
+                          in: 'path',
+                          required: true,
+                          schema: { type: 'string', format: 'uuid' },
+                        },
+                      ],
+                    },
+              delete: {
+                operationId: 'VoicesController_deleteVoice',
+                tags: ['Voices'],
+                parameters: [
+                  {
+                    name: 'id',
+                    in: 'path',
+                    required: true,
+                    schema: { type: 'string', format: 'uuid' },
+                  },
+                ],
+              },
+            },
             '/v2/voices': {
               get: { operationId: 'VoicesController_getVoices', tags: ['Voices'] },
               ...(options.available === false
@@ -93,11 +129,23 @@ async function fixture(
                       },
                     },
                   }),
-              delete: { operationId: 'VoicesController_deleteVoice', tags: ['Voices'] },
             },
           },
         }),
       );
+      return;
+    }
+    if (req.url === '/v2/oauth/account') {
+      res.end(
+        JSON.stringify({
+          account: { id: assetId, email: null, name: null },
+          organization: { id: projectId, name: 'Team', role: 'member' },
+        }),
+      );
+      return;
+    }
+    if (req.url === '/v2/plans/limits') {
+      res.end(JSON.stringify({ seats: 3, voiceClone: 5 }));
       return;
     }
     const chunks = [];
@@ -123,6 +171,18 @@ async function fixture(
           options.code
             ? { message: 'Voice request refused', errorCode: options.code }
             : { id: voiceId, voiceId: 'provider-id-not-the-sync-id', name: input.name },
+        ),
+      );
+    } else if (req.url === `/v2/voices/${voiceId}` && req.method === 'DELETE') {
+      cloned = false;
+      res.end('true');
+    } else if (req.url === `/v2/voices/${voiceId}`) {
+      if (!cloned) res.statusCode = 404;
+      res.end(
+        JSON.stringify(
+          cloned
+            ? { id: voiceId, name: input.name, provider: 'elevenlabs' }
+            : { message: 'Voice not found' },
         ),
       );
     } else if (req.url === '/v2/voices') {
@@ -160,7 +220,7 @@ async function fixture(
   return { client, calls, call };
 }
 
-it('advertises voice creation as a non-idempotent external write, without enabling deletion', async () => {
+it('advertises voice creation and explicit destructive deletion', async () => {
   const { client } = await fixture();
   const tools = (await client.listTools()).tools;
   const clone = tools.find((tool) => tool.name === 'voices_clone-voice');
@@ -172,12 +232,17 @@ it('advertises voice creation as a non-idempotent external write, without enabli
   });
   expect(clone?._meta?.securitySchemes).toEqual([{ type: 'oauth2', scopes: [] }]);
   expect(clone?.inputSchema.required).toEqual(['name', 'provider']);
-  expect(tools.some((tool) => tool.name === 'voices_delete-voice')).toBe(false);
+  expect(tools.find((tool) => tool.name === 'voices_delete-voice')?.annotations).toMatchObject({
+    readOnlyHint: false,
+    destructiveHint: true,
+  });
 });
 
 it('clones once from a saved sample and reuses the internal id for script generation', async () => {
-  const { calls, call } = await fixture();
+  const { client, calls, call } = await fixture();
   const result = await call('voices_clone-voice', input);
+  const tool = (await client.listTools()).tools.find((item) => item.name === 'voices_clone-voice');
+  expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toMatchObject({ id: voiceId, name: input.name });
   await call('voices_get-voices', {});
@@ -293,4 +358,33 @@ it('does not advertise cloning when the connected API has no clone operation', a
     false,
   );
   expect(calls).toHaveLength(0);
+});
+
+it('deletes one canonical voice id through the authenticated boundary and observes its absence', async () => {
+  const { calls, call } = await fixture();
+  await call('voices_clone-voice', input);
+  expect((await call('voices_get-voice', { id: voiceId })).isError).not.toBe(true);
+  const deleted = await call('voices_delete-voice', {
+    id: voiceId,
+    organizationId: 'untrusted',
+    providerVoiceId: 'untrusted',
+  });
+  expect(deleted.isError).not.toBe(true);
+  expect(calls.find((item) => item.method === 'DELETE')).toMatchObject({
+    path: `/v2/voices/${voiceId}`,
+    auth: 'Bearer fixture-account-token',
+    body: undefined,
+  });
+  expect((await call('voices_get-voice', { id: voiceId })).isError).toBe(true);
+  expect(calls.filter((item) => item.method === 'DELETE')).toHaveLength(1);
+});
+
+it.each([
+  true,
+  false,
+])('advertises deletion only with the single-voice recovery read available: %s', async (singleRead) => {
+  const { call } = await fixture({ singleRead });
+  expect((await call('get-account-context', {})).structuredContent).toMatchObject({
+    capabilities: { voiceDeletion: singleRead },
+  });
 });

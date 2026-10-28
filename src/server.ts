@@ -29,8 +29,14 @@ import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
+import { createGenerationFeedbackTools } from './tools/generation-feedback.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
+import {
+  createPlatformImportTools,
+  isPlatformImportOperation,
+  supportsPlatformImports,
+} from './tools/platform-import.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
@@ -69,6 +75,13 @@ const APP_UI_TOOLS = new Set([
   'ack-studio-view',
 ]);
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'detect-platform-link',
+  'get-platform-link-metadata',
+  'start-platform-import',
+  'get-platform-import',
+  'list-platform-imports',
+  'cancel-platform-import',
+  'retry-platform-import',
   'get-studio-view',
   'open-studio-project',
   'refresh-studio-project',
@@ -81,6 +94,8 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'update-studio-draft',
   'save-studio-draft',
   'ack-studio-draft',
+  'get-generation-feedback',
+  'submit-generation-feedback',
   'get-account-usage',
   'rename-project',
   'get-account-context',
@@ -109,6 +124,8 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'create-translation-preview',
   'get-translation-preview',
   'voices_get-voices',
+  'voices_get-voice',
+  'voices_delete-voice',
   'voices_clone-voice',
   'generate_get-generation',
   'models_get',
@@ -128,6 +145,13 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'detect-platform-link',
+  'get-platform-link-metadata',
+  'start-platform-import',
+  'get-platform-import',
+  'list-platform-imports',
+  'cancel-platform-import',
+  'retry-platform-import',
   'get-studio-view',
   'open-studio-project',
   'refresh-studio-project',
@@ -140,6 +164,11 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'update-studio-draft',
   'save-studio-draft',
   'ack-studio-draft',
+  'get-generation-feedback',
+  'submit-generation-feedback',
+  'voices_clone-voice',
+  'voices_get-voice',
+  'voices_delete-voice',
   'get-account-usage',
   'rename-project',
   'get-account-context',
@@ -166,6 +195,8 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'create-translation-preview',
   'get-translation-preview',
   'voices_get-voices',
+  'voices_get-voice',
+  'voices_delete-voice',
   'generate_get-generation',
   'models_get',
   'projects_get-all',
@@ -443,6 +474,7 @@ function createTools(
   const generatedOperations = operations.filter(
     (operation) =>
       translationPreviewOperations([operation]).length === 0 &&
+      !isPlatformImportOperation(operation) &&
       operation.studioDraftVersion !== 1 &&
       operation.studioViewVersion !== 1,
   );
@@ -468,9 +500,16 @@ function createTools(
       httpClient,
       supportsStudioDrafts(operations),
       supportsStudioViews(operations),
+      generatedTools.some((tool) => tool.name === 'voices_clone-voice'),
+      ['voices_get-voice', 'voices_delete-voice'].every((name) =>
+        generatedTools.some((tool) => tool.name === name),
+      ),
+      supportsPlatformImports(operations),
     ),
     ...createStudioViewTools(operations, httpClient),
     ...createStudioDraftTools(operations, httpClient),
+    ...createGenerationFeedbackTools(httpClient),
+    ...createPlatformImportTools(operations, httpClient),
     ...createAccountManagementTools(httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
@@ -655,6 +694,7 @@ export async function createMcpServerFactory(
       translationPreviewOperations([operation]).length > 0 ||
       dialogueOperations([operation]).length > 0 ||
       speechOperations([operation]).length > 0 ||
+      isPlatformImportOperation(operation) ||
       operation.studioDraftVersion === 1 ||
       operation.studioViewVersion === 1,
   );

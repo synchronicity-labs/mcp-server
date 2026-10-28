@@ -114,7 +114,13 @@ it('projects the authenticated account and keeps API-key identity null across th
               : account,
         organization: token === 'unnamed-user' ? { ...organization, name: null } : organization,
         limits: { seats: 3, voiceClone: 5 },
-        capabilities: { projectRenaming: true },
+        capabilities: {
+          projectRenaming: true,
+          embeddedVoiceCloning: false,
+          voiceDeletion: false,
+          platformImports: false,
+          generationFeedback: true,
+        },
       });
       expect(JSON.stringify(result)).not.toContain('must-not-leak');
       const members = await runWithAuth(token, 'openai-mcp', () =>

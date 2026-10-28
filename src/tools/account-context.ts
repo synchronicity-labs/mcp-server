@@ -17,6 +17,10 @@ const accountContext = z.object({
     projectRenaming: z.literal(true),
     studioDraftSync: z.literal(true).optional(),
     studioViewSync: z.literal(true).optional(),
+    embeddedVoiceCloning: z.boolean(),
+    voiceDeletion: z.boolean(),
+    platformImports: z.boolean(),
+    generationFeedback: z.literal(true),
   }),
 });
 
@@ -24,6 +28,9 @@ export function createAccountContextTool(
   http: HttpClient,
   studioDraftSync = false,
   studioViewSync = false,
+  embeddedVoiceCloning = false,
+  voiceDeletion = false,
+  platformImports = false,
 ): McpToolDefinition {
   return {
     name: 'get-account-context',
@@ -58,6 +65,10 @@ export function createAccountContextTool(
         ...(limits === undefined ? {} : { limits }),
         capabilities: {
           projectRenaming: true,
+          embeddedVoiceCloning,
+          voiceDeletion,
+          platformImports,
+          generationFeedback: true,
           ...(studioDraftSync ? { studioDraftSync: true } : {}),
           ...(studioViewSync ? { studioViewSync: true } : {}),
         },

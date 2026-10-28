@@ -19,7 +19,7 @@ assert.deepEqual(
 );
 assert(
   releases.length > 0 && releases.length <= MAX_PREVIOUS_CHATGPT_RELEASES + 1,
-  'Package one current and at most eleven retained releases.',
+  'Package one current and at most twelve retained releases.',
 );
 // Rebuilding after pruning a retained release must not carry stale output forward.
 await rm(output, { recursive: true, force: true });

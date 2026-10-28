@@ -14,6 +14,7 @@ const ALLOWED_TAGS = new Set([
   'transcriptions',
   'dialogue edits',
   'dubbing',
+  'platform import',
 ]);
 
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
