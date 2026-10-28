@@ -27,6 +27,7 @@ import {
   oauthRequestDiagnostics,
 } from './auth/oauth-diagnostics.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
+import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import type { SyncMcpConfig } from './config.js';
 import { readOAuthResponseText } from './oauth-response.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
@@ -542,8 +543,10 @@ export async function startHttpServer(
   );
 
   // MCP endpoint — requires valid Bearer token, rate limited
-  const resourceMetadataUrl = new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href;
-  const bearerAuth = requireBearerAuth({ verifier: oauthProvider, resourceMetadataUrl });
+  const bearerAuth = requireBearerAuth({
+    verifier: oauthProvider,
+    resourceMetadataUrl: resourceMetadataUrl(config.port),
+  });
   const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
 
   const sessionRuntimeConfig = getSessionRuntimeConfig();

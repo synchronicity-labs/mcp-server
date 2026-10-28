@@ -11,6 +11,7 @@ import { relayUploadTool } from './app-upload-relay.js';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from './asset-thumbnail.js';
 import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
+import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { loadToken } from './auth/token-store.js';
 import { type ChatgptApp, createOpenSyncAppTool, loadChatgptAppReleases } from './chatgpt-app.js';
 import {
@@ -220,7 +221,11 @@ function toolSchema(shape: Record<string, z.ZodType>): z.ZodObject {
   return schema;
 }
 
-export function registerTools(server: McpServer, tools: McpToolDefinition[]): void {
+export function registerTools(
+  server: McpServer,
+  tools: McpToolDefinition[],
+  authMetadataUrl?: string,
+): void {
   for (const tool of tools) {
     server.registerTool(
       tool.name,
@@ -240,14 +245,14 @@ export function registerTools(server: McpServer, tools: McpToolDefinition[]): vo
           const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
           return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
-          return createToolErrorResult(error);
+          return createToolErrorResult(error, authMetadataUrl);
         }
       },
     );
   }
 }
 
-export function createToolErrorResult(error: unknown): CallToolResult {
+export function createToolErrorResult(error: unknown, authMetadataUrl?: string): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ApiRequestError) {
     const structuredContent = {
@@ -268,6 +273,15 @@ export function createToolErrorResult(error: unknown): CallToolResult {
       ],
       structuredContent,
       isError: true,
+      ...(error.status === 401 && authMetadataUrl
+        ? {
+            _meta: {
+              'mcp/www_authenticate': [
+                `Bearer resource_metadata="${authMetadataUrl}", error="invalid_token", error_description="Reconnect your Sync account to continue"`,
+              ],
+            },
+          }
+        : {}),
     };
   }
   const retryableError =
@@ -530,6 +544,7 @@ function createProfiledServer(
           },
         }) as McpToolDefinition,
     ),
+    config.transport === 'http' ? resourceMetadataUrl(config.port) : undefined,
   );
   const resources: Resource[] = [];
   registerUploadWidgetResource({
@@ -609,6 +624,7 @@ function createProfiledServer(
           : {}),
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
+        securitySchemes: tool.meta?.securitySchemes ?? TOOL_SECURITY_SCHEMES,
       }));
       sharedCatalog?.descriptors.set(initializedProfile.name, descriptors);
     }

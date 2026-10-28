@@ -2,6 +2,7 @@ node_modules/
 chatgpt-dist/
 dist/
 .cache/
+temp/
 *.tsbuildinfo
 .env
 .DS_Store
