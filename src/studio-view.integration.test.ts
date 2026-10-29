@@ -117,7 +117,14 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
         openWorldHint: false,
       });
       expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(
-        [...Object.keys(fields), 'viewId', 'id', 'expectedRevision', 'projectIntent'].sort(),
+        [
+          ...Object.keys(fields),
+          'viewId',
+          'id',
+          'expectedRevision',
+          'projectIntent',
+          'syncAnalytics',
+        ].sort(),
       );
       const input = { viewId, id, expectedRevision: 1, ...fields };
       for (let attempt = 0; attempt < 2; attempt++) {

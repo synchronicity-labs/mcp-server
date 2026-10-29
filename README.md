@@ -736,3 +736,23 @@ See [MCP availability](docs/mcp-availability.md) for credential lifecycle, exit
 codes, alert thresholds and rollout verification. `/health` remains liveness only.
 
 HTTP session IDs retain only isolation metadata; SDK servers and transports close after each request. See [session lifecycle and stateless compatibility](docs/session-lifecycle.md).
+
+### Actual costs of past generations
+
+When the connected Sync API supports `GET /v2/generate/:id/costs`, the server
+exposes `get-generation-costs` to ChatGPT and other supported MCP clients.
+Pass `{ "generationId": "<Sync generation UUID>" }`, using the ID from creation
+or generation history. This is a read-only call under the connected account.
+
+The result separates dubbing and lip-sync charges. Prepaid amounts are credits
+actually consumed and their USD face value, not an allocated card payment.
+Metered amounts are recorded usage charges, excluding invoice adjustments and tax.
+For pending or incomplete history, `totalCostUsd` is null and
+`knownSubtotalUsd` is only the known part. Unlinked speech synthesis is explicitly
+unavailable, and external provider charges are excluded. The tool never estimates
+or generates media to answer a past-cost question.
+
+Deploy the API and its ID-filtered Tinybird dubbing pipe before releasing the
+MCP change, then restart the MCP service so it reloads public OpenAPI capabilities.
+Refresh the ChatGPT connection's tool catalog and verify in a fresh conversation.
+An API without the operation does not advertise the tool.

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
+import { getToolAnalytics } from './chatgpt-analytics.js';
 
 /** API-key analytics labels; bearer credentials use the API's MCP source namespace. */
 const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
@@ -102,6 +103,7 @@ export function createHttpClient(
           ...authHeaders,
           'x-sync-source': syncSource,
           ...options.headers,
+          ...(getToolAnalytics() && { 'x-sync-analytics': JSON.stringify(getToolAnalytics()) }),
         };
 
         if (options.body && method !== 'get') {

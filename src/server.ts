@@ -13,6 +13,7 @@ import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { loadToken } from './auth/token-store.js';
+import { createAnalyticsTool, trackToolExecution, uiAnalyticsSchema } from './chatgpt-analytics.js';
 import { type ChatgptApp, createOpenSyncAppTool, loadChatgptAppReleases } from './chatgpt-app.js';
 import {
   type ClientProfile,
@@ -27,8 +28,10 @@ import { createAccountContextTool } from './tools/account-context.js';
 import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
+import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
+import { createGenerationCostsTools, generationCostsOperation } from './tools/generation-costs.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
@@ -49,10 +52,14 @@ const SERVER_DESCRIPTION =
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 export const SERVER_INSTRUCTIONS =
+  'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. ' +
+  'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ' +
   ASSET_THUMBNAIL_INSTRUCTIONS +
   'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new create-lipsync or create-translate-and-dub calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ' +
+  'For what a past generation actually cost, use get-generation-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lip sync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generate_estimate-cost or start a paid generation to answer a past-cost question. ' +
   'In ChatGPT, default new lipsync and image-to-video requests to sync-3, the latest lipsync model, unless the user explicitly chooses another model. Preserve the selected model on an existing draft or an idempotent retry. ' +
   'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
+  'When trim-audio is available, offer prefix audio preparation for an over-limit lip-sync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lip-sync uses cut_off and preserves the original media. ' +
   'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
   'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
   'For a request such as “Translate this YouTube link to Spanish”, first call assets_create with the social URL, type=VIDEO and the selected projectId. YouTube, TikTok, Instagram and Facebook video links are imported into saved assets. A 409 import_in_progress means the import is running: wait retryAfterMs (15 seconds if absent), then repeat the identical assets_create request until it returns an asset. Keep the URL and project unchanged; do not submit a generation while importing or treat importJobId as an asset ID. On import_failed, import_not_enabled, import_unavailable or an import limit error, explain the returned reason and stop; offer a file upload instead of repeatedly starting imports. Once ready, estimate and confirm the paid translation before calling create-translate-and-dub when available with the returned asset id as videoAssetId. ' +
@@ -66,6 +73,7 @@ export const SERVER_INSTRUCTIONS =
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
+  'track-chatgpt-event',
   'open-sync-app',
   'save-studio-draft',
   'ack-studio-draft',
@@ -73,6 +81,7 @@ const APP_UI_TOOLS = new Set([
   'ack-studio-view',
 ]);
 const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  'track-chatgpt-event',
   'get-studio-view',
   'open-studio-project',
   'refresh-studio-project',
@@ -86,6 +95,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'save-studio-draft',
   'ack-studio-draft',
   'get-account-usage',
+  'get-generation-costs',
   'rename-project',
   'get-account-context',
   'get-asset-creators',
@@ -112,6 +122,8 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'estimate-translation-preview',
   'create-translation-preview',
   'get-translation-preview',
+  'trim-audio',
+  'get-audio-trim',
   'voices_get-voices',
   'voices_clone-voice',
   'generate_get-generation',
@@ -132,6 +144,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_estimate-cost',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'track-chatgpt-event',
   'get-studio-view',
   'open-studio-project',
   'refresh-studio-project',
@@ -145,6 +158,7 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'save-studio-draft',
   'ack-studio-draft',
   'get-account-usage',
+  'get-generation-costs',
   'rename-project',
   'get-account-context',
   'get-asset-creators',
@@ -169,6 +183,8 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'estimate-translation-preview',
   'create-translation-preview',
   'get-translation-preview',
+  'trim-audio',
+  'get-audio-trim',
   'voices_get-voices',
   'generate_get-generation',
   'models_get',
@@ -191,10 +207,15 @@ const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
 export function createToolDescriptorMeta(
   meta: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  return {
+  const descriptorMeta: Record<string, unknown> = {
     ...meta,
     securitySchemes: meta?.securitySchemes ?? TOOL_SECURITY_SCHEMES,
   };
+  for (const key of ['openai/toolInvocation/invoking', 'openai/toolInvocation/invoked']) {
+    const text = descriptorMeta[key];
+    if (typeof text === 'string') descriptorMeta[key] = text.toLowerCase();
+  }
+  return descriptorMeta;
 }
 
 // SDK clients validate structured errors too. Retained widgets require this
@@ -219,6 +240,22 @@ const toolErrorOutputSchema = z.toJSONSchema(
 
 // The SDK wraps raw shapes on registration. Reuse immutable validators across
 // sessions while keeping handlers, authentication and client profiles local.
+const toolInputSchemas = new WeakMap<Record<string, z.ZodType>, z.ZodObject>();
+
+function toolInputSchema(shape: Record<string, z.ZodType>): z.ZodObject {
+  let schema = toolInputSchemas.get(shape);
+  if (!schema) {
+    schema = z.object({
+      ...shape,
+      syncAnalytics: uiAnalyticsSchema
+        .optional()
+        .describe('Private UI instrumentation. Omit when calling from conversation.'),
+    });
+    toolInputSchemas.set(shape, schema);
+  }
+  return schema;
+}
+
 const toolSchemas = new WeakMap<Record<string, z.ZodType>, z.ZodObject>();
 
 function toolSchema(shape: Record<string, z.ZodType>): z.ZodObject {
@@ -239,9 +276,9 @@ export function registerTools(
     server.registerTool(
       tool.name,
       {
-        title: tool.title,
+        title: tool.title?.toLowerCase(),
         description: tool.description,
-        inputSchema: toolSchema(tool.inputSchema),
+        inputSchema: toolInputSchema(tool.inputSchema),
         outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
@@ -296,7 +333,11 @@ export function createToolErrorResult(error: unknown, authMetadataUrl?: string):
   }
   const retryableError =
     error && typeof error === 'object'
-      ? (error as { code?: unknown; retryable?: unknown; retryAfterMs?: unknown })
+      ? (error as {
+          code?: unknown;
+          retryable?: unknown;
+          retryAfterMs?: unknown;
+        })
       : {};
   if (
     typeof retryableError.code === 'string' &&
@@ -452,9 +493,12 @@ function createTools(
   // These operations require the durable wrapper's admission key and public projection.
   const generatedOperations = operations.filter(
     (operation) =>
+      operation.operationId !== 'analytics_captureChatgptEvent' &&
       translationPreviewOperations([operation]).length === 0 &&
+      !operation.path.startsWith('/v2/audio-trims') &&
       operation.studioDraftVersion !== 1 &&
-      operation.studioViewVersion !== 1,
+      operation.studioViewVersion !== 1 &&
+      !generationCostsOperation(operation),
   );
   const generatedTools = generateTools(
     config.transport === 'http'
@@ -464,7 +508,11 @@ function createTools(
       : generatedOperations,
     httpClient,
   );
+  const analyticsAvailable = operations.some(
+    (operation) => operation.operationId === 'analytics_captureChatgptEvent',
+  );
   const allTools = [
+    ...(analyticsAvailable ? [createAnalyticsTool(httpClient)] : []),
     ...(chatgptApp
       ? [
           createOpenSyncAppTool(
@@ -478,10 +526,13 @@ function createTools(
       httpClient,
       supportsStudioDrafts(operations),
       supportsStudioViews(operations),
+      supportsAudioTrimming(operations),
+      analyticsAvailable,
     ),
     ...createStudioViewTools(operations, httpClient),
     ...createStudioDraftTools(operations, httpClient),
     ...createAccountManagementTools(httpClient),
+    ...createGenerationCostsTools(operations, httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),
@@ -489,6 +540,7 @@ function createTools(
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
     ...createTranslationPreviewTools(operations, httpClient),
+    ...createAudioTrimTools(operations, httpClient),
     ...createDialogueTools(operations, httpClient),
     ...createSpeechTools(operations, httpClient),
     ...generatedTools.map((tool) =>
@@ -552,7 +604,18 @@ function createProfiledServer(
             ) {
               throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
             }
-            return tool.handler(args, { ...parameters[1], clientProfile: profile });
+            return trackToolExecution(
+              tool.name,
+              args,
+              parameters[1]?._meta,
+              profile.name,
+              httpClient,
+              (businessArgs) =>
+                tool.handler(businessArgs, { ...parameters[1], clientProfile: profile }),
+              operations.some(
+                (operation) => operation.operationId === 'analytics_captureChatgptEvent',
+              ),
+            );
           },
         }) as McpToolDefinition,
     ),
@@ -623,9 +686,9 @@ function createProfiledServer(
               .map((tool) => presentTool(tool, initializedProfile));
       descriptors = visible.map((tool) => ({
         name: tool.name,
-        title: tool.title,
+        title: tool.title?.toLowerCase(),
         description: tool.description,
-        inputSchema: z.toJSONSchema(z.object(tool.inputSchema)) as Tool['inputSchema'],
+        inputSchema: z.toJSONSchema(toolInputSchema(tool.inputSchema)) as Tool['inputSchema'],
         ...(tool.outputSchema
           ? {
               outputSchema: {
@@ -663,9 +726,13 @@ export async function createMcpServerFactory(
   // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
+      operation.operationId === 'analytics_captureChatgptEvent' ||
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
+      generationCostsOperation(operation) ||
       translationOperation([operation]) !== undefined ||
       translationPreviewOperations([operation]).length > 0 ||
+      operation.path === '/v2/audio-trims' ||
+      operation.path === '/v2/audio-trims/{id}' ||
       dialogueOperations([operation]).length > 0 ||
       speechOperations([operation]).length > 0 ||
       operation.studioDraftVersion === 1 ||
@@ -680,7 +747,10 @@ export async function createMcpServerFactory(
   );
 
   // Four presentation profiles at most; never key this by untrusted client names.
-  const sharedCatalog = { tools, descriptors: new Map<ClientProfile['name'], Tool[]>() };
+  const sharedCatalog = {
+    tools,
+    descriptors: new Map<ClientProfile['name'], Tool[]>(),
+  };
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: new Set(tools.map((tool) => tool.name)).size,

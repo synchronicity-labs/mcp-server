@@ -4,7 +4,11 @@ import type { McpToolDefinition } from './generator.js';
 
 const accountContext = z.object({
   account: z
-    .object({ id: z.uuid(), email: z.string().nullable(), name: z.string().nullable() })
+    .object({
+      id: z.uuid(),
+      email: z.string().nullable(),
+      name: z.string().nullable(),
+    })
     .nullable(),
   limits: z
     .object({
@@ -12,11 +16,17 @@ const accountContext = z.object({
       voiceClone: z.number().finite().nonnegative(),
     })
     .optional(),
-  organization: z.object({ id: z.uuid(), name: z.string().nullable(), role: z.string() }),
+  organization: z.object({
+    id: z.uuid(),
+    name: z.string().nullable(),
+    role: z.string(),
+  }),
   capabilities: z.object({
     projectRenaming: z.literal(true),
+    chatgptAnalytics: z.literal(true).optional(),
     studioDraftSync: z.literal(true).optional(),
     studioViewSync: z.literal(true).optional(),
+    audioTrimming: z.literal(true).optional(),
   }),
 });
 
@@ -24,6 +34,8 @@ export function createAccountContextTool(
   http: HttpClient,
   studioDraftSync = false,
   studioViewSync = false,
+  audioTrimming = false,
+  chatgptAnalytics = false,
 ): McpToolDefinition {
   return {
     name: 'get-account-context',
@@ -39,10 +51,14 @@ export function createAccountContextTool(
       openWorldHint: false,
     },
     handler: async (_args, context) => {
-      const identity = await http.request('get', '/v2/oauth/account', { signal: context?.signal });
+      const identity = await http.request('get', '/v2/oauth/account', {
+        signal: context?.signal,
+      });
       let limits: unknown;
       try {
-        limits = await http.request('get', '/v2/plans/limits', { signal: context?.signal });
+        limits = await http.request('get', '/v2/plans/limits', {
+          signal: context?.signal,
+        });
       } catch (error) {
         context?.signal?.throwIfAborted();
         // A limits outage must not erase verified identity; expired credentials still need linking.
@@ -58,8 +74,12 @@ export function createAccountContextTool(
         ...(limits === undefined ? {} : { limits }),
         capabilities: {
           projectRenaming: true,
+          ...(chatgptAnalytics && context?.clientProfile?.name === 'chatgpt'
+            ? { chatgptAnalytics: true }
+            : {}),
           ...(studioDraftSync ? { studioDraftSync: true } : {}),
           ...(studioViewSync ? { studioViewSync: true } : {}),
+          ...(audioTrimming ? { audioTrimming: true } : {}),
         },
       });
     },
