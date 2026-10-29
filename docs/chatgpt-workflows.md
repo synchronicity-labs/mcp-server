@@ -98,9 +98,10 @@ HTML plus source-commit and SHA-256 provenance; the loader verifies the bytes.
 The resource CSP permits the bundled data font and no external connections.
 The MCP image and npm package carry this artifact independently of Studio's bundle.
 Deploy MCP and refresh the ChatGPT publisher/tool metadata so existing cached
-descriptors acquire the resource link. The embedded Studio's corresponding
-status card ships through its normal frontend bundle release. Local protocol
-and browser fixtures do not establish deployment or live ChatGPT rendering.
+descriptors acquire the resource link. The card appears in chat for conversational
+submissions only. Embedded Studio keeps its existing progress overlay and result
+controls without this card. Local protocol and browser fixtures do not establish
+deployment or live ChatGPT rendering.
 
 ## Verification and batch release
 
