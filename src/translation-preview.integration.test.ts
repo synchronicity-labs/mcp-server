@@ -201,7 +201,9 @@ async function fixture({
   cleanups.push(() => client.close());
   await client.connect(ct);
   const call = (name: string, args: Record<string, unknown>) =>
-    runWithAuth('translation-user', 'openai-mcp', () => client.callTool({ name, arguments: args }));
+    runWithAuth('translation-user', 'openai-mcp', () =>
+      client.callTool({ name, arguments: { ...args, projectIntent: 'explicit' } }),
+    );
   return {
     client,
     call,

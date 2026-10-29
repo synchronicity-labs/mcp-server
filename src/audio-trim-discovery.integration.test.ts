@@ -117,6 +117,25 @@ it.each([
       expect(writes).toEqual([
         { key: id, body: JSON.stringify({ durationSeconds: 15, assetId: id }) },
       ]);
+      const scoped = { audioAssetId: id, projectId: id, durationSeconds: 15, idempotencyKey: id };
+      const refused = await runWithAuth('trim-user', 'openai-mcp', () =>
+        client.callTool({ name: 'trim-audio', arguments: scoped }),
+      );
+      expect(refused.structuredContent).toMatchObject({
+        error: { code: 'PROJECT_INTENT_REQUIRED' },
+      });
+      expect(writes).toHaveLength(1);
+      const selected = await runWithAuth('trim-user', 'openai-mcp', () =>
+        client.callTool({
+          name: 'trim-audio',
+          arguments: { ...scoped, projectIntent: 'explicit' },
+        }),
+      );
+      expect(selected.isError).not.toBe(true);
+      expect(writes[1]).toEqual({
+        key: id,
+        body: JSON.stringify({ projectId: id, durationSeconds: 15, assetId: id }),
+      });
     } else expect(account.structuredContent).not.toHaveProperty('capabilities.audioTrimming');
   } finally {
     await client.close();

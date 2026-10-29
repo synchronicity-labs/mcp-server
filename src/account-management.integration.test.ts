@@ -93,7 +93,9 @@ afterAll(async () => {
   await new Promise<void>((resolve) => upstream.close(() => resolve()));
 });
 function call(token: string, name: string, args: Record<string, unknown> = {}) {
-  return runWithAuth(token, 'openai-mcp', () => client.callTool({ name, arguments: args }));
+  return runWithAuth(token, 'openai-mcp', () =>
+    client.callTool({ name, arguments: { ...args, projectIntent: 'explicit' } }),
+  );
 }
 
 it.each([

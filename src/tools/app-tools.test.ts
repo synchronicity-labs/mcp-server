@@ -15,12 +15,10 @@ describe('createAppTools — create-lipsync', () => {
   // Mock the asset pipeline + generation endpoints. /v2/assets returns a fresh
   // id per call so re-hosted inputs are distinguishable in the generate body.
   function setup({
-    projects = [{ id: 'project-chatgpt', name: 'ChatGPT generations' }],
     runtime,
     clientName = 'chatgpt',
   }: {
     clientName?: string;
-    projects?: Array<{ id: string; name: string | null }>;
     runtime?: UploadRuntime;
   } = {}) {
     let assetSeq = 0;
@@ -36,9 +34,6 @@ describe('createAppTools — create-lipsync', () => {
         if (path === '/v2/assets') {
           assetSeq += 1;
           return { id: `asset-${assetSeq}` };
-        }
-        if (method === 'get' && path === '/v2/projects') {
-          return { items: projects };
         }
         if (method === 'post' && path === '/v2/projects') {
           const body = options?.body as { name?: string } | undefined;
@@ -561,7 +556,7 @@ describe('createAppTools — create-lipsync', () => {
           { type: 'video', url: 'https://x/v.mp4' },
           { type: 'audio', url: 'https://x/a.wav' },
         ],
-        projectId: 'project-chatgpt',
+        projectId: 'project-created',
       },
     });
   });
@@ -610,95 +605,15 @@ describe('createAppTools — create-lipsync', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('reuses the default ChatGPT project when it already exists', async () => {
-    const { tool, request } = setup();
+  it.each([
+    ['chatgpt', 'ChatGPT generations'],
+    ['claude-ai', 'Claude generations'],
+  ])('creates a new project with the %s default name', async (clientName, name) => {
+    const { tool, request } = setup({ clientName });
     await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
-
-    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
-      query: {
-        searchQuery: 'ChatGPT generations',
-        sortBy: 'name',
-        limit: '100',
-      },
-    });
-    expect(
-      request.mock.calls.some(([method, path]) => method === 'post' && path === '/v2/projects'),
-    ).toBe(false);
-    expect(lastGenerateBody(request).projectId).toBe('project-chatgpt');
-  });
-
-  it('creates the default ChatGPT project when it does not exist', async () => {
-    const { tool, request } = setup({ projects: [] });
-    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
-
     expect(request).toHaveBeenCalledWith('post', '/v2/projects', {
-      body: { name: 'ChatGPT generations' },
-    });
-    expect(lastGenerateBody(request).projectId).toBe('project-created');
-  });
-
-  it('uses a Claude-specific default project for Claude clients', async () => {
-    const { tool, request } = setup({
-      clientName: 'claude-ai',
-      projects: [{ id: 'project-claude', name: 'Claude generations' }],
-    });
-
-    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
-
-    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
-      query: {
-        searchQuery: 'Claude generations',
-        sortBy: 'name',
-        limit: '100',
-      },
-    });
-    expect(lastGenerateBody(request).projectId).toBe('project-claude');
-  });
-
-  it('uses a Claude-specific default project for Claude stdio clients', async () => {
-    const { tool, request } = setup({
-      clientName: 'claude-ai',
-      projects: [{ id: 'project-claude', name: 'Claude generations' }],
-    });
-
-    await tool.handler({ videoUrl: 'https://x/v.mp4', audioUrl: 'https://x/a.wav' });
-
-    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
-      query: {
-        searchQuery: 'Claude generations',
-        sortBy: 'name',
-        limit: '100',
-      },
-    });
-    expect(lastGenerateBody(request).projectId).toBe('project-claude');
-  });
-
-  it('reuses a user-requested project name instead of the ChatGPT default', async () => {
-    const { tool, request } = setup({
-      projects: [{ id: 'project-campaign', name: 'Campaign launch' }],
-    });
-    await tool.handler({
-      videoUrl: 'https://x/v.mp4',
-      audioUrl: 'https://x/a.wav',
-      projectName: 'Campaign launch',
-    });
-
-    expect(request).toHaveBeenCalledWith('get', '/v2/projects', {
-      query: { searchQuery: 'Campaign launch', sortBy: 'name', limit: '100' },
-    });
-    expect(lastGenerateBody(request).projectId).toBe('project-campaign');
-  });
-
-  it('creates a user-requested project name when it does not exist', async () => {
-    const { tool, request } = setup({ projects: [] });
-    await tool.handler({
-      videoUrl: 'https://x/v.mp4',
-      audioUrl: 'https://x/a.wav',
-      projectName: 'Campaign launch',
-    });
-
-    expect(request).toHaveBeenCalledWith('post', '/v2/projects', {
-      body: { name: 'Campaign launch' },
+      signal: undefined,
+      body: { name, defaultWorkflow: 'lipsync' },
     });
     expect(lastGenerateBody(request).projectId).toBe('project-created');
   });
@@ -744,7 +659,7 @@ describe('createAppTools — create-lipsync', () => {
             },
           },
         ],
-        projectId: 'project-chatgpt',
+        projectId: 'project-created',
       },
     });
   });
@@ -772,7 +687,7 @@ describe('createAppTools — create-lipsync', () => {
             },
           },
         ],
-        projectId: 'project-chatgpt',
+        projectId: 'project-created',
       },
     });
   });

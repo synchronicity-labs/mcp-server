@@ -269,7 +269,7 @@ beforeEach(async () => {
       return;
     }
     if (path === '/v2/projects') {
-      if (token === 'Bearer cancelled' && req.method === 'GET') {
+      if (token === 'Bearer cancelled' && req.method === 'POST') {
         res.on('close', () => {
           if (!res.writableEnded) projectAborted.resolve();
         });
@@ -494,7 +494,10 @@ it('offers asset management through the authenticated widget boundary', async ()
     const descriptor = tools.find((tool) => tool.name === name);
     expect(descriptor?._meta?.['openai/widgetAccessible']).toBe(true);
     expect(descriptor?.annotations?.destructiveHint).toBe(name !== 'assets_get-download-url');
-    const result = await client.callTool({ name, arguments: args });
+    const result = await client.callTool({
+      name,
+      arguments: { ...args, projectIntent: 'explicit' },
+    });
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual({ path, query: {}, body });
   }
@@ -530,6 +533,7 @@ it('uses authenticated project browsing and canonical selection through the host
       videoAssetId: 'existing-video',
       audioAssetId: 'existing-audio',
       projectId: 'selected-project',
+      projectIntent: 'explicit',
     },
   });
   expect(result.isError).not.toBe(true);
@@ -550,6 +554,7 @@ it('does not submit a generation or create a fallback for a denied project', asy
       videoAssetId: 'existing-video',
       audioAssetId: 'existing-audio',
       projectId: 'denied-project',
+      projectIntent: 'explicit',
     },
   });
   expect(result.isError).toBe(true);
@@ -596,7 +601,7 @@ it.each([
   const descriptor = (await client.listTools()).tools.find((tool) => tool.name === name);
   expect(descriptor?.annotations?.readOnlyHint).toBe(true);
   expect(descriptor?._meta?.ui).toEqual({ visibility: ['model', 'app'] });
-  const result = await client.callTool({ name, arguments: args });
+  const result = await client.callTool({ name, arguments: { ...args, projectIntent: 'explicit' } });
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toEqual({ path, query, body });
   expect(
@@ -613,7 +618,10 @@ it('forwards a caller-owned submission key through hosted MCP as an API header',
     idempotencyKey: 'action_A._~-09',
   };
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const result = await client.callTool({ name: 'create-lipsync', arguments: args });
+    const result = await client.callTool({
+      name: 'create-lipsync',
+      arguments: { ...args, projectIntent: 'explicit' },
+    });
     expect(result.isError).not.toBe(true);
   }
   const submissions = calls.filter(
@@ -642,6 +650,7 @@ it.each([
       audioAssetId: 'existing-audio',
       projectId: 'selected-project',
       idempotencyKey,
+      projectIntent: 'explicit',
     },
   });
   expect(result.isError).toBe(true);
@@ -686,6 +695,7 @@ it.each([
       audioAssetId: 'existing-audio',
       projectId: 'selected-project',
       idempotencyKey: 'same-action',
+      projectIntent: 'explicit',
     },
   });
   expect(result.isError).toBe(true);

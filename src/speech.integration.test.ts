@@ -135,7 +135,9 @@ async function fixture({ denied = false, rejected = false, available = true } = 
   clients.push(client);
   await client.connect(ct);
   const call = (name: string, args: Record<string, unknown>) =>
-    runWithAuth('speech-reader', 'openai-mcp', () => client.callTool({ name, arguments: args }));
+    runWithAuth('speech-reader', 'openai-mcp', () =>
+      client.callTool({ name, arguments: { ...args, projectIntent: 'explicit' } }),
+    );
   return { client, call, writes, paths };
 }
 it('admits a durable speech preview with caller identity, then polls that job without another synthesis', async () => {

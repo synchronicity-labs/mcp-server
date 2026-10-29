@@ -24,13 +24,13 @@ describe('HTTP cancellation versus response disconnect', () => {
     const aborted = deferred<void>();
     let generationPosts = 0;
     const api = express();
-    api.get('/v2/projects', async (_req, res) => {
+    api.post('/v2/projects', async (_req, res) => {
       res.on('close', () => {
         if (!res.writableEnded) aborted.resolve();
       });
       started.resolve();
       await release.promise;
-      res.json({ items: [{ id: 'project', name: 'Sync generations' }] });
+      res.json({ id: 'project' });
     });
     api.post('/v2/generate', (_req, res) => {
       generationPosts++;

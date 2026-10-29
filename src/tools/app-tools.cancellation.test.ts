@@ -51,7 +51,7 @@ describe('upload and generation write boundaries', () => {
     const request = vi.fn<HttpClient['request']>(async (method, path, options) => {
       expect(options?.signal).toBeDefined();
       expect(options?.signal?.aborted).toBe(false);
-      if (path === '/v2/projects') return { items: [{ id: 'project', name: 'Sync generations' }] };
+      if (path === '/v2/projects') return { id: 'project' };
       if (path === '/v2/assets/upload') {
         writes.push('presign');
         stopAt('presign');
@@ -97,13 +97,13 @@ describe('upload and generation write boundaries', () => {
     await expect(
       tool?.handler({ videoAssetId: 'video', audioAssetId: 'audio' }, { signal: cancel.signal }),
     ).rejects.toThrow('cancelled');
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it('does not undo or retry a generation already accepted upstream', async () => {
     const cancel = new AbortController();
     const request = vi.fn<HttpClient['request']>(async (_method, path) => {
-      if (path === '/v2/projects') return { items: [{ id: 'project', name: 'Sync generations' }] };
+      if (path === '/v2/projects') return { id: 'project' };
       if (path === '/v2/generate') {
         cancel.abort();
         return { id: 'accepted-generation', status: 'PENDING' };

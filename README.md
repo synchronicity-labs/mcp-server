@@ -19,6 +19,8 @@ Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API e
 
 ## Quick Start
 
+Local (stdio) clients require Node.js 20 or newer. Hosted connections need no local installation.
+
 ### Claude Web (claude.ai)
 
 No installation required — connect directly from your browser.
@@ -543,9 +545,13 @@ Claude and unknown clients also expose `create-lipsync`, `voices_get-voices`, an
 Upload local media in authenticated Sync and use **Copy ID** in the same organization,
 or **Copy URL**. Unsupported file/widget calls return this guidance without uploading.
 
-Defaults are `ChatGPT generations`, `Claude generations`, or `Sync generations` for
-unknown clients. Supply `projectId` to select an existing project by its canonical ID,
-or `projectName` to find or create a named project. These fields are mutually exclusive.
+New lipsync requests create new projects named `ChatGPT generations`,
+`Claude generations`, or `Sync generations` for unknown clients. `projectName`
+labels a NEW project; matching names are never reused. Keyed new-project actions
+require a fresh UUID `projectCreationKey`, retained with the generation key on
+retries. Only an explicit user project selection/update permits `projectId`,
+with `projectIntent: explicit`. `projectId` and `projectName` are mutually exclusive.
+Workflow labels and an already-open editor do not authorize existing-project writes.
 An explicit project ID is checked for access before any file transfer; an inaccessible
 or deleted project fails without falling back to a new project. Muse remains an unknown client until its
 actual handshake alias is verified. Client names affect presentation only, never
@@ -590,8 +596,9 @@ one intentional generation action and reuse the same key and payload after an
 ambiguous response. A new intentional generation uses a new key. The backend
 owns replay, conflict detection and credit accounting; MCP does not retry writes.
 
-Use the explicit canonical `projectId` and durable asset IDs or stable URLs for
-keyed submissions. Stage ChatGPT files with `upload-media` first, then use the
+For a new project, preserve `projectCreationKey` with the generation key. For an
+explicitly selected project, preserve its canonical `projectId` and supply
+`projectIntent: explicit`. Use durable asset IDs or stable URLs for keyed submissions. Stage ChatGPT files with `upload-media` first, then use the
 returned asset IDs. Re-transferring transient file inputs can produce different
 asset IDs and a changed-payload conflict. Keys accept 1-128 ASCII letters,
 digits, periods, underscores, tildes and hyphens. Omitting the key preserves

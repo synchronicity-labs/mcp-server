@@ -204,7 +204,7 @@ describe('SERVER_INSTRUCTIONS', () => {
     expect(SERVER_INSTRUCTIONS).toContain('exactly one visual input');
     expect(SERVER_INSTRUCTIONS).toContain('one driver');
     expect(SERVER_INSTRUCTIONS).toContain('defaults to sync-3');
-    expect(SERVER_INSTRUCTIONS).toContain('integration-specific project');
+    expect(SERVER_INSTRUCTIONS).toContain('NEW project');
   });
 
   it('describes only tools available to every profile and exact result handling', () => {

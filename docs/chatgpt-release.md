@@ -1,5 +1,22 @@
 # ChatGPT frontend release
 
+## Project destination safety candidate
+
+Source commit `e8b10e31ca1348ab46d77243c70d9fedbe039bbb`, tree `b3f897463dbebca91a18abccbb16651884440a21` ([UI follow-up #7486](https://github.com/synchronicity-labs/sync-api-v2/pull/7486), after merged [#7455](https://github.com/synchronicity-labs/sync-api-v2/pull/7455)).
+UI SHA256: `8e97c712972e3785c043a0385034b2ff9dbea93d87b617adbec5f259f295306e` (3360361 uncompressed bytes).
+Two builds produced identical HTML and manifest bytes. This bundle retains the
+analytics, audio-preparation and Studio reconciliation changes from the current
+source, with explicit intent on selected-project writes including `trim-audio`.
+New conversational workflows create fresh projects instead of reusing names.
+
+The analytics candidate below is retained as the first previous resource. The
+oldest retained resource `feb7f2a9…` and the superseded, unreleased project-safety
+candidate `b7c35f1b…` move intact to `deploy/chatgpt-retired/`.
+
+Merge UI follow-up #7486 before this MCP release. The API prerequisite below
+still applies. Refresh publisher tool metadata and open a fresh widget after
+release; production deployment and ChatGPT host acceptance are separate checks.
+
 ## ChatGPT analytics candidate (CRAFT-7540)
 
 The widget is built from merged `dev` commit

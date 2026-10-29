@@ -6,6 +6,7 @@ import { generationContextHeaders, generationContextSchema } from './generation-
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
+import { createProjectId, newProjectFields } from './project-destination.js';
 import { translationPreviewAvailable } from './translation-preview.js';
 
 export function translationOperation(operations: ParsedOperation[]): ParsedOperation | undefined {
@@ -35,11 +36,21 @@ export function createTranslationTools(
       videoAssetId: z
         .uuid()
         .describe(
-          'Existing Sync VIDEO asset in the connected organization. For a YouTube, TikTok, Instagram or Facebook link, call assets_create with type=VIDEO and this projectId first; wait for it to return the saved asset id.',
+          'Existing Sync VIDEO asset in the connected organization. For a social link, first create a NEW project unless the user explicitly chose an existing one. Import via assets_create with type=VIDEO and that projectId, wait for its saved asset id, then pass the same projectId with projectIntent=explicit.',
         ),
+      ...newProjectFields,
+      projectName: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe('Name for a NEW project. A matching existing name is never reused.'),
       projectId: z
         .uuid()
-        .describe('Accessible project ID from projects_get-all. Keep this unchanged on retries.'),
+        .optional()
+        .describe(
+          'Project ID only when explicitly selected by the user, or just created for this request. Otherwise omit it to create a new project. Keep unchanged on retries.',
+        ),
       targetLang: z.enum(target.data).describe('Target language from the API-supported list.'),
       sourceLang: z.enum(source.data).default('auto'),
       model: z.string().trim().min(1).describe('Video lip-sync model returned by models_get.'),
@@ -58,7 +69,7 @@ export function createTranslationTools(
       name: 'create-translate-and-dub',
       title: 'Translate and dub a video',
       description:
-        'Use this when the user wants to translate and dub a video into another language with matching lip movements. Not for subtitles only or translating a text document. Requires a saved video asset, selected project, model, and persistent idempotency key. For social video URLs, import through assets_create and wait for the saved asset before estimating or calling this tool. ' +
+        'Use this when the user wants to translate and dub a video into another language with matching lip movements. Not for subtitles only or translating a text document. Requires a saved video asset, model, and persistent idempotency key. By default creates a NEW project using a fresh projectCreationKey, even when projectName matches existing work. Preserve that UUID and key on retries. Supply projectId only for an explicit selection or the project just created for this request; never infer it from a workflow name or open editor. For social video URLs, import through assets_create and wait for the saved asset before estimating or calling this tool. ' +
         'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generate_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. ' +
         'The API manages dubbing and final rendering under the returned generation id. Poll generate_get-generation for that same id until COMPLETED; do not create another job to finish or recover it.',
       inputSchema: schema.shape,
@@ -72,14 +83,32 @@ export function createTranslationTools(
       handler: async (args, context) => {
         const input = schema.parse(args);
         context?.signal?.throwIfAborted();
-        const project = await httpClient.request('get', `/v2/projects/${input.projectId}`, {
-          signal: context?.signal,
-        });
+        if (input.projectId && (input.projectName || input.projectCreationKey))
+          throw new Error('Provide projectId or a new project name/UUID, not both.');
+        if (input.continuation && !input.projectId)
+          throw new Error('A continuation requires its explicitly selected projectId.');
+        const projectId =
+          input.projectId ??
+          (await createProjectId(
+            httpClient,
+            {
+              name: input.projectName ?? 'Translate and Dub',
+              projectCreationKey: input.projectCreationKey,
+              idempotencyKey: input.idempotencyKey,
+              defaultWorkflow: 'translate_and_dub',
+            },
+            context?.signal,
+          ));
+        const project = input.projectId
+          ? await httpClient.request('get', `/v2/projects/${projectId}`, {
+              signal: context?.signal,
+            })
+          : { id: projectId };
         if (
           !project ||
           typeof project !== 'object' ||
           !('id' in project) ||
-          project.id !== input.projectId
+          project.id !== projectId
         ) {
           throw new Error('Sync could not verify access to this project. Refresh and try again.');
         }
@@ -99,7 +128,7 @@ export function createTranslationTools(
           headers: { ...lineage, 'Idempotency-Key': input.idempotencyKey },
           body: {
             model: input.model,
-            projectId: input.projectId,
+            projectId,
             input: [{ type: 'video', assetId: input.videoAssetId }],
             dubParams: { targetLang: input.targetLang, sourceLang: input.sourceLang },
             ...(options === undefined ? {} : { options }),
