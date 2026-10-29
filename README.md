@@ -19,6 +19,8 @@ Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API e
 
 ## Quick Start
 
+Local (stdio) clients require Node.js 20 or newer. Hosted connections need no local installation.
+
 ### Claude Web (claude.ai)
 
 No installation required — connect directly from your browser.
