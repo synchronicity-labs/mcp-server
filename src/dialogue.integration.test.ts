@@ -232,6 +232,34 @@ async function fixture(
   return { calls, client, call, port: (upstream.address() as AddressInfo).port };
 }
 it.each([
+  false,
+  true,
+])('advertises account-scoped dialogue writes with keyedPreview=%s', async (keyedPreview) => {
+  const { client } = await fixture({ keyedPreview });
+  const tools = (await client.listTools()).tools;
+  for (const name of ['create-dialogue-preview', 'create-dialogue-video']) {
+    const tool = tools.find((candidate) => candidate.name === name);
+    expect(tool, name).toBeDefined();
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
+    expect(tool?._meta?.ui).toMatchObject({ visibility: ['model', 'app'] });
+    expect(tool?.inputSchema.required).toEqual(
+      expect.arrayContaining(['projectId', 'videoAssetId']),
+    );
+    expect(tool?.inputSchema.properties).not.toHaveProperty('sourceVideoUrl');
+    expect(tool?.inputSchema.properties).not.toHaveProperty('voiceId');
+  }
+  // Copying a saved external source can still fetch an open-world URL.
+  expect(
+    tools.find((tool) => tool.name === 'upload-dialogue-source')?.annotations?.openWorldHint,
+  ).toBe(true);
+});
+it.each([
   undefined,
   'COMPLETED',
   'COMPLETED_PARTIAL',

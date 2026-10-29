@@ -180,14 +180,36 @@ export function createDialogueTools(
       name: 'create-dialogue-preview',
       title: 'Preview dialogue edits',
       description:
-        'Preview timed word changes/removals in the original speaker’s voice. This is a synthesis action. Use a completed transcription, or a prior preview of this source when reopening. Confirm edits first. Persist an idempotencyKey before creating when get-dialogue-options advertises keyedPreview. Recover only through an explicit retry of identical input with that same key; never retry an ambiguous creation automatically. This is not arbitrary full-transcript replacement.',
+        'Start an audio synthesis job for user-approved timed word changes/removals in a saved single-speaker video, preserving the original speaker voice. Requires a project, source video and completed transcription or prior preview accessible to the connected Sync account. May clone the source speaker voice and incur synthesis charges; confirm the edits and permission to use that voice before creating. Creates a saved preview without overwriting the source; does not generate the final video. Returns a preview job ID; poll get-dialogue-preview with the same project and source until completion, and disclose any failed edits on partial completion. Persist an idempotencyKey before creating when get-dialogue-options advertises keyedPreview. Recover only through an explicit retry of identical input with that same key; never retry an ambiguous creation automatically. Not for translation, choosing another voice, or arbitrary full-transcript replacement.',
       inputSchema: sourceSchema.extend({
-        idempotencyKey: previewKeySchema.optional(),
-        transcriptionId: z.uuid().optional(),
-        previousPreviewId: z.uuid().optional(),
-        edits: preview.inputSchema.edits,
+        projectId: sourceSchema.shape.projectId.describe(
+          'Accessible Sync project for the preview. Keep unchanged on retries.',
+        ),
+        videoAssetId: sourceSchema.shape.videoAssetId.describe(
+          'Saved VIDEO asset for the transcription or prior preview, accessible to the connected account.',
+        ),
+        idempotencyKey: previewKeySchema
+          .optional()
+          .describe(
+            'Persist a unique key before creation when get-dialogue-options reports keyedPreview. Reuse only with identical inputs for an explicitly requested retry.',
+          ),
+        transcriptionId: z
+          .uuid()
+          .optional()
+          .describe(
+            'Completed transcription ID for this source. Supply exactly one of transcriptionId or previousPreviewId.',
+          ),
+        previousPreviewId: z
+          .uuid()
+          .optional()
+          .describe(
+            'Completed or partially completed preview ID for this source when reopening. Supply exactly one of previousPreviewId or transcriptionId.',
+          ),
+        edits: preview.inputSchema.edits.describe(
+          'User-approved changes/removals referencing timed word IDs in the source transcript.',
+        ),
       }).shape,
-      annotations: writeHints,
+      annotations: { ...writeHints, openWorldHint: false },
       handler: async (args, context) => {
         const key = previewKeySchema.optional().parse(args.idempotencyKey);
         if (key && !keyedPreview)
@@ -285,7 +307,7 @@ export function createDialogueTools(
           ),
       }).shape,
       outputSchema: generationOutputSchema,
-      annotations: writeHints,
+      annotations: { ...writeHints, openWorldHint: false },
       handler: async (args, context) => {
         const key = z
           .string()
