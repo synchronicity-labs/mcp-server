@@ -50,6 +50,7 @@ const TOOL_REFERENCE =
 // Optional workflow tools the server instructions may name: their rules are gated by
 // "when available" at the workflow level, not in every sentence.
 const OPTIONAL_INSTRUCTION_TOOLS = new Set([
+  'get-generation-costs',
   'continue-studio-generation',
   'create-dialogue-video',
   'create-lipsync-from-assets',

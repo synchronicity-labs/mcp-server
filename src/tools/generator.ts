@@ -19,6 +19,7 @@ type McpToolBaseDefinition = {
 };
 
 export type ToolRequestContext = {
+  _meta?: Record<string, unknown>;
   signal?: AbortSignal;
   // Internal session presentation, supplied by the server wrapper, never tool arguments.
   clientProfile?: ClientProfile;

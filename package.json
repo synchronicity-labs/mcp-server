@@ -41,7 +41,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=20"
   },
   "scripts": {
     "postinstall": "node scripts/patch-mcp-sdk.mjs",
@@ -75,7 +75,7 @@
   },
   "overrides": {
     "hono": "^4.12.24",
-    "@hono/node-server": "^1.19.13",
+    "@hono/node-server": "^2.1.3",
     "fast-uri": "^3.1.9",
     "path-to-regexp": "^8.4.2",
     "qs": "^6.15.2",
