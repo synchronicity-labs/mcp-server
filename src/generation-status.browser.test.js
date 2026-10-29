@@ -14,6 +14,8 @@ it.each([
   'legacy',
   'uncertain',
   'legacy-uncertain',
+  'uncertain-text',
+  'legacy-uncertain-text',
 ])('checks one accepted job and its server-clock ETA through the %s bridge', async (bridge) => {
   const generationId = '00000000-0000-4000-8000-000000000003';
   const projectId = '00000000-0000-4000-8000-000000000001';
@@ -115,6 +117,9 @@ it.each([
         : { id: generationId, projectId, generationEstimate: estimate },
     );
     expect(JSON.stringify(accepted)).not.toContain('privateInput');
+    const delivered = bridge.endsWith('-text')
+      ? { ...accepted, structuredContent: undefined }
+      : accepted;
     const resource = await client.readResource({ uri: descriptor._meta.ui.resourceUri });
     const page = await context.newPage();
     const pageErrors = [];
@@ -191,14 +196,14 @@ it.each([
           html = html.replace(
             '<script>',
             '<script>window.openai = { theme: "light", toolOutput: ' +
-              JSON.stringify(accepted.structuredContent) +
+              JSON.stringify(accepted.structuredContent ?? accepted) +
               ', callTool: (name, args) => window.parent.callSync({name, arguments: args}), openExternal: async options => { if (!await window.parent.canOpenSyncLink()) throw new Error("Fixture host refused navigation"); if (options.redirectUrl !== false) throw new Error("Signed links must not be rewritten"); window.parent.open(options.href, "_blank", "noopener,noreferrer"); }, notifyIntrinsicHeight: height => { window.frameElement.style.height = height + "px"; } };</script><script>',
           );
         iframe.srcdoc = html;
       },
       {
         html: resource.contents[0].text,
-        accepted,
+        accepted: delivered,
         bridge,
         fontSources: resource.contents[0]._meta.ui.csp.resourceDomains,
       },
