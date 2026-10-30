@@ -97,6 +97,14 @@ then checks both OAuth discovery documents and the unauthenticated `/mcp` 401
 challenge. A red deploy run means the new process never served or the public
 surface changed; it does not roll back on its own.
 
+Deploys run one at a time (`concurrency` in the deploy workflow). Each run
+deploys the current tip of `main`, whichever commit triggered it. When `/health`
+already reports that revision, the run skips the deploy but still runs the smoke
+check against the serving process, so a rerun can't pass while the tip is broken. A late run or a rerun therefore never
+rolls production back. When a new run replaces a pending one in the queue, the
+survivor still ships the tip. Rerunning a deploy redeploys the tip of `main`; to
+roll back, revert on `main`.
+
 Before merging, record the deployed image, current widget digest, green checks
 and reviewer approval. The baseline observed on 2026-10-28 was image
 `mcp-server:8a922e289d5488c7f50f258e1ca4d6ce25e925ad` and UI

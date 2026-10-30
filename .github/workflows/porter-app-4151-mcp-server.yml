@@ -3,23 +3,53 @@
         branches:
             - main
 name: Deploy to mcp-server
+# One deploy at a time. Each run deploys the current tip of main, whichever
+# commit triggered it, and skips when production already serves that tip. A late
+# run or a rerun therefore never rolls production back, and when a new run
+# replaces a pending one in this group, the survivor still ships the tip.
+concurrency:
+    group: deploy-mcp-server-production
+    cancel-in-progress: false
 jobs:
     porter-deploy:
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
               uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-            - name: Set Github tag
-              id: vars
-              run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+            - name: Check out the tip of main
+              id: target
+              env:
+                  HEALTH_URL: https://mcp.sync.so/health
+              run: |
+                  git fetch --no-tags --depth=1 origin main
+                  tip=$(git rev-parse FETCH_HEAD)
+                  # Both paths run the tip's own deploy and smoke scripts.
+                  if [ "$tip" != "$GITHUB_SHA" ]; then
+                      echo "::notice::main has moved past $GITHUB_SHA. Using the tip, $tip."
+                      git checkout --quiet --detach "$tip"
+                  fi
+                  echo "sha=$tip" >> "$GITHUB_OUTPUT"
+                  live=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r '.revision // empty' || true)
+                  if [ "$live" = "$tip" ]; then
+                      echo "::notice::Production already serves the tip of main, $tip. Checking it without redeploying."
+                      echo "deploy=false" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+                  {
+                      echo "deploy=true"
+                      echo "sha_short=$(git rev-parse --short "$tip")"
+                  } >> "$GITHUB_OUTPUT"
             - name: Setup porter
+              if: steps.target.outputs.deploy == 'true'
               uses: porter-dev/setup-porter@82aae6b91417e2a4e6cd4a1f6bd123fd316bd188 # v0.1.0
             - name: Record deploy start and revision
+              if: steps.target.outputs.deploy == 'true'
               id: start
               run: |
                   echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-                  echo "$GITHUB_SHA" > .revision
+                  echo "${{ steps.target.outputs.sha }}" > .revision
             - name: Deploy stack
+              if: steps.target.outputs.deploy == 'true'
               timeout-minutes: 30
               run: porter apply
               env:
@@ -28,8 +58,9 @@ jobs:
                 PORTER_DEPLOYMENT_TARGET_ID: 2222091e-eed3-40a8-bb60-86728b54d56f
                 PORTER_HOST: https://dashboard.porter.run
                 PORTER_PROJECT: "11208"
-                PORTER_TAG: ${{ steps.vars.outputs.sha_short }}
+                PORTER_TAG: ${{ steps.target.outputs.sha_short }}
                 PORTER_TOKEN: ${{ secrets.PORTER_APP_11208_1181459491 }}
+            # Runs on skipped deploys too, so a rerun cannot pass while the live tip is broken.
             - name: Use Node.js
               uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
               with:
@@ -39,4 +70,5 @@ jobs:
               run: node scripts/smoke-deploy.mjs
               env:
                 DEPLOY_STARTED_AT: ${{ steps.start.outputs.at }}
-                EXPECTED_REVISION: ${{ github.sha }}
+                EXPECTED_REVISION: ${{ steps.target.outputs.sha }}
+                SMOKE_ALLOW_EXISTING_PROCESS: ${{ steps.target.outputs.deploy != 'true' }}
