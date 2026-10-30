@@ -471,7 +471,14 @@ pnpm run lint
 
 # Type check
 pnpm run typecheck
+
+# Script tests (monitor, smoke check, pre-commit size check)
+pnpm run test:scripts
 ```
+
+`pnpm install` installs a pre-commit hook. It runs Oxlint and Oxfmt on staged
+files, and blocks a staged source file that grows past 5,000 tokens (20,000
+bytes). Files already over that size are exempt until someone splits them.
 
 ### Local HTTP Transport Testing
 

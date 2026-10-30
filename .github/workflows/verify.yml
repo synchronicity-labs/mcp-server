@@ -31,7 +31,7 @@ jobs:
           git rev-parse HEAD
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run lint
-      - run: pnpm run test:monitor
+      - run: pnpm run test:scripts
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: pnpm run test:memory
