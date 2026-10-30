@@ -377,9 +377,11 @@ export async function startHttpServer(
     res.type('image/svg+xml').send(ASSET_THUMBNAIL_PLACEHOLDER);
   });
 
-  // Health check (unauthenticated)
+  // Health check (unauthenticated). startedAt lets the post-deploy smoke check tell
+  // the new process from an old one that is still serving.
+  const startedAt = new Date().toISOString();
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', startedAt });
   });
 
   app.get('/.well-known/openai-apps-challenge', (_req, res) => {

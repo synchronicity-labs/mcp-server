@@ -56,7 +56,7 @@
     "prepublishOnly": "pnpm run build",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "monitor:mcp": "node scripts/check-mcp.mjs",
-    "test:monitor": "node --test scripts/check-mcp.test.mjs"
+    "test:monitor": "node --test scripts/check-mcp.test.mjs scripts/smoke-deploy.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.4.0",

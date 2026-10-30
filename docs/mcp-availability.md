@@ -91,6 +91,12 @@ project 11208, cluster 4151. The widget source hotfix targets `sync-api-v2/main`
 its immutable build is packaged in the MCP image. Keep one production replica:
 this release does not introduce cross-pod session/upload routing.
 
+After `porter apply`, the deploy job runs `scripts/smoke-deploy.mjs`. It waits up
+to 10 minutes for `/health` to report a process started after the deploy began,
+then checks both OAuth discovery documents and the unauthenticated `/mcp` 401
+challenge. A red deploy run means the new process never served or the public
+surface changed; it does not roll back on its own.
+
 Before merging, record the deployed image, current widget digest, green checks
 and reviewer approval. The baseline observed on 2026-10-28 was image
 `mcp-server:8a922e289d5488c7f50f258e1ca4d6ce25e925ad` and UI
