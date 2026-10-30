@@ -476,7 +476,8 @@ pnpm run typecheck
 pnpm run test:scripts
 ```
 
-`pnpm install` installs a pre-commit hook. It runs Oxlint and Oxfmt on staged
+Development needs Node 22.22.1 or newer (`.nvmrc`); `devEngines` in `package.json`
+enforces it on install. `pnpm install` installs a pre-commit hook. It runs Oxlint and Oxfmt on staged
 files, and blocks a staged source file that grows past 5,000 tokens (20,000
 bytes). Files already over that size are exempt until someone splits them.
 
