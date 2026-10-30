@@ -40,11 +40,11 @@
     }
   },
   "scripts": {
-    "build": "tsc -b && chmod +x dist/cli.js",
+    "build": "tsc -b tsconfig.build.json && chmod +x dist/cli.js",
     "package:chatgpt": "node scripts/package-chatgpt.mjs",
     "verify:chatgpt-package": "node scripts/verify-chatgpt-package.mjs",
     "clean": "rm -rf dist .cache",
-    "dev": "tsc -b --watch",
+    "dev": "tsc -b tsconfig.build.json --watch",
     "lint": "oxlint src scripts && oxfmt --check",
     "lint:fix": "oxlint --fix src scripts && oxfmt",
     "format": "oxfmt",
@@ -53,7 +53,7 @@
     "test:memory:http": "node --expose-gc --max-old-space-size=512 scripts/verify-http-memory.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "prepublishOnly": "pnpm run build",
+    "prepublishOnly": "pnpm run clean && pnpm run build",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "monitor:mcp": "node scripts/check-mcp.mjs",
     "test:monitor": "node --test scripts/check-mcp.test.mjs scripts/smoke-deploy.test.mjs"
