@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    // Run by hand: README "account recovery" and docs/session-lifecycle.md.
+    // Run by hand: docs/maintainers.md (account recovery) and docs/session-lifecycle.md.
     "scripts/verify-account-recovery.mjs",
     "scripts/summarize-session-lifecycle.mjs"
   ],
