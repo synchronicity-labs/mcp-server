@@ -57,7 +57,8 @@
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "monitor:mcp": "node scripts/check-mcp.mjs",
     "prepare": "husky",
-    "test:scripts": "node --test scripts/*.test.mjs"
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "capture:wire": "node scripts/capture-wire.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.4.0",
