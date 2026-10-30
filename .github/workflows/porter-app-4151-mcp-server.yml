@@ -23,19 +23,20 @@ jobs:
               run: |
                   git fetch --no-tags --depth=1 origin main
                   tip=$(git rev-parse FETCH_HEAD)
+                  # Both paths run the tip's own deploy and smoke scripts.
+                  if [ "$tip" != "$GITHUB_SHA" ]; then
+                      echo "::notice::main has moved past $GITHUB_SHA. Using the tip, $tip."
+                      git checkout --quiet --detach "$tip"
+                  fi
+                  echo "sha=$tip" >> "$GITHUB_OUTPUT"
                   live=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r '.revision // empty' || true)
                   if [ "$live" = "$tip" ]; then
-                      echo "::notice::Production already serves the tip of main, $tip."
+                      echo "::notice::Production already serves the tip of main, $tip. Checking it without redeploying."
                       echo "deploy=false" >> "$GITHUB_OUTPUT"
                       exit 0
                   fi
-                  if [ "$tip" != "$GITHUB_SHA" ]; then
-                      echo "::notice::main has moved past $GITHUB_SHA. Deploying the tip, $tip."
-                      git checkout --quiet --detach "$tip"
-                  fi
                   {
                       echo "deploy=true"
-                      echo "sha=$tip"
                       echo "sha_short=$(git rev-parse --short "$tip")"
                   } >> "$GITHUB_OUTPUT"
             - name: Setup porter
@@ -59,15 +60,15 @@ jobs:
                 PORTER_PROJECT: "11208"
                 PORTER_TAG: ${{ steps.target.outputs.sha_short }}
                 PORTER_TOKEN: ${{ secrets.PORTER_APP_11208_1181459491 }}
+            # Runs on skipped deploys too, so a rerun cannot pass while the live tip is broken.
             - name: Use Node.js
-              if: steps.target.outputs.deploy == 'true'
               uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
               with:
                   node-version: "22"
             - name: Smoke-check the deployed server
-              if: steps.target.outputs.deploy == 'true'
               timeout-minutes: 12
               run: node scripts/smoke-deploy.mjs
               env:
                 DEPLOY_STARTED_AT: ${{ steps.start.outputs.at }}
                 EXPECTED_REVISION: ${{ steps.target.outputs.sha }}
+                SMOKE_ALLOW_EXISTING_PROCESS: ${{ steps.target.outputs.deploy != 'true' }}

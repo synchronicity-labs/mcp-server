@@ -98,8 +98,9 @@ challenge. A red deploy run means the new process never served or the public
 surface changed; it does not roll back on its own.
 
 Deploys run one at a time (`concurrency` in the deploy workflow). Each run
-deploys the current tip of `main`, whichever commit triggered it, and skips when
-`/health` already reports that revision. A late run or a rerun therefore never
+deploys the current tip of `main`, whichever commit triggered it. When `/health`
+already reports that revision, the run skips the deploy but still runs the smoke
+check against the serving process, so a rerun can't pass while the tip is broken. A late run or a rerun therefore never
 rolls production back. When a new run replaces a pending one in the queue, the
 survivor still ships the tip. Rerunning a deploy redeploys the tip of `main`; to
 roll back, revert on `main`.

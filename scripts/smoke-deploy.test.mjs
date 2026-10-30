@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkPublicSurface, waitForNewProcess } from './smoke-deploy.mjs';
+import { checkPublicSurface, deployStartFrom, waitForNewProcess } from './smoke-deploy.mjs';
 
 const baseUrl = 'https://mcp.example.test';
 const deployStartedAt = Date.parse('2026-10-30T20:00:00.000Z');
@@ -143,4 +143,14 @@ void test('rejects an /mcp endpoint that stops challenging or points at the wron
     checkPublicSurface({ baseUrl, fetchImpl: publicSurface({ challenge: 'Bearer' }) }),
     /resource_metadata: expected/,
   );
+});
+
+void test('requires a deploy start unless the run checks the process already serving', () => {
+  assert.equal(
+    deployStartFrom({ deployStartedAt: '2026-10-30T20:00:00.000Z', allowExisting: false }),
+    deployStartedAt,
+  );
+  assert.equal(deployStartFrom({ deployStartedAt: '', allowExisting: true }), 0);
+  assert.throws(() => deployStartFrom({ deployStartedAt: '', allowExisting: false }), /ISO/);
+  assert.throws(() => deployStartFrom({ deployStartedAt: 'soon', allowExisting: false }), /ISO/);
 });

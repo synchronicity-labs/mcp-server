@@ -90,14 +90,25 @@ export async function checkPublicSurface({ baseUrl, fetchImpl = fetch }) {
   );
 }
 
+/**
+ * The earliest start time a passing process may report. A run that deployed waits for a
+ * process started after its deploy began; a run that found its revision already live
+ * (allowExisting) checks the process that is serving.
+ */
+export function deployStartFrom({ deployStartedAt, allowExisting }) {
+  if (allowExisting) return 0;
+  const parsed = Date.parse(deployStartedAt ?? '');
+  if (Number.isNaN(parsed)) throw new Error('DEPLOY_STARTED_AT must be an ISO timestamp.');
+  return parsed;
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const baseUrl = process.env.SMOKE_BASE_URL ?? 'https://mcp.sync.so';
-  const deployStartedAt = Date.parse(process.env.DEPLOY_STARTED_AT ?? '');
-  if (Number.isNaN(deployStartedAt)) {
-    console.error('DEPLOY_STARTED_AT must be an ISO timestamp.');
-    process.exit(1);
-  }
   try {
+    const deployStartedAt = deployStartFrom({
+      deployStartedAt: process.env.DEPLOY_STARTED_AT,
+      allowExisting: process.env.SMOKE_ALLOW_EXISTING_PROCESS === 'true',
+    });
     const health = await waitForNewProcess({
       baseUrl,
       deployStartedAt,
