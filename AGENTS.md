@@ -43,6 +43,12 @@ pnpm run package:chatgpt && pnpm run verify:chatgpt-package
 macOS shell. Type-aware lint resolves `scripts/` types through `dist/`, and CI
 lints before building, so lint once with `dist/` absent before pushing.
 
+Use the Node major in `.nvmrc`; pnpm refuses to install on Node older than
+22.22.1. The pre-commit hook runs Oxlint and an oxfmt check on staged files,
+then rejects any staged file over 20 KB (about 5,000 tokens) unless it was
+already that large at `HEAD`. Lockfiles, snapshots, generated files and
+`deploy/` are exempt.
+
 ## Invariants
 
 - **Tool names, schemas and `_meta` are a published contract.** OpenAI rescans the ChatGPT app on every deploy. Keep ChatGPT and Codex descriptors byte-identical unless the change is intended. Say so in the PR when they move.
