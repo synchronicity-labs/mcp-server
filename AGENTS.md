@@ -30,6 +30,7 @@ Every merge to `main` deploys production. Treat each merge as a release.
 ```bash
 pnpm install              # also installs the pre-commit hook
 pnpm run lint             # type-aware Oxlint, then oxfmt --check
+pnpm run knip             # unused files, exports and dependencies, then import cycles
 pnpm run typecheck
 pnpm run build
 pnpm test                 # vitest; use --no-file-parallelism on a loaded machine
@@ -62,7 +63,7 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 ## Verifying a change
 
 1. Run the commands above that your change touches.
-2. For anything that can change what clients see, compare `initialize`, `tools/list`, `resources/list` and the auth responses before and after, for each client name (`openai-mcp`, `openai-mcp (Codex)`, `claude-ai`, `claude-code`, `cursor-vscode`), against a stub API serving a saved `api-json`. Report the diff in the PR.
+2. For anything that can change what clients see, capture the wire before and after. After `pnpm run build && pnpm run package:chatgpt`, run `pnpm run capture:wire capture --out before.json --spec api-json.json` on `main`, the same with `--out after.json` on your branch, then `pnpm run capture:wire diff before.json after.json`. Against a local stub API, a capture records, over HTTP, protocol negotiation, the OAuth documents and 401 challenge, and `initialize`, `tools/list`, resources, resource templates, prompts and an unknown-tool call for each client name. Over stdio it records only `initialize` and `tools/list`, for `claude-code` and `openai-mcp`. Pass the same `--spec` file to both; without it the script fetches `api.sync.so/api-json` into `.cache/`, which `pnpm run clean` deletes. Report the diff in the PR.
 3. After a merge, the deploy job's smoke step must pass: `/health` reports the merged `revision`, and the OAuth documents and the 401 challenge are unchanged.
 
 ## Pull requests

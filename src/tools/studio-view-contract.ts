@@ -66,6 +66,3 @@ export const AcknowledgeStudioViewSchema = z.strictObject({
   reason: z.enum(['busy', 'stale', 'expired', 'unavailable']).optional(),
   context: StudioViewContextSchema.optional(),
 });
-export type StudioView = z.infer<typeof StudioViewSchema>;
-export type StudioViewContext = z.infer<typeof StudioViewContextSchema>;
-export type StudioViewCommand = z.infer<typeof StudioViewCommandSchema>;

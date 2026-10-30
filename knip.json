@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    // Run by hand: docs/maintainers.md (account recovery) and docs/session-lifecycle.md.
+    "scripts/verify-account-recovery.mjs",
+    "scripts/summarize-session-lifecycle.mjs"
+  ],
+  "ignoreBinaries": [
+    // The upload source test makes its throwaway TLS identity with the system openssl.
+    "openssl"
+  ],
+  "ignoreExportsUsedInFile": true,
+  // Knip reports cycles only with --cycles, and as warnings unless this is set.
+  "rules": { "cycles": "error" }
+}
