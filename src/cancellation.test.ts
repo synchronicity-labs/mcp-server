@@ -31,64 +31,64 @@ afterEach(() => {
 });
 
 describe('explicit MCP cancellation', () => {
-  it.each([
-    true,
-    false,
-  ])('stops after project search even if the upstream ignores abort (existing=%s)', async (existing) => {
-    const started = deferred<AbortSignal>();
-    const result = deferred<{ items: Array<{ id: string; name: string }> }>();
-    const finished = deferred<void>();
-    const request = vi.fn<HttpClient['request']>(async (_method, path, options) => {
-      if (path === '/v2/projects') {
-        if (!options?.signal) throw new Error('missing request cancellation');
-        started.resolve(options.signal);
-        return result.promise;
+  it.each([true, false])(
+    'stops after project search even if the upstream ignores abort (existing=%s)',
+    async (existing) => {
+      const started = deferred<AbortSignal>();
+      const result = deferred<{ items: Array<{ id: string; name: string }> }>();
+      const finished = deferred<void>();
+      const request = vi.fn<HttpClient['request']>(async (_method, path, options) => {
+        if (path === '/v2/projects') {
+          if (!options?.signal) throw new Error('missing request cancellation');
+          started.resolve(options.signal);
+          return result.promise;
+        }
+        throw new Error(`unexpected write: ${path}`);
+      });
+      const server = new McpServer({ name: 'cancellation-test', version: '1' });
+      const tools = createAppTools({ request }).map((tool) => {
+        if (tool.name !== 'create-lipsync' || tool.resultFormat === 'mcp') return tool;
+        return {
+          ...tool,
+          handler: async (args: Record<string, unknown>, context?: ToolRequestContext) => {
+            try {
+              return await tool.handler(args, context);
+            } finally {
+              finished.resolve();
+            }
+          },
+        };
+      });
+      registerTools(server, tools);
+      const client = new Client({ name: 'test', version: '1' });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const cancel = new AbortController();
+      try {
+        const call = client.callTool(
+          {
+            name: 'create-lipsync',
+            arguments: { videoAssetId: 'owned-video', audioAssetId: 'owned-audio' },
+          },
+          { signal: cancel.signal },
+        );
+        const rejected = expect(call).rejects.toThrow();
+        const upstreamSignal = await started.promise;
+        cancel.abort(new Error('user cancelled'));
+        await rejected;
+        expect(upstreamSignal.aborted).toBe(true);
+        result.resolve({ items: existing ? [{ id: 'project', name: 'Sync generations' }] : [] });
+        await finished.promise;
+        expect(request.mock.calls.map(([method, path]) => [method, path])).toEqual([
+          ['get', '/v2/projects'],
+        ]);
+      } finally {
+        await client.close();
+        await server.close();
       }
-      throw new Error(`unexpected write: ${path}`);
-    });
-    const server = new McpServer({ name: 'cancellation-test', version: '1' });
-    const tools = createAppTools({ request }).map((tool) => {
-      if (tool.name !== 'create-lipsync' || tool.resultFormat === 'mcp') return tool;
-      return {
-        ...tool,
-        handler: async (args: Record<string, unknown>, context?: ToolRequestContext) => {
-          try {
-            return await tool.handler(args, context);
-          } finally {
-            finished.resolve();
-          }
-        },
-      };
-    });
-    registerTools(server, tools);
-    const client = new Client({ name: 'test', version: '1' });
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await server.connect(serverTransport);
-    await client.connect(clientTransport);
-    const cancel = new AbortController();
-    try {
-      const call = client.callTool(
-        {
-          name: 'create-lipsync',
-          arguments: { videoAssetId: 'owned-video', audioAssetId: 'owned-audio' },
-        },
-        { signal: cancel.signal },
-      );
-      const rejected = expect(call).rejects.toThrow();
-      const upstreamSignal = await started.promise;
-      cancel.abort(new Error('user cancelled'));
-      await rejected;
-      expect(upstreamSignal.aborted).toBe(true);
-      result.resolve({ items: existing ? [{ id: 'project', name: 'Sync generations' }] : [] });
-      await finished.promise;
-      expect(request.mock.calls.map(([method, path]) => [method, path])).toEqual([
-        ['get', '/v2/projects'],
-      ]);
-    } finally {
-      await client.close();
-      await server.close();
-    }
-  });
+    },
+  );
 
   it('removes an explicitly cancelled upload from admission without consuming a slot', async () => {
     const uploads = runtime();

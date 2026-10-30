@@ -11,7 +11,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
       options: --ipc=host
     timeout-minutes: 10
     steps:

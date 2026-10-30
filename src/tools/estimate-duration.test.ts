@@ -79,14 +79,12 @@ describe('replacement speech estimates', () => {
     expect(() => resolveEstimateDuration({ script: text })).toThrow();
   });
 
-  it.each([
-    0,
-    -1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-  ])('refuses invalid measured duration %s', (audioDuration) => {
-    expect(() => resolveEstimateDuration({ audioDuration })).toThrow();
-  });
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'refuses invalid measured duration %s',
+    (audioDuration) => {
+      expect(() => resolveEstimateDuration({ audioDuration })).toThrow();
+    },
+  );
 
   it.each(['cut_off', 'silence'])('requires video length for %s quotes', (syncMode) => {
     expect(() => resolveEstimateDuration({ audioDuration: 2.5, syncMode })).toThrow(

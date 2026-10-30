@@ -130,16 +130,12 @@ describe('immutable client profiles', () => {
       defaultProjectName: 'Sync generations',
     });
   });
-  it.each([
-    'chatgpt',
-    'openai',
-    'openai-chatgpt',
-    'openai-mcp',
-    'OpenAI-MCP',
-    'ChatGPT',
-  ])('recognizes exact ChatGPT alias %s', (name) => {
-    expect(resolveClientProfile(name).name).toBe('chatgpt');
-  });
+  it.each(['chatgpt', 'openai', 'openai-chatgpt', 'openai-mcp', 'OpenAI-MCP', 'ChatGPT'])(
+    'recognizes exact ChatGPT alias %s',
+    (name) => {
+      expect(resolveClientProfile(name).name).toBe('chatgpt');
+    },
+  );
   it.each(['claude', 'claude-ai', 'Claude'])('recognizes exact Claude alias %s', (name) => {
     expect(resolveClientProfile(name).name).toBe('claude');
   });
@@ -157,59 +153,58 @@ describe('immutable client profiles', () => {
     expect(Object.isFrozen(resolveClientProfile(name))).toBe(true);
   });
 
-  it.each([
-    'chatgpt',
-    'claude',
-    'unknown',
-  ])('retains SDK cancellation through the profile wrapper for %s', async (name) => {
-    const calls = fakeApi();
-    const fetchApi = globalThis.fetch;
-    let started!: (signal: AbortSignal) => void;
-    const projectStarted = new Promise<AbortSignal>((resolve) => {
-      started = resolve;
-    });
-    let stopped!: () => void;
-    const projectStopped = new Promise<void>((resolve) => {
-      stopped = resolve;
-    });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string, options?: RequestInit) => {
-        if (new URL(url).pathname === '/v2/projects') {
-          const signal = options?.signal;
-          if (!signal) throw new Error('Profile wrapper dropped cancellation');
-          started(signal);
-          return new Promise<Response>((_resolve, reject) => {
-            signal.addEventListener(
-              'abort',
-              () => {
-                reject(signal.reason);
-                stopped();
-              },
-              { once: true },
-            );
-          });
-        }
-        return fetchApi(url, options);
-      }),
-    );
-    const { client } = await connect(await createMcpServerFactory(config), name, true);
-    const cancel = new AbortController();
-    const call = client.callTool(
-      {
-        name: 'create-lipsync',
-        arguments: { imageAssetId: 'image', script: 'Hello', voiceId: 'real-voice' },
-      },
-      { signal: cancel.signal },
-    );
-    const rejected = expect(call).rejects.toThrow();
-    const upstreamSignal = await projectStarted;
-    cancel.abort(new Error('user cancelled'));
-    await rejected;
-    await projectStopped;
-    expect(upstreamSignal.aborted).toBe(true);
-    expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(0);
-  });
+  it.each(['chatgpt', 'claude', 'unknown'])(
+    'retains SDK cancellation through the profile wrapper for %s',
+    async (name) => {
+      const calls = fakeApi();
+      const fetchApi = globalThis.fetch;
+      let started!: (signal: AbortSignal) => void;
+      const projectStarted = new Promise<AbortSignal>((resolve) => {
+        started = resolve;
+      });
+      let stopped!: () => void;
+      const projectStopped = new Promise<void>((resolve) => {
+        stopped = resolve;
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, options?: RequestInit) => {
+          if (new URL(url).pathname === '/v2/projects') {
+            const signal = options?.signal;
+            if (!signal) throw new Error('Profile wrapper dropped cancellation');
+            started(signal);
+            return new Promise<Response>((_resolve, reject) => {
+              signal.addEventListener(
+                'abort',
+                () => {
+                  reject(signal.reason);
+                  stopped();
+                },
+                { once: true },
+              );
+            });
+          }
+          return fetchApi(url, options);
+        }),
+      );
+      const { client } = await connect(await createMcpServerFactory(config), name, true);
+      const cancel = new AbortController();
+      const call = client.callTool(
+        {
+          name: 'create-lipsync',
+          arguments: { imageAssetId: 'image', script: 'Hello', voiceId: 'real-voice' },
+        },
+        { signal: cancel.signal },
+      );
+      const rejected = expect(call).rejects.toThrow();
+      const upstreamSignal = await projectStarted;
+      cancel.abort(new Error('user cancelled'));
+      await rejected;
+      await projectStopped;
+      expect(upstreamSignal.aborted).toBe(true);
+      expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(0);
+    },
+  );
 
   it('configures concurrent real HTTP sessions before discovery', async () => {
     const calls = fakeApi();
@@ -258,112 +253,112 @@ describe('immutable client profiles', () => {
     }
   });
 
-  it.each([
-    'openai-mcp',
-    'openai-mcp (Codex)',
-  ])('accepts hosted file uploads and direct file generation from %s over HTTP', async (clientName) => {
-    const calls = fakeApi();
-    const apiFetch = globalThis.fetch;
-    const uploaded: Buffer[] = [];
-    const bytes = Buffer.from('host-provided test media');
-    const file = {
-      file_id: 'file-test',
-      download_url: 'https://files.test/media.mp4',
-      mime_type: 'video/mp4',
-      file_name: 'media.mp4',
-    };
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string, init?: RequestInit) => {
-        const headers = new Headers(init?.headers);
-        if (url === file.download_url) {
-          expect(headers.has('authorization')).toBe(false);
-          return new Response(bytes, { headers: { 'content-type': file.mime_type } });
-        }
-        if (url === 'https://storage.test/upload') {
-          expect(headers.has('authorization')).toBe(false);
-          expect(init?.method).toBe('PUT');
-          if (!(init?.body instanceof Readable)) throw new Error('Expected streamed upload');
-          const chunks: Buffer[] = [];
-          for await (const chunk of init.body) chunks.push(Buffer.from(chunk));
-          uploaded.push(Buffer.concat(chunks));
-          return new Response(null, { status: 200 });
-        }
-        if (url === 'https://api.test/v2/assets/upload' || url === 'https://api.test/v2/assets') {
-          expect(headers.get('authorization')).toBe(`Bearer token-${clientName}`);
-          expect(headers.get('x-sync-source')).toBe(`mcp:${clientName}`);
-          const body = JSON.parse(String(init?.body));
-          if (url.endsWith('/upload')) {
-            expect(body).toEqual({
-              fileName: file.file_name,
-              contentType: file.mime_type,
-              size: bytes.byteLength,
-            });
-            return Response.json({
-              uploadUrl: 'https://storage.test/upload',
-              url: 'https://storage.test/media.mp4',
-            });
+  it.each(['openai-mcp', 'openai-mcp (Codex)'])(
+    'accepts hosted file uploads and direct file generation from %s over HTTP',
+    async (clientName) => {
+      const calls = fakeApi();
+      const apiFetch = globalThis.fetch;
+      const uploaded: Buffer[] = [];
+      const bytes = Buffer.from('host-provided test media');
+      const file = {
+        file_id: 'file-test',
+        download_url: 'https://files.test/media.mp4',
+        mime_type: 'video/mp4',
+        file_name: 'media.mp4',
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const headers = new Headers(init?.headers);
+          if (url === file.download_url) {
+            expect(headers.has('authorization')).toBe(false);
+            return new Response(bytes, { headers: { 'content-type': file.mime_type } });
           }
-          expect(body).toEqual({ url: 'https://storage.test/media.mp4', type: 'VIDEO' });
-          expect(uploaded.at(-1)).toEqual(bytes);
-          return Response.json({ id: 'uploaded-video' });
-        }
-        return apiFetch(url, init);
-      }),
-    );
-    const factory = await createMcpServerFactory(config);
-    const { client } = await connect(factory, clientName, true);
-    const { tools } = await client.listTools();
-    expect(
-      tools.find((tool) => tool.name === 'upload-media')?._meta?.['openai/fileParams'],
-    ).toEqual(['file']);
-    expect(
-      tools.find((tool) => tool.name === 'create-lipsync')?._meta?.['openai/fileParams'],
-    ).toEqual(['video', 'image', 'audio']);
-    expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
-    expect((await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError).not.toBe(
-      true,
-    );
+          if (url === 'https://storage.test/upload') {
+            expect(headers.has('authorization')).toBe(false);
+            expect(init?.method).toBe('PUT');
+            if (!(init?.body instanceof Readable)) throw new Error('Expected streamed upload');
+            const chunks: Buffer[] = [];
+            for await (const chunk of init.body) chunks.push(Buffer.from(chunk));
+            uploaded.push(Buffer.concat(chunks));
+            return new Response(null, { status: 200 });
+          }
+          if (url === 'https://api.test/v2/assets/upload' || url === 'https://api.test/v2/assets') {
+            expect(headers.get('authorization')).toBe(`Bearer token-${clientName}`);
+            expect(headers.get('x-sync-source')).toBe(`mcp:${clientName}`);
+            const body = JSON.parse(String(init?.body));
+            if (url.endsWith('/upload')) {
+              expect(body).toEqual({
+                fileName: file.file_name,
+                contentType: file.mime_type,
+                size: bytes.byteLength,
+              });
+              return Response.json({
+                uploadUrl: 'https://storage.test/upload',
+                url: 'https://storage.test/media.mp4',
+              });
+            }
+            expect(body).toEqual({ url: 'https://storage.test/media.mp4', type: 'VIDEO' });
+            expect(uploaded.at(-1)).toEqual(bytes);
+            return Response.json({ id: 'uploaded-video' });
+          }
+          return apiFetch(url, init);
+        }),
+      );
+      const factory = await createMcpServerFactory(config);
+      const { client } = await connect(factory, clientName, true);
+      const { tools } = await client.listTools();
+      expect(
+        tools.find((tool) => tool.name === 'upload-media')?._meta?.['openai/fileParams'],
+      ).toEqual(['file']);
+      expect(
+        tools.find((tool) => tool.name === 'create-lipsync')?._meta?.['openai/fileParams'],
+      ).toEqual(['video', 'image', 'audio']);
+      expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
+      expect(
+        (await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError,
+      ).not.toBe(true);
 
-    const result = await client.callTool({
-      name: 'upload-media',
-      arguments: { mediaType: 'video', file },
-    });
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({
-      assetId: 'uploaded-video',
-      mediaType: 'video',
-    });
-    expect(uploaded).toEqual([bytes]);
-    expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
-
-    const generation = await client.callTool({
-      name: 'create-lipsync',
-      arguments: { video: file, audioAssetId: 'audio' },
-    });
-    expect(generation.isError).not.toBe(true);
-    expect(uploaded).toEqual([bytes, bytes]);
-    expect(calls.find((call) => call.path === '/v2/generate')?.body).toMatchObject({
-      input: [
-        { type: 'video', assetId: 'uploaded-video' },
-        { type: 'audio', assetId: 'audio' },
-      ],
-    });
-
-    // The client name does not bypass the SDK schema or the fetchable-URL check.
-    for (const invalid of [
-      '/tmp/media.mp4',
-      { download_url: file.download_url },
-      { ...file, download_url: 'file:///tmp/media.mp4' },
-    ]) {
-      const rejected = await client.callTool({
+      const result = await client.callTool({
         name: 'upload-media',
-        arguments: { mediaType: 'video', file: invalid },
+        arguments: { mediaType: 'video', file },
       });
-      expect(rejected.isError).toBe(true);
-    }
-    expect(uploaded).toHaveLength(2);
-  });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        assetId: 'uploaded-video',
+        mediaType: 'video',
+      });
+      expect(uploaded).toEqual([bytes]);
+      expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
+
+      const generation = await client.callTool({
+        name: 'create-lipsync',
+        arguments: { video: file, audioAssetId: 'audio' },
+      });
+      expect(generation.isError).not.toBe(true);
+      expect(uploaded).toEqual([bytes, bytes]);
+      expect(calls.find((call) => call.path === '/v2/generate')?.body).toMatchObject({
+        input: [
+          { type: 'video', assetId: 'uploaded-video' },
+          { type: 'audio', assetId: 'audio' },
+        ],
+      });
+
+      // The client name does not bypass the SDK schema or the fetchable-URL check.
+      for (const invalid of [
+        '/tmp/media.mp4',
+        { download_url: file.download_url },
+        { ...file, download_url: 'file:///tmp/media.mp4' },
+      ]) {
+        const rejected = await client.callTool({
+          name: 'upload-media',
+          arguments: { mediaType: 'video', file: invalid },
+        });
+        expect(rejected.isError).toBe(true);
+      }
+      expect(uploaded).toHaveLength(2);
+    },
+  );
 
   it('isolates concurrent discovery, resources, defaults and auth for different sessions', async () => {
     const calls = fakeApi();
@@ -466,125 +461,127 @@ describe('immutable client profiles', () => {
     expect((await sessions[0]!.client.listTools()).tools).toHaveLength(12);
   });
 
-  it.each([
-    'chatgpt',
-    'claude',
-    'unknown',
-  ])('supports all URL/asset workflows, explicit project and exact signed results for %s', async (name) => {
-    const calls = fakeApi();
-    const { client } = await connect(await createMcpServerFactory(config), name);
-    const voices = await client.callTool({ name: 'voices_get-voices', arguments: {} });
-    expect(JSON.stringify(voices)).toContain('real-voice');
-    for (const visual of ['video', 'image']) {
-      for (const driver of ['audio', 'script']) {
-        for (const source of ['Url', 'AssetId']) {
-          const args: Record<string, unknown> = {
-            [`${visual}${source}`]:
-              source === 'Url' ? `https://media.test/${visual}?signature=a%2Fb` : `${visual}-asset`,
-            ...(driver === 'script'
-              ? { script: 'Hello', voiceId: 'real-voice' }
-              : {
-                  [`audio${source}`]:
-                    source === 'Url' ? 'https://media.test/audio?signature=c%2Fd' : 'audio-asset',
-                }),
-            projectName: 'Explicit project',
-          };
-          const result = await client.callTool({ name: 'create-lipsync', arguments: args });
-          expect(result.isError).not.toBe(true);
-          const body = calls.filter((call) => call.path === '/v2/generate').at(-1)!.body;
-          expect(body).toMatchObject({ projectId: 'project:Explicit project', model: 'sync-3' });
-          const input = body.input as Array<Record<string, unknown>>;
-          expect(input[0]).toEqual({
-            type: visual,
-            [source === 'Url' ? 'url' : 'assetId']: args[`${visual}${source}`],
-          });
-          if (driver === 'script')
-            expect(input[1]).toMatchObject({
-              type: 'text',
-              provider: { name: 'elevenlabs', script: 'Hello', voiceId: 'real-voice' },
+  it.each(['chatgpt', 'claude', 'unknown'])(
+    'supports all URL/asset workflows, explicit project and exact signed results for %s',
+    async (name) => {
+      const calls = fakeApi();
+      const { client } = await connect(await createMcpServerFactory(config), name);
+      const voices = await client.callTool({ name: 'voices_get-voices', arguments: {} });
+      expect(JSON.stringify(voices)).toContain('real-voice');
+      for (const visual of ['video', 'image']) {
+        for (const driver of ['audio', 'script']) {
+          for (const source of ['Url', 'AssetId']) {
+            const args: Record<string, unknown> = {
+              [`${visual}${source}`]:
+                source === 'Url'
+                  ? `https://media.test/${visual}?signature=a%2Fb`
+                  : `${visual}-asset`,
+              ...(driver === 'script'
+                ? { script: 'Hello', voiceId: 'real-voice' }
+                : {
+                    [`audio${source}`]:
+                      source === 'Url' ? 'https://media.test/audio?signature=c%2Fd' : 'audio-asset',
+                  }),
+              projectName: 'Explicit project',
+            };
+            const result = await client.callTool({ name: 'create-lipsync', arguments: args });
+            expect(result.isError).not.toBe(true);
+            const body = calls.filter((call) => call.path === '/v2/generate').at(-1)!.body;
+            expect(body).toMatchObject({ projectId: 'project:Explicit project', model: 'sync-3' });
+            const input = body.input as Array<Record<string, unknown>>;
+            expect(input[0]).toEqual({
+              type: visual,
+              [source === 'Url' ? 'url' : 'assetId']: args[`${visual}${source}`],
             });
-          else
-            expect(input[1]).toEqual({
-              type: 'audio',
-              [source === 'Url' ? 'url' : 'assetId']: args[`audio${source}`],
+            if (driver === 'script')
+              expect(input[1]).toMatchObject({
+                type: 'text',
+                provider: { name: 'elevenlabs', script: 'Hello', voiceId: 'real-voice' },
+              });
+            else
+              expect(input[1]).toEqual({
+                type: 'audio',
+                [source === 'Url' ? 'url' : 'assetId']: args[`audio${source}`],
+              });
+            const poll = await client.callTool({
+              name: 'generate_get-generation',
+              arguments: { id: 'generation', wait: true, timeout: 55 },
             });
-          const poll = await client.callTool({
-            name: 'generate_get-generation',
-            arguments: { id: 'generation', wait: true, timeout: 55 },
-          });
-          expect(poll.structuredContent).toMatchObject({ outputUrl: signedUrl });
-          expect(JSON.parse((poll.content as Array<{ text: string }>)[0]!.text).outputUrl).toBe(
-            signedUrl,
-          );
+            expect(poll.structuredContent).toMatchObject({ outputUrl: signedUrl });
+            expect(JSON.parse((poll.content as Array<{ text: string }>)[0]!.text).outputUrl).toBe(
+              signedUrl,
+            );
+          }
         }
       }
-    }
-    expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(8);
-  });
+      expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(8);
+    },
+  );
 
-  it.each([
-    'api-key',
-    'device-bearer',
-  ])('keeps %s stdio authentication local without contaminating an HTTP session', async (authentication) => {
-    const calls = fakeApi();
-    vi.spyOn(tokenStore, 'loadToken').mockResolvedValue('fake-device-token');
-    const stdio = await createSyncMcpServer({
-      ...config,
-      transport: 'stdio',
-      apiKey: authentication === 'api-key' ? 'fake-key' : undefined,
-    });
-    const { client: stdioClient } = await connect(
-      { createServer: () => stdio, toolCount: 5 },
-      'claude',
-    );
-    const { client: httpClient } = await connect(await createMcpServerFactory(config), 'unknown');
-    await stdioClient.callTool({
-      name: 'create-lipsync',
-      arguments: { videoAssetId: 'video', audioAssetId: 'audio' },
-    });
-    await runWithAuth('http-token', undefined, () =>
-      httpClient.callTool({
+  it.each(['api-key', 'device-bearer'])(
+    'keeps %s stdio authentication local without contaminating an HTTP session',
+    async (authentication) => {
+      const calls = fakeApi();
+      vi.spyOn(tokenStore, 'loadToken').mockResolvedValue('fake-device-token');
+      const stdio = await createSyncMcpServer({
+        ...config,
+        transport: 'stdio',
+        apiKey: authentication === 'api-key' ? 'fake-key' : undefined,
+      });
+      const { client: stdioClient } = await connect(
+        { createServer: () => stdio, toolCount: 5 },
+        'claude',
+      );
+      const { client: httpClient } = await connect(await createMcpServerFactory(config), 'unknown');
+      await stdioClient.callTool({
         name: 'create-lipsync',
         arguments: { videoAssetId: 'video', audioAssetId: 'audio' },
-      }),
-    );
-    const posts = calls.filter((call) => call.path === '/v2/generate');
-    expect(posts[0]!.body.projectId).toBe('project:Claude generations');
-    expect(posts[0]!.headers).toMatchObject(
-      authentication === 'api-key'
-        ? { 'x-api-key': 'fake-key', 'x-sync-source': 'claude' }
-        : { Authorization: 'Bearer fake-device-token', 'x-sync-source': 'mcp:claude' },
-    );
-    expect(posts[1]!.body.projectId).toBe('project:Sync generations');
-    expect(posts[1]!.headers).toMatchObject({
-      Authorization: 'Bearer http-token',
-      'x-sync-source': 'mcp',
-    });
-  });
+      });
+      await runWithAuth('http-token', undefined, () =>
+        httpClient.callTool({
+          name: 'create-lipsync',
+          arguments: { videoAssetId: 'video', audioAssetId: 'audio' },
+        }),
+      );
+      const posts = calls.filter((call) => call.path === '/v2/generate');
+      expect(posts[0]!.body.projectId).toBe('project:Claude generations');
+      expect(posts[0]!.headers).toMatchObject(
+        authentication === 'api-key'
+          ? { 'x-api-key': 'fake-key', 'x-sync-source': 'claude' }
+          : { Authorization: 'Bearer fake-device-token', 'x-sync-source': 'mcp:claude' },
+      );
+      expect(posts[1]!.body.projectId).toBe('project:Sync generations');
+      expect(posts[1]!.headers).toMatchObject({
+        Authorization: 'Bearer http-token',
+        'x-sync-source': 'mcp',
+      });
+    },
+  );
 });
 
-it.each([
-  0, 1, 2,
-])('reports available registered tools with %i generated hosted operations', async (count) => {
-  const paths = Object.fromEntries(Object.entries(spec.paths).slice(0, count));
-  // Excluded operations must not inflate diagnostics or client catalogs.
-  const excluded = Object.fromEntries(
-    Array.from({ length: 50 }, (_, index) => [
-      `/v2/projects/unused-${index}`,
-      { get: { operationId: `Projects_unused${index}`, tags: ['projects'] } },
-    ]),
-  );
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
-  );
-  const factory = await createMcpServerFactory(config);
-  expect(factory.toolCount).toBe(10 + count);
-  const chatgpt = await connect(factory, 'chatgpt');
-  const claude = await connect(factory, 'claude');
-  const chatTools = (await chatgpt.client.listTools()).tools;
-  const claudeTools = (await claude.client.listTools()).tools;
-  expect(chatTools).toHaveLength(10 + count);
-  expect(claudeTools).toHaveLength(7 + count);
-  expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
-});
+it.each([0, 1, 2])(
+  'reports available registered tools with %i generated hosted operations',
+  async (count) => {
+    const paths = Object.fromEntries(Object.entries(spec.paths).slice(0, count));
+    // Excluded operations must not inflate diagnostics or client catalogs.
+    const excluded = Object.fromEntries(
+      Array.from({ length: 50 }, (_, index) => [
+        `/v2/projects/unused-${index}`,
+        { get: { operationId: `Projects_unused${index}`, tags: ['projects'] } },
+      ]),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
+    );
+    const factory = await createMcpServerFactory(config);
+    expect(factory.toolCount).toBe(10 + count);
+    const chatgpt = await connect(factory, 'chatgpt');
+    const claude = await connect(factory, 'claude');
+    const chatTools = (await chatgpt.client.listTools()).tools;
+    const claudeTools = (await claude.client.listTools()).tools;
+    expect(chatTools).toHaveLength(10 + count);
+    expect(claudeTools).toHaveLength(7 + count);
+    expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
+  },
+);

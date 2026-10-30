@@ -169,28 +169,26 @@ async function initialize(token = 'owner') {
   return id;
 }
 const list = { jsonrpc: '2.0', id: 2, method: 'tools/list' };
-it.each([
-  'foreign-sub',
-  'foreign-client',
-  'foreign-org',
-  'missing-org',
-])('blocks %s reuse, SSE and deletion while allowing owner refresh', async (token) => {
-  const id = await initialize();
-  for (const method of ['POST', 'GET', 'DELETE']) {
-    const denied = await request(id, token, method, method === 'POST' ? list : undefined);
-    expect(denied.status).toBe(404);
-    expect(await denied.json()).toEqual({ error: 'Session not found' });
-  }
-  const refreshed = await request(id, 'owner-refreshed', 'POST', list);
-  expect(refreshed.status).toBe(200);
-  expect(await refreshed.text()).toContain('hold');
-  const deleted = await request(id, 'owner-refreshed', 'DELETE');
-  expect(deleted.status).toBe(200);
-  await deleted.text();
-  const gone = await request(id, 'owner', 'POST', list);
-  expect(gone.status).toBe(404);
-  await gone.text();
-});
+it.each(['foreign-sub', 'foreign-client', 'foreign-org', 'missing-org'])(
+  'blocks %s reuse, SSE and deletion while allowing owner refresh',
+  async (token) => {
+    const id = await initialize();
+    for (const method of ['POST', 'GET', 'DELETE']) {
+      const denied = await request(id, token, method, method === 'POST' ? list : undefined);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual({ error: 'Session not found' });
+    }
+    const refreshed = await request(id, 'owner-refreshed', 'POST', list);
+    expect(refreshed.status).toBe(200);
+    expect(await refreshed.text()).toContain('hold');
+    const deleted = await request(id, 'owner-refreshed', 'DELETE');
+    expect(deleted.status).toBe(200);
+    await deleted.text();
+    const gone = await request(id, 'owner', 'POST', list);
+    expect(gone.status).toBe(404);
+    await gone.text();
+  },
+);
 it('rejects foreign cancellation and accepts cancellation by a refreshed owner token', async () => {
   started = deferred<void>();
   release = deferred<void>();

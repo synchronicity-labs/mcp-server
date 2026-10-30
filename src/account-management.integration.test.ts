@@ -95,21 +95,21 @@ function call(token: string, name: string, args: Record<string, unknown> = {}) {
   return runWithAuth(token, 'openai-mcp', () => client.callTool({ name, arguments: args }));
 }
 
-it.each([
-  projectId,
-  projectId.toUpperCase(),
-])('renames only the requested project %s through the authenticated patch boundary', async (requestedId) => {
-  const before = writes.length;
-  const result = await call('member', 'rename-project', {
-    projectId: requestedId,
-    name: '  Launch video  ',
-  });
-  expect(result.isError).not.toBe(true);
-  expect(result.structuredContent).toEqual({ id: projectId, name: 'Launch video' });
-  expect(writes).toHaveLength(before + 1);
-  expect(writes.at(-1)).toEqual({ token: 'Bearer member', body: { name: 'Launch video' } });
-  expect(JSON.stringify(result)).not.toContain('secret');
-});
+it.each([projectId, projectId.toUpperCase()])(
+  'renames only the requested project %s through the authenticated patch boundary',
+  async (requestedId) => {
+    const before = writes.length;
+    const result = await call('member', 'rename-project', {
+      projectId: requestedId,
+      name: '  Launch video  ',
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ id: projectId, name: 'Launch video' });
+    expect(writes).toHaveLength(before + 1);
+    expect(writes.at(-1)).toEqual({ token: 'Bearer member', body: { name: 'Launch video' } });
+    expect(JSON.stringify(result)).not.toContain('secret');
+  },
+);
 
 it('refuses unauthorized or empty renames and never forwards extra mutation fields', async () => {
   const before = writes.length;
@@ -137,12 +137,15 @@ it.each([
       monthlyResetDate: '2026-11-01T00:00:00.000Z',
     },
   ],
-])('projects the %s allowance without exposing unrelated billing fields', async (token, credits, freeMonthlyLimits) => {
-  const result = await call(token as string, 'get-account-usage');
-  expect(result.isError).not.toBe(true);
-  expect(result.structuredContent).toMatchObject({ credits, freeMonthlyLimits, usage: null });
-  expect(JSON.stringify(result)).not.toContain('secret');
-});
+])(
+  'projects the %s allowance without exposing unrelated billing fields',
+  async (token, credits, freeMonthlyLimits) => {
+    const result = await call(token as string, 'get-account-usage');
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ credits, freeMonthlyLimits, usage: null });
+    expect(JSON.stringify(result)).not.toContain('secret');
+  },
+);
 
 it('sums complete metered usage and retains the authoritative billing permission', async () => {
   const result = await call('member', 'get-account-usage');

@@ -219,50 +219,50 @@ describe('upload source destination enforcement at the tool boundary', () => {
     expect(runtime.snapshot()).toMatchObject({ active: 0, queued: 0, downloadedBytes: 0 });
   });
 
-  it.each([
-    'http:',
-    'https:',
-  ])('pins a %s source connection and rejects a later rebound lookup', async (protocol) => {
-    const { upload, request, runtime } = setup();
-    const blockedGlobal = new MockAgent();
-    blockedGlobal.disableNetConnect();
-    setGlobalDispatcher(blockedGlobal);
-    vi.stubEnv('HTTP_PROXY', 'http://127.0.0.1:9');
-    vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:9');
-    const stored = stageStorage(request);
-    vi.mocked(lookup).mockImplementation(((
-      _host: string,
-      _options: unknown,
-      callback: (error: Error | null, addresses: LookupAddress[]) => void,
-    ) => {
-      lookups += 1;
-      callback(
-        null,
-        lookups === 1
-          ? [{ address: '93.184.216.34', family: 4 }]
-          : [{ address: '127.0.0.1', family: 4 }],
-      );
-    }) as typeof lookup);
-    await expect(upload(`${protocol}//uploads.test/source`)).resolves.toMatchObject({
-      assetId: 'durable-asset',
-    });
-    expect(Buffer.concat(stored).toString()).toBe('offline uploaded bytes');
-    expect(lookups).toBe(1);
-    request.mockClear();
-    await expect(upload(`${protocol}//uploads.test/source`)).rejects.toThrow();
-    expect(lookups).toBe(2);
-    expect(transport.connectedAddresses).toEqual(['93.184.216.34']);
-    expect(reads).toEqual(['/source']);
-    expect(request).not.toHaveBeenCalled();
-    expect(runtime.snapshot()).toMatchObject({
-      active: 0,
-      queued: 0,
-      completed: 1,
-      failed: 1,
-      cleanupFailures: 0,
-    });
-    await blockedGlobal.close();
-  });
+  it.each(['http:', 'https:'])(
+    'pins a %s source connection and rejects a later rebound lookup',
+    async (protocol) => {
+      const { upload, request, runtime } = setup();
+      const blockedGlobal = new MockAgent();
+      blockedGlobal.disableNetConnect();
+      setGlobalDispatcher(blockedGlobal);
+      vi.stubEnv('HTTP_PROXY', 'http://127.0.0.1:9');
+      vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:9');
+      const stored = stageStorage(request);
+      vi.mocked(lookup).mockImplementation(((
+        _host: string,
+        _options: unknown,
+        callback: (error: Error | null, addresses: LookupAddress[]) => void,
+      ) => {
+        lookups += 1;
+        callback(
+          null,
+          lookups === 1
+            ? [{ address: '93.184.216.34', family: 4 }]
+            : [{ address: '127.0.0.1', family: 4 }],
+        );
+      }) as typeof lookup);
+      await expect(upload(`${protocol}//uploads.test/source`)).resolves.toMatchObject({
+        assetId: 'durable-asset',
+      });
+      expect(Buffer.concat(stored).toString()).toBe('offline uploaded bytes');
+      expect(lookups).toBe(1);
+      request.mockClear();
+      await expect(upload(`${protocol}//uploads.test/source`)).rejects.toThrow();
+      expect(lookups).toBe(2);
+      expect(transport.connectedAddresses).toEqual(['93.184.216.34']);
+      expect(reads).toEqual(['/source']);
+      expect(request).not.toHaveBeenCalled();
+      expect(runtime.snapshot()).toMatchObject({
+        active: 0,
+        queued: 0,
+        completed: 1,
+        failed: 1,
+        cleanupFailures: 0,
+      });
+      await blockedGlobal.close();
+    },
+  );
   it.each([
     { url: 'http://93.184.216.34/source', address: '93.184.216.34', family: 4 },
     { url: 'http://[2606:4700:4700::1111]/source', address: '2606:4700:4700::1111', family: 6 },
@@ -308,37 +308,41 @@ describe('upload source destination enforcement at the tool boundary', () => {
         { address: '127.0.0.1', family: 4 },
       ],
     },
-  ])('rejects private or mixed DNS answers on the TLS connection: $results', async ({
-    results,
-  }) => {
-    addresses = results;
-    const { upload, request, runtime } = setup();
-    await expect(upload('https://uploads.test/source')).rejects.toThrow();
-    expect(lookups).toBe(1);
-    expect(reads).toEqual([]);
-    expect(request).not.toHaveBeenCalled();
-    expect(runtime.snapshot()).toMatchObject({ active: 0, queued: 0, downloadedBytes: 0 });
-  });
+  ])(
+    'rejects private or mixed DNS answers on the TLS connection: $results',
+    async ({ results }) => {
+      addresses = results;
+      const { upload, request, runtime } = setup();
+      await expect(upload('https://uploads.test/source')).rejects.toThrow();
+      expect(lookups).toBe(1);
+      expect(reads).toEqual([]);
+      expect(request).not.toHaveBeenCalled();
+      expect(runtime.snapshot()).toMatchObject({ active: 0, queued: 0, downloadedBytes: 0 });
+    },
+  );
 
   it.each([
     { address: '93.184.216.34', family: 4 },
     { address: '2606:4700:4700::1111', family: 6 },
-  ])('stages a checked HTTPS source with trusted hostname verification: $address', async (address) => {
-    addresses = [address];
-    const { upload, request, runtime } = setup();
-    const stored = stageStorage(request);
-    await expect(upload('https://uploads.test/source?signature=offline')).resolves.toMatchObject({
-      assetId: 'durable-asset',
-    });
-    expect(Buffer.concat(stored).toString()).toBe('offline uploaded bytes');
-    expect(transport.connectedAddresses).toEqual([address.address]);
-    expect(runtime.snapshot()).toMatchObject({
-      active: 0,
-      queued: 0,
-      completed: 1,
-      cleanupFailures: 0,
-    });
-  });
+  ])(
+    'stages a checked HTTPS source with trusted hostname verification: $address',
+    async (address) => {
+      addresses = [address];
+      const { upload, request, runtime } = setup();
+      const stored = stageStorage(request);
+      await expect(upload('https://uploads.test/source?signature=offline')).resolves.toMatchObject({
+        assetId: 'durable-asset',
+      });
+      expect(Buffer.concat(stored).toString()).toBe('offline uploaded bytes');
+      expect(transport.connectedAddresses).toEqual([address.address]);
+      expect(runtime.snapshot()).toMatchObject({
+        active: 0,
+        queued: 0,
+        completed: 1,
+        cleanupFailures: 0,
+      });
+    },
+  );
   it('retains TLS certificate hostname verification for public sources', async () => {
     const { upload, request, runtime } = setup();
     await expect(upload('https://wrong-host.test/source')).rejects.toThrow(

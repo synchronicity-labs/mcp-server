@@ -231,105 +231,105 @@ async function fixture(
     runWithAuth('dialogue-reader', 'openai-mcp', () => client.callTool({ name, arguments: args }));
   return { calls, client, call, port: (upstream.address() as AddressInfo).port };
 }
-it.each([
-  false,
-  true,
-])('advertises account-scoped dialogue writes with keyedPreview=%s', async (keyedPreview) => {
-  const { client } = await fixture({ keyedPreview });
-  const tools = (await client.listTools()).tools;
-  for (const name of ['create-dialogue-preview', 'create-dialogue-video']) {
-    const tool = tools.find((candidate) => candidate.name === name);
-    expect(tool, name).toBeDefined();
-    expect(tool?.annotations).toMatchObject({
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: false,
-      openWorldHint: false,
+it.each([false, true])(
+  'advertises account-scoped dialogue writes with keyedPreview=%s',
+  async (keyedPreview) => {
+    const { client } = await fixture({ keyedPreview });
+    const tools = (await client.listTools()).tools;
+    for (const name of ['create-dialogue-preview', 'create-dialogue-video']) {
+      const tool = tools.find((candidate) => candidate.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool?.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      });
+      expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
+      expect(tool?._meta?.ui).toMatchObject({ visibility: ['model', 'app'] });
+      expect(tool?.inputSchema.required).toEqual(
+        expect.arrayContaining(['projectId', 'videoAssetId']),
+      );
+      expect(tool?.inputSchema.properties).not.toHaveProperty('sourceVideoUrl');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('voiceId');
+    }
+    // Copying a saved external source can still fetch an open-world URL.
+    expect(
+      tools.find((tool) => tool.name === 'upload-dialogue-source')?.annotations?.openWorldHint,
+    ).toBe(true);
+  },
+);
+it.each([undefined, 'COMPLETED', 'COMPLETED_PARTIAL'] as const)(
+  'transcribes, preserves preview quality (%s), estimates and submits the canonical preview through MCP',
+  async (previewStatus) => {
+    const partialDetail = previewStatus
+      ? { slotsTotal: 1, slotsOk: 0, failedSlots: [{ index: 0, errorCode: 'QC_SEAM_STEP' }] }
+      : undefined;
+    const { calls, client, call } = await fixture({ previewStatus, partialDetail });
+    const tools = (await client.listTools()).tools;
+    expect(
+      tools.find((tool) => tool.name === 'create-dialogue-preview')?._meta?.[
+        'openai/widgetAccessible'
+      ],
+    ).toBe(true);
+    for (const tool of tools.filter((candidate) => candidate.name.includes('dialogue')))
+      expect(tool.title, tool.name).toBeTruthy();
+    expect((await call('create-dialogue-transcription', source)).isError).not.toBe(true);
+    expect(calls.find((c) => c.path === '/v2/transcriptions')?.body).toEqual({
+      sourceVideoUrl,
+      projectId,
+      maxSourceSeconds: 600,
     });
-    expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
-    expect(tool?._meta?.ui).toMatchObject({ visibility: ['model', 'app'] });
-    expect(tool?.inputSchema.required).toEqual(
-      expect.arrayContaining(['projectId', 'videoAssetId']),
-    );
-    expect(tool?.inputSchema.properties).not.toHaveProperty('sourceVideoUrl');
-    expect(tool?.inputSchema.properties).not.toHaveProperty('voiceId');
-  }
-  // Copying a saved external source can still fetch an open-world URL.
-  expect(
-    tools.find((tool) => tool.name === 'upload-dialogue-source')?.annotations?.openWorldHint,
-  ).toBe(true);
-});
-it.each([
-  undefined,
-  'COMPLETED',
-  'COMPLETED_PARTIAL',
-] as const)('transcribes, preserves preview quality (%s), estimates and submits the canonical preview through MCP', async (previewStatus) => {
-  const partialDetail = previewStatus
-    ? { slotsTotal: 1, slotsOk: 0, failedSlots: [{ index: 0, errorCode: 'QC_SEAM_STEP' }] }
-    : undefined;
-  const { calls, client, call } = await fixture({ previewStatus, partialDetail });
-  const tools = (await client.listTools()).tools;
-  expect(
-    tools.find((tool) => tool.name === 'create-dialogue-preview')?._meta?.[
-      'openai/widgetAccessible'
-    ],
-  ).toBe(true);
-  for (const tool of tools.filter((candidate) => candidate.name.includes('dialogue')))
-    expect(tool.title, tool.name).toBeTruthy();
-  expect((await call('create-dialogue-transcription', source)).isError).not.toBe(true);
-  expect(calls.find((c) => c.path === '/v2/transcriptions')?.body).toEqual({
-    sourceVideoUrl,
-    projectId,
-    maxSourceSeconds: 600,
-  });
-  const preview = await call('create-dialogue-preview', { ...source, transcriptionId, edits });
-  expect(preview.isError).not.toBe(true);
-  const recovered = await call('get-dialogue-preview', { ...source, id: dialogueEditId });
-  expect(recovered.isError).not.toBe(true);
-  for (const result of [preview, recovered]) {
-    if (partialDetail)
-      expect(result.structuredContent).toMatchObject({ status: previewStatus, partialDetail });
-    else expect(result.structuredContent).not.toHaveProperty('partialDetail');
-  }
-  expect(calls.find((c) => c.path === '/v2/dialogue-edits')?.body).toEqual({
-    sourceVideoUrl,
-    projectId,
-    transcript,
-    edits,
-    transcriptionJobId: transcriptionId,
-  });
-  const input = {
-    ...source,
-    dialogueEditId,
-    model: 'sync-3',
-    options: { active_speaker_detection: true },
-  };
-  expect((await call('estimate-dialogue-video', input)).structuredContent).toEqual(estimate);
-  expect(
-    (await call('create-dialogue-video', { ...input, idempotencyKey: 'dialogue-request' })).isError,
-  ).not.toBe(true);
-  const generation = calls.find((c) => c.path === '/v2/generate')!;
-  expect(generation.body).toEqual({
-    projectId,
-    model: 'sync-3',
-    input: [{ type: 'video', assetId: videoAssetId }],
-    dialogueEdit: { id: dialogueEditId },
-    options: { active_speaker_detection: { auto_detect: true } },
-  });
-  expect(calls.find((c) => c.path === '/v2/analyze/cost')?.body).toEqual(generation.body);
-  expect(generation.key).toBe('dialogue-request');
-  expect(calls.every((c) => c.token === 'Bearer dialogue-reader')).toBe(true);
-});
-it.each([
-  { denied: true },
-  { mismatched: true },
-])('blocks preview creation for inaccessible or different source: %j', async (options) => {
-  const { call, calls } = await fixture(options);
-  expect(
-    (await call('create-dialogue-preview', { ...source, transcriptionId, edits })).isError,
-  ).toBe(true);
-  expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
-});
+    const preview = await call('create-dialogue-preview', { ...source, transcriptionId, edits });
+    expect(preview.isError).not.toBe(true);
+    const recovered = await call('get-dialogue-preview', { ...source, id: dialogueEditId });
+    expect(recovered.isError).not.toBe(true);
+    for (const result of [preview, recovered]) {
+      if (partialDetail)
+        expect(result.structuredContent).toMatchObject({ status: previewStatus, partialDetail });
+      else expect(result.structuredContent).not.toHaveProperty('partialDetail');
+    }
+    expect(calls.find((c) => c.path === '/v2/dialogue-edits')?.body).toEqual({
+      sourceVideoUrl,
+      projectId,
+      transcript,
+      edits,
+      transcriptionJobId: transcriptionId,
+    });
+    const input = {
+      ...source,
+      dialogueEditId,
+      model: 'sync-3',
+      options: { active_speaker_detection: true },
+    };
+    expect((await call('estimate-dialogue-video', input)).structuredContent).toEqual(estimate);
+    expect(
+      (await call('create-dialogue-video', { ...input, idempotencyKey: 'dialogue-request' }))
+        .isError,
+    ).not.toBe(true);
+    const generation = calls.find((c) => c.path === '/v2/generate')!;
+    expect(generation.body).toEqual({
+      projectId,
+      model: 'sync-3',
+      input: [{ type: 'video', assetId: videoAssetId }],
+      dialogueEdit: { id: dialogueEditId },
+      options: { active_speaker_detection: { auto_detect: true } },
+    });
+    expect(calls.find((c) => c.path === '/v2/analyze/cost')?.body).toEqual(generation.body);
+    expect(generation.key).toBe('dialogue-request');
+    expect(calls.every((c) => c.token === 'Bearer dialogue-reader')).toBe(true);
+  },
+);
+it.each([{ denied: true }, { mismatched: true }])(
+  'blocks preview creation for inaccessible or different source: %j',
+  async (options) => {
+    const { call, calls } = await fixture(options);
+    expect(
+      (await call('create-dialogue-preview', { ...source, transcriptionId, edits })).isError,
+    ).toBe(true);
+    expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
+  },
+);
 it('does not retry an ambiguous paid preview and reuses the original voice without false rerun lineage', async () => {
   const { call, calls } = await fixture({ lostPreview: true });
   expect(

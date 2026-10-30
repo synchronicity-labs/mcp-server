@@ -116,22 +116,22 @@ function start(path: string, mode: Scenario['mode'], signal?: AbortSignal) {
   return { scenario, response };
 }
 for (const path of ['/token', '/revoke']) {
-  it.each([
-    'success',
-    'error',
-  ] as const)(`${path}: forces no-store on %s without altering the response`, async (mode) => {
-    const { scenario, response } = start(path, mode);
-    const res = await response;
-    expect(res.status).toBe(mode === 'error' ? 401 : 200);
-    expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(res.headers.get('pragma')).toBe('no-cache');
-    expect(await res.json()).toEqual(
-      mode === 'error'
-        ? { error: 'invalid_client' }
-        : { access_token: 'fixture-token', token_type: 'Bearer' },
-    );
-    expect(scenario.calls).toBe(1);
-  });
+  it.each(['success', 'error'] as const)(
+    `${path}: forces no-store on %s without altering the response`,
+    async (mode) => {
+      const { scenario, response } = start(path, mode);
+      const res = await response;
+      expect(res.status).toBe(mode === 'error' ? 401 : 200);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      expect(res.headers.get('pragma')).toBe('no-cache');
+      expect(await res.json()).toEqual(
+        mode === 'error'
+          ? { error: 'invalid_client' }
+          : { access_token: 'fixture-token', token_type: 'Bearer' },
+      );
+      expect(scenario.calls).toBe(1);
+    },
+  );
   it.each(['headers', 'body'] as const)(
     `${path}: bounds stalled %s and closes upstream without retries`,
     async (mode) => {
@@ -150,19 +150,19 @@ for (const path of ['/token', '/revoke']) {
     },
     OAUTH_PROXY_TIMEOUT_MS + 3_000,
   );
-  it.each([
-    'headers',
-    'body',
-  ] as const)(`${path}: aborts stalled %s after caller disconnect`, async (mode) => {
-    const stop = new AbortController();
-    const { scenario, response } = start(path, mode, stop.signal);
-    const rejected = expect(response).rejects.toThrow();
-    await vi.waitFor(() => expect(scenario.started).toBe(true));
-    stop.abort();
-    await rejected;
-    await vi.waitFor(() => expect(scenario.closed).toBe(true));
-    expect(scenario.calls).toBe(1);
-  });
+  it.each(['headers', 'body'] as const)(
+    `${path}: aborts stalled %s after caller disconnect`,
+    async (mode) => {
+      const stop = new AbortController();
+      const { scenario, response } = start(path, mode, stop.signal);
+      const rejected = expect(response).rejects.toThrow();
+      await vi.waitFor(() => expect(scenario.started).toBe(true));
+      stop.abort();
+      await rejected;
+      await vi.waitFor(() => expect(scenario.closed).toBe(true));
+      expect(scenario.calls).toBe(1);
+    },
+  );
   it(`${path}: marks local credential rejections non-cacheable before forwarding`, async () => {
     const before = [...scenarios.values()].reduce((n, s) => n + s.calls, 0);
     const res = await fetch(url + path, {
