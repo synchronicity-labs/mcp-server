@@ -130,9 +130,11 @@ The hosted server exposes a curated set of tools to every client:
 | Projects | `projects_create`, `projects_get`, `projects_get-all`, `projects_get-generations`, `rename-project` |
 | Account | `get-account-context`, `get-account-usage` |
 
-ChatGPT also gets the tools behind the embedded Studio app: Studio views and
-drafts, the upload widget and app helpers. Other clients don't see them, and
-calls to them from other clients are refused.
+Clients with app support also get the tools behind the embedded Studio app:
+Studio views and drafts, the upload widget and app helpers. Those are clients
+whose MCP handshake name selects the ChatGPT or Codex app profile (`openai-mcp`,
+`openai-mcp (Codex)`; see `src/client-profile.ts`). Other clients don't see these
+tools, and their calls to them are refused.
 
 The local stdio server has all of these, plus a tool for every other public API
 operation in the [OpenAPI spec](https://api.sync.so/api-json), such as
