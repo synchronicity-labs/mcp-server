@@ -215,9 +215,12 @@ describe('immutable client profiles', () => {
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
         const { tools } = await client.listTools();
-        expect(tools.length).toBe(supportsUploads ? 12 : 9);
+        expect(tools.length).toBe(supportsUploads ? 12 : 8);
         expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
+        // The initialize response carries the announced client's instructions.
+        expect(client.getInstructions()?.includes('When Studio publishes')).toBe(supportsUploads);
+        expect(client.getInstructions()).toContain('exactly one visual input');
         const create = tools.find((tool) => tool.name === 'create-lipsync')!;
         expect(create._meta?.['openai/fileParams']).toEqual(
           supportsUploads ? ['video', 'image', 'audio'] : undefined,
@@ -390,7 +393,6 @@ describe('immutable client profiles', () => {
                 'get-account-context',
                 'get-account-usage',
                 'rename-project',
-                'get-asset-creators',
                 'get-playback-metadata',
                 'get-generation-continuation',
                 'create-lipsync',
@@ -418,7 +420,9 @@ describe('immutable client profiles', () => {
           expect(JSON.stringify(tools)).not.toMatch(
             /openai\/|upload-media|assets_create|tts_create|ChatGPT/,
           );
-          await expect(client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow('Copy ID');
+          await expect(client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow(
+            'assets_create-upload-url',
+          );
           const denied = await client.callTool({
             name: 'upload-media',
             arguments: {
@@ -427,10 +431,10 @@ describe('immutable client profiles', () => {
             },
           });
           expect(denied.isError).toBe(true);
-          expect(JSON.stringify(denied)).toContain('Copy ID');
+          expect(JSON.stringify(denied)).toContain('assets_create-upload-url');
           const widget = await client.callTool({ name: 'open-upload-widget', arguments: {} });
           expect(widget.isError).toBe(true);
-          expect(JSON.stringify(widget)).toContain('Copy ID');
+          expect(JSON.stringify(widget)).toContain('assets_create-upload-url');
           const file = await client.callTool({
             name: 'create-lipsync',
             arguments: {
@@ -439,7 +443,14 @@ describe('immutable client profiles', () => {
             },
           });
           expect(file.isError).toBe(true);
-          expect(JSON.stringify(file)).toContain('Copy ID');
+          expect(JSON.stringify(file)).toContain('assets_create-upload-url');
+          // Widget-only tools stay registered but refuse model-only clients before any request.
+          const before = calls.length;
+          const creators = await runWithAuth(`token-${index}`, `untrusted-${index}`, () =>
+            client.callTool({ name: 'get-asset-creators', arguments: {} }),
+          );
+          expect(creators.isError).toBe(true);
+          expect(calls).toHaveLength(before);
         }
         const result = await runWithAuth(`token-${index}`, `untrusted-${index}`, () =>
           client.callTool({
@@ -581,7 +592,10 @@ it.each([0, 1, 2])(
     const chatTools = (await chatgpt.client.listTools()).tools;
     const claudeTools = (await claude.client.listTools()).tools;
     expect(chatTools).toHaveLength(10 + count);
-    expect(claudeTools).toHaveLength(7 + count);
+    // Widget-only tools such as get-asset-creators (member emails) stay out of model-only catalogs.
+    expect(claudeTools).toHaveLength(6 + count);
+    expect(claudeTools.map((tool) => tool.name)).not.toContain('get-asset-creators');
+    expect(chatTools.map((tool) => tool.name)).toContain('get-asset-creators');
     expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
   },
 );

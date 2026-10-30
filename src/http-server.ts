@@ -277,7 +277,10 @@ export function createHttpMcpTransport(
 }
 
 export async function startHttpServer(
-  serverFactory: { createServer: (clientName?: string) => McpServer; toolCount: number },
+  serverFactory: {
+    createServer: (clientName?: string, handshakeClientName?: string) => McpServer;
+    toolCount: number;
+  },
   config: SyncMcpConfig,
 ): Promise<void> {
   const log = (message: string) => {

@@ -52,4 +52,4 @@ export function resolveClientProfile(name?: string): ClientProfile {
 }
 
 export const UNSUPPORTED_UPLOAD_MESSAGE =
-  'This client does not support the ChatGPT file bridge or upload widget. Upload in authenticated Sync, use Copy ID as imageAssetId, videoAssetId or audioAssetId in the same organization, or pass a public/Sync-hosted URL to create-lipsync.';
+  'This client does not support the ChatGPT file bridge or upload widget. For a local file, call assets_create-upload-url, PUT the file bytes to the returned uploadUrl with the same Content-Type, register the returned url with assets_create, and pass the asset id as imageAssetId, videoAssetId or audioAssetId. Public or Sync-hosted URLs and existing Sync asset IDs also work in create-lipsync.';
