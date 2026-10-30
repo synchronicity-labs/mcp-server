@@ -5,6 +5,9 @@ import { gunzipSync } from 'node:zlib';
 import { loadChatgptApp } from '../dist/chatgpt-app.js';
 import { chatgptReleaseSchema, MAX_PREVIOUS_CHATGPT_RELEASES } from '../dist/chatgpt-release.js';
 
+// Default string sort order, spelled out so lint does not depend on built types.
+const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 // Check in the approved bytes so production builds need no cross-repository credentials.
 const source = new URL('../deploy/chatgpt/', import.meta.url);
 const output = new URL('../chatgpt-dist/', import.meta.url);
@@ -13,8 +16,8 @@ const catalog = chatgptReleaseSchema.parse(
 );
 const releases = [catalog.current, ...catalog.previous];
 assert.deepEqual(
-  (await readdir(source)).filter((name) => name !== 'releases.json').sort(),
-  [...releases].sort(),
+  (await readdir(source)).filter((name) => name !== 'releases.json').sort(byCodeUnit),
+  [...releases].sort(byCodeUnit),
   'Every packaged directory must be declared in releases.json.',
 );
 assert(
@@ -23,7 +26,7 @@ assert(
 );
 // Rebuilding after pruning a retained release must not carry stale output forward.
 await rm(output, { recursive: true, force: true });
-for (const digest of releases.sort()) {
+for (const digest of releases.sort(byCodeUnit)) {
   assert.match(digest, /^[a-f0-9]{64}$/);
   const input = new URL(`${digest}/`, source);
   const destination = new URL(`${digest}/`, output);
