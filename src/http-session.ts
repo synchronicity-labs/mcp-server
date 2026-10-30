@@ -33,7 +33,7 @@ export class HttpSession {
   #closed = false;
   constructor(
     readonly clientName: string,
-    private readonly createServer: (clientName?: string) => McpServer,
+    private readonly createServer: (clientName?: string, handshakeClientName?: string) => McpServer,
     private readonly reportProtocol: (version: string) => void,
     private readonly reportError: (details: Record<string, unknown>) => void = () => {},
   ) {}
@@ -113,7 +113,7 @@ export class HttpSession {
       res.status(400).json({ error: 'Request ID is already in flight in this session' });
       return;
     }
-    const server = this.createServer(initialize ? undefined : this.clientName);
+    const server = this.createServer(initialize ? undefined : this.clientName, this.clientName);
     const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
