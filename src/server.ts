@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { CallToolResult, Resource, Tool } from '@modelcontextprotocol/server';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -45,6 +46,11 @@ import {
 } from './tools/translation-preview.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
+
+// Report the published package version, not a hand-maintained copy.
+const { version: PACKAGE_VERSION } = createRequire(import.meta.url)('../package.json') as {
+  version: string;
+};
 
 const SERVER_DESCRIPTION =
   'Sync makes photos talk, lip-syncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
@@ -647,7 +653,7 @@ function createProfiledServer(
   const tools =
     sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
   const server = new McpServer(
-    { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
+    { name: 'sync', version: PACKAGE_VERSION, description: SERVER_DESCRIPTION },
     {
       instructions: serverInstructions(resolveClientProfile(httpClientName ?? handshakeClientName)),
     },

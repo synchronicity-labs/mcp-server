@@ -40,7 +40,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -b && chmod +x dist/cli.js",
+    "build": "tsc -b tsconfig.build.json && chmod +x dist/cli.js",
     "package:chatgpt": "node scripts/package-chatgpt.mjs",
     "verify:chatgpt-package": "node scripts/verify-chatgpt-package.mjs",
     "clean": "rm -rf dist .cache",
