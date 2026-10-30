@@ -1,79 +1,84 @@
-# Sync MCP Server
+# sync. MCP server
 
-An open-source [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for the [Sync](https://sync.so) API. Gives AI agents the ability to create lipsync videos, manage assets, check generation status, and more.
+Connect your AI agent to [sync.](https://sync.so) to lip-sync videos, translate
+and dub them into other languages, clone voices, and manage assets and projects
+from a chat or a coding session.
 
-Tools are **auto-generated from the Sync OpenAPI spec** at startup. As new API endpoints ship, they become available to agents automatically — no server update needed.
+sync. hosts this server at **`https://mcp.sync.so/mcp`**. You sign in with your
+sync. account, so there is nothing to install and no API key to copy. Every merge
+to this repository's `main` deploys there.
 
-## Supported Clients
+## Connect your agent
 
-| Client | Status | Transport |
-|--------|--------|-----------|
-| [Claude Web](https://claude.ai) (claude.ai) | Supported | Remote (HTTP + OAuth) |
-| [Claude Desktop](https://claude.ai/download) | Supported | Local (stdio) |
-| [ChatGPT Desktop](https://openai.com/chatgpt/desktop/) | Supported | Local (stdio) |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Supported | Local (stdio) |
-| [Cursor](https://cursor.com) | Supported | Local (stdio) |
-| [Windsurf](https://codeium.com/windsurf) | Supported | Local (stdio) |
-| [Codex CLI](https://github.com/openai/codex) | Supported | Local (stdio) |
-| Any MCP-compatible client | Supported | Local (stdio) |
+### ChatGPT
 
-## Quick Start
+Open [sync. in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6a398355fbc08191a232e7eeeacb73d5)
+and connect your account. In ChatGPT, sync. Studio also opens inside the chat.
 
-### Claude Web (claude.ai)
+### Claude (claude.ai and Claude Desktop)
 
-No installation required — connect directly from your browser.
-
-1. Go to [claude.ai](https://claude.ai) → **Settings** → **Integrations**
-2. Click **Add custom connector**
-3. Enter **Name:** `Sync` and **URL:** `https://mcp.sync.so/mcp`
-4. Click **Add**, then **Connect**
-5. Log in with your Sync account when prompted
-
-No API key needed — authentication is handled via OAuth.
+1. Open **Settings → Connectors** and choose **Add custom connector**.
+2. Name it `sync.` and set the URL to `https://mcp.sync.so/mcp`.
+3. Click **Connect** and sign in to sync.
 
 ### Claude Code
 
 ```bash
-claude mcp add sync -- npx -y @sync.so/mcp-server --api-key YOUR_API_KEY
+claude mcp add --transport http sync https://mcp.sync.so/mcp
 ```
 
-Or add to `.mcp.json` in your project root:
+Then run `/mcp` in Claude Code, select `sync` and sign in. Add `--scope user` to
+use it in every project.
 
-```json
-{
-  "mcpServers": {
-    "sync": {
-      "command": "npx",
-      "args": ["-y", "@sync.so/mcp-server"],
-      "env": {
-        "SYNC_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
+### Codex
 
-### Claude Desktop
-
-Add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "sync": {
-      "command": "npx",
-      "args": ["-y", "@sync.so/mcp-server"],
-      "env": {
-        "SYNC_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
+```bash
+codex mcp add sync --url https://mcp.sync.so/mcp
+codex mcp login sync
 ```
 
 ### Cursor
 
-Add to `.cursor/mcp.json` in your project:
+Add to `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for all projects:
+
+```json
+{
+  "mcpServers": {
+    "sync": { "url": "https://mcp.sync.so/mcp" }
+  }
+}
+```
+
+Cursor asks you to sign in to sync. the first time it connects.
+
+### VS Code
+
+Add to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "sync": { "type": "http", "url": "https://mcp.sync.so/mcp" }
+  }
+}
+```
+
+### Other clients
+
+Any client that supports remote MCP servers over Streamable HTTP with OAuth can
+use `https://mcp.sync.so/mcp`. The client registers itself, and you sign in to
+sync. in the browser.
+
+### Local server with an API key
+
+For clients without remote MCP support, and for scripts and CI, run the server
+locally over stdio with a sync. [API key](https://sync.so/docs/api-reference/guides/authentication):
+
+```bash
+claude mcp add sync -e SYNC_API_KEY=your-api-key -- npx -y @sync.so/mcp-server
+```
+
+Or in a client's JSON config:
 
 ```json
 {
@@ -81,270 +86,60 @@ Add to `.cursor/mcp.json` in your project:
     "sync": {
       "command": "npx",
       "args": ["-y", "@sync.so/mcp-server"],
-      "env": {
-        "SYNC_API_KEY": "your-api-key"
-      }
+      "env": { "SYNC_API_KEY": "your-api-key" }
     }
   }
 }
 ```
 
-### Without an API key (interactive login)
+Without `SYNC_API_KEY`, the server starts a device login on first run: visit the
+URL it prints and enter the code. The token is cached at
+`~/.config/sync/mcp-credentials.json`.
 
-Omit `SYNC_API_KEY` and the server will start a device auth flow on first run:
+npm releases are published separately from the hosted deploy and can lag behind
+it, so prefer the hosted server when your client supports it.
 
-```json
-{
-  "mcpServers": {
-    "sync": {
-      "command": "npx",
-      "args": ["-y", "@sync.so/mcp-server"]
-    }
-  }
-}
-```
+## What to ask
 
-You'll be prompted to visit a URL and enter a code. After approval, the token is cached at `~/.config/sync/mcp-credentials.json`.
+Paste prompts like these into your agent. Asset IDs come from your sync. library.
+Links can be public media URLs or YouTube, TikTok, Instagram and Facebook videos.
 
-## Getting an API Key
+| Ask | What the agent does |
+| --- | --- |
+| "Lipsync video asset `<video-asset-id>` with audio asset `<audio-asset-id>`." | `create-lipsync` with the saved assets, then waits for the result |
+| "Lipsync https://example.com/talk.mp4 to https://example.com/voiceover.wav." | `create-lipsync` with public URLs |
+| "Translate https://www.youtube.com/watch?v=… to Spanish." | Imports the link with `assets_create`, quotes the cost, and after you confirm runs `create-translate-and-dub` |
+| "Make video asset `<video-asset-id>` say “thanks for watching” in a calm narrator voice." | Picks a voice with `voices_get-voices`, quotes the script, then `create-lipsync` with `script` |
+| "How many credits do I have left?" | `get-account-usage` |
+| "What did my last generation cost?" | Finds it in history and reads `get-generation-costs` |
 
-1. Sign up at [sync.so](https://sync.so)
-2. Go to your dashboard settings
-3. Generate an API key
+Translation, dubbing, speech previews and voice clones are quoted and confirmed
+with you before they start.
 
-See the [authentication guide](https://sync.so/docs/api-reference/guides/authentication) for details.
+## Tools
 
-## Available Tools
+The hosted server exposes a curated set of tools to every client:
 
-Tools are dynamically generated from the Sync API. Core tools include:
+| Area | Tools |
+| --- | --- |
+| Lip sync | `create-lipsync`, `generate_estimate-cost`, `generate_get-generation`, `generate_get-generations`, `get-generation-continuation`, `get-generation-costs`, `models_get` |
+| Translation and dubbing | `create-translate-and-dub`, `get-translation-options`, `estimate-translation-preview`, `create-translation-preview`, `get-translation-preview` |
+| Speech and voices | `create-speech-preview`, `get-speech-options`, `get-speech-preview`, `voices_get-voices`, `voices_clone-voice` |
+| Edit Dialogue | `get-dialogue-options`, `upload-dialogue-source`, `create-dialogue-transcription`, `get-dialogue-transcription`, `create-dialogue-preview`, `get-dialogue-preview`, `estimate-dialogue-video`, `create-dialogue-video` |
+| Assets | `assets_create`, `assets_create-upload-url`, `assets_get`, `assets_get-all`, `assets_count`, `assets_get-download-url`, `assets_update`, `assets_delete`, `get-playback-metadata`, `get-audio-trim`, `trim-audio` |
+| Projects | `projects_create`, `projects_get`, `projects_get-all`, `projects_get-generations`, `rename-project` |
+| Account | `get-account-context`, `get-account-usage` |
 
-| Tool | Description |
-|------|-------------|
-| `models_get` | List available lipsync models |
-| `generate_create-generation` | Create a lipsync video from video + audio inputs |
-| `generate_get-generation` | Get generation status — poll until COMPLETED |
-| `generate_get-generations` | List recent generations |
-| `generate_estimate-cost` | Estimate generation cost before creating |
-| `create-translate-and-dub` | Translate and lip-sync a saved video in one generation, when supported by the API contract |
-| `generations_get-by-id` | Get a generation by ID |
-| `generations_delete` | Delete a generation |
-| `assets_create-upload-url` | Get a presigned URL to upload a local file |
-| `assets_create` | Register a media URL as a reusable asset |
-| `assets_get-all` / `assets_count` | List and count assets with authenticated project, creator, search and type filters |
-| `get-asset-creators` | Read creator labels for the connected organization without accepting an organization override |
-| `get-generation-continuation` | Read a generation’s source, public settings, segments and dialogue lineage through the existing Studio API after fresh project and source access checks; never starts work |
-| `get-playback-metadata` | Read user-authorized timing, dimensions and playback proxy metadata; API-key identity stays unsupported and missing metadata stays unknown |
-| `assets_get` | Get a specific asset by ID |
-| `assets_update` / `assets_delete` | Update or delete an asset |
-| `voices_get-voices` | List premade + cloned voices |
-| `voices_clone-voice` | Clone a voice from an audio/video sample |
-| `voices_delete-voice` | Delete a cloned voice |
-| `tts_create` | Synthesize speech from text → audio URL |
-| `projects_create` | Create a project to group generations + assets |
-| `projects_get-all` / `projects_get` | List / get projects |
-| `projects_update` / `projects_delete` | Update or delete a project |
-| `get-studio-view` | Read the exact mounted Studio view and its action receipt |
-| `open-studio-project` | Open an existing project and optional workflow in Studio |
-| `refresh-studio-project` | Refresh Studio after a project rename or details change |
-| `refresh-studio-assets` | Refresh Studio after uploads or asset registration |
-| `show-studio-generation` | Display an already accepted generation or result |
-| `continue-studio-generation` | Stage an explicit source/output continuation in a new draft; archives the prior draft and may register existing output as media |
-| `get-studio-draft` / `update-studio-draft` | Read or replace specified draft selections/settings with revision checks; updates are marked destructive |
+ChatGPT also gets the tools behind the embedded Studio app: Studio views and
+drafts, the upload widget and app helpers. Other clients don't see them, and
+calls to them from other clients are refused.
 
-`create-translate-and-dub` requires a saved video asset, accessible project,
-model, target language and persistent idempotency key. Confirm the paid action
-before calling it, then poll its generation ID through completion. The current
-`generate_estimate-cost` response covers lip-sync only, not additional dubbing
-charges. See the [workflow integration and release plan](docs/chatgpt-workflows.md)
-for the remaining combined-pricing and embedded UI work.
+The local stdio server has all of these, plus a tool for every other public API
+operation in the [OpenAPI spec](https://api.sync.so/api-json), such as
+`projects_delete` and `voices_delete-voice`.
 
-### Quote replacement speech
-
-For “make this video say this script”, pass the replacement `script` to
-`generate_estimate-cost` with the chosen `model` and source `fps` when known.
-The MCP adapter estimates spoken seconds using Sync's speech-duration heuristic
-(160 words/minute with CJK segmentation and a character-duration floor), then
-requests pricing from the existing API. It does not synthesize or reserve credits.
-A six-word greeting in a 30-second video therefore quotes approximately 2.25
-seconds of lip-sync. Speech synthesis is excluded; actual speech length and
-final cost can differ.
-
-Once replacement audio exists, pass its measured `audioDuration` instead. This
-wins over `script` and the legacy `duration` input. For videos, also pass
-`videoDuration` and the generation's `syncMode` when using `cut_off` (shorter
-input) or `silence` (longer input). Other modes follow the audio duration;
-image inputs need only the script or audio duration. Set `visualType: "image"`
-when quoting an image with any sync mode; images always follow speech duration
-and must omit `videoDuration`.
-
-The response preserves API pricing fields and adds `durationEstimate` with
-`durationSeconds`, `audioDurationSeconds`, `source` (`script` or `audio`),
-`approximate` and `excludesSpeechSynthesis`. Explain that basis when confirming
-the generation. Requote changed scripts, audio, models or sync modes. Existing
-explicit `duration` calls and combined translate-and-dub quotes keep their
-existing behavior; translation still uses source duration.
-
-Deploy the MCP service and refresh the ChatGPT tool catalog to expose the new
-inputs. No embedded app bundle or API deployment is required for this adapter.
-
-### Translate a social video link
-
-For “Translate this YouTube link to Spanish”, use the existing asset and translation tools:
-
-1. Select a project and call `assets_create` with the link, `type: "VIDEO"`,
-   and `projectId`. YouTube, TikTok, Instagram and Facebook video links are supported.
-2. A `409 import_in_progress` response includes `importJobId`, `importStatus`,
-   `progress`, and `retryAfterMs`. Wait that interval (15 seconds if absent), then
-   repeat the identical asset request. The API reuses the import and eventually
-   returns the saved asset; no separate download or asset registration is needed.
-3. Use the returned asset `id` as `videoAssetId`. Discover supported languages/models,
-   estimate the translation, confirm its cost and configuration, then call
-   `create-translate-and-dub` with `targetLang: "es"` and a persistent idempotency key.
-   Poll the returned generation ID through completion.
-
-Never submit translation while the import is pending or use `importJobId` as an
-asset ID. Stop on import failure, disabled imports, unavailable service or import
-limits, explain the returned reason and offer uploading a file. Account feature
-flags, platform restrictions and daily import limits remain enforced by the API.
-
-### Edit Dialogue
-
-When the API exposes transcription and dialogue-edit endpoints, `get-dialogue-options`
-enables the embedded timed-word editor. When transcription refuses a source URL
-because it is not in Sync storage, `upload-dialogue-source` copies the accessible
-saved video through the bounded upload pipeline and returns a new project asset.
-Use that asset's ID for the remaining dialogue calls. The widget performs this
-recovery when `get-dialogue-options` advertises `sourceUpload: true`, and retains
-the uploaded selection through reload, preview, and generation. Other 422 errors
-do not initiate an upload, and a rejected uploaded copy does not trigger another
-automatic upload. `create-dialogue-transcription` and
-`get-dialogue-transcription` obtain the single-speaker transcript. Users edit or
-remove timed words, then explicitly request `create-dialogue-preview` and poll
-`get-dialogue-preview`. The adapter reads the server-owned transcript and keeps
-the original speaker voice. It does not accept a full replacement script or a
-selected TTS voice.
-
-`estimate-dialogue-video` and `create-dialogue-video` use the completed preview's
-`dialogueEdit.id`, original video asset and project. The final generation retains
-normal API admission, retiming, billing and idempotency. A lost preview creation
-response must not be automatically retried. Reopening an identified preview is
-read-only. Partial completion must be shown to the user.
-
-This candidate adds authenticated chat delivery to the exact mounted Studio view
-from [sync-api-v2 #7227](https://github.com/synchronicity-labs/sync-api-v2/pull/7227).
-Backend success is separate from its pending/applied/blocked/failed display
-receipt. Existing draft synchronization and paid-operation recovery remain in
-place; these view tools do not generate or synthesize media.
-Each model-callable view operation has its own tool, flat input schema and
-annotations. The generic `request-studio-view-action` tool is no longer exposed.
-Draft updates/saves, project/workflow switches, result selection and continuation
-declare destructive effects; receipt
-acknowledgements remain non-destructive. Cached Studio resources retain the
-existing app-only registration and acknowledgement tools.
-
-This candidate includes thumbnail-only asset previews and hosted-video recovery
-for Edit Dialogue. It packages the merged expanded-Studio fixes from
-[sync-api-v2 #7216](https://github.com/synchronicity-labs/sync-api-v2/pull/7216),
-[#7220](https://github.com/synchronicity-labs/sync-api-v2/pull/7220) and
-[#7222](https://github.com/synchronicity-labs/sync-api-v2/pull/7222) and
-[#7233](https://github.com/synchronicity-labs/sync-api-v2/pull/7233): active draft
-context publication, fullscreen height, draft/result controls and accessible
-current-result navigation. The release follow-up
-[#7253](https://github.com/synchronicity-labs/sync-api-v2/pull/7253) aligns all
-workflow titles, removes the projects-header Resume shortcut, and keeps previews
-above the composer. New lipsync/image-to-video requests default to `sync-3`;
-saved drafts and retries retain explicit model choices. It retains all eleven UI resources published through
-MCP #96 and the unchanged archive of the oldest October 2 resource. See
-[frontend packaging](docs/chatgpt-release.md) for the exact source commit,
-checksums, release order and live acceptance requirements.
-
-The existing workflow backend from PR #6822 is already in production. The draft
-API is already published; the new Studio view API routes must be released before this MCP candidate.
-Preparing the candidate does not deploy it or perform an EKS cutover.
-
-## Example Prompts
-
-### Embedded speech previews
-
-When the API advertises durable `/v2/tts/jobs` creation and status endpoints,
-ChatGPT can check `get-speech-options`, create a confirmed `create-speech-preview`
-and read the same job with `get-speech-preview`. Creation requires a persisted
-UUID idempotency key and is potentially paid. Reuse the key and identical input
-only to reconcile uncertain admission. Never synthesize again because saving the
-resulting audio asset failed. Project access and organization billing remain API
-authority; options expose only the fields needed for the speech quote.
-
-The compatible backend from sync-api-v2 PR #6822 is already in production.
-The packaged frontend comes from the merged source recorded in its release
-provenance. The candidate catalog retains eleven previous UIs; the retired October 2
-resource is archived rather than served, as detailed in the release guide.
-After the MCP release, rescan publisher metadata and verify preview, attachment,
-reload recovery and playback in ChatGPT. Local and package checks do not establish
-production acceptance; older APIs omit the speech tools and the UI fails closed.
-
-### Embedded translation previews
-
-With saved-asset support deployed on the existing `/v2/integrations/dubbing` API,
-the server exposes
-`estimate-translation-preview`, `create-translation-preview` and
-`get-translation-preview`. These are separate from combined video dubbing.
-Creation requires a stable UUID key and an authorized saved audio asset; the API
-binds the key to immutable inputs before provider admission. A lost response
-reuses the same key or known job ID. `recoveryRequired` never permits a fresh
-paid request. Save/reconcile the resulting audio separately, then explicitly
-lip-sync that saved audio rather than submitting another combined dub.
-
-The API advertises versioned saved-source authorization and keyed recovery in
-its OpenAPI contract. Existing route presence alone does not enable these tools.
-Older APIs omit these tools; `get-translation-options.previewAvailable` reports
-that distinction. Deploy API support before MCP, package the matching shared
-Studio frontend, rescan, and verify the real ChatGPT workflow. Local fixtures
-establish neither production release nor provider output quality.
-
-`get-account-usage` reads the connected organization's billing projection and,
-for metered accounts, complete current-period usage. Available credits exclude
-in-flight holds. Missing usage is unavailable, never a zero total. Billing
-management requires an owner/admin role as well as the API billing flag.
-`rename-project` changes only the name through the existing authenticated project
-PATCH route; it cannot change visibility or submit work and never retries writes
-automatically. Embedded clients keep the title read-only when older MCP
-releases omit `get-account-context.capabilities.projectRenaming`.
-
-`get-account-context` reads `/v2/oauth/account` for the connected account and
-organization. API keys retain a null signed-in account. The UI must not infer a
-personal asset scope or permissions from a client name or an API key's owner.
-
-### Reusable voice cloning in ChatGPT
-
-When the connected API exposes voice cloning, hosted clients can call
-`voices_clone-voice`. Ask: “Save a reusable clone of my voice from this sample,
-called My narration.” Confirm permission to clone the speaker, the sample and
-the name before creating it. Plan limits and provider requirements still apply.
-
-1. Upload an audio/video sample in Sync, or upload and register it with the asset
-   tools. Reuse its `assetId`; alternatively provide a Sync-hosted `url`.
-2. List existing voices first to avoid unnecessary duplicates. Clone with
-   `name`, `provider: elevenlabs` and exactly one sample source.
-3. Use the returned **`id`** as `voiceId` in `create-lipsync` with `script`.
-   The separate provider-specific `voiceId` field is not the Sync identifier.
-4. Review the video estimate and confirm generation separately.
-
-This exposes the conversational tool flow, not a new clone form in the embedded
-UI. It does not enable hosted voice deletion or standalone TTS. Edit Dialogue's
-original-speaker previews remain a different workflow.
-
-The API enforces sample validity, asset access, plan slots, provider access and
-duplicate names. On a failed or lost response, do not automatically retry:
-list voices, reconcile the result and explain uncertainty to the user. See
-[voice-cloning acceptance](docs/chatgpt-voice-cloning.md) before publication.
-
-Once configured, ask your AI agent:
-
-- *"List available Sync models"*
-- *"Create a lipsync video with this video URL and audio URL using the lipsync-2 model"*
-- *"Check the status of generation gen-abc123"*
-- *"Show me my recent generations"*
-- *"How much would it cost to generate a 30-second video?"*
+[Tool workflows](docs/tool-workflows.md) describes how the multi-step and paid
+tools behave.
 
 ## CLI Options
 
@@ -359,86 +154,21 @@ Options:
   -h, --help          Show this help message
 ```
 
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SYNC_API_KEY` | Your Sync API key (stdio transport) | — |
-| `SYNC_BASE_URL` | Direct API base URL for server-side calls, including token exchange | `https://api.sync.so` |
-| `SYNC_OAUTH_AUTHORIZATION_URL` | Optional browser-only authorization endpoint when Studio login uses another origin | `<SYNC_BASE_URL>/v2/oauth/authorize` |
-| `SYNC_CHATGPT_APP_RELEASES` | Release manifest selecting the current and retained UI bundles; set by the Docker image, no per-release Porter edit | `/app/chatgpt-dist/releases.json` in Docker; otherwise unset |
-| `SYNC_CHATGPT_APP_DIR` | Legacy/local frontend directory; packaged deployments select the release manifest instead | unset |
-| `SYNC_CHATGPT_APP_PREVIOUS_DIRS` | Legacy additional frontend directories; external mounts remain retained, packaged retention is managed by the release manifest | `[]` |
-| `SYNC_CHATGPT_APP_CONNECT_DOMAINS` | JSON array of exact HTTPS origins for uploads and media extraction | `[]` |
-| `SYNC_APP_UPLOAD_ORIGINS` | JSON array of exact HTTPS browser origins allowed to upload | widget domain and `https://web-sandbox.oaiusercontent.com` |
-| `SYNC_APP_UPLOAD_STORAGE_ORIGIN` | Exact HTTPS storage origin allowed for the one-use upload relay; unset uses direct presigned uploads | unset |
-| `SYNC_CHATGPT_APP_DOMAIN` | Exact HTTPS widget origin for the configured app | required when app is configured |
-| `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
-| `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
-| `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
-| `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `120000` (2 min) |
-| `MCP_MAX_SESSIONS` | Maximum active and initializing HTTP sessions | `1000` |
-| `MCP_SESSION_SWEEP_INTERVAL_MS` | Interval for idle-session cleanup | `15000` (15 sec) |
-| `MCP_SHUTDOWN_GRACE_MS` | Time to drain active requests before forced shutdown cleanup | `10000` (10 sec) |
-| `MCP_RUNTIME_TELEMETRY_INTERVAL_MS` | Interval for structured memory, CPU, event-loop, session, request, and upload telemetry | `15000` (15 sec) |
-| `MCP_UPLOAD_MAX_BYTES` | Maximum declared or streamed size for a re-hosted upload | `536870912` (512 MiB) |
-| `MCP_UPLOAD_CONCURRENCY` | Maximum concurrent re-host uploads per process | `2` |
-| `MCP_UPLOAD_MAX_QUEUED` | Maximum re-host uploads waiting for process capacity | `8` |
-| `MCP_UPLOAD_RETRY_AFTER_MS` | Suggested retry delay returned by upload overload errors | `5000` (5 sec) |
-| `MCP_UPLOAD_TIMEOUT_MS` | End-to-end deadline for a queued or active re-host upload | `900000` (15 min) |
-
-New HTTP session initialization is also refused with HTTP 503 and `Retry-After: 60`
-when V8 heap usage reaches 60% of its actual heap limit. In-flight sessions remain
-protected and no paid action is replayed. Admission resumes
-when memory is available. The production image enables explicit garbage collection;
-at this threshold the server first collects reclaimable objects and rechecks the
-same bound. Collection is limited to once per 30 seconds during sustained pressure.
-Custom launchers should use `node --expose-gc dist/cli.js`; without that flag the
-guard remains conservative. `mcp_runtime.memory.heapLimitBytes` reports that limit
-alongside heap usage and session rejection counts. This guard bounds session
-admission, not all request/response or upload memory; size container resources
-with those workloads in mind.
-
-The MCP SDK v2 packages are pinned to exact versions. Completed responses must
-release their stream entry immediately; retaining its resolver also retains the
-serialized response until the session closes. SDK v2 does this itself, and
-`src/http-response-cleanup.test.ts` keeps the ESM and CommonJS transports covered.
-Re-run the HTTP retention regressions before every SDK upgrade.
-
-After `pnpm run build && pnpm run package:chatgpt`, run `pnpm run test:memory:http`
-to exercise the actual HTTP transport and every packaged widget release in a
-512 MiB old-space process. It checks retained heap while sessions remain live,
-then expires sessions and repeats the workload to verify recovery. It uses only
-loopback HTTP and fixture API metadata; no credentials or generation calls are
-needed. `src/http-response-cleanup.test.ts` also checks successful and failed RPC
-responses, concurrent requests, and completion after a client disconnect without
-cancelling or repeating the tool operation.
-
-Tool schemas and stateless handlers are built once per HTTP factory. Discovery
-descriptions are cached for the four supported presentation profiles. Immutable schema validators are shared too. Session
-profiles, transports and request validation remain separate; credentials are resolved
-per request. After `pnpm run build`, `pnpm run test:memory` exercises local session
-load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
-`--burst` to defer initialization until all connections have reserved capacity,
-covering clients that complete discovery after an initialization burst.
-
-HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. Admission first expires idle sessions, then reclaims the oldest session idle for at least 30 seconds when the session-count limit is reached. In-flight requests and pending initializations are protected. Expired/evicted IDs return 404 so clients can initialize again. If no eligible capacity remains or heap admission fails, new initialization returns `503` with `Retry-After: 60`.
-
-Host-provided upload source URLs must use HTTP(S) on the protocol default port, without credentials. IP literals and every DNS answer used by a source connection must be public unicast destinations. Private, loopback, link-local, reserved, mapped and transition addresses are rejected. Source redirects are rejected; hosts must provide the final download URL. Source connections use a dedicated direct dispatcher rather than an environment or global proxy.
-
-Re-hosted uploads are streamed through bounded temporary files before durable asset registration. The deployment needs writable temporary disk sized for `MCP_UPLOAD_MAX_BYTES * MCP_UPLOAD_CONCURRENCY`; a memory-backed temporary directory defeats the memory bound. When upload capacity is exhausted, excess work fails with the retryable `UPLOAD_CAPACITY_EXCEEDED` code instead of increasing process memory pressure.
-
-The HTTP server writes newline-delimited JSON diagnostics to stderr. Lifecycle events distinguish graceful pod termination from abrupt process loss, request logs include latency and abort state, and `mcp_runtime` heartbeats include memory, CPU, event-loop delay, session totals, pending transports, aggregate HTTP status counts, and upload activity, queue, rejection, and byte counters.
+Environment variables and the HTTP server's session, memory, upload and
+diagnostics limits are in [HTTP server configuration](docs/http-server.md).
 
 ## How It Works
 
-1. On startup, the server fetches the OpenAPI spec from `{baseUrl}/api-json`
-2. Parses all public endpoints into operation definitions
-3. Converts each operation into an MCP tool with a Zod input schema
-4. Registers tools on the MCP server
-5. Each tool call makes an authenticated HTTP request to the Sync API
+1. At startup, the server fetches the public OpenAPI spec from `{baseUrl}/api-json`
+   and turns each operation into an MCP tool with a Zod input schema.
+2. Hand-written tools add multi-step workflows on the same API, such as translate
+   and dub, Edit Dialogue, speech previews and cost lookups.
+3. Each tool call is an authenticated request to the sync. API, with your OAuth
+   token (hosted) or API key (local).
 
-This means **new API endpoints are automatically available** — just restart the MCP server.
+Over stdio, a new public API operation becomes a tool on the next restart. The
+hosted server only exposes tools on its allowlist, so a new hosted tool ships with
+a release of this repository.
 
 ## Programmatic Usage
 
@@ -513,6 +243,8 @@ credentials, query or fragment. Existing deployments need no new setting.
 
 ## Learn More
 
+- [Tool workflows](docs/tool-workflows.md) — How multi-step and paid tools behave
+- [HTTP server configuration](docs/http-server.md) — Environment variables and runtime limits
 - [Maintainer notes](docs/maintainers.md) — Hosted compatibility, cancellation, OAuth proxy, uploads and monitoring
 - [Claude directory readiness](docs/claude-directory-readiness.md) — Review checklist and remaining submission work
 - [Sync Documentation](https://sync.so/docs) — Full API reference and guides
