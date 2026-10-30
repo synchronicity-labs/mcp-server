@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const draftId = '00000000-0000-4000-8000-000000000002';
@@ -81,62 +82,64 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     schema: { type: 'string' },
   }));
   const endpoint = '/v2/projects/{projectId}/studio-drafts/{draftId}';
-  const upstream = createServer(async (req, res) => {
-    res.setHeader('content-type', 'application/json');
-    if (req.url === '/api-json') {
-      const operation = (operationId: string, properties?: Record<string, unknown>) => ({
-        operationId,
-        tags: ['Projects'],
-        parameters,
-        'x-sync-studio-drafts': 1,
-        ...(properties
-          ? {
-              requestBody: {
-                content: {
-                  'application/json': {
-                    schema: { type: 'object', properties, required: Object.keys(properties) },
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/api-json') {
+        const operation = (operationId: string, properties?: Record<string, unknown>) => ({
+          operationId,
+          tags: ['Projects'],
+          parameters,
+          'x-sync-studio-drafts': 1,
+          ...(properties
+            ? {
+                requestBody: {
+                  content: {
+                    'application/json': {
+                      schema: { type: 'object', properties, required: Object.keys(properties) },
+                    },
                   },
                 },
+              }
+            : {}),
+        });
+        res.end(
+          JSON.stringify({
+            openapi: '3.0.0',
+            paths: {
+              [endpoint]: {
+                get: operation('StudioDraftsController_get'),
+                put: operation('StudioDraftsController_save', {
+                  expectedRevision: { type: 'integer' },
+                  state: stateSchema,
+                  editable: { type: 'boolean' },
+                }),
               },
-            }
-          : {}),
-      });
-      res.end(
-        JSON.stringify({
-          openapi: '3.0.0',
-          paths: {
-            [endpoint]: {
-              get: operation('StudioDraftsController_get'),
-              put: operation('StudioDraftsController_save', {
-                expectedRevision: { type: 'integer' },
-                state: stateSchema,
-                editable: { type: 'boolean' },
-              }),
+              [`${endpoint}/acknowledgement`]: {
+                post: operation('StudioDraftsController_acknowledge', {
+                  revision: { type: 'integer' },
+                }),
+              },
             },
-            [`${endpoint}/acknowledgement`]: {
-              post: operation('StudioDraftsController_acknowledge', {
-                revision: { type: 'integer' },
-              }),
-            },
-          },
-        }),
-      );
-      return;
-    }
-    let raw = '';
-    for await (const part of req) raw += part;
-    const body = raw ? JSON.parse(raw) : {};
-    calls.push({ method: req.method, path: req.url, auth: req.headers.authorization, body });
-    if (req.url !== `/v2/projects/${projectId}/studio-drafts/${draftId}`) {
-      res.statusCode = 500;
-      res.end(JSON.stringify({ message: 'Unexpected or paid request' }));
-      return;
-    }
-    if (req.method === 'PUT') {
-      current = { ...current, revision: 5, state: body.state };
-    }
-    res.end(JSON.stringify(current));
-  });
+          }),
+        );
+        return;
+      }
+      let raw = '';
+      for await (const part of req) raw += part;
+      const body = raw ? JSON.parse(raw) : {};
+      calls.push({ method: req.method, path: req.url, auth: req.headers.authorization, body });
+      if (req.url !== `/v2/projects/${projectId}/studio-drafts/${draftId}`) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ message: 'Unexpected or paid request' }));
+        return;
+      }
+      if (req.method === 'PUT') {
+        current = { ...current, revision: 5, state: body.state };
+      }
+      res.end(JSON.stringify(current));
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const factory = await createMcpServerFactory({

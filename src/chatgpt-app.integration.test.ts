@@ -127,7 +127,7 @@ it.each(['openai-mcp', 'openai-mcp (Codex)'])(
       if (path === '/v2/generate') {
         requests.push({
           path,
-          body: JSON.parse(String(init?.body)),
+          body: JSON.parse(typeof init?.body === 'string' ? init.body : JSON.stringify(init?.body)),
           key: new Headers(init?.headers).get('Idempotency-Key'),
         });
         return Response.json({ id: 'generation-1', status: 'PENDING' });

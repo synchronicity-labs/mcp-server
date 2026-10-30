@@ -34,7 +34,7 @@ const CLAUDE: ClientProfile = Object.freeze({
 
 /** Presentation only. These untrusted handshake names never grant permissions. */
 export function resolveClientProfile(name?: string): ClientProfile {
-  switch (name?.toLowerCase()) {
+  switch ((name ?? '').toLowerCase()) {
     case 'chatgpt':
     case 'openai':
     case 'openai-chatgpt':

@@ -5,50 +5,53 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 it.each([true, false])(
   'gates authenticated app telemetry on collector discovery (%s)',
   async (available) => {
     const id = '22222222-2222-4222-8222-222222222222';
     const calls: { auth?: string; source?: string; body: unknown }[] = [];
-    const upstream = createServer(async (req, res) => {
-      res.setHeader('content-type', 'application/json');
-      if (req.url === '/api-json') {
-        res.end(
-          JSON.stringify({
-            openapi: '3.0.0',
-            paths: available
-              ? {
-                  '/v2/analytics/chatgpt-events': {
-                    post: { operationId: 'analytics_captureChatgptEvent', tags: ['Analytics'] },
-                  },
-                }
-              : {},
-          }),
-        );
-      } else if (req.url === '/v2/oauth/account') {
-        res.end(
-          JSON.stringify({
-            account: { id, email: null, name: null },
-            organization: { id, name: null, role: 'owner' },
-          }),
-        );
-      } else if (req.url === '/v2/plans/limits') {
-        res.end(JSON.stringify({ seats: 1, voiceClone: 1 }));
-      } else if (req.url === '/v2/analytics/chatgpt-events') {
-        let raw = '';
-        for await (const part of req) raw += part;
-        calls.push({
-          auth: req.headers.authorization,
-          source: String(req.headers['x-sync-source']),
-          body: JSON.parse(raw),
-        });
-        res.end('{}');
-      } else {
-        res.statusCode = 404;
-        res.end('{}');
-      }
-    });
+    const upstream = createServer(
+      asyncRequestListener(async (req, res) => {
+        res.setHeader('content-type', 'application/json');
+        if (req.url === '/api-json') {
+          res.end(
+            JSON.stringify({
+              openapi: '3.0.0',
+              paths: available
+                ? {
+                    '/v2/analytics/chatgpt-events': {
+                      post: { operationId: 'analytics_captureChatgptEvent', tags: ['Analytics'] },
+                    },
+                  }
+                : {},
+            }),
+          );
+        } else if (req.url === '/v2/oauth/account') {
+          res.end(
+            JSON.stringify({
+              account: { id, email: null, name: null },
+              organization: { id, name: null, role: 'owner' },
+            }),
+          );
+        } else if (req.url === '/v2/plans/limits') {
+          res.end(JSON.stringify({ seats: 1, voiceClone: 1 }));
+        } else if (req.url === '/v2/analytics/chatgpt-events') {
+          let raw = '';
+          for await (const part of req) raw += part;
+          calls.push({
+            auth: req.headers.authorization,
+            source: String(req.headers['x-sync-source']),
+            body: JSON.parse(raw),
+          });
+          res.end('{}');
+        } else {
+          res.statusCode = 404;
+          res.end('{}');
+        }
+      }),
+    );
     upstream.listen(0, '127.0.0.1');
     await once(upstream, 'listening');
     const factory = await createMcpServerFactory({

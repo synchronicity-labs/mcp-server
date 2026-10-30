@@ -1,29 +1,35 @@
 {
   "name": "@sync.so/mcp-server",
   "version": "0.1.4",
-  "description": "MCP server for the Sync API \u2014 give AI agents the ability to create lipsync videos, manage assets, and more",
+  "description": "MCP server for the Sync API — give AI agents the ability to create lipsync videos, manage assets, and more",
   "keywords": [
-    "mcp",
-    "sync",
-    "lipsync",
     "ai",
-    "video",
-    "model-context-protocol"
+    "lipsync",
+    "mcp",
+    "model-context-protocol",
+    "sync",
+    "video"
   ],
+  "homepage": "https://sync.so/docs",
+  "bugs": {
+    "url": "https://github.com/synchronicity-labs/mcp-server/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/synchronicity-labs/mcp-server.git"
   },
-  "homepage": "https://sync.so/docs",
-  "bugs": {
-    "url": "https://github.com/synchronicity-labs/mcp-server/issues"
-  },
-  "type": "module",
   "bin": {
     "mcp-server": "./dist/cli.js",
     "sync-mcp": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "deploy/generation-status",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -33,24 +39,15 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": [
-    "dist",
-    "deploy/generation-status",
-    "README.md",
-    "LICENSE"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "build": "tsc -b && chmod +x dist/cli.js",
     "package:chatgpt": "node scripts/package-chatgpt.mjs",
     "verify:chatgpt-package": "node scripts/verify-chatgpt-package.mjs",
     "clean": "rm -rf dist .cache",
     "dev": "tsc -b --watch",
-    "lint": "biome check ./src ./scripts",
-    "lint:fix": "biome check --fix ./src ./scripts",
-    "format": "biome format --write ./src ./scripts",
+    "lint": "oxlint src scripts && oxfmt --check",
+    "lint:fix": "oxlint --fix src scripts && oxfmt",
+    "format": "oxfmt",
     "test": "vitest run",
     "test:memory": "node --expose-gc --max-old-space-size=512 scripts/verify-session-memory.mjs",
     "test:memory:http": "node --expose-gc --max-old-space-size=512 scripts/verify-http-memory.mjs",
@@ -74,21 +71,26 @@
     "undici": "^6.29.1",
     "zod": "^4.6.7"
   },
-  "overrides": {
-    "hono": "^4.12.24",
-    "@hono/node-server": "^2.1.3",
-    "fast-uri": "^3.1.9",
-    "path-to-regexp": "^8.4.2",
-    "qs": "^6.15.2",
-    "ip-address": "^10.7.4"
-  },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.4",
     "@playwright/test": "1.64.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^22.20.5",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
+    "oxlint-tsgolint": "7.0.2005",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12"
+  },
+  "overrides": {
+    "@hono/node-server": "^2.1.3",
+    "fast-uri": "^3.1.9",
+    "hono": "^4.12.24",
+    "ip-address": "^10.7.4",
+    "path-to-regexp": "^8.4.2",
+    "qs": "^6.15.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

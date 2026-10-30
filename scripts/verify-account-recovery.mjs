@@ -7,6 +7,17 @@ import { dirname, resolve } from 'node:path';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { chromium, expect } from '@playwright/test';
 
+// Node ignores a request listener's returned promise. On failure, close the response so the
+// client is not left waiting, then rethrow so the failure is still reported.
+function asyncRequestListener(listener) {
+  return (req, res) => {
+    void listener(req, res).catch((error) => {
+      res.destroy();
+      throw error;
+    });
+  };
+}
+
 // Run against a built, immutable UI bundle. Only the identity provider and Sync API are fixtures.
 if (!process.argv[2])
   throw new Error('Usage: node scripts/verify-account-recovery.mjs /path/to/chatgpt/dist/app.html');
@@ -27,26 +38,28 @@ const organization = {
 const writes = [];
 let challenges = 0;
 let limitsStatus = 200;
-const api = createServer(async (req, res) => {
-  res.setHeader('content-type', 'application/json');
-  if (req.method !== 'GET') writes.push(req.url);
-  if (req.url === '/api-json')
-    return void res.end(
-      JSON.stringify({
-        openapi: '3.0.0',
-        paths: {
-          '/v2/projects': {
-            get: {
-              operationId: 'ProjectsController_getAll',
-              tags: ['Projects'],
-              responses: {
-                200: {
-                  description: 'Projects',
-                  content: {
-                    'application/json': {
-                      schema: {
-                        type: 'object',
-                        properties: { items: { type: 'array', items: { type: 'object' } } },
+const api = createServer(
+  asyncRequestListener(async (req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.method !== 'GET') writes.push(req.url);
+    if (req.url === '/api-json')
+      return void res.end(
+        JSON.stringify({
+          openapi: '3.0.0',
+          paths: {
+            '/v2/projects': {
+              get: {
+                operationId: 'ProjectsController_getAll',
+                tags: ['Projects'],
+                responses: {
+                  200: {
+                    description: 'Projects',
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          properties: { items: { type: 'array', items: { type: 'object' } } },
+                        },
                       },
                     },
                   },
@@ -54,50 +67,54 @@ const api = createServer(async (req, res) => {
               },
             },
           },
-        },
-      }),
-    );
-  if (req.url === '/v2/oauth/token') {
-    let body = '';
-    for await (const chunk of req) body += chunk;
-    const grant = new URLSearchParams(body);
-    assert.equal(grant.get('grant_type'), 'authorization_code');
-    assert.equal(grant.get('code'), 'fixture-consent-code');
-    return void res.end(
-      JSON.stringify({ access_token: 'recovered-fixture', token_type: 'Bearer', expires_in: 3600 }),
-    );
-  }
-  const token = req.headers.authorization;
-  if (req.url === '/v2/oauth/userinfo') {
-    if (!['Bearer original-fixture', 'Bearer recovered-fixture'].includes(token))
-      return void res.writeHead(401).end('{}');
-    return void res.end(
-      JSON.stringify({
-        sub: account.id,
-        organization_id: organization.id,
-        client_id: 'fixture-client',
-        expires_at: Math.floor(Date.now() / 1000) + 3600,
-      }),
-    );
-  }
-  if (req.url === '/v2/oauth/account') {
-    if (token !== 'Bearer recovered-fixture')
-      return void res.writeHead(401).end(JSON.stringify({ message: 'Invalid or expired token' }));
-    return void res.end(JSON.stringify({ account, organization }));
-  }
-  if (req.url === '/v2/plans/limits')
-    return void res
-      .writeHead(limitsStatus)
-      .end(
-        JSON.stringify(
-          limitsStatus === 200 ? { seats: 3, voiceClone: 5 } : { message: 'Limits unavailable' },
-        ),
+        }),
       );
-  if (req.url?.startsWith('/v2/projects')) return void res.end(JSON.stringify({ items: [] }));
-  if (req.url === '/v2/billing')
-    return void res.writeHead(503).end(JSON.stringify({ message: 'Usage unavailable' }));
-  res.writeHead(404).end('{}');
-});
+    if (req.url === '/v2/oauth/token') {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      const grant = new URLSearchParams(body);
+      assert.equal(grant.get('grant_type'), 'authorization_code');
+      assert.equal(grant.get('code'), 'fixture-consent-code');
+      return void res.end(
+        JSON.stringify({
+          access_token: 'recovered-fixture',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        }),
+      );
+    }
+    const token = req.headers.authorization;
+    if (req.url === '/v2/oauth/userinfo') {
+      if (!['Bearer original-fixture', 'Bearer recovered-fixture'].includes(token))
+        return void res.writeHead(401).end('{}');
+      return void res.end(
+        JSON.stringify({
+          sub: account.id,
+          organization_id: organization.id,
+          client_id: 'fixture-client',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      );
+    }
+    if (req.url === '/v2/oauth/account') {
+      if (token !== 'Bearer recovered-fixture')
+        return void res.writeHead(401).end(JSON.stringify({ message: 'Invalid or expired token' }));
+      return void res.end(JSON.stringify({ account, organization }));
+    }
+    if (req.url === '/v2/plans/limits')
+      return void res
+        .writeHead(limitsStatus)
+        .end(
+          JSON.stringify(
+            limitsStatus === 200 ? { seats: 3, voiceClone: 5 } : { message: 'Limits unavailable' },
+          ),
+        );
+    if (req.url?.startsWith('/v2/projects')) return void res.end(JSON.stringify({ items: [] }));
+    if (req.url === '/v2/billing')
+      return void res.writeHead(503).end(JSON.stringify({ message: 'Usage unavailable' }));
+    res.writeHead(404).end('{}');
+  }),
+);
 await new Promise((done) => api.listen(0, '127.0.0.1', done));
 const baseUrl = `http://127.0.0.1:${api.address().port}`;
 const reserve = createServer();
@@ -167,44 +184,46 @@ try {
   const resource = resources.resources.find((item) => item.name === 'sync-app');
   assert(resource);
   const html = (await client.readResource({ uri: resource.uri })).contents[0].text;
-  host = createServer(async (req, res) => {
-    try {
-      if (req.url === '/app') return void res.setHeader('content-type', 'text/html').end(html);
-      if (req.url === '/tool') {
-        let body = '';
-        for await (const chunk of req) body += chunk;
-        const result = await client.callTool(JSON.parse(body));
-        if (result._meta?.['mcp/www_authenticate']) challenges++;
-        return void res.setHeader('content-type', 'application/json').end(JSON.stringify(result));
+  host = createServer(
+    asyncRequestListener(async (req, res) => {
+      try {
+        if (req.url === '/app') return void res.setHeader('content-type', 'text/html').end(html);
+        if (req.url === '/tool') {
+          let body = '';
+          for await (const chunk of req) body += chunk;
+          const result = await client.callTool(JSON.parse(body));
+          if (result._meta?.['mcp/www_authenticate']) challenges++;
+          return void res.setHeader('content-type', 'application/json').end(JSON.stringify(result));
+        }
+        if (req.url === '/authorize' && req.method === 'POST') {
+          const response = await fetch(`${origin}/token`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              grant_type: 'authorization_code',
+              code: 'fixture-consent-code',
+              client_id: 'fixture-client',
+              client_secret: 'fixture-secret',
+              redirect_uri: 'https://chatgpt.com/fixture',
+              code_verifier: 'fixture-verifier',
+            }),
+          });
+          assert.equal(response.status, 200);
+          await connect((await response.json()).access_token);
+          return void res.end('authorized');
+        }
+        res
+          .setHeader('content-type', 'text/html')
+          .end(
+            '<button id="authorize">Authorize Sync (fixture host)</button><iframe title="Sync" src="/app" style="width:100%;height:850px;border:0"></iframe><script>document.querySelector("button").onclick=async()=>{await fetch("/authorize",{method:"POST"});document.querySelector("button").textContent="Authorized";};</script>',
+          );
+      } catch (error) {
+        res
+          .writeHead(500, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ error: error.message }));
       }
-      if (req.url === '/authorize' && req.method === 'POST') {
-        const response = await fetch(`${origin}/token`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'authorization_code',
-            code: 'fixture-consent-code',
-            client_id: 'fixture-client',
-            client_secret: 'fixture-secret',
-            redirect_uri: 'https://chatgpt.com/fixture',
-            code_verifier: 'fixture-verifier',
-          }),
-        });
-        assert.equal(response.status, 200);
-        await connect((await response.json()).access_token);
-        return void res.end('authorized');
-      }
-      res
-        .setHeader('content-type', 'text/html')
-        .end(
-          '<button id="authorize">Authorize Sync (fixture host)</button><iframe title="Sync" src="/app" style="width:100%;height:850px;border:0"></iframe><script>document.querySelector("button").onclick=async()=>{await fetch("/authorize",{method:"POST"});document.querySelector("button").textContent="Authorized";};</script>',
-        );
-    } catch (error) {
-      res
-        .writeHead(500, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ error: error.message }));
-    }
-  });
+    }),
+  );
   await new Promise((done) => host.listen(0, '127.0.0.1', done));
   browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1000, height: 1000 } });

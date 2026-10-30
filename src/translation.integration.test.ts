@@ -9,6 +9,7 @@ import { runWithAuth } from './auth/async-context.js';
 import { createHttpClient } from './http-client.js';
 import { parseSpec } from './openapi/parser.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
 import { createTranslationTools } from './tools/translation.js';
 
@@ -42,41 +43,43 @@ async function fixture() {
     key?: string;
     body: unknown;
   }> = [];
-  const upstream = createServer(async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api-json') {
-      res.end(JSON.stringify(translationSpec));
-      return;
-    }
-    let data = '';
-    for await (const chunk of req) data += chunk.toString();
-    calls.push({
-      path: req.url!,
-      token: req.headers.authorization,
-      source: req.headers['x-sync-source'] as string | undefined,
-      key: req.headers['idempotency-key'] as string | undefined,
-      body: data ? JSON.parse(data) : undefined,
-    });
-    if (req.headers.authorization === 'Bearer denied') {
-      res.statusCode = 403;
-      res.end(JSON.stringify({ message: 'Not allowed' }));
-    } else if (req.url === `/v2/projects/${projectId}`) {
-      res.end(JSON.stringify({ id: projectId }));
-    } else if (req.url === '/v2/generate/estimate-cost') {
-      res.end(JSON.stringify(externalEstimate));
-    } else if (req.url === '/v2/generate') {
-      res.end(
-        JSON.stringify({
-          id: '00000000-0000-4000-8000-000000000003',
-          status: 'PENDING',
-          input: 'private-input-must-not-leak',
-        }),
-      );
-    } else {
-      res.statusCode = 404;
-      res.end('{}');
-    }
-  });
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/api-json') {
+        res.end(JSON.stringify(translationSpec));
+        return;
+      }
+      let data = '';
+      for await (const chunk of req) data += chunk.toString();
+      calls.push({
+        path: req.url!,
+        token: req.headers.authorization,
+        source: req.headers['x-sync-source'] as string | undefined,
+        key: req.headers['idempotency-key'] as string | undefined,
+        body: data ? JSON.parse(data) : undefined,
+      });
+      if (req.headers.authorization === 'Bearer denied') {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ message: 'Not allowed' }));
+      } else if (req.url === `/v2/projects/${projectId}`) {
+        res.end(JSON.stringify({ id: projectId }));
+      } else if (req.url === '/v2/generate/estimate-cost') {
+        res.end(JSON.stringify(externalEstimate));
+      } else if (req.url === '/v2/generate') {
+        res.end(
+          JSON.stringify({
+            id: '00000000-0000-4000-8000-000000000003',
+            status: 'PENDING',
+            input: 'private-input-must-not-leak',
+          }),
+        );
+      } else {
+        res.statusCode = 404;
+        res.end('{}');
+      }
+    }),
+  );
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -103,7 +106,7 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
     sourceLanguages: ['auto', 'en', 'es', 'fr', 'ja'],
   });
   expect(calls).toEqual([]);
-  const tool = tools.find((tool) => tool.name === 'create-translate-and-dub')!;
+  const tool = tools.find((candidate) => candidate.name === 'create-translate-and-dub')!;
   expect(tool.inputSchema.properties?.targetLang).toMatchObject({ enum: ['es', 'fr', 'ja'] });
   expect(tool.inputSchema.required).toContain('idempotencyKey');
   expect(tool._meta?.['openai/widgetAccessible']).toBe(true);

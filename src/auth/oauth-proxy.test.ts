@@ -6,6 +6,7 @@ import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { resolveConfig } from '../config.js';
 import { startHttpServer } from '../http-server.js';
+import { asyncRequestListener } from '../test-fixtures/request-listener.js';
 import { closeFixtureServers } from './fixture-cleanup.js';
 
 let upstream: Server | undefined;
@@ -29,42 +30,44 @@ beforeAll(async () => {
     logs.push(String(chunk));
     return true;
   });
-  upstream = createServer(async (req, res) => {
-    let body = '';
-    for await (const chunk of req) body += chunk;
-    calls.push({
-      path: req.url ?? '',
-      body: new URLSearchParams(body),
-      authorization: req.headers.authorization,
-    });
-    if (dropUpstreamResponse) {
-      res.destroy();
-      return;
-    }
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
-      res.statusCode = userinfoStatus;
-      res.setHeader('Retry-After', '9');
-      res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
-      return;
-    }
-    if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      calls.push({
+        path: req.url ?? '',
+        body: new URLSearchParams(body),
+        authorization: req.headers.authorization,
+      });
+      if (dropUpstreamResponse) {
+        res.destroy();
+        return;
+      }
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
+        res.statusCode = userinfoStatus;
+        res.setHeader('Retry-After', '9');
+        res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
+        return;
+      }
+      if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
+        res.end(
+          JSON.stringify({
+            client_id: 'client',
+            redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+          }),
+        );
+        return;
+      }
+      res.statusCode = upstreamStatus;
       res.end(
-        JSON.stringify({
-          client_id: 'client',
-          redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
-        }),
+        upstreamBody ??
+          (upstreamStatus === 401
+            ? JSON.stringify({ error: 'invalid_client' })
+            : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
       );
-      return;
-    }
-    res.statusCode = upstreamStatus;
-    res.end(
-      upstreamBody ??
-        (upstreamStatus === 401
-          ? JSON.stringify({ error: 'invalid_client' })
-          : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
-    );
-  });
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;
@@ -216,7 +219,7 @@ for (const path of ['/token', '/revoke']) {
       expect(res.headers.get('www-authenticate')).toBe(
         status === 401 ? 'Basic realm="oauth"' : null,
       );
-      expect(calls.length).toBe(before);
+      expect(calls).toHaveLength(before);
     },
   );
   it.each(['post', 'basic'])(
@@ -230,7 +233,7 @@ for (const path of ['/token', '/revoke']) {
         method === 'basic' ? basic() : undefined,
       );
       expect(res.status).toBe(200);
-      expect(calls.length).toBe(before + 1);
+      expect(calls).toHaveLength(before + 1);
       const sent = calls.at(-1);
       expect(sent?.path).toBe(`${apiPrefix}/v2/oauth${path}`);
       expect(sent?.body.get('client_id')).toBe('client');
@@ -282,6 +285,7 @@ it('redirects browser authorization separately from server-side token and API tr
   expect(calls.slice(before).map((call) => call.path)).toEqual([`${apiPrefix}/v2/oauth/token`]);
 });
 it.each([
+  // oxlint-disable-next-line eslint/no-script-url -- the fixture proves configuration rejects a script URL
   'javascript:alert(1)',
   'https://user:password@studio.fixture/authorize',
   'https://studio.fixture/authorize?client_secret=private',
@@ -501,7 +505,7 @@ it('rejects duplicate Authorization headers before Node can silently select one'
   );
   expect(result.status).toBe(400);
   expect(JSON.parse(result.body)).toMatchObject({ error: 'invalid_request' });
-  expect(calls.length).toBe(before);
+  expect(calls).toHaveLength(before);
 });
 it.each(['post', 'basic'])('preserves refresh-token credentials for %s clients', async (method) => {
   const response = await post(

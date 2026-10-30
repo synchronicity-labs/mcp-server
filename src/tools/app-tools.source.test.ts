@@ -117,7 +117,9 @@ function setup({ timeoutMs = 2_000 } = {}) {
   const request = vi.fn<HttpClient['request']>(async () => {
     throw new Error('Rejected source reached asset storage');
   });
-  const tool = createAppTools({ request }, runtime).find((tool) => tool.name === 'upload-media');
+  const tool = createAppTools({ request }, runtime).find(
+    (candidate) => candidate.name === 'upload-media',
+  );
   if (!tool) throw new Error('missing upload-media');
   const upload = (download_url: string) =>
     tool.handler({ mediaType: 'video', file: { download_url, file_id: 'untrusted' } });

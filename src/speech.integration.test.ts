@@ -7,6 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const jobId = '00000000-0000-4000-8000-000000000002';
@@ -29,9 +30,9 @@ const job = {
   startedAt: null,
   finishedAt: null,
 };
-const upstreams: Server[] = [],
-  clients: Client[] = [],
-  servers: McpServer[] = [];
+const clients: Client[] = [],
+  servers: McpServer[] = [],
+  upstreams: Server[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
   for (const server of servers.splice(0)) await server.close();
@@ -45,80 +46,82 @@ async function fixture({ denied = false, rejected = false, available = true } = 
     [];
   const paths: string[] = [];
   let reads = 0;
-  const upstream = createServer(async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api-json') {
-      res.end(
-        JSON.stringify({
-          openapi: '3.0.0',
-          paths: available
-            ? {
-                '/v2/tts/jobs': {
-                  post: { operationId: 'Tts_createJob', tags: ['Text-to-Speech'] },
-                },
-                '/v2/tts/jobs/{id}': {
-                  get: {
-                    operationId: 'Tts_getJob',
-                    tags: ['Text-to-Speech'],
-                    parameters: [
-                      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
-                    ],
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/api-json') {
+        res.end(
+          JSON.stringify({
+            openapi: '3.0.0',
+            paths: available
+              ? {
+                  '/v2/tts/jobs': {
+                    post: { operationId: 'Tts_createJob', tags: ['Text-to-Speech'] },
                   },
-                },
-              }
-            : {},
-        }),
-      );
-      return;
-    }
-    paths.push(req.url!);
-    let raw = '';
-    for await (const chunk of req) raw += chunk.toString();
-    let value: unknown;
-    if (req.url === `/v2/projects/${projectId}`) {
-      res.statusCode = denied ? 403 : 200;
-      value = denied ? { message: 'Project denied' } : { id: projectId };
-    } else if (req.url === '/v2/billing') {
-      value = {
-        plan: 'scale',
-        billingVersion: 'v3',
-        hasActiveCredits: true,
-        freeTtsExhausted: false,
-        freeGenerationsExhausted: false,
-        paymentFailureCountExceededLimit: false,
-        freeMonthlyLimits: {
-          generations: { used: 2, max: 3 },
-          sync3: { used: 1, max: 1 },
-          tts: { used: 3, max: 10 },
-        },
-        stripeCustomerId: 'private-billing-field',
-      };
-    } else if (req.method === 'POST' && req.url === '/v2/tts/jobs') {
-      writes.push({
-        key: req.headers['idempotency-key'],
-        body: JSON.parse(raw),
-        token: req.headers.authorization,
-      });
-      res.statusCode = rejected ? 503 : 202;
-      value = rejected ? { message: 'Admission temporarily unavailable' } : job;
-    } else if (req.url === `/v2/tts/jobs/${jobId}`) {
-      reads++;
-      value =
-        reads === 1
-          ? { ...job, status: 'PROCESSING' }
-          : {
-              ...job,
-              status: 'SUCCESS',
-              url: 'https://cdn.sync.so/speech.wav',
-              duration: 2.5,
-              finishedAt: '2026-10-14T00:00:03.000Z',
-            };
-    } else {
-      res.statusCode = 404;
-      value = {};
-    }
-    res.end(JSON.stringify(value));
-  });
+                  '/v2/tts/jobs/{id}': {
+                    get: {
+                      operationId: 'Tts_getJob',
+                      tags: ['Text-to-Speech'],
+                      parameters: [
+                        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                      ],
+                    },
+                  },
+                }
+              : {},
+          }),
+        );
+        return;
+      }
+      paths.push(req.url!);
+      let raw = '';
+      for await (const chunk of req) raw += chunk.toString();
+      let value: unknown;
+      if (req.url === `/v2/projects/${projectId}`) {
+        res.statusCode = denied ? 403 : 200;
+        value = denied ? { message: 'Project denied' } : { id: projectId };
+      } else if (req.url === '/v2/billing') {
+        value = {
+          plan: 'scale',
+          billingVersion: 'v3',
+          hasActiveCredits: true,
+          freeTtsExhausted: false,
+          freeGenerationsExhausted: false,
+          paymentFailureCountExceededLimit: false,
+          freeMonthlyLimits: {
+            generations: { used: 2, max: 3 },
+            sync3: { used: 1, max: 1 },
+            tts: { used: 3, max: 10 },
+          },
+          stripeCustomerId: 'private-billing-field',
+        };
+      } else if (req.method === 'POST' && req.url === '/v2/tts/jobs') {
+        writes.push({
+          key: req.headers['idempotency-key'],
+          body: JSON.parse(raw),
+          token: req.headers.authorization,
+        });
+        res.statusCode = rejected ? 503 : 202;
+        value = rejected ? { message: 'Admission temporarily unavailable' } : job;
+      } else if (req.url === `/v2/tts/jobs/${jobId}`) {
+        reads++;
+        value =
+          reads === 1
+            ? { ...job, status: 'PROCESSING' }
+            : {
+                ...job,
+                status: 'SUCCESS',
+                url: 'https://cdn.sync.so/speech.wav',
+                duration: 2.5,
+                finishedAt: '2026-10-14T00:00:03.000Z',
+              };
+      } else {
+        res.statusCode = 404;
+        value = {};
+      }
+      res.end(JSON.stringify(value));
+    }),
+  );
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');

@@ -6,6 +6,7 @@ import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { startHttpServer } from './http-server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const heap = vi.hoisted(() => ({ used_heap_size: 20, heap_size_limit: 100 }));
 vi.mock('node:v8', () => ({ getHeapStatistics: () => heap }));
@@ -36,27 +37,29 @@ beforeAll(async () => {
   vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffset);
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  upstream = createServer(async (req, res) => {
-    const path = new URL(req.url ?? '/', 'http://fixture.invalid').pathname;
-    const token = req.headers.authorization;
-    res.setHeader('Content-Type', 'application/json');
-    if (path === '/v2/oauth/userinfo') {
-      const kind = token?.replace('Bearer ', '');
-      res.end(
-        JSON.stringify({
-          sub: kind === 'foreign-sub' ? 'other' : 'owner',
-          client_id: kind === 'foreign-client' ? 'other' : 'client',
-          ...(kind === 'missing-org'
-            ? {}
-            : { organization_id: kind === 'foreign-org' ? 'other' : 'org' }),
-          expires_at: 4000000000,
-        }),
-      );
-      return;
-    }
-    res.statusCode = 404;
-    res.end('{}');
-  });
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      const path = new URL(req.url ?? '/', 'http://fixture.invalid').pathname;
+      const token = req.headers.authorization;
+      res.setHeader('Content-Type', 'application/json');
+      if (path === '/v2/oauth/userinfo') {
+        const kind = token?.replace('Bearer ', '');
+        res.end(
+          JSON.stringify({
+            sub: kind === 'foreign-sub' ? 'other' : 'owner',
+            client_id: kind === 'foreign-client' ? 'other' : 'client',
+            ...(kind === 'missing-org'
+              ? {}
+              : { organization_id: kind === 'foreign-org' ? 'other' : 'org' }),
+            expires_at: 4000000000,
+          }),
+        );
+        return;
+      }
+      res.statusCode = 404;
+      res.end('{}');
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;

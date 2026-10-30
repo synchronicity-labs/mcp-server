@@ -48,9 +48,9 @@ export function oauthFailureDiagnostics(response: unknown): {
   }
   const body = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const reason = [body.message, body.error_description]
-    .filter((value): value is string => typeof value === 'string')
-    .map((value) => KNOWN_REASONS.get(value))
-    .find((value) => value !== undefined);
+    .filter((message): message is string => typeof message === 'string')
+    .map((message) => KNOWN_REASONS.get(message))
+    .find((known) => known !== undefined);
   return {
     oauthError:
       typeof body.error === 'string' && OAUTH_ERRORS.has(body.error) ? body.error : 'unknown',

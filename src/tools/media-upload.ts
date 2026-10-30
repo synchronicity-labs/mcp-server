@@ -118,7 +118,9 @@ async function rehostUpload(
       download = await fetch(src, { signal, dispatcher, redirect: 'error' });
     } catch (err) {
       if (signal.aborted) throw signal.reason;
-      throw new Error(`Could not reach the uploaded ${kind} at ${hostOf(src)}: ${reason(err)}.`);
+      throw new Error(`Could not reach the uploaded ${kind} at ${hostOf(src)}: ${reason(err)}.`, {
+        cause: err,
+      });
     }
     if (!download.ok) {
       await cancelResponseBody(download);
@@ -205,6 +207,7 @@ async function rehostUpload(
       uploadBody.destroy();
       throw new Error(
         `Could not upload the ${kind} to Sync storage at ${hostOf(uploadUrl)}: ${reason(err)}.`,
+        { cause: err },
       );
     }
     if (!put.ok) {

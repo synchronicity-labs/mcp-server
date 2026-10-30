@@ -4,64 +4,77 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 import { checkMcp } from './check-mcp.mjs';
 
-test('monitor detects tool failure inside HTTP 200 and closes its session on success and failure', async () => {
+// Node ignores a request listener's returned promise. On failure, close the response so the
+// client is not left waiting, then rethrow so the failure is still reported.
+function asyncRequestListener(listener) {
+  return (req, res) => {
+    void listener(req, res).catch((error) => {
+      res.destroy();
+      throw error;
+    });
+  };
+}
+
+void test('monitor detects tool failure inside HTTP 200 and closes its session on success and failure', async () => {
   let toolFails = false;
   let deleted = 0;
-  const server = createServer(async (req, res) => {
-    assert.equal(req.headers.authorization, 'Bearer fixture');
-    res.setHeader('Content-Type', 'application/json');
-    if (req.method === 'GET' && req.url === '/mcp') {
-      res.statusCode = 405;
-      res.end();
-      return;
-    }
-    if (req.method === 'DELETE') {
-      deleted++;
-      res.end('{}');
-      return;
-    }
-    if (req.url === '/status') {
-      res.end(
-        JSON.stringify({
-          sessions: {
-            active: 1,
-            pending: 0,
-            limit: 1000,
-            created: 1,
-            rejectedCapacity: 0,
-            rejectedMemory: 0,
-          },
-          memory: { heapUsedBytes: 10, heapLimitBytes: 100 },
-          requests: { inFlight: 0, limit: 32 },
-        }),
-      );
-      return;
-    }
-    let input = '';
-    for await (const chunk of req) input += chunk;
-    const body = JSON.parse(input);
-    if (body.id === undefined) {
-      res.statusCode = 202;
-      res.end();
-      return;
-    }
-    let result;
-    if (body.method === 'initialize') {
-      res.setHeader('Mcp-Session-Id', 'fixture');
-      result = {
-        protocolVersion: '2025-03-26',
-        capabilities: { tools: {} },
-        serverInfo: { name: 'fixture', version: '1' },
-      };
-    } else if (body.method === 'tools/list')
-      result = { tools: [{ name: 'get-account-context', inputSchema: { type: 'object' } }] };
-    else
-      result = {
-        isError: toolFails,
-        content: [{ type: 'text', text: toolFails ? 'private failure detail' : '{}' }],
-      };
-    res.end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result }));
-  });
+  const server = createServer(
+    asyncRequestListener(async (req, res) => {
+      assert.equal(req.headers.authorization, 'Bearer fixture');
+      res.setHeader('Content-Type', 'application/json');
+      if (req.method === 'GET' && req.url === '/mcp') {
+        res.statusCode = 405;
+        res.end();
+        return;
+      }
+      if (req.method === 'DELETE') {
+        deleted++;
+        res.end('{}');
+        return;
+      }
+      if (req.url === '/status') {
+        res.end(
+          JSON.stringify({
+            sessions: {
+              active: 1,
+              pending: 0,
+              limit: 1000,
+              created: 1,
+              rejectedCapacity: 0,
+              rejectedMemory: 0,
+            },
+            memory: { heapUsedBytes: 10, heapLimitBytes: 100 },
+            requests: { inFlight: 0, limit: 32 },
+          }),
+        );
+        return;
+      }
+      let input = '';
+      for await (const chunk of req) input += chunk;
+      const body = JSON.parse(input);
+      if (body.id === undefined) {
+        res.statusCode = 202;
+        res.end();
+        return;
+      }
+      let result;
+      if (body.method === 'initialize') {
+        res.setHeader('Mcp-Session-Id', 'fixture');
+        result = {
+          protocolVersion: '2025-03-26',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'fixture', version: '1' },
+        };
+      } else if (body.method === 'tools/list')
+        result = { tools: [{ name: 'get-account-context', inputSchema: { type: 'object' } }] };
+      else
+        result = {
+          isError: toolFails,
+          content: [{ type: 'text', text: toolFails ? 'private failure detail' : '{}' }],
+        };
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result }));
+    }),
+  );
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const url = `http://127.0.0.1:${server.address().port}/mcp`;

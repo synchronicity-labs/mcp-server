@@ -84,13 +84,15 @@ export class HttpSession {
     }
     for (const result of parsed) {
       if (!result.success) continue;
-      const notification = JSONRPCNotificationSchema.safeParse(result.data);
-      if (!notification.success) continue;
-      if (InitializedNotificationSchema.safeParse(notification.data).success)
+      const batchNotification = JSONRPCNotificationSchema.safeParse(result.data);
+      if (!batchNotification.success) continue;
+      if (InitializedNotificationSchema.safeParse(batchNotification.data).success)
         this.#initialized = true;
-      const cancelled = CancelledNotificationSchema.safeParse(notification.data);
-      if (cancelled.success && cancelled.data.params.requestId !== undefined)
-        await this.#active.get(cancelled.data.params.requestId)?.cancel(notification.data);
+      const batchCancelled = CancelledNotificationSchema.safeParse(batchNotification.data);
+      if (batchCancelled.success && batchCancelled.data.params.requestId !== undefined)
+        await this.#active
+          .get(batchCancelled.data.params.requestId)
+          ?.cancel(batchNotification.data);
     }
     if (isSessionControlRequest(body)) {
       res.status(202).end();
@@ -138,10 +140,10 @@ export class HttpSession {
     if (!initialize)
       for (const id of ids)
         this.#active.set(id, {
-          cancel: async (notification) => {
+          cancel: async (cancelNotification) => {
             if (completed.has(id)) return;
-            const parsed = JSONRPCNotificationSchema.parse(notification);
-            transport.onmessage?.(parsed);
+            const cancelMessage = JSONRPCNotificationSchema.parse(cancelNotification);
+            transport.onmessage?.(cancelMessage);
             if (ids.length === 1) {
               res.destroy();
               await server.close();

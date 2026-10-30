@@ -7,6 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 import { routeUploadSourceToFixture } from './test-fixtures/upload-source.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
@@ -79,9 +80,9 @@ const spec = {
     ]),
   ),
 };
-const upstreams: Server[] = [],
-  clients: Client[] = [],
-  servers: McpServer[] = [];
+const clients: Client[] = [],
+  servers: McpServer[] = [],
+  upstreams: Server[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
   for (const server of servers.splice(0)) await server.close();
@@ -109,109 +110,116 @@ async function fixture(
 ) {
   const calls: { path: string; body?: Record<string, unknown>; token?: string; key?: string }[] =
     [];
-  const upstream = createServer(async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api-json') {
-      const current = structuredClone(spec);
-      if (options.keyedPreview)
-        Object.assign(current.paths['/v2/dialogue-edits']!.post!, {
-          parameters: [
-            { name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } },
-          ],
-        });
-      res.end(JSON.stringify(current));
-      return;
-    }
-    if (req.url === '/external.mp4') {
-      calls.push({ path: req.url });
-      res.setHeader('Content-Type', 'video/mp4');
-      res.end('external video bytes');
-      return;
-    }
-    if (req.url === '/storage') {
-      let bytes = '';
-      for await (const chunk of req) bytes += chunk.toString();
-      calls.push({ path: req.url, body: { bytes } });
-      res.statusCode = options.uploadRejected ? 403 : 200;
-      res.end();
-      return;
-    }
-    let raw = '';
-    for await (const chunk of req) raw += chunk.toString();
-    const body = raw ? JSON.parse(raw) : undefined;
-    calls.push({
-      path: req.url!,
-      body,
-      token: req.headers.authorization,
-      key: req.headers['idempotency-key'] as string | undefined,
-    });
-    if (options.denied) {
-      res.statusCode = 403;
-      res.end(JSON.stringify({ message: 'Project denied' }));
-      return;
-    }
-    let value: unknown;
-    if (req.url === `/v2/projects/${projectId}`) value = { id: projectId };
-    else if (req.url === `/v2/assets/${videoAssetId}`)
-      value = {
-        id: videoAssetId,
-        type: 'VIDEO',
-        url: options.external
-          ? externalUrl
-          : options.rotatingAssetUrl
-            ? `${sourceVideoUrl}?read=${calls.length}`
-            : sourceVideoUrl,
-      };
-    else if (req.url === '/v2/assets/upload')
-      value = { uploadUrl: `http://${req.headers.host}/storage`, url: sourceVideoUrl };
-    else if (req.url === '/v2/assets' || req.url === `/v2/assets/${uploadedAssetId}`)
-      value = {
-        id: uploadedAssetId,
-        type: 'VIDEO',
-        url: sourceVideoUrl,
-        name: 'Interview.mp4',
-        durationSeconds: 2,
-      };
-    else if (req.url?.startsWith('/v2/transcriptions')) {
-      if (req.method === 'POST' && body.sourceVideoUrl !== sourceVideoUrl) {
-        res.statusCode = 422;
-        res.end(
-          JSON.stringify({
-            message:
-              'Transcription sources must be hosted in sync. labs storage. Upload the file via POST /v2/assets/upload first, then transcribe the returned url.',
-          }),
-        );
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/api-json') {
+        const current = structuredClone(spec);
+        if (options.keyedPreview)
+          Object.assign(current.paths['/v2/dialogue-edits']!.post!, {
+            parameters: [
+              {
+                name: 'Idempotency-Key',
+                in: 'header',
+                required: false,
+                schema: { type: 'string' },
+              },
+            ],
+          });
+        res.end(JSON.stringify(current));
         return;
       }
-      value = {
-        id: transcriptionId,
-        status: 'COMPLETED',
-        sourceVideoUrl: options.mismatched ? 'https://cdn.sync.so/other.mp4' : sourceVideoUrl,
-        transcript,
-      };
-    } else if (req.url?.startsWith('/v2/dialogue-edits')) {
-      if (req.method === 'POST' && options.lostPreview) {
-        res.statusCode = 503;
-        res.end(JSON.stringify({ message: 'Unknown outcome' }));
+      if (req.url === '/external.mp4') {
+        calls.push({ path: req.url });
+        res.setHeader('Content-Type', 'video/mp4');
+        res.end('external video bytes');
         return;
       }
-      value = {
-        id: dialogueEditId,
-        status: options.previewStatus ?? 'COMPLETED',
-        sourceVideoUrl,
-        sourceTranscript: transcript,
-        edits,
-        voiceId: 'original-speaker',
-        ...(options.partialDetail ? { partialDetail: options.partialDetail } : {}),
-      };
-    } else if (req.url === '/v2/analyze/cost') value = estimate;
-    else if (req.url === '/v2/generate') value = { id: dialogueEditId, status: 'PENDING' };
-    else {
-      res.statusCode = 404;
-      value = {};
-    }
-    res.end(JSON.stringify(value));
-  });
+      if (req.url === '/storage') {
+        let bytes = '';
+        for await (const chunk of req) bytes += chunk.toString();
+        calls.push({ path: req.url, body: { bytes } });
+        res.statusCode = options.uploadRejected ? 403 : 200;
+        res.end();
+        return;
+      }
+      let raw = '';
+      for await (const chunk of req) raw += chunk.toString();
+      const body = raw ? JSON.parse(raw) : undefined;
+      calls.push({
+        path: req.url!,
+        body,
+        token: req.headers.authorization,
+        key: req.headers['idempotency-key'] as string | undefined,
+      });
+      if (options.denied) {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ message: 'Project denied' }));
+        return;
+      }
+      let value: unknown;
+      if (req.url === `/v2/projects/${projectId}`) value = { id: projectId };
+      else if (req.url === `/v2/assets/${videoAssetId}`)
+        value = {
+          id: videoAssetId,
+          type: 'VIDEO',
+          url: options.external
+            ? externalUrl
+            : options.rotatingAssetUrl
+              ? `${sourceVideoUrl}?read=${calls.length}`
+              : sourceVideoUrl,
+        };
+      else if (req.url === '/v2/assets/upload')
+        value = { uploadUrl: `http://${req.headers.host}/storage`, url: sourceVideoUrl };
+      else if (req.url === '/v2/assets' || req.url === `/v2/assets/${uploadedAssetId}`)
+        value = {
+          id: uploadedAssetId,
+          type: 'VIDEO',
+          url: sourceVideoUrl,
+          name: 'Interview.mp4',
+          durationSeconds: 2,
+        };
+      else if (req.url?.startsWith('/v2/transcriptions')) {
+        if (req.method === 'POST' && body.sourceVideoUrl !== sourceVideoUrl) {
+          res.statusCode = 422;
+          res.end(
+            JSON.stringify({
+              message:
+                'Transcription sources must be hosted in sync. labs storage. Upload the file via POST /v2/assets/upload first, then transcribe the returned url.',
+            }),
+          );
+          return;
+        }
+        value = {
+          id: transcriptionId,
+          status: 'COMPLETED',
+          sourceVideoUrl: options.mismatched ? 'https://cdn.sync.so/other.mp4' : sourceVideoUrl,
+          transcript,
+        };
+      } else if (req.url?.startsWith('/v2/dialogue-edits')) {
+        if (req.method === 'POST' && options.lostPreview) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ message: 'Unknown outcome' }));
+          return;
+        }
+        value = {
+          id: dialogueEditId,
+          status: options.previewStatus ?? 'COMPLETED',
+          sourceVideoUrl,
+          sourceTranscript: transcript,
+          edits,
+          voiceId: 'original-speaker',
+          ...(options.partialDetail ? { partialDetail: options.partialDetail } : {}),
+        };
+      } else if (req.url === '/v2/analyze/cost') value = estimate;
+      else if (req.url === '/v2/generate') value = { id: dialogueEditId, status: 'PENDING' };
+      else {
+        res.statusCode = 404;
+        value = {};
+      }
+      res.end(JSON.stringify(value));
+    }),
+  );
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -356,7 +364,7 @@ it('rejects ambiguous transcript identity before any preview synthesis', async (
     edits,
   });
   expect(response.isError).toBe(true);
-  expect(calls.some((call) => call.path === '/v2/dialogue-edits')).toBe(false);
+  expect(calls.some((request) => request.path === '/v2/dialogue-edits')).toBe(false);
 });
 
 it('forwards one frozen keyed preview through explicit recovery even when asset playback signatures rotate', async () => {

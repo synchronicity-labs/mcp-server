@@ -14,7 +14,8 @@ import { SessionRegistry } from '../dist/session-registry.js';
 assert(global.gc, 'Run with --expose-gc');
 const fetchHttp = globalThis.fetch;
 globalThis.fetch = async (url) => {
-  assert.equal(String(url), 'https://memory.fixture.invalid/api-json');
+  const href = url instanceof URL ? url.href : url instanceof Request ? url.url : url;
+  assert.equal(href, 'https://memory.fixture.invalid/api-json');
   return Response.json({ openapi: '3.0.0', paths: {} });
 };
 const root = resolve('chatgpt-dist');
@@ -186,7 +187,7 @@ try {
     const baseline = await heap();
     for (let cycle = 1; cycle <= 3; cycle++) {
       const clients = await Promise.all([initialize(), initialize()]);
-      for (const digest of [...releases, ...Array(4).fill(catalog.current)]) {
+      for (const digest of [...releases, ...Array.from({ length: 4 }, () => catalog.current)]) {
         await Promise.all(clients.map((sessionId) => readResource(sessionId, digest)));
       }
       assert.equal(sessions.size, 2);

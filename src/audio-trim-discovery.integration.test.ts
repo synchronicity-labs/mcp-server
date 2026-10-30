@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 it.each(['complete', 'complete-with-analytics', 'missing-create', 'missing-get', 'missing-key'])(
   'discovers hosted audio preparation only with its complete contract: %s',
@@ -51,36 +52,39 @@ it.each(['complete', 'complete-with-analytics', 'missing-create', 'missing-get',
         post: { operationId: 'analytics_captureChatgptEvent', tags: ['Analytics'] },
       };
     const writes: { key: string | string[] | undefined; body: string }[] = [];
-    const upstream = createServer(async (req, res) => {
-      res.setHeader('content-type', 'application/json');
-      if (req.url === '/api-json') res.end(JSON.stringify({ openapi: '3.0.0', paths }));
-      else if (req.url === '/v2/oauth/account')
-        res.end(
-          JSON.stringify({ account: null, organization: { id, name: 'test', role: 'owner' } }),
-        );
-      else if (req.url === '/v2/plans/limits') res.end(JSON.stringify({ seats: 1, voiceClone: 1 }));
-      else if (req.url === '/v2/audio-trims') {
-        const chunks = [];
-        for await (const chunk of req) chunks.push(chunk);
-        writes.push({
-          key: req.headers['idempotency-key'],
-          body: Buffer.concat(chunks).toString(),
-        });
-        res.end(
-          JSON.stringify({
-            id,
-            status: 'queued',
-            assetId: null,
-            durationSeconds: null,
-            errorCode: null,
-            retryAfterMs: 2000,
-          }),
-        );
-      } else {
-        res.statusCode = 500;
-        res.end('{}');
-      }
-    });
+    const upstream = createServer(
+      asyncRequestListener(async (req, res) => {
+        res.setHeader('content-type', 'application/json');
+        if (req.url === '/api-json') res.end(JSON.stringify({ openapi: '3.0.0', paths }));
+        else if (req.url === '/v2/oauth/account')
+          res.end(
+            JSON.stringify({ account: null, organization: { id, name: 'test', role: 'owner' } }),
+          );
+        else if (req.url === '/v2/plans/limits')
+          res.end(JSON.stringify({ seats: 1, voiceClone: 1 }));
+        else if (req.url === '/v2/audio-trims') {
+          const chunks = [];
+          for await (const chunk of req) chunks.push(chunk);
+          writes.push({
+            key: req.headers['idempotency-key'],
+            body: Buffer.concat(chunks).toString(),
+          });
+          res.end(
+            JSON.stringify({
+              id,
+              status: 'queued',
+              assetId: null,
+              durationSeconds: null,
+              errorCode: null,
+              retryAfterMs: 2000,
+            }),
+          );
+        } else {
+          res.statusCode = 500;
+          res.end('{}');
+        }
+      }),
+    );
     upstream.listen(0, '127.0.0.1');
     await once(upstream, 'listening');
     const factory = await createMcpServerFactory({

@@ -53,7 +53,8 @@ function fakeApi() {
     vi.fn(async (url: string, options?: RequestInit) => {
       if (new URL(url).hostname === '127.0.0.1') return nativeFetch(url, options);
       const path = new URL(url).pathname;
-      const body = options?.body ? JSON.parse(String(options.body)) : {};
+      const raw = options?.body;
+      const body = raw ? JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw)) : {};
       const headers = options?.headers as Record<string, string>;
       if (path === '/api-json') return Response.json(spec);
       calls.push({ path, body, headers });
@@ -202,7 +203,7 @@ describe('immutable client profiles', () => {
       await rejected;
       await projectStopped;
       expect(upstreamSignal.aborted).toBe(true);
-      expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(0);
+      expect(calls.filter((request) => request.path === '/v2/generate')).toHaveLength(0);
     },
   );
 
@@ -215,7 +216,7 @@ describe('immutable client profiles', () => {
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
         const { tools } = await client.listTools();
-        expect(tools.length).toBe(supportsUploads ? 12 : 8);
+        expect(tools).toHaveLength(supportsUploads ? 12 : 8);
         expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
         // The initialize response carries the announced client's instructions.
@@ -289,7 +290,9 @@ describe('immutable client profiles', () => {
           if (url === 'https://api.test/v2/assets/upload' || url === 'https://api.test/v2/assets') {
             expect(headers.get('authorization')).toBe(`Bearer token-${clientName}`);
             expect(headers.get('x-sync-source')).toBe(`mcp:${clientName}`);
-            const body = JSON.parse(String(init?.body));
+            const body = JSON.parse(
+              typeof init?.body === 'string' ? init.body : JSON.stringify(init?.body),
+            );
             if (url.endsWith('/upload')) {
               expect(body).toEqual({
                 fileName: file.file_name,
@@ -412,7 +415,7 @@ describe('immutable client profiles', () => {
         const { resources } = await client.listResources();
         expect(resources.length > 0).toBe(index === 0);
         if (index === 0) {
-          expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents.length).toBe(1);
+          expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
           expect(
             (await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError,
           ).not.toBe(true);
@@ -497,7 +500,8 @@ describe('immutable client profiles', () => {
             };
             const result = await client.callTool({ name: 'create-lipsync', arguments: args });
             expect(result.isError).not.toBe(true);
-            const body = calls.filter((call) => call.path === '/v2/generate').at(-1)!.body;
+            const posts = calls.filter((call) => call.path === '/v2/generate');
+            const body = posts.at(-1)!.body;
             expect(body).toMatchObject({ projectId: 'project:Explicit project', model: 'sync-3' });
             const input = body.input as Array<Record<string, unknown>>;
             expect(input[0]).toEqual({

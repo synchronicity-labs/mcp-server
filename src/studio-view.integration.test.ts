@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 it('delivers explicit view requests over authenticated HTTP, preserves pending receipts, and hides mount controls from non-UI clients', async () => {
   const viewId = '00000000-0000-4000-8000-000000000001';
@@ -25,53 +26,55 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
     parameters: [{ name: 'viewId', in: 'path', required: true, schema: { type: 'string' } }],
     'x-sync-studio-views': 1,
   });
-  const upstream = createServer(async (req, res) => {
-    res.setHeader('content-type', 'application/json');
-    if (req.url === '/api-json') {
-      res.end(
-        JSON.stringify({
-          openapi: '3.0.0',
-          paths: {
-            '/v2/studio-views/{viewId}': {
-              get: operation('StudioViewsController_get'),
-              put: operation('StudioViewsController_register'),
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/api-json') {
+        res.end(
+          JSON.stringify({
+            openapi: '3.0.0',
+            paths: {
+              '/v2/studio-views/{viewId}': {
+                get: operation('StudioViewsController_get'),
+                put: operation('StudioViewsController_register'),
+              },
+              '/v2/studio-views/{viewId}/actions': {
+                post: operation('StudioViewsController_request'),
+              },
+              '/v2/studio-views/{viewId}/acknowledgement': {
+                post: operation('StudioViewsController_acknowledge'),
+              },
             },
-            '/v2/studio-views/{viewId}/actions': {
-              post: operation('StudioViewsController_request'),
+          }),
+        );
+        return;
+      }
+      let raw = '';
+      for await (const part of req) raw += part;
+      const body = raw ? JSON.parse(raw) : {};
+      calls.push({ path: req.url, auth: req.headers.authorization, body });
+      if (req.url === `/v2/studio-views/${viewId}/actions`) {
+        res.end(
+          JSON.stringify({
+            ...view,
+            revision: 2,
+            action: {
+              id,
+              requestRevision: 1,
+              expectedContext: view.context,
+              command: body.command,
+              expiresAt: Date.now() + 120000,
+              status: 'pending',
             },
-            '/v2/studio-views/{viewId}/acknowledgement': {
-              post: operation('StudioViewsController_acknowledge'),
-            },
-          },
-        }),
-      );
-      return;
-    }
-    let raw = '';
-    for await (const part of req) raw += part;
-    const body = raw ? JSON.parse(raw) : {};
-    calls.push({ path: req.url, auth: req.headers.authorization, body });
-    if (req.url === `/v2/studio-views/${viewId}/actions`) {
-      res.end(
-        JSON.stringify({
-          ...view,
-          revision: 2,
-          action: {
-            id,
-            requestRevision: 1,
-            expectedContext: view.context,
-            command: body.command,
-            expiresAt: Date.now() + 120000,
-            status: 'pending',
-          },
-        }),
-      );
-    } else if (req.url === `/v2/studio-views/${viewId}`) res.end(JSON.stringify(view));
-    else {
-      res.statusCode = 500;
-      res.end(JSON.stringify({ message: 'Unexpected or paid request' }));
-    }
-  });
+          }),
+        );
+      } else if (req.url === `/v2/studio-views/${viewId}`) res.end(JSON.stringify(view));
+      else {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ message: 'Unexpected or paid request' }));
+      }
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const factory = await createMcpServerFactory({
@@ -108,7 +111,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
       ],
     ] as const;
     for (const [name, { type, ...fields }, destructiveHint] of actions) {
-      const tool = tools.find((tool) => tool.name === name);
+      const tool = tools.find((candidate) => candidate.name === name);
       expect(tool?.annotations).toMatchObject({
         readOnlyHint: false,
         destructiveHint,
