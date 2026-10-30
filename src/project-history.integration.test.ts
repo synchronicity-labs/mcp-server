@@ -190,27 +190,30 @@ async function fixture(
   return { client, calls, rows };
 }
 
-it.each([
-  '',
-  '/api-proxy',
-])('reads selected-project history with cursor pagination under API base path %j', async (basePath) => {
-  const { client, calls, rows } = await fixture({ basePath });
-  const tool = (await client.listTools()).tools.find(
-    (item) => item.name === 'projects_get-generations',
-  );
-  expect(tool?.inputSchema.required).toContain('projectId');
-  expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
-  const result = await client.callTool({
-    name: 'projects_get-generations',
-    arguments: { projectId, limit: 2, cursor: generationId },
-  });
-  expect(result.isError).not.toBe(true);
-  expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(rows, null, 2) }]);
-  expect(calls).toEqual([
-    { path: `${basePath}/v2/projects/${projectId}`, query: {} },
-    { path: `${basePath}/v2/generations`, query: { projectId, limit: '2', cursor: generationId } },
-  ]);
-});
+it.each(['', '/api-proxy'])(
+  'reads selected-project history with cursor pagination under API base path %j',
+  async (basePath) => {
+    const { client, calls, rows } = await fixture({ basePath });
+    const tool = (await client.listTools()).tools.find(
+      (item) => item.name === 'projects_get-generations',
+    );
+    expect(tool?.inputSchema.required).toContain('projectId');
+    expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
+    const result = await client.callTool({
+      name: 'projects_get-generations',
+      arguments: { projectId, limit: 2, cursor: generationId },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(rows, null, 2) }]);
+    expect(calls).toEqual([
+      { path: `${basePath}/v2/projects/${projectId}`, query: {} },
+      {
+        path: `${basePath}/v2/generations`,
+        query: { projectId, limit: '2', cursor: generationId },
+      },
+    ]);
+  },
+);
 
 it('keeps legacy organization history available without advertising unsupported project history', async () => {
   const { client, calls } = await fixture({ supported: false });
@@ -245,72 +248,74 @@ it('stops before reading history when the current project access check fails', a
   expect(calls).toEqual([{ path: `/v2/projects/${projectId}`, query: {} }]);
 });
 
-it.each([
-  '',
-  '/api-proxy',
-])('reads canonical continuation inputs through existing Studio routes under base path %j without writes', async (basePath) => {
-  const { client, calls, rows } = await fixture({ basePath });
-  const result = await client.callTool({
-    name: 'get-generation-continuation',
-    arguments: { projectId, id: generationId },
-  });
-  expect(result.isError).not.toBe(true);
-  expect(result.structuredContent).toMatchObject({
-    submissionContextVersion: 1,
-    generation: {
-      id: generationId,
-      projectId,
-      workflow: 'edit_dialogue',
-      outputMediaUrl: rows[0]!.outputUrl,
-      inputs: [{ type: 'video', assetId: sourceAssetId, url: sourceUrl }],
-      options: {
-        sync_mode: 'cut_off',
-        model_mode: 'legacy-mode',
-        active_speaker_detection: { auto_detect: true, frame_number: -1.5 },
-      },
-      segments: [
-        {
-          startTime: 0,
-          endTime: 1,
-          audioInput: { refId: 'take' },
-          optionsOverride: { sync_mode: 'cut_off' },
+it.each(['', '/api-proxy'])(
+  'reads canonical continuation inputs through existing Studio routes under base path %j without writes',
+  async (basePath) => {
+    const { client, calls, rows } = await fixture({ basePath });
+    const result = await client.callTool({
+      name: 'get-generation-continuation',
+      arguments: { projectId, id: generationId },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      submissionContextVersion: 1,
+      generation: {
+        id: generationId,
+        projectId,
+        workflow: 'edit_dialogue',
+        outputMediaUrl: rows[0]!.outputUrl,
+        inputs: [{ type: 'video', assetId: sourceAssetId, url: sourceUrl }],
+        options: {
+          sync_mode: 'cut_off',
+          model_mode: 'legacy-mode',
+          active_speaker_detection: { auto_detect: true, frame_number: -1.5 },
         },
-      ],
-      speakers: [
-        { id: 'speaker', audio: { refId: 'take' }, face: { frame_number: 0, coordinates: [1, 2] } },
-      ],
-      dialogueEditJobId: generationId,
-      renderedFromAssetId: sourceAssetId,
-    },
-  });
-  expect(JSON.stringify(result)).not.toContain('private-provider-state');
-  expect(calls).toEqual([
-    { path: `${basePath}/v2/projects/${projectId}`, query: {} },
-    {
-      path: `${basePath}/v2/generations/list`,
-      query: { projectId, ids: generationId, limit: '1' },
-    },
-    { path: `${basePath}/v2/assets/${sourceAssetId}`, query: {} },
-  ]);
-});
+        segments: [
+          {
+            startTime: 0,
+            endTime: 1,
+            audioInput: { refId: 'take' },
+            optionsOverride: { sync_mode: 'cut_off' },
+          },
+        ],
+        speakers: [
+          {
+            id: 'speaker',
+            audio: { refId: 'take' },
+            face: { frame_number: 0, coordinates: [1, 2] },
+          },
+        ],
+        dialogueEditJobId: generationId,
+        renderedFromAssetId: sourceAssetId,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('private-provider-state');
+    expect(calls).toEqual([
+      { path: `${basePath}/v2/projects/${projectId}`, query: {} },
+      {
+        path: `${basePath}/v2/generations/list`,
+        query: { projectId, ids: generationId, limit: '1' },
+      },
+      { path: `${basePath}/v2/assets/${sourceAssetId}`, query: {} },
+    ]);
+  },
+);
 
-it.each([
-  'denied',
-  'ignoresFilter',
-  'wrongGeneration',
-  'sourceDenied',
-] as const)('refuses unsafe continuation read %s without leaking source or output', async (failure) => {
-  const { client, calls } = await fixture({ [failure]: true });
-  const result = await client.callTool({
-    name: 'get-generation-continuation',
-    arguments: { projectId, id: generationId },
-  });
-  expect(result.isError).toBe(true);
-  expect(JSON.stringify(result)).not.toContain(sourceUrl);
-  expect(JSON.stringify(result)).not.toContain('https://fixture.invalid/video.mp4');
-  if (failure === 'denied')
-    expect(calls).toEqual([{ path: `/v2/projects/${projectId}`, query: {} }]);
-  if (failure === 'sourceDenied') expect(calls.at(-1)?.path).toBe(`/v2/assets/${sourceAssetId}`);
-  if (failure === 'ignoresFilter' || failure === 'wrongGeneration')
-    expect(calls.some((c) => c.path.includes('/assets/'))).toBe(false);
-});
+it.each(['denied', 'ignoresFilter', 'wrongGeneration', 'sourceDenied'] as const)(
+  'refuses unsafe continuation read %s without leaking source or output',
+  async (failure) => {
+    const { client, calls } = await fixture({ [failure]: true });
+    const result = await client.callTool({
+      name: 'get-generation-continuation',
+      arguments: { projectId, id: generationId },
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(sourceUrl);
+    expect(JSON.stringify(result)).not.toContain('https://fixture.invalid/video.mp4');
+    if (failure === 'denied')
+      expect(calls).toEqual([{ path: `/v2/projects/${projectId}`, query: {} }]);
+    if (failure === 'sourceDenied') expect(calls.at(-1)?.path).toBe(`/v2/assets/${sourceAssetId}`);
+    if (failure === 'ignoresFilter' || failure === 'wrongGeneration')
+      expect(calls.some((c) => c.path.includes('/assets/'))).toBe(false);
+  },
+);

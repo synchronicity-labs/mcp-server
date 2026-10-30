@@ -583,24 +583,21 @@ it.each([
     query: {},
     body: { model: 'sync-3', duration: 12, fps: 24, reasoningEnabled: false },
   },
-])('calls $name with authenticated generated contracts through hosted MCP', async ({
-  name,
-  path,
-  args,
-  query,
-  body,
-}) => {
-  const client = await connect('chatgpt', `catalog-${name}`);
-  const descriptor = (await client.listTools()).tools.find((tool) => tool.name === name);
-  expect(descriptor?.annotations?.readOnlyHint).toBe(true);
-  expect(descriptor?._meta?.ui).toEqual({ visibility: ['model', 'app'] });
-  const result = await client.callTool({ name, arguments: args });
-  expect(result.isError).not.toBe(true);
-  expect(result.structuredContent).toEqual({ path, query, body });
-  expect(
-    calls.find((call) => call.token === `Bearer catalog-${name}` && call.path === path),
-  ).toMatchObject({ query, body });
-});
+])(
+  'calls $name with authenticated generated contracts through hosted MCP',
+  async ({ name, path, args, query, body }) => {
+    const client = await connect('chatgpt', `catalog-${name}`);
+    const descriptor = (await client.listTools()).tools.find((tool) => tool.name === name);
+    expect(descriptor?.annotations?.readOnlyHint).toBe(true);
+    expect(descriptor?._meta?.ui).toEqual({ visibility: ['model', 'app'] });
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ path, query, body });
+    expect(
+      calls.find((call) => call.token === `Bearer catalog-${name}` && call.path === path),
+    ).toMatchObject({ query, body });
+  },
+);
 
 it('forwards a caller-owned submission key through hosted MCP as an API header', async () => {
   const client = await connect('chatgpt', 'submission-key');
@@ -625,26 +622,24 @@ it('forwards a caller-owned submission key through hosted MCP as an API header',
   }
 });
 
-it.each([
-  '',
-  'contains space',
-  'comma,key',
-  'a'.repeat(129),
-])('rejects invalid submission key %j before project lookup or transfer', async (idempotencyKey) => {
-  const client = await connect('chatgpt', 'invalid-submission-key');
-  const before = calls.length;
-  const result = await client.callTool({
-    name: 'create-lipsync',
-    arguments: {
-      videoAssetId: 'existing-video',
-      audioAssetId: 'existing-audio',
-      projectId: 'selected-project',
-      idempotencyKey,
-    },
-  });
-  expect(result.isError).toBe(true);
-  expect(calls.slice(before).filter((call) => call.path !== '/v2/oauth/userinfo')).toEqual([]);
-});
+it.each(['', 'contains space', 'comma,key', 'a'.repeat(129)])(
+  'rejects invalid submission key %j before project lookup or transfer',
+  async (idempotencyKey) => {
+    const client = await connect('chatgpt', 'invalid-submission-key');
+    const before = calls.length;
+    const result = await client.callTool({
+      name: 'create-lipsync',
+      arguments: {
+        videoAssetId: 'existing-video',
+        audioAssetId: 'existing-audio',
+        projectId: 'selected-project',
+        idempotencyKey,
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(calls.slice(before).filter((call) => call.path !== '/v2/oauth/userinfo')).toEqual([]);
+  },
+);
 
 it.each([
   {
@@ -668,43 +663,40 @@ it.each([
     retryAfterMs: undefined,
     generationId: '00000000-0000-4000-8000-000000000005',
   },
-])('preserves $code for submission recovery without leaking the upstream body', async ({
-  token,
-  status,
-  code,
-  retryAfterMs,
-  generationId,
-}) => {
-  const client = await connect('chatgpt', token);
-  await client.listTools();
-  const result = await client.callTool({
-    name: 'create-lipsync',
-    arguments: {
-      videoAssetId: 'existing-video',
-      audioAssetId: 'existing-audio',
-      projectId: 'selected-project',
-      idempotencyKey: 'same-action',
-    },
-  });
-  expect(result.isError).toBe(true);
-  const detail = CallToolResultSchema.parse(result).content.find((item) => item.type === 'text');
-  expect(detail?.type).toBe('text');
-  const payload = JSON.parse(detail!.text as string);
-  expect(result.structuredContent).toEqual(payload);
-  expect(payload).toEqual({
-    error: {
-      status,
-      code,
-      message: expect.any(String),
-      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
-      ...(generationId === undefined ? {} : { generationId }),
-    },
-  });
-  expect(JSON.stringify(result)).not.toContain('do-not-forward');
-  expect(
-    calls.filter((call) => call.token === `Bearer ${token}` && call.path === '/v2/generate'),
-  ).toHaveLength(1);
-});
+])(
+  'preserves $code for submission recovery without leaking the upstream body',
+  async ({ token, status, code, retryAfterMs, generationId }) => {
+    const client = await connect('chatgpt', token);
+    await client.listTools();
+    const result = await client.callTool({
+      name: 'create-lipsync',
+      arguments: {
+        videoAssetId: 'existing-video',
+        audioAssetId: 'existing-audio',
+        projectId: 'selected-project',
+        idempotencyKey: 'same-action',
+      },
+    });
+    expect(result.isError).toBe(true);
+    const detail = CallToolResultSchema.parse(result).content.find((item) => item.type === 'text');
+    expect(detail?.type).toBe('text');
+    const payload = JSON.parse(detail!.text as string);
+    expect(result.structuredContent).toEqual(payload);
+    expect(payload).toEqual({
+      error: {
+        status,
+        code,
+        message: expect.any(String),
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+        ...(generationId === undefined ? {} : { generationId }),
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('do-not-forward');
+    expect(
+      calls.filter((call) => call.token === `Bearer ${token}` && call.path === '/v2/generate'),
+    ).toHaveLength(1);
+  },
+);
 
 it('serves a local branded asset placeholder and tells clients not to substitute web images', async () => {
   const before = calls.length;

@@ -211,72 +211,72 @@ async function fixture({
   };
 }
 
-it.each([
-  'http',
-  'stdio',
-] as const)('%s quotes and admits only a keyed standalone dub, then reads its translated audio', async (transport) => {
-  const { client, call, calls, setReadStatus } = await fixture({ transport });
-  const catalog = (await client.listTools()).tools;
-  expect(catalog.filter((tool) => tool.name.startsWith('dubbing_'))).toEqual([]);
-  const tool = catalog.find((t) => t.name === 'create-translation-preview');
-  expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
-  const quote = await call('estimate-translation-preview', { projectId, audioAssetId });
-  expect(quote.structuredContent).toMatchObject({
-    billing: 'external',
-    preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
-  });
-  expect(JSON.stringify(quote)).not.toContain('must-not-leak');
-  expect(
-    (
-      await call('create-translation-preview', {
-        projectId,
-        audioAssetId,
-        targetLang: 'es',
-        idempotencyKey,
-      })
-    ).structuredContent,
-  ).toMatchObject({ id: jobId, status: 'PROCESSING' });
-  setReadStatus('COMPLETING');
-  const completing = await call('get-translation-preview', { projectId, id: jobId });
-  expect(completing.structuredContent).toMatchObject({
-    id: jobId,
-    status: 'COMPLETING',
-    createdAt: '2026-10-15T12:00:00.000Z',
-  });
-  setReadStatus('COMPLETED');
-  const completed = await call('get-translation-preview', { projectId, id: jobId });
-  expect(completed.structuredContent).toMatchObject({
-    status: 'COMPLETED',
-    outputMediaUrl: 'https://media.example.test/translated.wav',
-  });
-  expect(JSON.stringify(completed)).not.toContain('must-not-leak');
-  expect(calls).toEqual([
-    {
-      path: '/v2/integrations/dubbing/estimate',
-      key: undefined,
-      token: 'Bearer translation-user',
-      body: { projectId, audioAssetId, preview: true },
-    },
-    {
-      path: '/v2/integrations/dubbing',
-      key: idempotencyKey,
-      token: 'Bearer translation-user',
-      body: { projectId, audioAssetId, targetLang: 'es', sourceLang: 'auto' },
-    },
-    {
-      path: `/v2/integrations/dubbing/${jobId}?projectId=${projectId}`,
-      key: undefined,
-      token: 'Bearer translation-user',
-      body: undefined,
-    },
-    {
-      path: `/v2/integrations/dubbing/${jobId}?projectId=${projectId}`,
-      key: undefined,
-      token: 'Bearer translation-user',
-      body: undefined,
-    },
-  ]);
-});
+it.each(['http', 'stdio'] as const)(
+  '%s quotes and admits only a keyed standalone dub, then reads its translated audio',
+  async (transport) => {
+    const { client, call, calls, setReadStatus } = await fixture({ transport });
+    const catalog = (await client.listTools()).tools;
+    expect(catalog.filter((tool) => tool.name.startsWith('dubbing_'))).toEqual([]);
+    const tool = catalog.find((t) => t.name === 'create-translation-preview');
+    expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
+    const quote = await call('estimate-translation-preview', { projectId, audioAssetId });
+    expect(quote.structuredContent).toMatchObject({
+      billing: 'external',
+      preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
+    });
+    expect(JSON.stringify(quote)).not.toContain('must-not-leak');
+    expect(
+      (
+        await call('create-translation-preview', {
+          projectId,
+          audioAssetId,
+          targetLang: 'es',
+          idempotencyKey,
+        })
+      ).structuredContent,
+    ).toMatchObject({ id: jobId, status: 'PROCESSING' });
+    setReadStatus('COMPLETING');
+    const completing = await call('get-translation-preview', { projectId, id: jobId });
+    expect(completing.structuredContent).toMatchObject({
+      id: jobId,
+      status: 'COMPLETING',
+      createdAt: '2026-10-15T12:00:00.000Z',
+    });
+    setReadStatus('COMPLETED');
+    const completed = await call('get-translation-preview', { projectId, id: jobId });
+    expect(completed.structuredContent).toMatchObject({
+      status: 'COMPLETED',
+      outputMediaUrl: 'https://media.example.test/translated.wav',
+    });
+    expect(JSON.stringify(completed)).not.toContain('must-not-leak');
+    expect(calls).toEqual([
+      {
+        path: '/v2/integrations/dubbing/estimate',
+        key: undefined,
+        token: 'Bearer translation-user',
+        body: { projectId, audioAssetId, preview: true },
+      },
+      {
+        path: '/v2/integrations/dubbing',
+        key: idempotencyKey,
+        token: 'Bearer translation-user',
+        body: { projectId, audioAssetId, targetLang: 'es', sourceLang: 'auto' },
+      },
+      {
+        path: `/v2/integrations/dubbing/${jobId}?projectId=${projectId}`,
+        key: undefined,
+        token: 'Bearer translation-user',
+        body: undefined,
+      },
+      {
+        path: `/v2/integrations/dubbing/${jobId}?projectId=${projectId}`,
+        key: undefined,
+        token: 'Bearer translation-user',
+        body: undefined,
+      },
+    ]);
+  },
+);
 it('preserves the server preview cap and accepts an older uncapped quote without starting work', async () => {
   const limited = await fixture({
     preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 20, limitSeconds: 20 },
@@ -306,23 +306,23 @@ it('preserves the server preview cap and accepts an older uncapped quote without
     '/v2/integrations/dubbing/estimate',
   ]);
 });
-it.each([
-  undefined,
-  'invalid-key',
-])('rejects admission key %s before any upstream request', async (key) => {
-  const { call, calls } = await fixture();
-  expect(
-    (
-      await call('create-translation-preview', {
-        projectId,
-        audioAssetId,
-        targetLang: 'es',
-        ...(key ? { idempotencyKey: key } : {}),
-      })
-    ).isError,
-  ).toBe(true);
-  expect(calls).toHaveLength(0);
-});
+it.each([undefined, 'invalid-key'])(
+  'rejects admission key %s before any upstream request',
+  async (key) => {
+    const { call, calls } = await fixture();
+    expect(
+      (
+        await call('create-translation-preview', {
+          projectId,
+          audioAssetId,
+          targetLang: 'es',
+          ...(key ? { idempotencyKey: key } : {}),
+        })
+      ).isError,
+    ).toBe(true);
+    expect(calls).toHaveLength(0);
+  },
+);
 it.each([
   { status: 422, message: 'Project not found' },
   { status: 403, message: 'Project access revoked' },

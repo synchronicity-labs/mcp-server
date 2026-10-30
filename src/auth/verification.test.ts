@@ -17,20 +17,18 @@ describe('userinfo verification regression', () => {
       createOAuthProvider('https://fixture.invalid').verifyAccessToken('fake-token'),
     ).rejects.not.toBeInstanceOf(InvalidTokenError);
   });
-  it.each([
-    {},
-    null,
-    { ...valid, client_id: '' },
-    { ...valid, expires_at: '4000000000' },
-  ])('rejects malformed successful body %j', async (body) => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => Response.json(body)),
-    );
-    await expect(
-      createOAuthProvider('https://fixture.invalid').verifyAccessToken('fake-token'),
-    ).rejects.toThrow();
-  });
+  it.each([{}, null, { ...valid, client_id: '' }, { ...valid, expires_at: '4000000000' }])(
+    'rejects malformed successful body %j',
+    async (body) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json(body)),
+      );
+      await expect(
+        createOAuthProvider('https://fixture.invalid').verifyAccessToken('fake-token'),
+      ).rejects.toThrow();
+    },
+  );
 });
 
 it.each([401, 403])('reserves invalid token for upstream %s', async (status) => {
@@ -112,49 +110,45 @@ it('does not dispatch pre-cancelled verification', async () => {
   ).rejects.toMatchObject({ status: 503 });
   expect(fetchMock).not.toHaveBeenCalled();
 });
-it.each([
-  undefined,
-  'org-1',
-])('retains stable verified ownership across token refresh (org %s)', async (organizationId) => {
-  let expiresAt = 4000000000;
-  const response = () => ({
-    sub: 'user',
-    client_id: 'client',
-    expires_at: expiresAt++,
-    ...(organizationId === undefined ? {} : { organization_id: organizationId }),
-    email: 'not-retained@example.invalid',
-    extra: { sub: 'untrusted' },
-  });
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => Response.json(response())),
-  );
-  const provider = createOAuthProvider('https://fixture.invalid');
-  const before = await provider.verifyAccessToken('old-token');
-  const refreshed = await provider.verifyAccessToken('new-token');
-  const expected = { sub: 'user', ...(organizationId === undefined ? {} : { organizationId }) };
-  expect(before.extra).toEqual(expected);
-  expect(refreshed.extra).toEqual(expected);
-  expect(before.clientId).toBe(refreshed.clientId);
-  expect(before.token).not.toBe(refreshed.token);
-  expect(before.expiresAt).not.toBe(refreshed.expiresAt);
-});
-it.each([
-  null,
-  '',
-  ' ',
-  42,
-  {},
-  [],
-])('rejects malformed verified org context %j', async (organization_id) => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => Response.json({ ...valid, organization_id })),
-  );
-  await expect(
-    createOAuthProvider('https://fixture.invalid').verifyAccessToken('fake'),
-  ).rejects.toMatchObject({ status: 502, errorCode: 'temporarily_unavailable' });
-});
+it.each([undefined, 'org-1'])(
+  'retains stable verified ownership across token refresh (org %s)',
+  async (organizationId) => {
+    let expiresAt = 4000000000;
+    const response = () => ({
+      sub: 'user',
+      client_id: 'client',
+      expires_at: expiresAt++,
+      ...(organizationId === undefined ? {} : { organization_id: organizationId }),
+      email: 'not-retained@example.invalid',
+      extra: { sub: 'untrusted' },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(response())),
+    );
+    const provider = createOAuthProvider('https://fixture.invalid');
+    const before = await provider.verifyAccessToken('old-token');
+    const refreshed = await provider.verifyAccessToken('new-token');
+    const expected = { sub: 'user', ...(organizationId === undefined ? {} : { organizationId }) };
+    expect(before.extra).toEqual(expected);
+    expect(refreshed.extra).toEqual(expected);
+    expect(before.clientId).toBe(refreshed.clientId);
+    expect(before.token).not.toBe(refreshed.token);
+    expect(before.expiresAt).not.toBe(refreshed.expiresAt);
+  },
+);
+it.each([null, '', ' ', 42, {}, []])(
+  'rejects malformed verified org context %j',
+  async (organization_id) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ ...valid, organization_id })),
+    );
+    await expect(
+      createOAuthProvider('https://fixture.invalid').verifyAccessToken('fake'),
+    ).rejects.toMatchObject({ status: 502, errorCode: 'temporarily_unavailable' });
+  },
+);
 it('preserves distinct subjects, clients, organizations and organization absence', async () => {
   const variants = [
     valid,
