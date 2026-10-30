@@ -19,7 +19,8 @@ Every merge to `main` deploys production. Treat each merge as a release.
 | `src/client-profile.ts` | Maps the handshake client name to a presentation profile (chatgpt, codex, claude, generic). Presentation only, never permissions |
 | `src/tools/` | Hand-written tools; `generator.ts` turns public OpenAPI operations into generated tools |
 | `src/openapi/` | Fetches and parses `api.sync.so/api-json` at startup |
-| `src/http-server.ts`, `src/http-session.ts`, `src/session-registry.ts` | Express app, OAuth proxy routes, `/mcp`, `/health`, rate limits, request-scoped MCP sessions |
+| `src/http-server.ts`, `src/http-session.ts`, `src/session-registry.ts` | Express app, OAuth proxy routes, `/mcp`, `/health`, request-scoped MCP sessions |
+| `src/rate-limits.ts` | Request limits per verified user and OAuth client, plus per-address limits on rejected credentials |
 | `src/auth/` | OAuth proxy provider (SDK `server-legacy`), bearer verification, device auth for stdio |
 | `src/chatgpt-app.ts`, `deploy/chatgpt/` | Immutable ChatGPT UI releases built from sync-api-v2 `apps/chatgpt`; see `docs/chatgpt-release.md` |
 | `scripts/` | Memory and session suites, UI packaging, monitor, post-deploy smoke check, pre-commit size check |
@@ -55,6 +56,7 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 - **Never change the OAuth issuer `https://mcp.sync.so/` or `/authorize`, `/token`, `/register`, `/revoke`.** Changing any of them forces every connected user to reconnect.
 - **Generated tool names come from API operationIds.** Renaming a controller method in sync-api-v2 silently drops a hosted tool unless `HOSTED_HTTP_TOOL_ALLOWLIST` follows.
 - **App-only tools stay out of model-only clients.** Studio bridge tools and widget-only tools (`ui.visibility` without `model`) are hidden, and refuse direct calls, outside the ChatGPT app.
+- **Limit requests by verified user or OAuth client, never by address alone.** ChatGPT and Claude.ai reach the server from a few shared egress addresses, so an address limit throttles all of their users together. Address limits count only rejected credentials.
 - **Sessions, upload tickets and token caches live in one process.** Do not add replicas without cross-pod routing.
 - **Keep `undici` on the same major as Node's bundled undici.** The upload path hands an undici dispatcher to Node's built-in `fetch`.
 - **Fix lint findings rather than disabling them.** Unused disable directives fail lint. The ten files with complexity caps in `.oxlintrc.json` must not grow; split them instead.

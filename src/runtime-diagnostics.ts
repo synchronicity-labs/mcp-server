@@ -13,6 +13,8 @@ export type HttpRequestStats = {
   status2xx: number;
   status3xx: number;
   status4xx: number;
+  /** Rate-limited responses, also counted in status4xx. */
+  status429: number;
   status5xx: number;
   durationMsTotal: number;
   durationMsMax: number;
@@ -27,6 +29,7 @@ export class HttpRequestMetrics {
     status2xx: 0,
     status3xx: 0,
     status4xx: 0,
+    status429: 0,
     status5xx: 0,
     durationMsTotal: 0,
     durationMsMax: 0,
@@ -47,6 +50,7 @@ export class HttpRequestMetrics {
         if (completion.statusCode >= 200 && completion.statusCode < 300) this.#stats.status2xx += 1;
         if (completion.statusCode >= 300 && completion.statusCode < 400) this.#stats.status3xx += 1;
         if (completion.statusCode >= 400 && completion.statusCode < 500) this.#stats.status4xx += 1;
+        if (completion.statusCode === 429) this.#stats.status429 += 1;
         if (completion.statusCode >= 500) this.#stats.status5xx += 1;
       }
       this.#stats.durationMsTotal += completion.durationMs;

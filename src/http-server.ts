@@ -12,7 +12,6 @@ import {
 } from '@modelcontextprotocol/server-legacy/auth';
 import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import { appUploadHandler, createAppUploadCors } from './app-upload-relay.js';
 import { ASSET_THUMBNAIL_PLACEHOLDER } from './asset-thumbnail.js';
 import { runWithAuth } from './auth/async-context.js';
@@ -33,6 +32,12 @@ import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpSession, isSessionControlRequest } from './http-session.js';
 import { readOAuthResponseText } from './oauth-response.js';
+import {
+  createMcpRejectedCredentialLimit,
+  createMcpUserLimit,
+  createOAuthClientLimit,
+  createOAuthRejectedRequestLimit,
+} from './rate-limits.js';
 import { REVISION } from './revision.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry, sessionOwner } from './session-registry.js';
@@ -407,7 +412,8 @@ export async function startHttpServer(
   // let the Sync API validate the confidential client.
   app.use(['/token', '/revoke'], express.urlencoded({ extended: false }));
 
-  const oauthProxyRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
+  const oauthRejectedRequestLimit = createOAuthRejectedRequestLimit();
+  const oauthClientLimit = createOAuthClientLimit();
   const proxyOAuthFormRequest = async (
     path: 'token' | 'revoke',
     req: express.Request,
@@ -516,11 +522,11 @@ export async function startHttpServer(
     }
   };
 
-  app.post('/token', oauthProxyRateLimit, (req, res) => {
+  app.post('/token', oauthRejectedRequestLimit, oauthClientLimit, (req, res) => {
     void proxyOAuthFormRequest('token', req, res);
   });
 
-  app.post('/revoke', oauthProxyRateLimit, (req, res) => {
+  app.post('/revoke', oauthRejectedRequestLimit, oauthClientLimit, (req, res) => {
     void proxyOAuthFormRequest('revoke', req, res);
   });
 
@@ -553,12 +559,13 @@ export async function startHttpServer(
     }),
   );
 
-  // MCP endpoint — requires valid Bearer token, rate limited
+  // MCP endpoint: requires a valid Bearer token; rate limits are in rate-limits.ts.
   const bearerAuth = requireBearerAuth({
     verifier: oauthProvider,
     resourceMetadataUrl: resourceMetadataUrl(config.port),
   });
-  const mcpRateLimit = rateLimit({ windowMs: 60_000, limit: 120 });
+  const mcpRejectedCredentialLimit = createMcpRejectedCredentialLimit();
+  const mcpUserLimit = createMcpUserLimit();
 
   const sessionRuntimeConfig = getSessionRuntimeConfig();
   const canAdmitRequest = createSessionHeapAdmission();
@@ -577,7 +584,7 @@ export async function startHttpServer(
 
   const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
   eventLoopDelay.enable();
-  app.get('/status', mcpRateLimit, bearerAuth, (_req, res) => {
+  app.get('/status', mcpRejectedCredentialLimit, bearerAuth, mcpUserLimit, (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       sessions: sessions.stats(),
@@ -657,7 +664,7 @@ export async function startHttpServer(
   app.use('/mcp', express.json());
 
   let shuttingDown = false;
-  app.all('/mcp', mcpRateLimit, bearerAuth, async (req, res) => {
+  app.all('/mcp', mcpRejectedCredentialLimit, bearerAuth, mcpUserLimit, async (req, res) => {
     const token = req.auth?.token;
     if (!token) {
       res.status(401).json({ error: 'Missing auth token' });
