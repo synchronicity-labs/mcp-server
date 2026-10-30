@@ -97,9 +97,11 @@ then checks both OAuth discovery documents and the unauthenticated `/mcp` 401
 challenge. A red deploy run means the new process never served or the public
 surface changed; it does not roll back on its own.
 
-Deploys run one at a time in merge order (`concurrency` in the deploy workflow).
-While one deploys, only the newest later push waits, so an older commit never
-lands after a newer one.
+Deploys run one at a time (`concurrency` in the deploy workflow). Inside that
+slot, a run deploys only if its commit is still the tip of `main`; otherwise it
+skips, because the run for the newer commit ships it. A late or rerun deploy of
+an older commit therefore never replaces a newer one. To redeploy an older
+commit, revert on `main` instead of rerunning its old deploy.
 
 Before merging, record the deployed image, current widget digest, green checks
 and reviewer approval. The baseline observed on 2026-10-28 was image

@@ -3,9 +3,9 @@
         branches:
             - main
 name: Deploy to mcp-server
-# Deploy one commit at a time, in merge order. A deploy in progress finishes;
-# a newer push waits, and only the newest waiting push deploys after it, so an
-# older commit can never land after a newer one.
+# One deploy at a time. Inside that slot a run deploys only while its commit
+# is still the tip of main, so a run that GitHub schedules late, or a rerun of
+# an older commit, skips instead of replacing a newer deploy.
 concurrency:
     group: deploy-mcp-server-production
     cancel-in-progress: false
@@ -17,15 +17,29 @@ jobs:
               uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
             - name: Set Github tag
               id: vars
-              run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+              run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            - name: Skip if main has moved on
+              id: current
+              run: |
+                  git fetch --no-tags --depth=1 origin main
+                  tip=$(git rev-parse FETCH_HEAD)
+                  if [ "$tip" = "$GITHUB_SHA" ]; then
+                      echo "deploy=true" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "::notice::main is at $tip, not $GITHUB_SHA. Skipping; the deploy for $tip ships it."
+                      echo "deploy=false" >> "$GITHUB_OUTPUT"
+                  fi
             - name: Setup porter
+              if: steps.current.outputs.deploy == 'true'
               uses: porter-dev/setup-porter@82aae6b91417e2a4e6cd4a1f6bd123fd316bd188 # v0.1.0
             - name: Record deploy start and revision
+              if: steps.current.outputs.deploy == 'true'
               id: start
               run: |
                   echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
                   echo "$GITHUB_SHA" > .revision
             - name: Deploy stack
+              if: steps.current.outputs.deploy == 'true'
               timeout-minutes: 30
               run: porter apply
               env:
@@ -37,10 +51,12 @@ jobs:
                 PORTER_TAG: ${{ steps.vars.outputs.sha_short }}
                 PORTER_TOKEN: ${{ secrets.PORTER_APP_11208_1181459491 }}
             - name: Use Node.js
+              if: steps.current.outputs.deploy == 'true'
               uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
               with:
                   node-version: "22"
             - name: Smoke-check the deployed server
+              if: steps.current.outputs.deploy == 'true'
               timeout-minutes: 12
               run: node scripts/smoke-deploy.mjs
               env:
