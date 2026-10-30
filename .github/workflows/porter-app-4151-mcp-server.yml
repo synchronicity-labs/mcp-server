@@ -3,9 +3,10 @@
         branches:
             - main
 name: Deploy to mcp-server
-# One deploy at a time. Inside that slot a run deploys only while its commit
-# is still the tip of main, so a run that GitHub schedules late, or a rerun of
-# an older commit, skips instead of replacing a newer deploy.
+# One deploy at a time. Each run deploys the current tip of main, whichever
+# commit triggered it, and skips when production already serves that tip. A late
+# run or a rerun therefore never rolls production back, and when a new run
+# replaces a pending one in this group, the survivor still ships the tip.
 concurrency:
     group: deploy-mcp-server-production
     cancel-in-progress: false
@@ -15,31 +16,39 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-            - name: Set Github tag
-              id: vars
-              run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-            - name: Skip if main has moved on
-              id: current
+            - name: Check out the tip of main
+              id: target
+              env:
+                  HEALTH_URL: https://mcp.sync.so/health
               run: |
                   git fetch --no-tags --depth=1 origin main
                   tip=$(git rev-parse FETCH_HEAD)
-                  if [ "$tip" = "$GITHUB_SHA" ]; then
-                      echo "deploy=true" >> "$GITHUB_OUTPUT"
-                  else
-                      echo "::notice::main is at $tip, not $GITHUB_SHA. Skipping; the deploy for $tip ships it."
+                  live=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r '.revision // empty' || true)
+                  if [ "$live" = "$tip" ]; then
+                      echo "::notice::Production already serves the tip of main, $tip."
                       echo "deploy=false" >> "$GITHUB_OUTPUT"
+                      exit 0
                   fi
+                  if [ "$tip" != "$GITHUB_SHA" ]; then
+                      echo "::notice::main has moved past $GITHUB_SHA. Deploying the tip, $tip."
+                      git checkout --quiet --detach "$tip"
+                  fi
+                  {
+                      echo "deploy=true"
+                      echo "sha=$tip"
+                      echo "sha_short=$(git rev-parse --short "$tip")"
+                  } >> "$GITHUB_OUTPUT"
             - name: Setup porter
-              if: steps.current.outputs.deploy == 'true'
+              if: steps.target.outputs.deploy == 'true'
               uses: porter-dev/setup-porter@82aae6b91417e2a4e6cd4a1f6bd123fd316bd188 # v0.1.0
             - name: Record deploy start and revision
-              if: steps.current.outputs.deploy == 'true'
+              if: steps.target.outputs.deploy == 'true'
               id: start
               run: |
                   echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-                  echo "$GITHUB_SHA" > .revision
+                  echo "${{ steps.target.outputs.sha }}" > .revision
             - name: Deploy stack
-              if: steps.current.outputs.deploy == 'true'
+              if: steps.target.outputs.deploy == 'true'
               timeout-minutes: 30
               run: porter apply
               env:
@@ -48,17 +57,17 @@ jobs:
                 PORTER_DEPLOYMENT_TARGET_ID: 2222091e-eed3-40a8-bb60-86728b54d56f
                 PORTER_HOST: https://dashboard.porter.run
                 PORTER_PROJECT: "11208"
-                PORTER_TAG: ${{ steps.vars.outputs.sha_short }}
+                PORTER_TAG: ${{ steps.target.outputs.sha_short }}
                 PORTER_TOKEN: ${{ secrets.PORTER_APP_11208_1181459491 }}
             - name: Use Node.js
-              if: steps.current.outputs.deploy == 'true'
+              if: steps.target.outputs.deploy == 'true'
               uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
               with:
                   node-version: "22"
             - name: Smoke-check the deployed server
-              if: steps.current.outputs.deploy == 'true'
+              if: steps.target.outputs.deploy == 'true'
               timeout-minutes: 12
               run: node scripts/smoke-deploy.mjs
               env:
                 DEPLOY_STARTED_AT: ${{ steps.start.outputs.at }}
-                EXPECTED_REVISION: ${{ github.sha }}
+                EXPECTED_REVISION: ${{ steps.target.outputs.sha }}

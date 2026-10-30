@@ -97,11 +97,12 @@ then checks both OAuth discovery documents and the unauthenticated `/mcp` 401
 challenge. A red deploy run means the new process never served or the public
 surface changed; it does not roll back on its own.
 
-Deploys run one at a time (`concurrency` in the deploy workflow). Inside that
-slot, a run deploys only if its commit is still the tip of `main`; otherwise it
-skips, because the run for the newer commit ships it. A late or rerun deploy of
-an older commit therefore never replaces a newer one. To redeploy an older
-commit, revert on `main` instead of rerunning its old deploy.
+Deploys run one at a time (`concurrency` in the deploy workflow). Each run
+deploys the current tip of `main`, whichever commit triggered it, and skips when
+`/health` already reports that revision. A late run or a rerun therefore never
+rolls production back. When a new run replaces a pending one in the queue, the
+survivor still ships the tip. Rerunning a deploy redeploys the tip of `main`; to
+roll back, revert on `main`.
 
 Before merging, record the deployed image, current widget digest, green checks
 and reviewer approval. The baseline observed on 2026-10-28 was image
