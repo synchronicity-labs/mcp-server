@@ -153,168 +153,170 @@ beforeEach(async () => {
   clients.length = 0;
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  upstream = createServer(asyncRequestListener(async (req, res) => {
-    const requestUrl = new URL(req.url ?? '/', 'http://fixture.invalid');
-    const path = requestUrl.pathname;
-    let raw = '';
-    for await (const chunk of req) raw += chunk;
-    const body = raw ? JSON.parse(raw) : {};
-    const token = req.headers.authorization;
-    calls.push({
-      path,
-      token,
-      idempotencyKey: req.headers['idempotency-key'],
-      body,
-      query: Object.fromEntries(requestUrl.searchParams),
-    });
-    res.setHeader('Content-Type', 'application/json');
-    if (path === '/v2/generate' && token === 'Bearer known-id') {
-      res.statusCode = 503;
-      res.end(
-        JSON.stringify({
-          message: 'Submission acceptance is being reconciled',
-          errorCode: 'IDEMPOTENCY_OUTCOME_UNKNOWN',
-          generationId: '00000000-0000-4000-8000-000000000005',
-          internalDetail: 'do-not-forward',
-        }),
-      );
-      return;
-    }
-    if (
-      path === '/v2/generate' &&
-      ['Bearer preparing', 'Bearer changed-payload'].includes(token ?? '')
-    ) {
-      res.statusCode = 409;
-      const preparing = token === 'Bearer preparing';
-      if (preparing) res.setHeader('Retry-After', '2');
-      res.end(
-        JSON.stringify({
-          message: preparing ? 'Still preparing' : 'Payload changed',
-          errorCode: preparing ? 'IDEMPOTENCY_IN_PROGRESS' : 'IDEMPOTENCY_KEY_CONFLICT',
-          internalDetail: 'do-not-forward',
-        }),
-      );
-      return;
-    }
-    if (path === '/api-json') {
-      res.end(JSON.stringify(spec));
-      return;
-    }
-    if (path === '/v2/oauth/userinfo') {
-      const status =
-        token === 'Bearer rate-limited'
-          ? 429
-          : token === 'Bearer unavailable'
-            ? 503
-            : token === 'Bearer invalid'
-              ? 401
-              : 200;
-      res.statusCode = status;
-      res.setHeader('Retry-After', '9');
-      res.end(
-        JSON.stringify({
-          sub: 'fixture-user',
-          client_id: 'verified-oauth-client',
-          expires_at: 4000000000,
-        }),
-      );
-      return;
-    }
-    const source = req.headers['x-sync-source'];
-    if (token?.startsWith('Bearer ') && source !== 'mcp' && !String(source).startsWith('mcp:')) {
-      res.statusCode = 401;
-      res.end(JSON.stringify({ message: 'Bearer API calls require an MCP source' }));
-      return;
-    }
-    if (
-      token === 'Bearer thumbnails' &&
-      req.method === 'GET' &&
-      ['/v2/assets', '/v2/assets/asset-thumbnail'].includes(path)
-    ) {
-      const asset = {
-        id: 'asset-thumbnail',
-        name: 'Fixture clip',
-        thumbnailUrl: 'https://fixture.invalid/thumbnail.png?Signature=a%2Fb%2Bc',
-        url: 'https://fixture.invalid/source.mp4',
-      };
-      res.end(
-        JSON.stringify(
-          path === '/v2/assets'
-            ? { items: [asset, { id: 'asset-missing', thumbnailUrl: null }] }
-            : asset,
-        ),
-      );
-      return;
-    }
-    if (
-      [
-        '/v2/models',
-        '/v2/assets',
-        '/v2/assets/asset-1',
-        '/v2/assets/asset-1/download',
-        '/v2/generations',
-        '/v2/generate/estimate-cost',
-      ].includes(path)
-    ) {
-      res.end(JSON.stringify({ path, query: Object.fromEntries(requestUrl.searchParams), body }));
-      return;
-    }
-    if (path === '/v2/projects/selected-project') {
-      res.end(JSON.stringify({ id: 'selected-project', name: 'Web app project' }));
-      return;
-    }
-    if (path === '/v2/projects/denied-project') {
-      res.statusCode = 404;
-      res.end(JSON.stringify({ message: 'Project not found or you do not have permission' }));
-      return;
-    }
-    if (path === '/v2/projects') {
-      if (token === 'Bearer cancelled' && req.method === 'GET') {
-        res.on('close', () => {
-          if (!res.writableEnded) projectAborted.resolve();
-        });
-        projectStarted.resolve();
-        await projectRelease.promise;
-      }
-      res.end(
-        JSON.stringify(req.method === 'GET' ? { items: [] } : { id: `project:${body.name}` }),
-      );
-      return;
-    }
-    if (path === '/v2/voices') {
-      res.end(JSON.stringify({ voices: [{ id: 'fixture-voice' }] }));
-      return;
-    }
-    if (path === '/v2/generate') {
-      res.end(JSON.stringify({ id: 'generation', status: 'PENDING' }));
-      return;
-    }
-    if (path === '/v2/generate/malformed') {
-      res.end(JSON.stringify({ id: 'malformed', status: 123 }));
-      return;
-    }
-    if (path === '/v2/generate/generation') {
-      const timeout = requestUrl.searchParams.get('timeout');
-      if (timeout !== null && Number(timeout) > 10) {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ message: 'timeout must not be greater than 10' }));
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      const requestUrl = new URL(req.url ?? '/', 'http://fixture.invalid');
+      const path = requestUrl.pathname;
+      let raw = '';
+      for await (const chunk of req) raw += chunk;
+      const body = raw ? JSON.parse(raw) : {};
+      const token = req.headers.authorization;
+      calls.push({
+        path,
+        token,
+        idempotencyKey: req.headers['idempotency-key'],
+        body,
+        query: Object.fromEntries(requestUrl.searchParams),
+      });
+      res.setHeader('Content-Type', 'application/json');
+      if (path === '/v2/generate' && token === 'Bearer known-id') {
+        res.statusCode = 503;
+        res.end(
+          JSON.stringify({
+            message: 'Submission acceptance is being reconciled',
+            errorCode: 'IDEMPOTENCY_OUTCOME_UNKNOWN',
+            generationId: '00000000-0000-4000-8000-000000000005',
+            internalDetail: 'do-not-forward',
+          }),
+        );
         return;
       }
-      if (requestUrl.searchParams.get('wait') !== 'true') {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ message: 'Expected wait=true for this polling fixture' }));
+      if (
+        path === '/v2/generate' &&
+        ['Bearer preparing', 'Bearer changed-payload'].includes(token ?? '')
+      ) {
+        res.statusCode = 409;
+        const preparing = token === 'Bearer preparing';
+        if (preparing) res.setHeader('Retry-After', '2');
+        res.end(
+          JSON.stringify({
+            message: preparing ? 'Still preparing' : 'Payload changed',
+            errorCode: preparing ? 'IDEMPOTENCY_IN_PROGRESS' : 'IDEMPOTENCY_KEY_CONFLICT',
+            internalDetail: 'do-not-forward',
+          }),
+        );
         return;
       }
-      if (calls.filter((call) => call.path === path && call.token === token).length === 1) {
+      if (path === '/api-json') {
+        res.end(JSON.stringify(spec));
+        return;
+      }
+      if (path === '/v2/oauth/userinfo') {
+        const status =
+          token === 'Bearer rate-limited'
+            ? 429
+            : token === 'Bearer unavailable'
+              ? 503
+              : token === 'Bearer invalid'
+                ? 401
+                : 200;
+        res.statusCode = status;
+        res.setHeader('Retry-After', '9');
+        res.end(
+          JSON.stringify({
+            sub: 'fixture-user',
+            client_id: 'verified-oauth-client',
+            expires_at: 4000000000,
+          }),
+        );
+        return;
+      }
+      const source = req.headers['x-sync-source'];
+      if (token?.startsWith('Bearer ') && source !== 'mcp' && !String(source).startsWith('mcp:')) {
+        res.statusCode = 401;
+        res.end(JSON.stringify({ message: 'Bearer API calls require an MCP source' }));
+        return;
+      }
+      if (
+        token === 'Bearer thumbnails' &&
+        req.method === 'GET' &&
+        ['/v2/assets', '/v2/assets/asset-thumbnail'].includes(path)
+      ) {
+        const asset = {
+          id: 'asset-thumbnail',
+          name: 'Fixture clip',
+          thumbnailUrl: 'https://fixture.invalid/thumbnail.png?Signature=a%2Fb%2Bc',
+          url: 'https://fixture.invalid/source.mp4',
+        };
+        res.end(
+          JSON.stringify(
+            path === '/v2/assets'
+              ? { items: [asset, { id: 'asset-missing', thumbnailUrl: null }] }
+              : asset,
+          ),
+        );
+        return;
+      }
+      if (
+        [
+          '/v2/models',
+          '/v2/assets',
+          '/v2/assets/asset-1',
+          '/v2/assets/asset-1/download',
+          '/v2/generations',
+          '/v2/generate/estimate-cost',
+        ].includes(path)
+      ) {
+        res.end(JSON.stringify({ path, query: Object.fromEntries(requestUrl.searchParams), body }));
+        return;
+      }
+      if (path === '/v2/projects/selected-project') {
+        res.end(JSON.stringify({ id: 'selected-project', name: 'Web app project' }));
+        return;
+      }
+      if (path === '/v2/projects/denied-project') {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ message: 'Project not found or you do not have permission' }));
+        return;
+      }
+      if (path === '/v2/projects') {
+        if (token === 'Bearer cancelled' && req.method === 'GET') {
+          res.on('close', () => {
+            if (!res.writableEnded) projectAborted.resolve();
+          });
+          projectStarted.resolve();
+          await projectRelease.promise;
+        }
+        res.end(
+          JSON.stringify(req.method === 'GET' ? { items: [] } : { id: `project:${body.name}` }),
+        );
+        return;
+      }
+      if (path === '/v2/voices') {
+        res.end(JSON.stringify({ voices: [{ id: 'fixture-voice' }] }));
+        return;
+      }
+      if (path === '/v2/generate') {
         res.end(JSON.stringify({ id: 'generation', status: 'PENDING' }));
         return;
       }
-      res.end(JSON.stringify({ id: 'generation', status: 'COMPLETED', outputUrl: signedUrl }));
-      return;
-    }
-    res.statusCode = 404;
-    res.end('{}');
-  }));
+      if (path === '/v2/generate/malformed') {
+        res.end(JSON.stringify({ id: 'malformed', status: 123 }));
+        return;
+      }
+      if (path === '/v2/generate/generation') {
+        const timeout = requestUrl.searchParams.get('timeout');
+        if (timeout !== null && Number(timeout) > 10) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ message: 'timeout must not be greater than 10' }));
+          return;
+        }
+        if (requestUrl.searchParams.get('wait') !== 'true') {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ message: 'Expected wait=true for this polling fixture' }));
+          return;
+        }
+        if (calls.filter((call) => call.path === path && call.token === token).length === 1) {
+          res.end(JSON.stringify({ id: 'generation', status: 'PENDING' }));
+          return;
+        }
+        res.end(JSON.stringify({ id: 'generation', status: 'COMPLETED', outputUrl: signedUrl }));
+        return;
+      }
+      res.statusCode = 404;
+      res.end('{}');
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;

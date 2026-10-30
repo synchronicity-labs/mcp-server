@@ -8,8 +8,8 @@ import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
-import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
 
 const importJobId = '00000000-0000-4000-8000-000000000004';
 const generationId = '00000000-0000-4000-8000-000000000005';
@@ -57,36 +57,38 @@ afterEach(async () => {
 
 async function fixture(importReplies: Reply[]) {
   const calls: Array<{ path: string; body: unknown; token?: string; key?: string }> = [];
-  const upstream = createServer(asyncRequestListener(async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api-json') {
-      res.end(JSON.stringify(spec));
-      return;
-    }
-    let data = '';
-    for await (const chunk of req) data += chunk.toString();
-    calls.push({
-      path: req.url!,
-      body: data ? JSON.parse(data) : undefined,
-      token: req.headers.authorization,
-      key: req.headers['idempotency-key'] as string | undefined,
-    });
-    if (req.url === '/v2/assets') {
-      const reply = importReplies.shift();
-      res.statusCode = reply?.status ?? 500;
-      if (reply?.retryAfter) res.setHeader('Retry-After', reply.retryAfter);
-      res.end(JSON.stringify(reply?.body ?? { message: 'Unexpected import retry' }));
-    } else if (req.url === `/v2/projects/${projectId}`) {
-      res.end(JSON.stringify({ id: projectId }));
-    } else if (req.url === '/v2/generate/estimate-cost') {
-      res.end(JSON.stringify({ estimatedGenerationCost: 2 }));
-    } else if (req.url === '/v2/generate') {
-      res.end(JSON.stringify({ id: generationId, status: 'PENDING' }));
-    } else {
-      res.statusCode = 404;
-      res.end('{}');
-    }
-  }));
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/api-json') {
+        res.end(JSON.stringify(spec));
+        return;
+      }
+      let data = '';
+      for await (const chunk of req) data += chunk.toString();
+      calls.push({
+        path: req.url!,
+        body: data ? JSON.parse(data) : undefined,
+        token: req.headers.authorization,
+        key: req.headers['idempotency-key'] as string | undefined,
+      });
+      if (req.url === '/v2/assets') {
+        const reply = importReplies.shift();
+        res.statusCode = reply?.status ?? 500;
+        if (reply?.retryAfter) res.setHeader('Retry-After', reply.retryAfter);
+        res.end(JSON.stringify(reply?.body ?? { message: 'Unexpected import retry' }));
+      } else if (req.url === `/v2/projects/${projectId}`) {
+        res.end(JSON.stringify({ id: projectId }));
+      } else if (req.url === '/v2/generate/estimate-cost') {
+        res.end(JSON.stringify({ estimatedGenerationCost: 2 }));
+      } else if (req.url === '/v2/generate') {
+        res.end(JSON.stringify({ id: generationId, status: 'PENDING' }));
+      } else {
+        res.statusCode = 404;
+        res.end('{}');
+      }
+    }),
+  );
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');

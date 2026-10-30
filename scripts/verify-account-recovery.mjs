@@ -76,7 +76,11 @@ const api = createServer(
       assert.equal(grant.get('grant_type'), 'authorization_code');
       assert.equal(grant.get('code'), 'fixture-consent-code');
       return void res.end(
-        JSON.stringify({ access_token: 'recovered-fixture', token_type: 'Bearer', expires_in: 3600 }),
+        JSON.stringify({
+          access_token: 'recovered-fixture',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        }),
       );
     }
     const token = req.headers.authorization;

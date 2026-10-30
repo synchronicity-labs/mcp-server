@@ -24,37 +24,39 @@ const scenarios = new Map<string, Scenario>();
 beforeAll(async () => {
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  upstream = createServer(asyncRequestListener(async (req, res) => {
-    let raw = '';
-    for await (const chunk of req) raw += chunk;
-    const scenario = scenarios.get(new URLSearchParams(raw).get('client_id') ?? '');
-    if (!scenario) {
-      res.writeHead(500);
-      res.end();
-      return;
-    }
-    scenario.calls++;
-    scenario.started = true;
-    res.once('close', () => {
-      if (!res.writableEnded) scenario.closed = true;
-    });
-    if (scenario.mode === 'headers') return;
-    res.setHeader('Content-Type', 'application/json');
-    // Even an upstream's unsafe cache policy must not reach token clients.
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    if (scenario.mode === 'body') {
-      res.write('{"private":"fixture-secret');
-      return;
-    }
-    res.statusCode = scenario.mode === 'error' ? 401 : 200;
-    res.end(
-      JSON.stringify(
-        scenario.mode === 'error'
-          ? { error: 'invalid_client' }
-          : { access_token: 'fixture-token', token_type: 'Bearer' },
-      ),
-    );
-  }));
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      let raw = '';
+      for await (const chunk of req) raw += chunk;
+      const scenario = scenarios.get(new URLSearchParams(raw).get('client_id') ?? '');
+      if (!scenario) {
+        res.writeHead(500);
+        res.end();
+        return;
+      }
+      scenario.calls++;
+      scenario.started = true;
+      res.once('close', () => {
+        if (!res.writableEnded) scenario.closed = true;
+      });
+      if (scenario.mode === 'headers') return;
+      res.setHeader('Content-Type', 'application/json');
+      // Even an upstream's unsafe cache policy must not reach token clients.
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      if (scenario.mode === 'body') {
+        res.write('{"private":"fixture-secret');
+        return;
+      }
+      res.statusCode = scenario.mode === 'error' ? 401 : 200;
+      res.end(
+        JSON.stringify(
+          scenario.mode === 'error'
+            ? { error: 'invalid_client' }
+            : { access_token: 'fixture-token', token_type: 'Bearer' },
+        ),
+      );
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;

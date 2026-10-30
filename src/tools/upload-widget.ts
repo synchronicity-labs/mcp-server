@@ -751,7 +751,7 @@ export const UPLOAD_WIDGET_HTML = `
 
 export function registerUploadWidgetResource(server: UploadWidgetResourceServer): void {
   for (const uri of UPLOAD_WIDGET_RESOURCE_URIS) {
-    const version = (/upload-widget-(v\d+)\.html$/.exec(uri))?.[1] ?? 'current';
+    const version = /upload-widget-(v\d+)\.html$/.exec(uri)?.[1] ?? 'current';
     server.registerResource(
       `sync-upload-widget-${version}`,
       uri,

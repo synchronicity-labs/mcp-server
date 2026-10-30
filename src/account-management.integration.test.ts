@@ -9,67 +9,71 @@ import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000abc';
 const writes: { token: string | undefined; body: unknown }[] = [];
-const upstream = createServer(asyncRequestListener(async (req, res) => {
-  res.setHeader('content-type', 'application/json');
-  if (req.url === '/api-json') {
-    res.end(JSON.stringify({ openapi: '3.0.0', paths: {} }));
-    return;
-  }
-  if (req.headers.authorization === 'Bearer forbidden') {
-    res.writeHead(403).end(JSON.stringify({ message: 'Access denied' }));
-    return;
-  }
-  if (req.url === '/v2/oauth/account') {
-    res.end(
-      JSON.stringify({
-        organization: { role: req.headers.authorization === 'Bearer admin' ? 'admin' : 'member' },
-      }),
-    );
-    return;
-  }
-  if (req.url?.toLowerCase() === `/v2/projects/${projectId}` && req.method === 'PATCH') {
-    let body = '';
-    for await (const chunk of req) body += chunk;
-    writes.push({ token: req.headers.authorization, body: JSON.parse(body) });
-    res.end(JSON.stringify({ id: projectId, name: JSON.parse(body).name, privateToken: 'secret' }));
-    return;
-  }
-  if (req.url === '/v2/billing') {
-    const mode = req.headers.authorization;
-    res.end(
-      JSON.stringify({
-        plan: mode === 'Bearer free' ? null : 'team',
-        canManageBilling: true,
-        credits:
-          mode === 'Bearer credits' ? { balance: 1500, available: 1200, inFlight: 300 } : null,
-        freeMonthlyLimits:
-          mode === 'Bearer free'
-            ? {
-                generations: { used: 2, max: 3 },
-                tts: { used: 4, max: 10 },
-                monthlyResetDate: '2026-11-01T00:00:00.000Z',
-              }
-            : null,
-        privateToken: 'secret',
-      }),
-    );
-    return;
-  }
-  if (req.url === '/v2/usage/totals-with-completeness') {
-    res.end(
-      JSON.stringify({
-        isComplete: req.headers.authorization !== 'Bearer incomplete',
-        items: [
-          { totalGenerationsAmountBilledCents: 125, totalFramesCount: 300 },
-          { totalIntegrationsAmountBilledCents: 25, totalSecondsGenerated: 12 },
-        ],
-        privateToken: 'secret',
-      }),
-    );
-    return;
-  }
-  res.writeHead(404).end('{}');
-}));
+const upstream = createServer(
+  asyncRequestListener(async (req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/api-json') {
+      res.end(JSON.stringify({ openapi: '3.0.0', paths: {} }));
+      return;
+    }
+    if (req.headers.authorization === 'Bearer forbidden') {
+      res.writeHead(403).end(JSON.stringify({ message: 'Access denied' }));
+      return;
+    }
+    if (req.url === '/v2/oauth/account') {
+      res.end(
+        JSON.stringify({
+          organization: { role: req.headers.authorization === 'Bearer admin' ? 'admin' : 'member' },
+        }),
+      );
+      return;
+    }
+    if (req.url?.toLowerCase() === `/v2/projects/${projectId}` && req.method === 'PATCH') {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      writes.push({ token: req.headers.authorization, body: JSON.parse(body) });
+      res.end(
+        JSON.stringify({ id: projectId, name: JSON.parse(body).name, privateToken: 'secret' }),
+      );
+      return;
+    }
+    if (req.url === '/v2/billing') {
+      const mode = req.headers.authorization;
+      res.end(
+        JSON.stringify({
+          plan: mode === 'Bearer free' ? null : 'team',
+          canManageBilling: true,
+          credits:
+            mode === 'Bearer credits' ? { balance: 1500, available: 1200, inFlight: 300 } : null,
+          freeMonthlyLimits:
+            mode === 'Bearer free'
+              ? {
+                  generations: { used: 2, max: 3 },
+                  tts: { used: 4, max: 10 },
+                  monthlyResetDate: '2026-11-01T00:00:00.000Z',
+                }
+              : null,
+          privateToken: 'secret',
+        }),
+      );
+      return;
+    }
+    if (req.url === '/v2/usage/totals-with-completeness') {
+      res.end(
+        JSON.stringify({
+          isComplete: req.headers.authorization !== 'Bearer incomplete',
+          items: [
+            { totalGenerationsAmountBilledCents: 125, totalFramesCount: 300 },
+            { totalIntegrationsAmountBilledCents: 25, totalSecondsGenerated: 12 },
+          ],
+          privateToken: 'secret',
+        }),
+      );
+      return;
+    }
+    res.writeHead(404).end('{}');
+  }),
+);
 let client: Client;
 let server: ReturnType<Awaited<ReturnType<typeof createMcpServerFactory>>['createServer']>;
 beforeAll(async () => {

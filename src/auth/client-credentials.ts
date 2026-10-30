@@ -32,7 +32,8 @@ export function extractBasicClientCredentials(
     const decode = (value: string) => decodeURIComponent(value.replace(/\+/g, ' '));
     const clientId = decode(decoded.slice(0, colon));
     const clientSecret = decode(decoded.slice(colon + 1));
-    if (!clientId || !clientSecret) throw new Error('Basic credentials need a client ID and secret');
+    if (!clientId || !clientSecret)
+      throw new Error('Basic credentials need a client ID and secret');
     return { clientId, clientSecret };
   } catch {
     throw new ClientAuthenticationError(401);

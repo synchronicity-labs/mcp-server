@@ -38,107 +38,109 @@ async function fixture(
     source?: string;
   }> = [];
   let cloned = false;
-  const upstream = createServer(asyncRequestListener(async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api-json') {
-      res.end(
-        JSON.stringify({
-          openapi: '3.0.0',
-          paths: {
-            '/v2/voices': {
-              get: { operationId: 'VoicesController_getVoices', tags: ['Voices'] },
-              ...(options.available === false
-                ? {}
-                : {
-                    post: {
-                      operationId: 'VoicesController_cloneVoice',
-                      tags: ['Voices'],
-                      requestBody: {
-                        content: {
-                          'application/json': {
-                            schema: {
-                              type: 'object',
-                              required: ['name', 'provider'],
-                              properties: {
-                                name: { type: 'string', minLength: 1, maxLength: 100 },
-                                provider: { type: 'string', enum: ['elevenlabs'] },
-                                assetId: { type: 'string', format: 'uuid' },
-                                url: { type: 'string', format: 'uri' },
-                                sampleUrls: {
-                                  type: 'array',
-                                  minItems: 1,
-                                  maxItems: 10,
-                                  items: { type: 'string', format: 'uri' },
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/api-json') {
+        res.end(
+          JSON.stringify({
+            openapi: '3.0.0',
+            paths: {
+              '/v2/voices': {
+                get: { operationId: 'VoicesController_getVoices', tags: ['Voices'] },
+                ...(options.available === false
+                  ? {}
+                  : {
+                      post: {
+                        operationId: 'VoicesController_cloneVoice',
+                        tags: ['Voices'],
+                        requestBody: {
+                          content: {
+                            'application/json': {
+                              schema: {
+                                type: 'object',
+                                required: ['name', 'provider'],
+                                properties: {
+                                  name: { type: 'string', minLength: 1, maxLength: 100 },
+                                  provider: { type: 'string', enum: ['elevenlabs'] },
+                                  assetId: { type: 'string', format: 'uuid' },
+                                  url: { type: 'string', format: 'uri' },
+                                  sampleUrls: {
+                                    type: 'array',
+                                    minItems: 1,
+                                    maxItems: 10,
+                                    items: { type: 'string', format: 'uri' },
+                                  },
                                 },
+                                // The live API puts the exclusive sample sources in allOf/oneOf.
+                                allOf: [
+                                  {
+                                    oneOf: [
+                                      {
+                                        type: 'object',
+                                        properties: { url: { type: 'string', format: 'uri' } },
+                                        required: ['url'],
+                                      },
+                                      {
+                                        type: 'object',
+                                        properties: { assetId: { type: 'string', format: 'uuid' } },
+                                        required: ['assetId'],
+                                      },
+                                    ],
+                                  },
+                                ],
                               },
-                              // The live API puts the exclusive sample sources in allOf/oneOf.
-                              allOf: [
-                                {
-                                  oneOf: [
-                                    {
-                                      type: 'object',
-                                      properties: { url: { type: 'string', format: 'uri' } },
-                                      required: ['url'],
-                                    },
-                                    {
-                                      type: 'object',
-                                      properties: { assetId: { type: 'string', format: 'uuid' } },
-                                      required: ['assetId'],
-                                    },
-                                  ],
-                                },
-                              ],
                             },
                           },
                         },
                       },
-                    },
-                  }),
-              delete: { operationId: 'VoicesController_deleteVoice', tags: ['Voices'] },
+                    }),
+                delete: { operationId: 'VoicesController_deleteVoice', tags: ['Voices'] },
+              },
             },
-          },
-        }),
-      );
-      return;
-    }
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const raw = Buffer.concat(chunks).toString();
-    calls.push({
-      method: req.method!,
-      path: req.url!,
-      body: raw ? JSON.parse(raw) : undefined,
-      auth: req.headers.authorization,
-      source: req.headers['x-sync-source'] as string | undefined,
-    });
-    if (req.url === '/v2/voices' && req.method === 'POST') {
-      if (!options.code) cloned = true;
-      if (options.dropResponse) {
-        res.destroy();
+          }),
+        );
         return;
       }
-      res.statusCode = options.status ?? 201;
-      if (options.code) res.setHeader('Retry-After', '60');
-      res.end(
-        JSON.stringify(
-          options.code
-            ? { message: 'Voice request refused', errorCode: options.code }
-            : { id: voiceId, voiceId: 'provider-id-not-the-sync-id', name: input.name },
-        ),
-      );
-    } else if (req.url === '/v2/voices') {
-      res.end(
-        JSON.stringify(cloned ? [{ id: voiceId, name: input.name, provider: 'elevenlabs' }] : []),
-      );
-    } else if (req.url === `/v2/projects/${projectId}`) {
-      res.end(JSON.stringify({ id: projectId }));
-    } else if (req.url === '/v2/generate') {
-      res.end(JSON.stringify({ id: 'fixture-generation', status: 'PENDING' }));
-    } else {
-      res.statusCode = 404;
-      res.end('{}');
-    }
-  }));
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const raw = Buffer.concat(chunks).toString();
+      calls.push({
+        method: req.method!,
+        path: req.url!,
+        body: raw ? JSON.parse(raw) : undefined,
+        auth: req.headers.authorization,
+        source: req.headers['x-sync-source'] as string | undefined,
+      });
+      if (req.url === '/v2/voices' && req.method === 'POST') {
+        if (!options.code) cloned = true;
+        if (options.dropResponse) {
+          res.destroy();
+          return;
+        }
+        res.statusCode = options.status ?? 201;
+        if (options.code) res.setHeader('Retry-After', '60');
+        res.end(
+          JSON.stringify(
+            options.code
+              ? { message: 'Voice request refused', errorCode: options.code }
+              : { id: voiceId, voiceId: 'provider-id-not-the-sync-id', name: input.name },
+          ),
+        );
+      } else if (req.url === '/v2/voices') {
+        res.end(
+          JSON.stringify(cloned ? [{ id: voiceId, name: input.name, provider: 'elevenlabs' }] : []),
+        );
+      } else if (req.url === `/v2/projects/${projectId}`) {
+        res.end(JSON.stringify({ id: projectId }));
+      } else if (req.url === '/v2/generate') {
+        res.end(JSON.stringify({ id: 'fixture-generation', status: 'PENDING' }));
+      } else {
+        res.statusCode = 404;
+        res.end('{}');
+      }
+    }),
+  );
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -196,9 +198,9 @@ it('clones once from a saved sample and reuses the internal id for script genera
     auth: 'Bearer fixture-account-token',
     source: 'mcp:openai-mcp',
   });
-  expect(calls.filter((request) => request.path === '/v2/voices' && request.method === 'POST')).toHaveLength(
-    1,
-  );
+  expect(
+    calls.filter((request) => request.path === '/v2/voices' && request.method === 'POST'),
+  ).toHaveLength(1);
   expect(calls.at(-1)?.body).toMatchObject({
     input: [
       { type: 'image', assetId },

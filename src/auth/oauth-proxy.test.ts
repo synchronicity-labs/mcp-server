@@ -6,8 +6,8 @@ import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { resolveConfig } from '../config.js';
 import { startHttpServer } from '../http-server.js';
-import { closeFixtureServers } from './fixture-cleanup.js';
 import { asyncRequestListener } from '../test-fixtures/request-listener.js';
+import { closeFixtureServers } from './fixture-cleanup.js';
 
 let upstream: Server | undefined;
 let hosted: Server | undefined;
@@ -30,42 +30,44 @@ beforeAll(async () => {
     logs.push(String(chunk));
     return true;
   });
-  upstream = createServer(asyncRequestListener(async (req, res) => {
-    let body = '';
-    for await (const chunk of req) body += chunk;
-    calls.push({
-      path: req.url ?? '',
-      body: new URLSearchParams(body),
-      authorization: req.headers.authorization,
-    });
-    if (dropUpstreamResponse) {
-      res.destroy();
-      return;
-    }
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
-      res.statusCode = userinfoStatus;
-      res.setHeader('Retry-After', '9');
-      res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
-      return;
-    }
-    if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      calls.push({
+        path: req.url ?? '',
+        body: new URLSearchParams(body),
+        authorization: req.headers.authorization,
+      });
+      if (dropUpstreamResponse) {
+        res.destroy();
+        return;
+      }
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
+        res.statusCode = userinfoStatus;
+        res.setHeader('Retry-After', '9');
+        res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
+        return;
+      }
+      if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
+        res.end(
+          JSON.stringify({
+            client_id: 'client',
+            redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+          }),
+        );
+        return;
+      }
+      res.statusCode = upstreamStatus;
       res.end(
-        JSON.stringify({
-          client_id: 'client',
-          redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
-        }),
+        upstreamBody ??
+          (upstreamStatus === 401
+            ? JSON.stringify({ error: 'invalid_client' })
+            : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
       );
-      return;
-    }
-    res.statusCode = upstreamStatus;
-    res.end(
-      upstreamBody ??
-        (upstreamStatus === 401
-          ? JSON.stringify({ error: 'invalid_client' })
-          : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
-    );
-  }));
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;

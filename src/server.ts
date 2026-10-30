@@ -15,12 +15,12 @@ import {
   UNSUPPORTED_UPLOAD_MESSAGE,
 } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
+import { GENERATION_STATUS_HTML } from './generation-status-html.js';
 import {
   GENERATION_STATUS_METADATA,
   GENERATION_STATUS_URI,
   withGenerationStatusCard,
 } from './generation-status.js';
-import { GENERATION_STATUS_HTML } from './generation-status-html.js';
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
@@ -39,11 +39,11 @@ import { createProjectHistoryTools } from './tools/project-history.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
-import { createTranslationTools, translationOperation } from './tools/translation.js';
 import {
   createTranslationPreviewTools,
   translationPreviewOperations,
 } from './tools/translation-preview.js';
+import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 
 const SERVER_DESCRIPTION =
