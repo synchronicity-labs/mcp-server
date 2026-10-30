@@ -419,7 +419,7 @@ descriptions are cached for the four supported presentation profiles. Immutable 
 profiles, transports and request validation remain separate; credentials are resolved
 per request. After `pnpm run build`, `pnpm run test:memory` exercises local session
 load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
-`-- --burst` to defer initialization until all connections have reserved capacity,
+`--burst` to defer initialization until all connections have reserved capacity,
 covering clients that complete discovery after an initialization burst.
 
 HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. Admission first expires idle sessions, then reclaims the oldest session idle for at least 30 seconds when the session-count limit is reached. In-flight requests and pending initializations are protected. Expired/evicted IDs return 404 so clients can initialize again. If no eligible capacity remains or heap admission fails, new initialization returns `503` with `Retry-After: 60`.

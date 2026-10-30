@@ -30,8 +30,8 @@ pnpm run typecheck
 pnpm run build
 pnpm test --no-file-parallelism
 pnpm test
-npm audit
-npm audit --omit=dev
+pnpm audit
+pnpm audit --prod
 git diff --check
 ```
 
