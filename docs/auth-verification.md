@@ -1,7 +1,8 @@
 # CRAFT-5991: token verification
 
-The installed MCP SDK is 1.27.1. Its bearer middleware maps general OAuthError
-subclasses (including TemporarilyUnavailableError) to HTTP 400. The local
+The bearer middleware is the frozen v1 copy in `@modelcontextprotocol/server-legacy/auth`
+(SDK v2). It maps general OAuthError subclasses (including
+TemporarilyUnavailableError) to HTTP 400. The local
 `auth/bearer-auth.ts` adapter translates verification dependency failures and
 otherwise delegates challenges, expiry and scope checks to that SDK middleware.
 Keep this import when integrating shared `http-server.ts` changes.

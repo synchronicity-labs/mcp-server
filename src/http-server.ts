@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import { getHeapStatistics } from 'node:v8';
-import { InvalidRequestError, OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import { InitializeRequestSchema } from '@modelcontextprotocol/core';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import type { McpServer } from '@modelcontextprotocol/server';
 import {
   createOAuthMetadata,
+  InvalidRequestError,
   mcpAuthRouter,
-} from '@modelcontextprotocol/sdk/server/auth/router.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+  OAuthError,
+} from '@modelcontextprotocol/server-legacy/auth';
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -270,9 +271,9 @@ export function encodeOAuthFormBody(body: Record<string, unknown>): string {
 
 /** Complete each POST with a JSON response, including large HTML resources. */
 export function createHttpMcpTransport(
-  options: ConstructorParameters<typeof StreamableHTTPServerTransport>[0],
-): StreamableHTTPServerTransport {
-  return new StreamableHTTPServerTransport({ ...options, enableJsonResponse: true });
+  options: ConstructorParameters<typeof NodeStreamableHTTPServerTransport>[0],
+): NodeStreamableHTTPServerTransport {
+  return new NodeStreamableHTTPServerTransport({ ...options, enableJsonResponse: true });
 }
 
 export async function startHttpServer(

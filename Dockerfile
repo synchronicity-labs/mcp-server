@@ -5,7 +5,6 @@ RUN apt-get update \
   && apt-get upgrade -y \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-COPY scripts/patch-mcp-sdk.mjs ./scripts/patch-mcp-sdk.mjs
 RUN npm ci
 COPY . .
 RUN npm run build
@@ -20,7 +19,6 @@ RUN apt-get update \
   && apt-get upgrade -y \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/scripts/patch-mcp-sdk.mjs ./scripts/patch-mcp-sdk.mjs
 RUN npm ci --omit=dev
 COPY --from=build /app/scripts/check-mcp.mjs ./scripts/check-mcp.mjs
 COPY --from=build /app/dist ./dist

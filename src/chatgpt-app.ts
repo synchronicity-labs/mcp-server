@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ResourceMetadata } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ResourceMetadata } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { MAX_PREVIOUS_CHATGPT_RELEASES } from './chatgpt-release.js';

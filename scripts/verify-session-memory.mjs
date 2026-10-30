@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { getHeapStatistics } from 'node:v8';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createSessionHeapAdmission, hasSessionHeapCapacity } from '../dist/http-server.js';
 import { createMcpServerFactory } from '../dist/server.js';
 import { SessionRegistry } from '../dist/session-registry.js';
@@ -70,7 +68,7 @@ const registry = new SessionRegistry({
 let clients = [];
 // Use the low-level request to avoid counting the SDK client's cached tool-output
 // validators as server memory. Real remote clients run in another process.
-const list = (client) => client.request({ method: 'tools/list' }, ListToolsResultSchema);
+const list = (client) => client.request({ method: 'tools/list' });
 async function initialize(connection) {
   await connection.client.connect(connection.ct);
   const catalog = await list(connection.client);

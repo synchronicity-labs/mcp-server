@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { describe, expect, it } from 'vitest';
 import { createHttpClient } from './http-client.js';
@@ -58,7 +58,7 @@ describe('HTTP cancellation versus response disconnect', () => {
         };
       }),
     );
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: randomUUID });
+    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: randomUUID });
     await mcp.connect(transport);
     const app = express();
     app.use(express.json());

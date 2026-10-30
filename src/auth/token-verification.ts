@@ -1,8 +1,8 @@
+import type { AuthInfo } from '@modelcontextprotocol/server';
 import {
   InvalidTokenError,
   TemporarilyUnavailableError,
-} from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+} from '@modelcontextprotocol/server-legacy/auth';
 import { z } from 'zod';
 
 export const VERIFICATION_TIMEOUT_MS = 5_000;
