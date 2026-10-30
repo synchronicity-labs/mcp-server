@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import {
+  Client,
+  InMemoryTransport,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -198,7 +200,6 @@ describe('immutable client profiles', () => {
         name: 'create-lipsync',
         arguments: { imageAssetId: 'image', script: 'Hello', voiceId: 'real-voice' },
       },
-      undefined,
       { signal: cancel.signal },
     );
     const rejected = expect(call).rejects.toThrow();

@@ -1,4 +1,4 @@
-import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import { InvalidTokenError } from '@modelcontextprotocol/server-legacy/auth';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOAuthProvider } from './oauth-provider.js';
 

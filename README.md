@@ -399,14 +399,11 @@ alongside heap usage and session rejection counts. This guard bounds session
 admission, not all request/response or upload memory; size container resources
 with those workloads in mind.
 
-The SDK is pinned to `1.32.1` with a small JSON-response cleanup patch in
-`scripts/patch-mcp-sdk.mjs`. Completed responses must release their stream entry
-immediately; retaining its resolver also retains the serialized response until
-the session closes. The install hook patches both ESM and CommonJS builds and
-rejects an unexpected SDK version or source layout. Installs that disable scripts
-must run `npm run patch:mcp-sdk` explicitly, as CI does. The patch script is also
-included in the published npm package and both Docker install stages. Remove it
-only after an SDK upgrade passes the HTTP retention regressions.
+The MCP SDK v2 packages are pinned to exact versions. Completed responses must
+release their stream entry immediately; retaining its resolver also retains the
+serialized response until the session closes. SDK v2 does this itself, and
+`src/http-response-cleanup.test.ts` keeps the ESM and CommonJS transports covered.
+Re-run the HTTP retention regressions before every SDK upgrade.
 
 After `npm run build && npm run package:chatgpt`, run `npm run test:memory:http`
 to exercise the actual HTTP transport and every packaged widget release in a

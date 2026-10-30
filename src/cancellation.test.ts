@@ -1,6 +1,5 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHttpClient, type HttpClient, UPSTREAM_REQUEST_TIMEOUT_MS } from './http-client.js';
 import { registerTools } from './server.js';
@@ -73,7 +72,6 @@ describe('explicit MCP cancellation', () => {
           name: 'create-lipsync',
           arguments: { videoAssetId: 'owned-video', audioAssetId: 'owned-audio' },
         },
-        undefined,
         { signal: cancel.signal },
       );
       const rejected = expect(call).rejects.toThrow();

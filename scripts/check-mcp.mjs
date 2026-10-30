@@ -1,6 +1,5 @@
 import { pathToFileURL } from 'node:url';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
 // The scheduler supplies a fresh OAuth access token. Never persist credentials,
 // log account results, or invoke a configurable (potentially paid) tool.
@@ -35,11 +34,7 @@ export async function checkMcp(url, token) {
     if (!catalog.tools.some((tool) => tool.name === 'get-account-context'))
       throw new Error('Missing account tool');
     stage = 'read-only tool';
-    const result = await client.callTool(
-      { name: 'get-account-context', arguments: {} },
-      undefined,
-      options,
-    );
+    const result = await client.callTool({ name: 'get-account-context', arguments: {} }, options);
     if (result.isError) throw new Error('Account read failed');
     stage = 'capacity';
     const response = await fetch(new URL('/status', endpoint), {

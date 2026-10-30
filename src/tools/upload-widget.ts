@@ -1,8 +1,8 @@
 import type {
+  CallToolResult,
   ReadResourceCallback,
   ResourceMetadata,
-} from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 

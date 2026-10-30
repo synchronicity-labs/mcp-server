@@ -1,16 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createHttpMcpTransport } from './http-server.js';
 
-const { StreamableHTTPServerTransport: CommonJsTransport } = createRequire(import.meta.url)(
-  '@modelcontextprotocol/sdk/server/streamableHttp.js',
-) as { StreamableHTTPServerTransport: typeof StreamableHTTPServerTransport };
+const { NodeStreamableHTTPServerTransport: CommonJsTransport } = createRequire(import.meta.url)(
+  '@modelcontextprotocol/node',
+) as { NodeStreamableHTTPServerTransport: typeof NodeStreamableHTTPServerTransport };
 
 function deferred() {
   let resolve!: () => void;
@@ -96,9 +96,13 @@ describe.each(['esm', 'cjs'] as const)('%s HTTP response cleanup', (format) => {
           contents: [{ uri, mimeType: 'text/html;profile=mcp-app', text: html }],
         }),
       );
-      server.registerTool('echo', { inputSchema: { value: z.number() } }, async ({ value }) => ({
-        content: [{ type: 'text', text: String(value) }],
-      }));
+      server.registerTool(
+        'echo',
+        { inputSchema: z.object({ value: z.number() }) },
+        async ({ value }) => ({
+          content: [{ type: 'text', text: String(value) }],
+        }),
+      );
     }, format);
     try {
       await http.initialize();
@@ -144,7 +148,7 @@ describe.each(['esm', 'cjs'] as const)('%s HTTP response cleanup', (format) => {
     const http = await fixture((server) => {
       server.registerTool(
         'wait',
-        { inputSchema: { slot: z.number().int().min(0).max(1) } },
+        { inputSchema: z.object({ slot: z.number().int().min(0).max(1) }) },
         async ({ slot }) => {
           started[slot]!.resolve();
           await gates[slot]!.promise;
@@ -189,9 +193,9 @@ describe.each(['esm', 'cjs'] as const)('%s HTTP response cleanup', (format) => {
     let executions = 0;
     let toolSignal: AbortSignal | undefined;
     const http = await fixture((server) => {
-      server.registerTool('wait', { inputSchema: {} }, async (_args, extra) => {
+      server.registerTool('wait', { inputSchema: z.object({}) }, async (_args, ctx) => {
         executions++;
-        toolSignal = extra.signal;
+        toolSignal = ctx.mcpReq.signal;
         started.resolve();
         await release.promise;
         return { content: [{ type: 'text', text: 'completed' }] };

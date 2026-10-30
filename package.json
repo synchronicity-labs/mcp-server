@@ -36,7 +36,6 @@
   "files": [
     "dist",
     "deploy/generation-status",
-    "scripts/patch-mcp-sdk.mjs",
     "README.md",
     "LICENSE"
   ],
@@ -44,8 +43,6 @@
     "node": ">=20"
   },
   "scripts": {
-    "postinstall": "node scripts/patch-mcp-sdk.mjs",
-    "patch:mcp-sdk": "node scripts/patch-mcp-sdk.mjs",
     "build": "tsc -b && chmod +x dist/cli.js",
     "package:chatgpt": "node scripts/package-chatgpt.mjs",
     "verify:chatgpt-package": "node scripts/verify-chatgpt-package.mjs",
@@ -65,7 +62,11 @@
     "test:monitor": "node --test scripts/check-mcp.test.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "@modelcontextprotocol/server-legacy": "2.4.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.1",

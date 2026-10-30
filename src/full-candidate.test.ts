@@ -1,9 +1,8 @@
 import { type EventEmitter, once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { CallToolResultSchema } from '@modelcontextprotocol/core';
 import express from 'express';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { startHttpServer } from './http-server.js';
@@ -461,7 +460,6 @@ it('propagates explicit cancellation through bearer auth, sessions and the profi
       name: 'create-lipsync',
       arguments: { videoAssetId: 'fixture-video', audioAssetId: 'fixture-audio' },
     },
-    undefined,
     { signal: cancel.signal },
   );
   const rejected = expect(pending).rejects.toThrow();

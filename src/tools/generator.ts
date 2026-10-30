@@ -1,4 +1,4 @@
-import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { ClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';

@@ -1,7 +1,7 @@
 import { type EventEmitter, once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -77,20 +77,20 @@ beforeAll(async () => {
       toolCount: 1,
       createServer: () => {
         const server = new McpServer({ name: 'ownership-fixture', version: '1' });
-        server.registerTool('hold', { inputSchema: {} }, async (_args, context) => {
+        server.registerTool('hold', { inputSchema: z.object({}) }, async (_args, context) => {
           activeHolds++;
           started.resolve();
           const onAbort = () => {
             aborted = true;
             release.resolve();
           };
-          context.signal.addEventListener('abort', onAbort, { once: true });
+          context.mcpReq.signal.addEventListener('abort', onAbort, { once: true });
           try {
             await release.promise;
             return { content: [{ type: 'text' as const, text: 'completed' }] };
           } finally {
             activeHolds--;
-            context.signal.removeEventListener('abort', onAbort);
+            context.mcpReq.signal.removeEventListener('abort', onAbort);
           }
         });
         return server;

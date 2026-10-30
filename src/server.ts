@@ -1,11 +1,5 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import {
-  type CallToolResult,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  type Resource,
-  type Tool,
-} from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, Resource, Tool } from '@modelcontextprotocol/server';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { relayUploadTool } from './app-upload-relay.js';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from './asset-thumbnail.js';
@@ -287,7 +281,9 @@ export function registerTools(
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
-      async (args, context): Promise<CallToolResult> => {
+      async (args, ctx): Promise<CallToolResult> => {
+        // Tools take the request's signal and _meta, not the SDK handler context.
+        const context = { signal: ctx.mcpReq.signal, _meta: ctx.mcpReq._meta };
         try {
           if (tool.resultFormat === 'mcp') {
             return await tool.handler((args ?? {}) as Record<string, unknown>, context);
@@ -653,9 +649,9 @@ function createProfiledServer(
   registerUploadWidgetResource({
     registerResource: (name, uri, metadata, read) => {
       resources.push({ name, uri, ...metadata });
-      return server.registerResource(name, uri, metadata, async (url, extra) => {
+      return server.registerResource(name, uri, metadata, async (url, ctx) => {
         if (!getProfile().supportsUploads) throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
-        return read(url, extra);
+        return read(url, ctx);
       });
     },
   });
@@ -685,11 +681,11 @@ function createProfiledServer(
     );
   }
   let descriptors: Tool[] = [];
-  server.server.setRequestHandler(ListToolsRequestSchema, () => {
+  server.server.setRequestHandler('tools/list', () => {
     if (!profile) throw new Error('Complete MCP initialization before listing tools.');
     return { tools: descriptors };
   });
-  server.server.setRequestHandler(ListResourcesRequestSchema, () => ({
+  server.server.setRequestHandler('resources/list', () => ({
     resources: resources.filter((resource) =>
       resource.name === 'sync-app' || resource.name === 'sync-generation-status'
         ? getProfile().supportsAppUi

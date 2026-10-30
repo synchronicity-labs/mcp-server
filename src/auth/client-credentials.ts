@@ -1,7 +1,4 @@
-import {
-  InvalidClientError,
-  InvalidRequestError,
-} from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import { InvalidClientError, InvalidRequestError } from '@modelcontextprotocol/server-legacy/auth';
 
 // Basic is an existing ChatGPT compatibility path; both methods become a single
 // confidential body-secret request to Sync. Public clients are not supported.

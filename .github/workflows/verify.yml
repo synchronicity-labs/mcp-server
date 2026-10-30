@@ -28,7 +28,6 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git rev-parse HEAD
       - run: npm ci --ignore-scripts
-      - run: npm run patch:mcp-sdk
       - run: npm run lint
       - run: npm run test:monitor
       - run: npm run typecheck

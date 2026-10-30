@@ -1,9 +1,9 @@
 import { once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import type { McpServer } from '@modelcontextprotocol/server';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { createMcpServerFactory } from './server.js';
 
@@ -217,11 +217,9 @@ it('keeps legacy organization history available without advertising unsupported 
   const names = (await client.listTools()).tools.map((tool) => tool.name);
   expect(names).toContain('generate_get-generations');
   expect(names).not.toContain('projects_get-generations');
-  const result = await client.callTool({
-    name: 'projects_get-generations',
-    arguments: { projectId },
-  });
-  expect(result.isError).toBe(true);
+  await expect(
+    client.callTool({ name: 'projects_get-generations', arguments: { projectId } }),
+  ).rejects.toMatchObject({ code: -32602 });
   expect(calls).toEqual([]);
 });
 

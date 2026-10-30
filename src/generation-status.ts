@@ -1,4 +1,4 @@
-import type { ResourceMetadata } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ResourceMetadata } from '@modelcontextprotocol/server';
 import type { McpToolDefinition } from './tools/generator.js';
 import { MCP_APP_RESOURCE_MIME_TYPE } from './tools/upload-widget.js';
 

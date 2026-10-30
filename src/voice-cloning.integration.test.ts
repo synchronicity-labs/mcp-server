@@ -1,9 +1,9 @@
 import { once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import type { McpServer } from '@modelcontextprotocol/server';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { runWithAuth } from './auth/async-context.js';

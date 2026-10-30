@@ -4,8 +4,7 @@ import { once } from 'node:events';
 import { mkdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, resolve } from 'node:path';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { chromium, expect } from '@playwright/test';
 
 // Run against a built, immutable UI bundle. Only the identity provider and Sync API are fixtures.
