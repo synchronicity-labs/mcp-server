@@ -57,7 +57,7 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 - **App-only tools stay out of model-only clients.** Studio bridge tools and widget-only tools (`ui.visibility` without `model`) are hidden, and refuse direct calls, outside the ChatGPT app.
 - **Sessions, upload tickets and token caches live in one process.** Do not add replicas without cross-pod routing.
 - **Keep `undici` on the same major as Node's bundled undici.** The upload path hands an undici dispatcher to Node's built-in `fetch`.
-- **Fix lint findings rather than disabling them.** Unused disable directives fail lint. The ten files with complexity caps in `.oxlintrc.json` must not grow; split them instead.
+- **Fix lint findings rather than disabling them.** Unused disable directives fail lint. Files with their own complexity cap in `.oxlintrc.json` must not grow; split them instead, and remove a cap once the file meets the default of 20.
 
 ## Verifying a change
 

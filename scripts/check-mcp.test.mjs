@@ -91,3 +91,18 @@ void test('monitor detects tool failure inside HTTP 200 and closes its session o
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+void test('monitor refuses unsafe targets before connecting', async () => {
+  await assert.rejects(checkMcp('https://user:pass@mcp.example.test/mcp', 'fixture'), {
+    message: 'MCP monitor URL must not contain credentials, query or fragment',
+  });
+  await assert.rejects(checkMcp('https://mcp.example.test/mcp?debug=1', 'fixture'), {
+    message: 'MCP monitor URL must not contain credentials, query or fragment',
+  });
+  await assert.rejects(checkMcp('http://mcp.example.test/mcp', 'fixture'), {
+    message: 'MCP monitor requires HTTPS outside loopback',
+  });
+  await assert.rejects(checkMcp('https://mcp.example.test/mcp', ''), {
+    message: 'MCP_MONITOR_ACCESS_TOKEN is required',
+  });
+});

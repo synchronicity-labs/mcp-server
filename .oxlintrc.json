@@ -233,34 +233,6 @@
           }
         ]
       }
-    },
-    {
-      "files": [
-        "scripts/check-mcp.mjs"
-      ],
-      "rules": {
-        "eslint/complexity": [
-          "error",
-          {
-            "max": 22,
-            "variant": "modified"
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "src/config.ts"
-      ],
-      "rules": {
-        "eslint/complexity": [
-          "error",
-          {
-            "max": 21,
-            "variant": "modified"
-          }
-        ]
-      }
     }
   ]
 }

@@ -24,41 +24,46 @@ export const DEFAULT_CONFIG: SyncMcpConfig = {
   port: 3002,
 };
 
-export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpConfig {
+const OAuthAuthorizationUrlSchema = z
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+    );
+  }, 'OAuth authorization URL must use HTTP(S) without credentials, query or fragment')
+  .optional();
+
+/** The ChatGPT UI release to serve, from the release catalog or the legacy directory settings. */
+function resolveChatgptAppRelease():
+  | { directory: string; previousDirectories: string[] }
+  | undefined {
   const legacyDirectory = process.env.SYNC_CHATGPT_APP_DIR;
   const catalogPath = process.env.SYNC_CHATGPT_APP_RELEASES;
-  let release: { directory: string; previousDirectories: string[] } | undefined;
-  if (
-    !overrides.chatgptApp &&
-    (legacyDirectory || (catalogPath && process.env.SYNC_CHATGPT_APP_DOMAIN))
-  ) {
-    const previous = z
-      .array(z.string().min(1))
-      .parse(JSON.parse(process.env.SYNC_CHATGPT_APP_PREVIOUS_DIRS ?? '[]'));
-    release = catalogPath
-      ? resolveChatgptRelease(catalogPath, [
-          ...previous,
-          ...(legacyDirectory ? [legacyDirectory] : []),
-        ])
-      : { directory: legacyDirectory as string, previousDirectories: previous };
-  }
+  if (!legacyDirectory && !(catalogPath && process.env.SYNC_CHATGPT_APP_DOMAIN)) return undefined;
+  const previous = z
+    .array(z.string().min(1))
+    .parse(JSON.parse(process.env.SYNC_CHATGPT_APP_PREVIOUS_DIRS ?? '[]'));
+  return catalogPath
+    ? resolveChatgptRelease(catalogPath, [
+        ...previous,
+        ...(legacyDirectory ? [legacyDirectory] : []),
+      ])
+    : { directory: legacyDirectory as string, previousDirectories: previous };
+}
+
+export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpConfig {
+  const release = overrides.chatgptApp ? undefined : resolveChatgptAppRelease();
   return {
     apiKey: overrides.apiKey ?? process.env.SYNC_API_KEY,
     baseUrl: overrides.baseUrl ?? process.env.SYNC_BASE_URL ?? DEFAULT_CONFIG.baseUrl,
-    oauthAuthorizationUrl: z
-      .url()
-      .refine((value) => {
-        const url = new URL(value);
-        return (
-          (url.protocol === 'https:' || url.protocol === 'http:') &&
-          !url.username &&
-          !url.password &&
-          !url.search &&
-          !url.hash
-        );
-      }, 'OAuth authorization URL must use HTTP(S) without credentials, query or fragment')
-      .optional()
-      .parse(overrides.oauthAuthorizationUrl ?? process.env.SYNC_OAUTH_AUTHORIZATION_URL),
+    oauthAuthorizationUrl: OAuthAuthorizationUrlSchema.parse(
+      overrides.oauthAuthorizationUrl ?? process.env.SYNC_OAUTH_AUTHORIZATION_URL,
+    ),
     transport: overrides.transport ?? DEFAULT_CONFIG.transport,
     port: overrides.port ?? DEFAULT_CONFIG.port,
     chatgptApp:
