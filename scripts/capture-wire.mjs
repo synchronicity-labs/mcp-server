@@ -22,6 +22,7 @@ const CLIENTS = [
 const VERSIONS = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25', '2026-07-28'];
 const ACCEPT = 'application/json, text/event-stream';
 const TOKEN = 'capture-token';
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export function sortKeys(value) {
   if (Array.isArray(value)) return value.map(sortKeys);
@@ -103,6 +104,7 @@ function httpClient(base) {
         ...headers,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     return res;
   };
@@ -117,14 +119,20 @@ function httpClient(base) {
   return { post, rpc };
 }
 
+// A response as the client saw it, so a changed status or error shows in the diff. The
+// JSON-RPC id only reflects request order, so it is left out.
+function seen(res, body) {
+  return { status: res.status, ...body, id: undefined };
+}
+
 async function listAll(rpc, session, method, key) {
   const items = [];
   let cursor;
   do {
-    const { body } = await rpc(session, method, cursor ? { cursor } : {});
-    if (body.error) return { error: body.error };
-    items.push(...(body.result?.[key] ?? []));
-    cursor = body.result?.nextCursor;
+    const { res, body } = await rpc(session, method, cursor ? { cursor } : {});
+    if (!res.ok || !body.result) return seen(res, body);
+    items.push(...(body.result[key] ?? []));
+    cursor = body.result.nextCursor;
   } while (cursor);
   return items;
 }
@@ -147,13 +155,14 @@ async function captureClient(base, name) {
     )
   ).text();
   const tools = await listAll(rpc, session, 'tools/list', 'tools');
+  const unknownTool = await rpc(session, 'tools/call', { name: 'does-not-exist', arguments: {} });
   const result = {
     initialize: init.body.result ?? init.body,
     tools: Array.isArray(tools) ? tools.sort((a, b) => a.name.localeCompare(b.name)) : tools,
     resources: await listAll(rpc, session, 'resources/list', 'resources'),
     resourceTemplates: await listAll(rpc, session, 'resources/templates/list', 'resourceTemplates'),
     prompts: await listAll(rpc, session, 'prompts/list', 'prompts'),
-    unknownTool: (await rpc(session, 'tools/call', { name: 'does-not-exist', arguments: {} })).body,
+    unknownTool: seen(unknownTool.res, unknownTool.body),
   };
   await (
     await fetch(`${base}/mcp`, {
@@ -231,12 +240,30 @@ async function captureStdio(env, name) {
       buffer = buffer.slice(newline + 1);
       if (!line.trim()) continue;
       const message = JSON.parse(line);
-      waiters.get(message.id)?.(message);
+      waiters.get(message.id)?.done(message);
     }
   });
+  child.on('exit', (code, signal) => {
+    for (const waiter of waiters.values()) {
+      waiter.fail(new Error(`The stdio server exited (${signal ?? code}) before replying.`));
+    }
+  });
+  // A write to a dead child fails with EPIPE; the exit handler reports it instead.
+  child.stdin.on('error', () => {});
   const send = (method, params) => {
     const id = nextId++;
-    const reply = new Promise((done) => waiters.set(id, done));
+    const reply = new Promise((done, fail) => {
+      const timer = setTimeout(
+        () => fail(new Error(`stdio ${method} got no reply within ${REQUEST_TIMEOUT_MS} ms.`)),
+        REQUEST_TIMEOUT_MS,
+      );
+      const settle = (finish) => (value) => {
+        clearTimeout(timer);
+        waiters.delete(id);
+        finish(value);
+      };
+      waiters.set(id, { done: settle(done), fail: settle(fail) });
+    });
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
     return reply;
   };
@@ -249,10 +276,13 @@ async function captureStdio(env, name) {
     child.stdin.write(
       `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`,
     );
-    const tools = (await send('tools/list', {})).result?.tools ?? [];
+    const list = await send('tools/list', {});
     return {
       initialize: init.result ?? init,
-      tools: tools.sort((a, b) => a.name.localeCompare(b.name)),
+      // Keep an error response whole rather than reading it as an empty list.
+      tools: list.result
+        ? (list.result.tools ?? []).sort((a, b) => a.name.localeCompare(b.name))
+        : { ...list, id: undefined },
     };
   } finally {
     child.kill('SIGTERM');
