@@ -5,84 +5,142 @@ import { checkPublicSurface, waitForNewProcess } from './smoke-deploy.mjs';
 const baseUrl = 'https://mcp.example.test';
 const deployStartedAt = Date.parse('2026-10-30T20:00:00.000Z');
 
-function healthSequence(startedAts) {
+function healthSequence(answers) {
   let call = 0;
-  return async () => {
-    const startedAt = startedAts[Math.min(call++, startedAts.length - 1)];
-    return Response.json({ status: 'ok', startedAt });
-  };
+  return async () =>
+    Response.json({ status: 'ok', ...answers[Math.min(call++, answers.length - 1)] });
 }
 
-void test('waits past the old process until one started after the deploy answers', async () => {
+function fakeClock() {
   let clock = deployStartedAt;
-  const health = await waitForNewProcess({
-    baseUrl,
-    deployStartedAt,
-    timeoutMs: 60_000,
-    intervalMs: 10_000,
-    fetchImpl: healthSequence([
-      '2026-10-30T18:46:00.000Z',
-      '2026-10-30T18:46:00.000Z',
-      '2026-10-30T20:00:31.000Z',
-    ]),
+  return {
     now: () => clock,
     sleep: async (ms) => {
       clock += ms;
     },
+  };
+}
+
+void test('waits past the old process until the deployed revision answers', async () => {
+  const health = await waitForNewProcess({
+    baseUrl,
+    deployStartedAt,
+    expectedRevision: 'new',
+    timeoutMs: 60_000,
+    intervalMs: 10_000,
+    fetchImpl: healthSequence([
+      { revision: 'old', startedAt: '2026-10-30T18:46:00.000Z' },
+      { revision: 'new', startedAt: '2026-10-30T20:00:31.000Z' },
+    ]),
+    ...fakeClock(),
   });
-  assert.equal(health.startedAt, '2026-10-30T20:00:31.000Z');
+  assert.equal(health.revision, 'new');
 });
 
-void test('fails with the last /health answer when the new process never serves', async () => {
-  let clock = deployStartedAt;
+void test('does not accept an old revision that restarted during the rollout', async () => {
+  await assert.rejects(
+    waitForNewProcess({
+      baseUrl,
+      deployStartedAt,
+      expectedRevision: 'new',
+      timeoutMs: 30_000,
+      intervalMs: 10_000,
+      fetchImpl: healthSequence([{ revision: 'old', startedAt: '2026-10-30T20:00:05.000Z' }]),
+      ...fakeClock(),
+    }),
+    /No revision new server process started after 2026-10-30T20:00:00\.000Z within 30s .*"old"/,
+  );
+});
+
+void test('fails with the last /health answer when no new process serves', async () => {
   await assert.rejects(
     waitForNewProcess({
       baseUrl,
       deployStartedAt,
       timeoutMs: 30_000,
       intervalMs: 10_000,
-      fetchImpl: healthSequence(['2026-10-30T18:46:00.000Z']),
-      now: () => clock,
-      sleep: async (ms) => {
-        clock += ms;
-      },
+      fetchImpl: healthSequence([{ startedAt: '2026-10-30T18:46:00.000Z' }]),
+      ...fakeClock(),
     }),
     /No server process started after 2026-10-30T20:00:00\.000Z within 30s .*18:46:00/,
   );
 });
 
-function publicSurface({ challenge = 'Bearer resource_metadata="x"', status = 401 } = {}) {
+const goodDiscovery = {
+  resource: { resource: `${baseUrl}/mcp`, authorization_servers: [`${baseUrl}/`] },
+  server: {
+    issuer: `${baseUrl}/`,
+    authorization_endpoint: `${baseUrl}/authorize`,
+    token_endpoint: `${baseUrl}/token`,
+    registration_endpoint: `${baseUrl}/register`,
+  },
+  status: 401,
+  challenge: `Bearer error="invalid_token", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp"`,
+};
+
+function publicSurface(overrides = {}) {
+  const surface = { ...goodDiscovery, ...overrides };
   return async (url) => {
     const { pathname } = new URL(url);
     if (pathname === '/.well-known/oauth-protected-resource/mcp')
-      return Response.json({
-        resource: `${baseUrl}/mcp`,
-        authorization_servers: [`${baseUrl}/`],
-      });
+      return Response.json(surface.resource);
     if (pathname === '/.well-known/oauth-authorization-server')
-      return Response.json({
-        issuer: `${baseUrl}/`,
-        authorization_endpoint: `${baseUrl}/authorize`,
-        token_endpoint: `${baseUrl}/token`,
-        registration_endpoint: `${baseUrl}/register`,
-      });
+      return Response.json(surface.server);
     if (pathname === '/mcp')
-      return new Response('{}', { status, headers: { 'www-authenticate': challenge } });
+      return new Response('{}', {
+        status: surface.status,
+        headers: { 'www-authenticate': surface.challenge },
+      });
     return new Response('not found', { status: 404 });
   };
 }
 
-void test('accepts the OAuth discovery documents and the unauthenticated challenge', async () => {
+void test('accepts the expected discovery documents and unauthenticated challenge', async () => {
   await checkPublicSurface({ baseUrl, fetchImpl: publicSurface() });
 });
 
-void test('rejects an /mcp endpoint that no longer challenges unauthenticated requests', async () => {
+void test('rejects discovery URLs that point anywhere else or are malformed', async () => {
+  await assert.rejects(
+    checkPublicSurface({
+      baseUrl,
+      fetchImpl: publicSurface({
+        server: { ...goodDiscovery.server, token_endpoint: 'https://evil.example/token' },
+      }),
+    }),
+    /token_endpoint: expected "https:\/\/mcp\.example\.test\/token"/,
+  );
+  await assert.rejects(
+    checkPublicSurface({
+      baseUrl,
+      fetchImpl: publicSurface({ server: { ...goodDiscovery.server, authorization_endpoint: '' } }),
+    }),
+    /authorization_endpoint/,
+  );
+  await assert.rejects(
+    checkPublicSurface({
+      baseUrl,
+      fetchImpl: publicSurface({
+        resource: { ...goodDiscovery.resource, resource: 'not a url' },
+      }),
+    }),
+    /protected resource/,
+  );
+});
+
+void test('rejects an /mcp endpoint that stops challenging or points at the wrong metadata', async () => {
   await assert.rejects(
     checkPublicSurface({ baseUrl, fetchImpl: publicSurface({ status: 200 }) }),
     /unauthenticated \/mcp status: expected 401, got 200/,
   );
   await assert.rejects(
+    checkPublicSurface({
+      baseUrl,
+      fetchImpl: publicSurface({ challenge: 'Bearer resource_metadata="x"' }),
+    }),
+    /resource_metadata: expected/,
+  );
+  await assert.rejects(
     checkPublicSurface({ baseUrl, fetchImpl: publicSurface({ challenge: 'Bearer' }) }),
-    /lacks resource_metadata/,
+    /resource_metadata: expected/,
   );
 });

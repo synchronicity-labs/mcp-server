@@ -33,6 +33,7 @@ import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpSession, isSessionControlRequest } from './http-session.js';
 import { readOAuthResponseText } from './oauth-response.js';
+import { REVISION } from './revision.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry, sessionOwner } from './session-registry.js';
 import { SessionTelemetry } from './session-telemetry.js';
@@ -292,8 +293,7 @@ export async function startHttpServer(
         timestamp: new Date().toISOString(),
         event,
         pod: process.env.HOSTNAME,
-        revision:
-          process.env.PORTER_TAG ?? process.env.GIT_SHA ?? process.env.K_REVISION ?? 'unknown',
+        revision: REVISION,
         ...details,
       })}\n`,
     );
@@ -377,11 +377,11 @@ export async function startHttpServer(
     res.type('image/svg+xml').send(ASSET_THUMBNAIL_PLACEHOLDER);
   });
 
-  // Health check (unauthenticated). startedAt lets the post-deploy smoke check tell
-  // the new process from an old one that is still serving.
+  // Health check (unauthenticated). revision and startedAt let the post-deploy smoke
+  // check tell the deployed process from an old one that is still serving.
   const startedAt = new Date().toISOString();
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', startedAt });
+    res.json({ status: 'ok', revision: REVISION, startedAt });
   });
 
   app.get('/.well-known/openai-apps-challenge', (_req, res) => {

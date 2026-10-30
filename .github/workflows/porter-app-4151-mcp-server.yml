@@ -14,9 +14,11 @@ jobs:
               run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
             - name: Setup porter
               uses: porter-dev/setup-porter@v0.1.0
-            - name: Record deploy start
+            - name: Record deploy start and revision
               id: start
-              run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+              run: |
+                  echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+                  echo "$GITHUB_SHA" > .revision
             - name: Deploy stack
               timeout-minutes: 30
               run: porter apply
@@ -37,3 +39,4 @@ jobs:
               run: node scripts/smoke-deploy.mjs
               env:
                 DEPLOY_STARTED_AT: ${{ steps.start.outputs.at }}
+                EXPECTED_REVISION: ${{ github.sha }}

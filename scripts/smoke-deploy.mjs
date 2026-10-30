@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 
-// Unauthenticated post-deploy smoke check. It waits until /health reports a
-// process that started after the deploy began, so an old pod that keeps serving
-// while the new one crash-loops does not pass, then checks the OAuth discovery
-// documents clients need and that /mcp challenges a request without a token.
+// Unauthenticated post-deploy smoke check. It waits until /health reports the
+// deployed revision from a process started after the deploy began, so an old pod
+// that keeps serving (or restarts) while the new one crash-loops does not pass.
+// Then it checks the exact OAuth discovery URLs clients use and that /mcp
+// challenges a request without a token with the right resource metadata.
 
 async function getJson(fetchImpl, url) {
   const res = await fetchImpl(url, { signal: AbortSignal.timeout(10_000) });
@@ -21,6 +22,7 @@ function expectEqual(actual, expected, what) {
 export async function waitForNewProcess({
   baseUrl,
   deployStartedAt,
+  expectedRevision,
   timeoutMs,
   intervalMs,
   fetchImpl = fetch,
@@ -33,13 +35,18 @@ export async function waitForNewProcess({
     try {
       const health = await getJson(fetchImpl, new URL('/health', baseUrl));
       last = JSON.stringify(health);
-      if (health.status === 'ok' && Date.parse(health.startedAt) >= deployStartedAt) return health;
+      if (
+        health.status === 'ok' &&
+        Date.parse(health.startedAt) >= deployStartedAt &&
+        (!expectedRevision || health.revision === expectedRevision)
+      )
+        return health;
     } catch (error) {
       last = error instanceof Error ? error.message : String(error);
     }
     if (now() >= deadline) {
       throw new Error(
-        `No server process started after ${new Date(deployStartedAt).toISOString()} within ${timeoutMs / 1000}s (last /health: ${last})`,
+        `No ${expectedRevision ? `revision ${expectedRevision} ` : ''}server process started after ${new Date(deployStartedAt).toISOString()} within ${timeoutMs / 1000}s (last /health: ${last})`,
       );
     }
     await sleep(intervalMs);
@@ -60,8 +67,12 @@ export async function checkPublicSurface({ baseUrl, fetchImpl = fetch }) {
     new URL('/.well-known/oauth-authorization-server', origin),
   );
   expectEqual(server.issuer, issuer, 'issuer');
-  for (const endpoint of ['authorization_endpoint', 'token_endpoint', 'registration_endpoint']) {
-    if (typeof server[endpoint] !== 'string') throw new Error(`issuer metadata lacks ${endpoint}`);
+  for (const [endpoint, path] of [
+    ['authorization_endpoint', '/authorize'],
+    ['token_endpoint', '/token'],
+    ['registration_endpoint', '/register'],
+  ]) {
+    expectEqual(server[endpoint], new URL(path, origin).href, endpoint);
   }
   const res = await fetchImpl(new URL('/mcp', origin), {
     method: 'POST',
@@ -72,9 +83,11 @@ export async function checkPublicSurface({ baseUrl, fetchImpl = fetch }) {
   await res.body?.cancel();
   expectEqual(res.status, 401, 'unauthenticated /mcp status');
   const challenge = res.headers.get('www-authenticate') ?? '';
-  if (!challenge.includes('resource_metadata=')) {
-    throw new Error(`unauthenticated /mcp challenge lacks resource_metadata: ${challenge}`);
-  }
+  expectEqual(
+    /resource_metadata="([^"]*)"/.exec(challenge)?.[1],
+    new URL('/.well-known/oauth-protected-resource/mcp', origin).href,
+    'unauthenticated /mcp resource_metadata',
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -88,11 +101,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const health = await waitForNewProcess({
       baseUrl,
       deployStartedAt,
+      expectedRevision: process.env.EXPECTED_REVISION || undefined,
       timeoutMs: Number(process.env.SMOKE_TIMEOUT_MS ?? 600_000),
       intervalMs: 10_000,
     });
     await checkPublicSurface({ baseUrl });
-    console.log(`Deploy smoke check passed: process started ${health.startedAt}.`);
+    console.log(
+      `Deploy smoke check passed: revision ${health.revision} started ${health.startedAt}.`,
+    );
   } catch (error) {
     console.error(`Deploy smoke check failed: ${error instanceof Error ? error.message : error}`);
     process.exit(1);
