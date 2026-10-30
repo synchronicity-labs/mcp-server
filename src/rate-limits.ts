@@ -50,11 +50,16 @@ export function createOAuthRejectedRequestLimit() {
   return rejectedRequestLimit([400, 401, 403]);
 }
 
-/** Token and revocation requests per OAuth client; the API still authenticates the client. */
+/**
+ * Accepted token and revocation requests per OAuth client. Client IDs are not secret,
+ * so requests the API rejects never spend a client's allowance; they count against
+ * the sender's address instead.
+ */
 export function createOAuthClientLimit() {
   return rateLimit({
     windowMs: WINDOW_MS,
     limit: REQUESTS_PER_MINUTE,
+    skipFailedRequests: true,
     keyGenerator: (req) => {
       const body: unknown = req.body;
       try {

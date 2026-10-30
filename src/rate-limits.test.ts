@@ -46,7 +46,13 @@ beforeAll(async () => {
       if (path === '/v2/oauth/token') {
         let form = '';
         for await (const chunk of req) form += String(chunk);
-        const rejected = new URLSearchParams(form).get('client_id')?.startsWith('rejected-');
+        const params = new URLSearchParams(form);
+        if (params.get('client_secret') === 'wrong') {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: 'invalid_client' }));
+          return;
+        }
+        const rejected = params.get('client_id')?.startsWith('rejected-');
         res.statusCode = rejected ? 400 : 200;
         res.end(JSON.stringify(rejected ? { error: 'invalid_grant' } : { access_token: 'a' }));
         return;
@@ -116,7 +122,7 @@ async function mcp(token: string) {
   return res.status;
 }
 
-async function exchangeToken(clientId: string) {
+async function exchangeToken(clientId: string, clientSecret = 's') {
   const res = await fetch(`${base}/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -124,7 +130,7 @@ async function exchangeToken(clientId: string) {
       grant_type: 'refresh_token',
       refresh_token: 'r',
       client_id: clientId,
-      client_secret: 's',
+      client_secret: clientSecret,
     }),
   });
   await res.arrayBuffer();
@@ -159,10 +165,16 @@ it('limits /token per OAuth client, so clients on one address do not share a buc
   expect(await exchangeToken('client-b')).toBe(200);
 });
 
+it('does not let wrong-secret requests spend an OAuth client allowance', async () => {
+  // Client IDs are not secret, so anyone could otherwise throttle another client's refreshes.
+  const wrongSecret = await repeat(150, () => exchangeToken('client-c', 'wrong'));
+  expect(new Set(wrongSecret)).toEqual(new Set([401]));
+  expect(await exchangeToken('client-c')).toBe(200);
+});
+
 it('counts only rejected token requests against the address', async () => {
-  // Distinct client IDs stay under the per-client limit, as a credential flood would.
-  let attempt = 0;
-  const rejected = await repeat(300, () => exchangeToken(`rejected-${attempt++}`));
+  // The 150 wrong-secret attempts above spent half of this address's 300.
+  const rejected = await repeat(150, () => exchangeToken('rejected-client'));
   expect(new Set(rejected)).toEqual(new Set([400]));
-  expect(await exchangeToken(`rejected-${attempt}`)).toBe(429);
+  expect(await exchangeToken('rejected-client')).toBe(429);
 });
