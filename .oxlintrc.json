@@ -1,0 +1,266 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "off"
+  },
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "import",
+    "promise",
+    "oxc",
+    "vitest",
+    "jsdoc",
+    "node"
+  ],
+  "options": {
+    "typeAware": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "extends": [
+    "./.oxlintrc.rules.json"
+  ],
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "chatgpt-dist/**",
+    "deploy/**",
+    ".cache/**",
+    "**/*.json"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "scripts/**"
+      ],
+      "rules": {
+        "eslint/no-useless-assignment": "error"
+      }
+    },
+    {
+      "files": [
+        "**/test/**",
+        "**/__tests__/**",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.setup.ts",
+        "**/*.setup.tsx"
+      ],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    },
+    {
+      "files": [
+        "**/test/**",
+        "**/__tests__/**",
+        "**/*.{test,spec}.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"
+      ],
+      "rules": {
+        "eslint/require-yield": "off",
+        "vitest/no-commented-out-tests": "error",
+        "vitest/no-disabled-tests": "error",
+        "vitest/no-standalone-expect": [
+          "error",
+          {
+            "additionalTestBlockFunctions": [
+              "posixTest",
+              "posixTest.each",
+              "beforeEach",
+              "afterEach"
+            ]
+          }
+        ],
+        "vitest/valid-title": [
+          "error",
+          {
+            "ignoreTypeOfTestName": true
+          }
+        ],
+        "vitest/consistent-each-for": "error",
+        "vitest/consistent-vitest-vi": "error",
+        "vitest/hoisted-apis-on-top": "error",
+        "vitest/max-nested-describe": "error",
+        "vitest/no-alias-methods": "error",
+        "vitest/no-conditional-tests": "error",
+        "vitest/no-focused-tests": "error",
+        "vitest/no-interpolation-in-snapshots": "error",
+        "vitest/no-large-snapshots": "error",
+        "vitest/no-mocks-import": "error",
+        "vitest/no-test-prefixes": "error",
+        "vitest/no-test-return-statement": "error",
+        "vitest/no-unneeded-async-expect-function": "error",
+        "vitest/prefer-called-exactly-once-with": "error",
+        "vitest/prefer-comparison-matcher": "error",
+        "vitest/prefer-equality-matcher": "error",
+        "vitest/prefer-mock-promise-shorthand": "error",
+        "vitest/prefer-snapshot-hint": "error",
+        "vitest/prefer-to-be": "error",
+        "vitest/prefer-to-be-object": "error",
+        "vitest/prefer-to-contain": "error",
+        "vitest/prefer-to-have-been-called-times": "error",
+        "vitest/prefer-to-have-length": "error",
+        "vitest/require-awaited-expect-poll": "error",
+        "vitest/require-local-test-context-for-concurrent-snapshots": "error",
+        "vitest/valid-describe-callback": "error",
+        "vitest/valid-expect-in-promise": "error",
+        "vitest/warn-todo": "error"
+      }
+    },
+    {
+      "files": [
+        "**/*.{js,jsx,mjs,cjs}"
+      ],
+      "rules": {
+        "eslint/prefer-promise-reject-errors": "error",
+        "import/named": "error",
+        "jsdoc/require-param-type": "error",
+        "jsdoc/require-property-type": "error",
+        "jsdoc/require-yields-type": "error"
+      }
+    },
+    {
+      "files": [
+        "src/http-session.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 43,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/full-candidate.test.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 40,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/http-client.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 38,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/tools/app-tools.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 38,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/http-server.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 33,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/dialogue.integration.test.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 30,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/tools/media-upload.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 29,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/translation-preview.integration.test.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 25,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "scripts/check-mcp.mjs"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 22,
+            "variant": "modified"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/config.ts"
+      ],
+      "rules": {
+        "eslint/complexity": [
+          "error",
+          {
+            "max": 21,
+            "variant": "modified"
+          }
+        ]
+      }
+    }
+  ]
+}

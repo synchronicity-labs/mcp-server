@@ -63,7 +63,7 @@ describe('upload and generation write boundaries', () => {
         throw new Error(`unexpected request ${method} ${path}`);
       });
       const tool = createAppTools({ request }, uploads).find(
-        (tool) => tool.name === 'create-lipsync',
+        (candidate) => candidate.name === 'create-lipsync',
       );
       if (!tool) throw new Error('missing create-lipsync');
       await expect(
@@ -92,7 +92,7 @@ describe('upload and generation write boundaries', () => {
       cancel.abort(new Error('cancelled'));
       return { id: 'project' };
     });
-    const tool = createAppTools({ request }).find((tool) => tool.name === 'create-lipsync');
+    const tool = createAppTools({ request }).find((candidate) => candidate.name === 'create-lipsync');
     await expect(
       tool?.handler({ videoAssetId: 'video', audioAssetId: 'audio' }, { signal: cancel.signal }),
     ).rejects.toThrow('cancelled');
@@ -109,7 +109,7 @@ describe('upload and generation write boundaries', () => {
       }
       throw new Error('unexpected request');
     });
-    const tool = createAppTools({ request }).find((tool) => tool.name === 'create-lipsync');
+    const tool = createAppTools({ request }).find((candidate) => candidate.name === 'create-lipsync');
     await expect(
       tool?.handler({ videoAssetId: 'video', audioAssetId: 'audio' }, { signal: cancel.signal }),
     ).resolves.toEqual({ id: 'accepted-generation', status: 'PENDING' });

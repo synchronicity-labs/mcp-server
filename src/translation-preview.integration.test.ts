@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const audioAssetId = '00000000-0000-4000-8000-000000000002';
@@ -12,7 +13,8 @@ const jobId = '00000000-0000-4000-8000-000000000003';
 const idempotencyKey = '00000000-0000-4000-8000-000000000004';
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  const pending = cleanups.splice(0);
+  for (let cleanup = pending.pop(); cleanup; cleanup = pending.pop()) await cleanup();
 });
 async function fixture({
   available = true,
@@ -41,7 +43,7 @@ async function fixture({
 } = {}) {
   const calls: { path: string; key?: string; token?: string; body?: unknown }[] = [];
   let readStatus = 'COMPLETED';
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('content-type', 'application/json');
     if (req.url === '/api-json') {
       res.end(
@@ -180,7 +182,7 @@ async function fixture({
           privateProviderId: 'must-not-leak',
         }),
       );
-  });
+  }));
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   cleanups.push(async () => {

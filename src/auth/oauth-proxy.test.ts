@@ -7,6 +7,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { resolveConfig } from '../config.js';
 import { startHttpServer } from '../http-server.js';
 import { closeFixtureServers } from './fixture-cleanup.js';
+import { asyncRequestListener } from '../test-fixtures/request-listener.js';
 
 let upstream: Server | undefined;
 let hosted: Server | undefined;
@@ -29,7 +30,7 @@ beforeAll(async () => {
     logs.push(String(chunk));
     return true;
   });
-  upstream = createServer(async (req, res) => {
+  upstream = createServer(asyncRequestListener(async (req, res) => {
     let body = '';
     for await (const chunk of req) body += chunk;
     calls.push({
@@ -64,7 +65,7 @@ beforeAll(async () => {
           ? JSON.stringify({ error: 'invalid_client' })
           : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
     );
-  });
+  }));
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;
@@ -216,7 +217,7 @@ for (const path of ['/token', '/revoke']) {
       expect(res.headers.get('www-authenticate')).toBe(
         status === 401 ? 'Basic realm="oauth"' : null,
       );
-      expect(calls.length).toBe(before);
+      expect(calls).toHaveLength(before);
     },
   );
   it.each(['post', 'basic'])(
@@ -230,7 +231,7 @@ for (const path of ['/token', '/revoke']) {
         method === 'basic' ? basic() : undefined,
       );
       expect(res.status).toBe(200);
-      expect(calls.length).toBe(before + 1);
+      expect(calls).toHaveLength(before + 1);
       const sent = calls.at(-1);
       expect(sent?.path).toBe(`${apiPrefix}/v2/oauth${path}`);
       expect(sent?.body.get('client_id')).toBe('client');
@@ -282,6 +283,7 @@ it('redirects browser authorization separately from server-side token and API tr
   expect(calls.slice(before).map((call) => call.path)).toEqual([`${apiPrefix}/v2/oauth/token`]);
 });
 it.each([
+  // oxlint-disable-next-line eslint/no-script-url -- the fixture proves configuration rejects a script URL
   'javascript:alert(1)',
   'https://user:password@studio.fixture/authorize',
   'https://studio.fixture/authorize?client_secret=private',
@@ -501,7 +503,7 @@ it('rejects duplicate Authorization headers before Node can silently select one'
   );
   expect(result.status).toBe(400);
   expect(JSON.parse(result.body)).toMatchObject({ error: 'invalid_request' });
-  expect(calls.length).toBe(before);
+  expect(calls).toHaveLength(before);
 });
 it.each(['post', 'basic'])('preserves refresh-token credentials for %s clients', async (method) => {
   const response = await post(

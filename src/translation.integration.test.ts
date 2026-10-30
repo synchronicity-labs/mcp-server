@@ -11,6 +11,7 @@ import { parseSpec } from './openapi/parser.js';
 import { createMcpServerFactory } from './server.js';
 import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
 import { createTranslationTools } from './tools/translation.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const upstreams: Server[] = [];
 const clients: Client[] = [];
@@ -42,7 +43,7 @@ async function fixture() {
     key?: string;
     body: unknown;
   }> = [];
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
       res.end(JSON.stringify(translationSpec));
@@ -76,7 +77,7 @@ async function fixture() {
       res.statusCode = 404;
       res.end('{}');
     }
-  });
+  }));
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -103,7 +104,7 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
     sourceLanguages: ['auto', 'en', 'es', 'fr', 'ja'],
   });
   expect(calls).toEqual([]);
-  const tool = tools.find((tool) => tool.name === 'create-translate-and-dub')!;
+  const tool = tools.find((candidate) => candidate.name === 'create-translate-and-dub')!;
   expect(tool.inputSchema.properties?.targetLang).toMatchObject({ enum: ['es', 'fr', 'ja'] });
   expect(tool.inputSchema.required).toContain('idempotencyKey');
   expect(tool._meta?.['openai/widgetAccessible']).toBe(true);

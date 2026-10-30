@@ -8,6 +8,7 @@ import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
 import { routeUploadSourceToFixture } from './test-fixtures/upload-source.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const videoAssetId = '00000000-0000-4000-8000-000000000002';
@@ -79,9 +80,9 @@ const spec = {
     ]),
   ),
 };
-const upstreams: Server[] = [],
-  clients: Client[] = [],
-  servers: McpServer[] = [];
+const clients: Client[] = [],
+  servers: McpServer[] = [],
+  upstreams: Server[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
   for (const server of servers.splice(0)) await server.close();
@@ -109,7 +110,7 @@ async function fixture(
 ) {
   const calls: { path: string; body?: Record<string, unknown>; token?: string; key?: string }[] =
     [];
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
       const current = structuredClone(spec);
@@ -211,7 +212,7 @@ async function fixture(
       value = {};
     }
     res.end(JSON.stringify(value));
-  });
+  }));
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -356,7 +357,7 @@ it('rejects ambiguous transcript identity before any preview synthesis', async (
     edits,
   });
   expect(response.isError).toBe(true);
-  expect(calls.some((call) => call.path === '/v2/dialogue-edits')).toBe(false);
+  expect(calls.some((request) => request.path === '/v2/dialogue-edits')).toBe(false);
 });
 
 it('forwards one frozen keyed preview through explicit recovery even when asset playback signatures rotate', async () => {

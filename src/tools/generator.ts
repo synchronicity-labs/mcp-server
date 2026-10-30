@@ -253,7 +253,7 @@ function buildPath(pathTemplate: string, args: Record<string, unknown>): string 
     if (value === undefined) {
       throw new Error(`Missing required path parameter: ${paramName}`);
     }
-    return encodeURIComponent(String(value));
+    return encodeURIComponent(parameterString(value));
   });
 }
 
@@ -268,11 +268,25 @@ function buildQuery(
   for (const param of queryParams) {
     const value = args[param.name];
     if (value !== undefined && value !== null) {
-      query[param.name] = String(value);
+      query[param.name] = parameterString(value);
     }
   }
 
   return Object.keys(query).length > 0 ? query : undefined;
+}
+
+// Path and query values are JSON scalars or arrays such as `types`; keep String()'s
+// comma-joined array form and serialize plain objects instead of `[object Object]`.
+function parameterString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    Array.isArray(value)
+  )
+    return String(value);
+  return JSON.stringify(value);
 }
 
 function buildBody(operation: ParsedOperation, args: Record<string, unknown>): unknown | undefined {

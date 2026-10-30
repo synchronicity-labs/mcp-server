@@ -148,13 +148,13 @@ it.each([
         '<iframe title="Sync status" sandbox="allow-scripts allow-same-origin" style="border:0;width:100%;height:350px"></iframe>',
       );
       await page.evaluate(
-        ({ html, accepted, bridge, fontSources }) => {
-          html = html.replace(
+        ({ html, toolResult, hostBridge, fontSources }) => {
+          let srcdoc = html.replace(
             '<head>',
             `<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src ${fontSources.join(' ')}">`,
           );
           const iframe = document.querySelector('iframe');
-          window.addEventListener('message', async (event) => {
+          const handleMessage = async (event) => {
             if (event.source !== iframe.contentWindow) return;
             const message = event.data;
             if (message.method === 'ui/notifications/size-changed') {
@@ -165,7 +165,7 @@ it.each([
             if (message.method === 'ui/initialize') {
               // Deliver immediately, including before initialization has finished.
               event.source.postMessage(
-                { jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: accepted },
+                { jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: toolResult },
                 '*',
               );
               event.source.postMessage(
@@ -199,20 +199,23 @@ it.each([
               const result = await window.callSync(message.params);
               event.source.postMessage({ jsonrpc: '2.0', id: message.id, result }, '*');
             }
+          };
+          window.addEventListener('message', (event) => {
+            void handleMessage(event);
           });
-          if (bridge.startsWith('legacy'))
-            html = html.replace(
+          if (hostBridge.startsWith('legacy'))
+            srcdoc = srcdoc.replace(
               '<script>',
               '<script>window.openai = { theme: "light", toolOutput: ' +
-                JSON.stringify(accepted.structuredContent ?? accepted) +
+                JSON.stringify(toolResult.structuredContent ?? toolResult) +
                 ', callTool: (name, args) => window.parent.callSync({name, arguments: args}), openExternal: async options => { if (!await window.parent.canOpenSyncLink()) throw new Error("Fixture host refused navigation"); if (options.redirectUrl !== false) throw new Error("Signed links must not be rewritten"); window.parent.open(options.href, "_blank", "noopener,noreferrer"); }, notifyIntrinsicHeight: height => { window.frameElement.style.height = height + "px"; } };</script><script>',
             );
-          iframe.srcdoc = html;
+          iframe.srcdoc = srcdoc;
         },
         {
           html: resource.contents[0].text,
-          accepted: delivered,
-          bridge,
+          toolResult: delivered,
+          hostBridge: bridge,
           fontSources: resource.contents[0]._meta.ui.csp.resourceDomains,
         },
       );

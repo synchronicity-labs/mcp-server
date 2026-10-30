@@ -5,13 +5,14 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 it.each([true, false])(
   'gates authenticated app telemetry on collector discovery (%s)',
   async (available) => {
     const id = '22222222-2222-4222-8222-222222222222';
     const calls: { auth?: string; source?: string; body: unknown }[] = [];
-    const upstream = createServer(async (req, res) => {
+    const upstream = createServer(asyncRequestListener(async (req, res) => {
       res.setHeader('content-type', 'application/json');
       if (req.url === '/api-json') {
         res.end(
@@ -48,7 +49,7 @@ it.each([true, false])(
         res.statusCode = 404;
         res.end('{}');
       }
-    });
+    }));
     upstream.listen(0, '127.0.0.1');
     await once(upstream, 'listening');
     const factory = await createMcpServerFactory({

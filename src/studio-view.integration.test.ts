@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 it('delivers explicit view requests over authenticated HTTP, preserves pending receipts, and hides mount controls from non-UI clients', async () => {
   const viewId = '00000000-0000-4000-8000-000000000001';
@@ -25,7 +26,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
     parameters: [{ name: 'viewId', in: 'path', required: true, schema: { type: 'string' } }],
     'x-sync-studio-views': 1,
   });
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('content-type', 'application/json');
     if (req.url === '/api-json') {
       res.end(
@@ -71,7 +72,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
       res.statusCode = 500;
       res.end(JSON.stringify({ message: 'Unexpected or paid request' }));
     }
-  });
+  }));
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const factory = await createMcpServerFactory({
@@ -108,7 +109,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
       ],
     ] as const;
     for (const [name, { type, ...fields }, destructiveHint] of actions) {
-      const tool = tools.find((tool) => tool.name === name);
+      const tool = tools.find((candidate) => candidate.name === name);
       expect(tool?.annotations).toMatchObject({
         readOnlyHint: false,
         destructiveHint,

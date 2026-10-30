@@ -7,6 +7,7 @@ import express from 'express';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { startHttpServer } from './http-server.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 // Exercise the production factory AND hosted auth/session wiring together.
 // All credentials, media IDs and API responses are local test fixtures.
@@ -152,7 +153,7 @@ beforeEach(async () => {
   clients.length = 0;
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  upstream = createServer(async (req, res) => {
+  upstream = createServer(asyncRequestListener(async (req, res) => {
     const requestUrl = new URL(req.url ?? '/', 'http://fixture.invalid');
     const path = requestUrl.pathname;
     let raw = '';
@@ -313,7 +314,7 @@ beforeEach(async () => {
     }
     res.statusCode = 404;
     res.end('{}');
-  });
+  }));
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;
@@ -371,7 +372,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = (await client.listTools()).tools;
-      expect(tools.length).toBe(index === 0 ? 22 : 18);
+      expect(tools).toHaveLength(index === 0 ? 22 : 18);
       expect(tools.some((tool) => tool.name === 'get-asset-creators')).toBe(index === 0);
       const create = tools.find((tool) => tool.name === 'create-lipsync')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
@@ -451,7 +452,7 @@ it('rejects an unsupported Origin before verification or tool execution', async 
   });
   expect(response.status).toBe(403);
   await response.text();
-  expect(calls.length).toBe(before);
+  expect(calls).toHaveLength(before);
 });
 it('propagates explicit cancellation through bearer auth, sessions and the profile wrapper', async () => {
   const client = await connect('unknown', 'cancelled');

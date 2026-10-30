@@ -8,6 +8,7 @@ import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const assetId = '00000000-0000-4000-8000-000000000001';
 const voiceId = '00000000-0000-4000-8000-000000000002';
@@ -37,7 +38,7 @@ async function fixture(
     source?: string;
   }> = [];
   let cloned = false;
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
       res.end(
@@ -137,7 +138,7 @@ async function fixture(
       res.statusCode = 404;
       res.end('{}');
     }
-  });
+  }));
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -195,7 +196,7 @@ it('clones once from a saved sample and reuses the internal id for script genera
     auth: 'Bearer fixture-account-token',
     source: 'mcp:openai-mcp',
   });
-  expect(calls.filter((call) => call.path === '/v2/voices' && call.method === 'POST')).toHaveLength(
+  expect(calls.filter((request) => request.path === '/v2/voices' && request.method === 'POST')).toHaveLength(
     1,
   );
   expect(calls.at(-1)?.body).toMatchObject({

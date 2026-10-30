@@ -6,6 +6,7 @@ import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { closeFixtureServers } from './auth/fixture-cleanup.js';
 import { OAUTH_PROXY_TIMEOUT_MS, startHttpServer } from './http-server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 let upstream: Server | undefined;
 let hosted: Server | undefined;
@@ -23,7 +24,7 @@ const scenarios = new Map<string, Scenario>();
 beforeAll(async () => {
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  upstream = createServer(async (req, res) => {
+  upstream = createServer(asyncRequestListener(async (req, res) => {
     let raw = '';
     for await (const chunk of req) raw += chunk;
     const scenario = scenarios.get(new URLSearchParams(raw).get('client_id') ?? '');
@@ -53,7 +54,7 @@ beforeAll(async () => {
           : { access_token: 'fixture-token', token_type: 'Bearer' },
       ),
     );
-  });
+  }));
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;

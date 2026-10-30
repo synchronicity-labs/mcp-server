@@ -46,7 +46,9 @@ describe('createOAuthProvider — getClient', () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({
       ok: true,
       json: async () => {
-        registrationBody = JSON.parse(String(init?.body));
+        registrationBody = JSON.parse(
+          typeof init?.body === 'string' ? init.body : JSON.stringify(init?.body),
+        );
         return {
           client_id: 'client-123',
           client_secret: 'client-secret',

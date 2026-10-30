@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
 import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const importJobId = '00000000-0000-4000-8000-000000000004';
 const generationId = '00000000-0000-4000-8000-000000000005';
@@ -56,7 +57,7 @@ afterEach(async () => {
 
 async function fixture(importReplies: Reply[]) {
   const calls: Array<{ path: string; body: unknown; token?: string; key?: string }> = [];
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
       res.end(JSON.stringify(spec));
@@ -85,7 +86,7 @@ async function fixture(importReplies: Reply[]) {
       res.statusCode = 404;
       res.end('{}');
     }
-  });
+  }));
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -147,13 +148,15 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
     expect(JSON.stringify(result)).not.toContain('must-not-leak');
     expect(calls).toHaveLength(index + 1);
     expect(
-      calls.every((call) => call.path === '/v2/assets' && call.token === 'Bearer social-link-user'),
+      calls.every(
+        (request) => request.path === '/v2/assets' && request.token === 'Bearer social-link-user',
+      ),
     ).toBe(true);
   }
   const imported = await call('assets_create', args);
   expect(imported.isError).not.toBe(true);
   expect(imported.structuredContent).toEqual(asset);
-  expect(calls.map((call) => call.body)).toEqual([args, args, args, args]);
+  expect(calls.map((request) => request.body)).toEqual([args, args, args, args]);
 
   const saved = z
     .object({ id: z.uuid(), durationSeconds: z.number() })
@@ -169,8 +172,8 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
   });
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toEqual({ id: generationId, status: 'PENDING' });
-  expect(calls.map((call) => call.path)).toEqual([
-    ...Array(4).fill('/v2/assets'),
+  expect(calls.map((request) => request.path)).toEqual([
+    ...Array.from({ length: 4 }, () => '/v2/assets'),
     '/v2/generate/estimate-cost',
     `/v2/projects/${projectId}`,
     '/v2/generate',
@@ -212,7 +215,7 @@ it.each([
   expect(result.structuredContent).toMatchObject({
     error: { status, code, ...(code === 'import_failed' ? { importJobId } : {}) },
   });
-  expect(calls.map((call) => call.path)).toEqual(['/v2/assets']);
+  expect(calls.map((request) => request.path)).toEqual(['/v2/assets']);
 });
 
 it('still registers a direct media URL without import polling', async () => {

@@ -5,10 +5,11 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000abc';
 const writes: { token: string | undefined; body: unknown }[] = [];
-const upstream = createServer(async (req, res) => {
+const upstream = createServer(asyncRequestListener(async (req, res) => {
   res.setHeader('content-type', 'application/json');
   if (req.url === '/api-json') {
     res.end(JSON.stringify({ openapi: '3.0.0', paths: {} }));
@@ -68,7 +69,7 @@ const upstream = createServer(async (req, res) => {
     return;
   }
   res.writeHead(404).end('{}');
-});
+}));
 let client: Client;
 let server: ReturnType<Awaited<ReturnType<typeof createMcpServerFactory>>['createServer']>;
 beforeAll(async () => {

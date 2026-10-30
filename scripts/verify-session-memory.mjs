@@ -49,7 +49,8 @@ const spec = specPath
       },
     };
 globalThis.fetch = async (url) => {
-  assert.equal(String(url), 'https://memory.fixture.invalid/api-json');
+  const href = url instanceof URL ? url.href : url instanceof Request ? url.url : url;
+  assert.equal(href, 'https://memory.fixture.invalid/api-json');
   return Response.json(spec);
 };
 const factory = await createMcpServerFactory({

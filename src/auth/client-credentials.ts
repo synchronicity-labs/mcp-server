@@ -24,14 +24,15 @@ export function extractBasicClientCredentials(
     const canonical = bytes.toString('base64');
     const padding = canonical.indexOf('=');
     const unpadded = padding < 0 ? canonical : canonical.slice(0, padding);
-    if (match[1] !== canonical && match[1] !== unpadded) throw new Error();
+    if (match[1] !== canonical && match[1] !== unpadded)
+      throw new Error('Basic credentials are not canonical base64');
     const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     const colon = decoded.indexOf(':');
-    if (colon < 0) throw new Error();
+    if (colon < 0) throw new Error('Basic credentials are missing the client ID separator');
     const decode = (value: string) => decodeURIComponent(value.replace(/\+/g, ' '));
     const clientId = decode(decoded.slice(0, colon));
     const clientSecret = decode(decoded.slice(colon + 1));
-    if (!clientId || !clientSecret) throw new Error();
+    if (!clientId || !clientSecret) throw new Error('Basic credentials need a client ID and secret');
     return { clientId, clientSecret };
   } catch {
     throw new ClientAuthenticationError(401);

@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const draftId = '00000000-0000-4000-8000-000000000002';
@@ -81,7 +82,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     schema: { type: 'string' },
   }));
   const endpoint = '/v2/projects/{projectId}/studio-drafts/{draftId}';
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('content-type', 'application/json');
     if (req.url === '/api-json') {
       const operation = (operationId: string, properties?: Record<string, unknown>) => ({
@@ -136,7 +137,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
       current = { ...current, revision: 5, state: body.state };
     }
     res.end(JSON.stringify(current));
-  });
+  }));
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const factory = await createMcpServerFactory({

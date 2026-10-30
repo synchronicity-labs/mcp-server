@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { expect, it } from 'vitest';
 import { createHttpClient } from './http-client.js';
 import { createAppTools } from './tools/app-tools.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const parentId = '00000000-0000-4000-8000-000000000002';
@@ -26,7 +27,7 @@ it.each([
     const submissions: { key: unknown; workflow: unknown; parent: unknown; body: unknown }[] = [];
     const oldSourceId = '00000000-0000-4000-8000-000000000004';
     let sourceReads = 0;
-    const upstream = createServer(async (req, res) => {
+    const upstream = createServer(asyncRequestListener(async (req, res) => {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       res.setHeader('content-type', 'application/json');
@@ -79,7 +80,7 @@ it.each([
           res.writeHead(503).end(JSON.stringify({ message: 'Try the same request' }));
         else res.end(JSON.stringify({ id: parentId, status: 'PROCESSING' }));
       } else res.writeHead(404).end('{}');
-    });
+    }));
     upstream.listen(0, '127.0.0.1');
     await once(upstream, 'listening');
     try {

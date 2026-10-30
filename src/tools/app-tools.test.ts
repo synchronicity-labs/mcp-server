@@ -12,6 +12,35 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 });
 
 describe('createAppTools — create-lipsync', () => {
+  // Default fetch mock: a GET reads the upload bytes, a PUT stores them.
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: { method?: string; body?: AsyncIterable<Uint8Array> }) => {
+        if (init?.method === 'PUT') {
+          if (init.body) {
+            for await (const _chunk of init.body) {
+              // Drain the streamed upload like a real fetch implementation.
+            }
+          }
+          return { ok: true, status: 200 };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) => (name === 'content-length' ? '8' : 'video/mp4'),
+          },
+          body: Readable.toWeb(Readable.from([new Uint8Array(8)])),
+        };
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   // Mock the asset pipeline + generation endpoints. /v2/assets returns a fresh
   // id per call so re-hosted inputs are distinguishable in the generate body.
   function setup({
@@ -121,35 +150,6 @@ describe('createAppTools — create-lipsync', () => {
       tool.handler({ videoAssetId: 'video-1', audioAssetId: 'audio-1', options }),
     ).rejects.toThrow();
     expect(request).not.toHaveBeenCalled();
-  });
-
-  // Default fetch mock: a GET reads the upload bytes, a PUT stores them.
-  beforeEach(() => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, init?: { method?: string; body?: AsyncIterable<Uint8Array> }) => {
-        if (init?.method === 'PUT') {
-          if (init.body) {
-            for await (const _chunk of init.body) {
-              // Drain the streamed upload like a real fetch implementation.
-            }
-          }
-          return { ok: true, status: 200 };
-        }
-        return {
-          ok: true,
-          status: 200,
-          headers: {
-            get: (name: string) => (name === 'content-length' ? '8' : 'video/mp4'),
-          },
-          body: Readable.toWeb(Readable.from([new Uint8Array(8)])),
-        };
-      }),
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   function lastGenerateBody(request: ReturnType<typeof setup>['request']) {

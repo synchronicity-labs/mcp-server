@@ -7,6 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const jobId = '00000000-0000-4000-8000-000000000002';
@@ -29,9 +30,9 @@ const job = {
   startedAt: null,
   finishedAt: null,
 };
-const upstreams: Server[] = [],
-  clients: Client[] = [],
-  servers: McpServer[] = [];
+const clients: Client[] = [],
+  servers: McpServer[] = [],
+  upstreams: Server[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
   for (const server of servers.splice(0)) await server.close();
@@ -45,7 +46,7 @@ async function fixture({ denied = false, rejected = false, available = true } = 
     [];
   const paths: string[] = [];
   let reads = 0;
-  const upstream = createServer(async (req, res) => {
+  const upstream = createServer(asyncRequestListener(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') {
       res.end(
@@ -118,7 +119,7 @@ async function fixture({ denied = false, rejected = false, available = true } = 
       value = {};
     }
     res.end(JSON.stringify(value));
-  });
+  }));
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
