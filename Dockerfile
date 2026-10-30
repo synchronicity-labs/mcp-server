@@ -9,6 +9,8 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+# The deploy job writes the commit it builds to .revision; other builds record unknown.
+RUN [ -s .revision ] || echo unknown > .revision
 RUN pnpm run build
 RUN pnpm run package:chatgpt
 
@@ -31,6 +33,7 @@ COPY --from=build /app/package.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/scripts/check-mcp.mjs ./scripts/check-mcp.mjs
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/.revision ./.revision
 COPY --from=build /app/chatgpt-dist ./chatgpt-dist
 COPY --from=build /app/deploy/generation-status ./deploy/generation-status
 
