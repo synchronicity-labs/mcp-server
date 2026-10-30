@@ -7,7 +7,7 @@ import { createMcpServerFactory } from '../dist/server.js';
 import { SessionRegistry } from '../dist/session-registry.js';
 
 // Local-only: no credentials, upstream requests or paid operations. Optionally
-// reproduce against a saved public OpenAPI spec: npm run test:memory -- /path/spec.json.
+// reproduce against a saved public OpenAPI spec: pnpm run test:memory /path/spec.json.
 assert(global.gc, 'Run with --expose-gc');
 const burst = process.argv.includes('--burst');
 const specPath = process.argv.slice(2).find((arg) => arg !== '--burst');

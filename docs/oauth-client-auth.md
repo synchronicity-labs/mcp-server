@@ -83,8 +83,8 @@ Existing provider tests preserve registration and cache-miss recovery. No actual
 ChatGPT/Claude/Muse connection has been claimed or tested. Real client acceptance
 requires the designated test account/organization, fixtures and budget.
 
-Run `npm test -- --no-file-parallelism`, `npm run lint`, `npm run typecheck`,
-`npm run build`, `git diff --check`. Serial file execution avoids the existing
+Run `pnpm test --no-file-parallelism`, `pnpm run lint`, `pnpm run typecheck`,
+`pnpm run build`, `git diff --check`. Serial file execution avoids the existing
 upload tests' shared temporary-directory snapshot race. Preserve the separate
 5991 local bearer-auth import when integrating `http-server.ts`. Client profiles,
 widgets and Origin behavior are outside both fixes.

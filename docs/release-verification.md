@@ -24,14 +24,14 @@ is historical evidence, not approval of subsequent release fixes.
 Use Node 22, matching the runtime container, with the committed lockfile:
 
 ```sh
-npm ci --ignore-scripts
-npm run lint
-npm run typecheck
-npm run build
-npm test -- --no-file-parallelism
-npm test
-npm audit
-npm audit --omit=dev
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm run lint
+pnpm run typecheck
+pnpm run build
+pnpm test --no-file-parallelism
+pnpm test
+pnpm audit
+pnpm audit --prod
 git diff --check
 ```
 

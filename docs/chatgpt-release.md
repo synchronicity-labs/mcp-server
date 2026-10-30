@@ -436,7 +436,7 @@ the frontend's original manifest, and source/build provenance in `release.json`.
 Compression keeps the generated artifact small; the manifest hashes the
 uncompressed HTML. The manifest verifies the exact uncompressed bytes recorded in each release.
 
-`npm run build && npm run package:chatgpt` expands and validates every included
+`pnpm run build && pnpm run package:chatgpt` expands and validates every included
 release in `chatgpt-dist/`. Docker copies only that verified output to its final
 image. No registry credentials, local environment files, or preview settings are
 part of the frontend package. The Docker context excludes local environment
@@ -509,8 +509,8 @@ Update `deploy/chatgpt/releases.json` to select the new hash and retain publishe
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.
 The generated catalog is copied into the production image with the verified HTML.
 
-Run `npm run build`, `npm run package:chatgpt`, and
-`npm run verify:chatgpt-package`, then build/test the image as in CI. Review the
+Run `pnpm run build`, `pnpm run package:chatgpt`, and
+`pnpm run verify:chatgpt-package`, then build/test the image as in CI. Review the
 new provenance and artifact checksum in the PR. Deployment selects the manifest's current release; prior releases stay addressable through its previous list.
 
 To roll back the UI, change the checked-in manifest's `current` to a retained hash,

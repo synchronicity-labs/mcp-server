@@ -26,8 +26,8 @@ fallback; this is not a caching policy.
 Tests cover success/rejection, rate limits/outages, malformed JSON/shapes,
 network failure, missing/expired tokens, scopes, safe Retry-After, pre-cancel,
 disconnect, mocked stalled fetch/body, and native HTTP partial-body timeout.
-Run `npm test -- --no-file-parallelism`, `npm run lint`, `npm run typecheck`,
-`npm run build`, and `git diff --check`. Serial file execution avoids an existing
+Run `pnpm test --no-file-parallelism`, `pnpm run lint`, `pnpm run typecheck`,
+`pnpm run build`, and `git diff --check`. Serial file execution avoids an existing
 upload test's process-wide temporary-directory snapshot race with upload tests
 in other files. No upload implementation is changed.
 

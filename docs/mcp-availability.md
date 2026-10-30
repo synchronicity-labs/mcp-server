@@ -20,7 +20,7 @@ No tool action is replayed by session recovery.
 
 ## Authenticated synthetic check
 
-Run `npm run monitor:mcp` against `MCP_MONITOR_URL` (default
+Run `pnpm run monitor:mcp` against `MCP_MONITOR_URL` (default
 `https://mcp.sync.so/mcp`). Supply `MCP_MONITOR_ACCESS_TOKEN` through the runner's
 secret injection. It must be a **fresh OAuth access token**, not an API key.
 The runner must own a dedicated monitoring account's credential refresh lifecycle;
@@ -67,7 +67,7 @@ An increase in initialization traffic alone is not proof of more end users.
 
 ## Regression and release checks
 
-`npm run test:memory:http` sends real HTTP initialization/discovery requests with
+`pnpm run test:memory:http` sends real HTTP initialization/discovery requests with
 fresh sessions and no DELETE, at a virtual 160 sessions/minute for 45 minutes.
 It checks bounded sessions, retained heap, zero admission refusals and cleanup.
 Time is accelerated for CI; this is not a wall-clock production soak.

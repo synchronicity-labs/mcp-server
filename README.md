@@ -405,7 +405,7 @@ serialized response until the session closes. SDK v2 does this itself, and
 `src/http-response-cleanup.test.ts` keeps the ESM and CommonJS transports covered.
 Re-run the HTTP retention regressions before every SDK upgrade.
 
-After `npm run build && npm run package:chatgpt`, run `npm run test:memory:http`
+After `pnpm run build && pnpm run package:chatgpt`, run `pnpm run test:memory:http`
 to exercise the actual HTTP transport and every packaged widget release in a
 512 MiB old-space process. It checks retained heap while sessions remain live,
 then expires sessions and repeats the workload to verify recovery. It uses only
@@ -417,9 +417,9 @@ cancelling or repeating the tool operation.
 Tool schemas and stateless handlers are built once per HTTP factory. Discovery
 descriptions are cached for the four supported presentation profiles. Immutable schema validators are shared too. Session
 profiles, transports and request validation remain separate; credentials are resolved
-per request. After `npm run build`, `npm run test:memory` exercises local session
+per request. After `pnpm run build`, `pnpm run test:memory` exercises local session
 load, graceful refusal, expiry and recovery in a 512 MiB old-space process. Add
-`-- --burst` to defer initialization until all connections have reserved capacity,
+`--burst` to defer initialization until all connections have reserved capacity,
 covering clients that complete discovery after an initialization burst.
 
 HTTP session limits apply only to the stateful remote transport. Sessions with requests in flight are protected from idle expiry. Admission first expires idle sessions, then reclaims the oldest session idle for at least 30 seconds when the session-count limit is reached. In-flight requests and pending initializations are protected. Expired/evicted IDs return 404 so clients can initialize again. If no eligible capacity remains or heap admission fails, new initialization returns `503` with `Retry-After: 60`.
@@ -458,19 +458,19 @@ test identity. Temporary certificate and key files are removed before the tests 
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Build
-npm run build
+pnpm run build
 
 # Run tests
-npm test
+pnpm test
 
 # Lint
-npm run lint
+pnpm run lint
 
 # Type check
-npm run typecheck
+pnpm run typecheck
 ```
 
 ### Local HTTP Transport Testing
@@ -675,7 +675,7 @@ seat and voice-clone limits are unavailable; a limits 401 still requests linking
 To verify account recovery across the packaged UI and the real MCP HTTP server:
 
 ```bash
-npm run build
+pnpm run build
 node scripts/verify-account-recovery.mjs /path/to/sync-api-v2/apps/chatgpt/dist/app.html
 ```
 
@@ -686,7 +686,7 @@ a usage outage. It asserts that recovery makes no paid requests. Screenshots and
 a browser trace are written to `temp/account-recovery/`. This proves the local
 cross-service flow; the live ChatGPT consent UI still needs release acceptance.
 
-`npm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
+`pnpm run test:browser` verifies an 11 MB browser upload through the real relay to fixture
 storage. Install Chromium with `npx playwright install chromium` first. This does not
 prove live authenticated storage delivery or authorize a production rollout.
 
@@ -722,7 +722,7 @@ thumbnail-only rule and its loading/error fallback directly.
 
 ### Availability monitoring
 
-`npm run monitor:mcp` exercises authenticated initialization, tool discovery,
+`pnpm run monitor:mcp` exercises authenticated initialization, tool discovery,
 a read-only account call and aggregate `/status`, then deletes the probe session.
 See [MCP availability](docs/mcp-availability.md) for credential lifecycle, exit
 codes, alert thresholds and rollout verification. `/health` remains liveness only.

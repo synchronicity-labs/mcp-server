@@ -76,8 +76,8 @@ expiry recovery and cancellation. `client-profile.test.ts` uses the request-scop
 HTTP path for concurrent ChatGPT/Codex/generic discovery, file bridge uploads,
 resource reads and cancellation before generation submission.
 
-`npm run test:memory:http` runs accelerated fresh-session churn with packaged UI
-reads. `npm run test:memory:http -- --soak-minutes=20` uses real elapsed time,
+`pnpm run test:memory:http` runs accelerated fresh-session churn with packaged UI
+reads. `pnpm run test:memory:http --soak-minutes=20` uses real elapsed time,
 fresh abandoned contexts plus eight reused contexts, harmless app-opening calls,
 periodic packaged HTML reads, actual expiry and stable heap/count assertions.
 These local tests use fixture identities and do not establish real ChatGPT
