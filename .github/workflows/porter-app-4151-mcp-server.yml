@@ -3,6 +3,12 @@
         branches:
             - main
 name: Deploy to mcp-server
+# Deploy one commit at a time, in merge order. A deploy in progress finishes;
+# a newer push waits, and only the newest waiting push deploys after it, so an
+# older commit can never land after a newer one.
+concurrency:
+    group: deploy-mcp-server-production
+    cancel-in-progress: false
 jobs:
     porter-deploy:
         runs-on: ubuntu-latest

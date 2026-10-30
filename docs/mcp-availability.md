@@ -97,6 +97,10 @@ then checks both OAuth discovery documents and the unauthenticated `/mcp` 401
 challenge. A red deploy run means the new process never served or the public
 surface changed; it does not roll back on its own.
 
+Deploys run one at a time in merge order (`concurrency` in the deploy workflow).
+While one deploys, only the newest later push waits, so an older commit never
+lands after a newer one.
+
 Before merging, record the deployed image, current widget digest, green checks
 and reviewer approval. The baseline observed on 2026-10-28 was image
 `mcp-server:8a922e289d5488c7f50f258e1ca4d6ce25e925ad` and UI
