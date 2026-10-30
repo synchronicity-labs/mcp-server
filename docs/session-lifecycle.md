@@ -67,6 +67,11 @@ session, and distinguish DELETE from idle expiry. Treat app-only heartbeat/draft
 tools as widget traffic; shared tools alone do not reliably identify the caller.
 Do not claim this production evidence until the instrumented revision is deployed.
 
+`node scripts/summarize-session-lifecycle.mjs < logs.jsonl` reads structured logs
+on stdin and prints one JSON line per client, presentation profile and protocol:
+closed sessions, sessions with zero or one tool call, total requests, tool calls
+and lifetime, and closure reasons. It never prints `sessionRef` values.
+
 ## Validation
 
 `http-session.test.ts` verifies graph closure after every response, repeated
