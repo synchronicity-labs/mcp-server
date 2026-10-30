@@ -7,7 +7,7 @@ RUN apt-get update \
 # Corepack provides the pnpm version pinned in package.json.
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
 # The deploy job writes the commit it builds to .revision; other builds record unknown.
 RUN [ -s .revision ] || echo unknown > .revision
@@ -19,7 +19,7 @@ FROM node:22-trixie-slim AS prod-deps
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 FROM node:22-trixie-slim
 ENV DEBIAN_FRONTEND=noninteractive

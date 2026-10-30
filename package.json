@@ -56,7 +56,8 @@
     "prepublishOnly": "pnpm run clean && pnpm run build",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "monitor:mcp": "node scripts/check-mcp.mjs",
-    "test:monitor": "node --test scripts/check-mcp.test.mjs scripts/smoke-deploy.test.mjs"
+    "prepare": "husky",
+    "test:scripts": "node --test scripts/*.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.4.0",
@@ -76,11 +77,27 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^22.20.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
     "oxlint-tsgolint": "7.0.2005",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12"
+  },
+  "lint-staged": {
+    "package.json": "oxfmt --check --no-error-on-unmatched-pattern",
+    "*.{js,ts,mjs,cjs,mts,cts}": [
+      "oxlint --no-error-on-unmatched-pattern",
+      "oxfmt --check --no-error-on-unmatched-pattern"
+    ]
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.22.1",
+      "onFail": "error"
+    }
   },
   "engines": {
     "node": ">=20"
