@@ -158,9 +158,9 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
     await nonUiServer.connect(nst);
     await nonUi.connect(nct);
     try {
-      expect((await nonUi.listTools()).tools.map((tool) => tool.name)).not.toContain(
-        'ack-studio-view',
-      );
+      const nonUiTools = (await nonUi.listTools()).tools.map((tool) => tool.name);
+      expect(nonUiTools).not.toContain('ack-studio-view');
+      for (const [name] of actions) expect(nonUiTools).not.toContain(name);
       const rejected = await runWithAuth('view-user', 'cli', () =>
         nonUi.callTool({
           name: 'ack-studio-view',
@@ -168,6 +168,20 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
         }),
       );
       expect(rejected.isError).toBe(true);
+      // Hidden Studio bridge tools refuse valid calls from clients without the app UI.
+      const hidden = await runWithAuth('view-user', 'cli', () =>
+        nonUi.callTool({
+          name: 'open-studio-project',
+          arguments: {
+            viewId,
+            id,
+            expectedRevision: 1,
+            projectId,
+            workflow: 'lipsync',
+          },
+        }),
+      );
+      expect(hidden.isError).toBe(true);
       expect(calls).toHaveLength(10);
     } finally {
       await nonUi.close();

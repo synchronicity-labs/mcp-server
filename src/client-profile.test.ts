@@ -444,6 +444,13 @@ describe('immutable client profiles', () => {
           });
           expect(file.isError).toBe(true);
           expect(JSON.stringify(file)).toContain('assets_create-upload-url');
+          // Widget-only tools stay registered but refuse model-only clients before any request.
+          const before = calls.length;
+          const creators = await runWithAuth(`token-${index}`, `untrusted-${index}`, () =>
+            client.callTool({ name: 'get-asset-creators', arguments: {} }),
+          );
+          expect(creators.isError).toBe(true);
+          expect(calls).toHaveLength(before);
         }
         const result = await runWithAuth(`token-${index}`, `untrusted-${index}`, () =>
           client.callTool({
