@@ -33,12 +33,17 @@ pnpm run lint             # type-aware Oxlint, then oxfmt --check
 pnpm run knip             # unused files, exports and dependencies, then import cycles
 pnpm run typecheck
 pnpm run build
-pnpm test                 # vitest; use --no-file-parallelism on a loaded machine
+pnpm test                 # vitest; see the note below on loaded machines
 pnpm run test:scripts     # node:test suites under scripts/
 pnpm run test:memory      # session memory; add --burst for the burst scenario
 pnpm run test:memory:http
 pnpm run package:chatgpt && pnpm run verify:chatgpt-package
 ```
+
+On a loaded or slow machine, parallel fork workers can miss vitest's start
+deadline. vitest then prints `Failed to start forks worker` and skips those files,
+yet a filtered summary can still read as passing. Check that the `Test Files`
+count matches `vitest list --filesOnly`, or run `pnpm test --no-file-parallelism`.
 
 `test:browser` needs the Playwright container that CI uses; it fails on a plain
 macOS shell. Type-aware lint resolves `scripts/` types through `dist/`, and CI

@@ -173,7 +173,9 @@ it('releases every SDK graph and isolates request-zero cancellation between tabs
       else await tabs[1]!.close();
       await expect.poll(() => settled, { timeout: 1000 }).toBe(true);
       await request;
-      expect(cancelled.has(slot)).toBe(true);
+      await expect
+        .poll(() => cancelled.has(slot), { message: `slot ${slot} (${action})`, timeout: 1000 })
+        .toBe(true);
     }
   } finally {
     for (const stop of stops) stop.abort();
