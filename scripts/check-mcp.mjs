@@ -3,13 +3,61 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 
 // The scheduler supplies a fresh OAuth access token. Never persist credentials,
 // log account results, or invoke a configurable (potentially paid) tool.
-export async function checkMcp(url, token) {
-  const endpoint = new URL(url);
+function assertMonitorTarget(endpoint, token) {
   if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash)
     throw new Error('MCP monitor URL must not contain credentials, query or fragment');
   if (endpoint.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(endpoint.hostname))
     throw new Error('MCP monitor requires HTTPS outside loopback');
   if (!token) throw new Error('MCP_MONITOR_ACCESS_TOKEN is required');
+}
+
+/** Session, request and heap capacity from the authenticated `/status` endpoint. */
+async function readCapacity(endpoint, requestInit) {
+  const response = await fetch(new URL('/status', endpoint), {
+    ...requestInit,
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error('Capacity read failed');
+  const status = await response.json();
+  const { active, pending, limit, rejectedCapacity, rejectedMemory, created } = status.sessions;
+  const { heapUsedBytes, heapLimitBytes } = status.memory;
+  const { inFlight, limit: requestLimit } = status.requests;
+  const values = [
+    active,
+    pending,
+    limit,
+    rejectedCapacity,
+    rejectedMemory,
+    created,
+    heapUsedBytes,
+    heapLimitBytes,
+    inFlight,
+    requestLimit,
+  ];
+  if (
+    !values.every((value) => Number.isFinite(value) && value >= 0) ||
+    limit <= 0 ||
+    heapLimitBytes <= 0 ||
+    requestLimit <= 0
+  )
+    throw new Error('Invalid capacity metrics');
+  return {
+    active,
+    pending,
+    limit,
+    rejectedCapacity,
+    rejectedMemory,
+    created,
+    heapUsedBytes,
+    heapLimitBytes,
+    inFlight,
+    requestLimit,
+  };
+}
+
+export async function checkMcp(url, token) {
+  const endpoint = new URL(url);
+  assertMonitorTarget(endpoint, token);
   const requestInit = { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' };
   const transport = new StreamableHTTPClientTransport(endpoint, {
     requestInit,
@@ -37,46 +85,7 @@ export async function checkMcp(url, token) {
     const result = await client.callTool({ name: 'get-account-context', arguments: {} }, options);
     if (result.isError) throw new Error('Account read failed');
     stage = 'capacity';
-    const response = await fetch(new URL('/status', endpoint), {
-      ...requestInit,
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error('Capacity read failed');
-    const status = await response.json();
-    const { active, pending, limit, rejectedCapacity, rejectedMemory, created } = status.sessions;
-    const { heapUsedBytes, heapLimitBytes } = status.memory;
-    const { inFlight, limit: requestLimit } = status.requests;
-    const values = [
-      active,
-      pending,
-      limit,
-      rejectedCapacity,
-      rejectedMemory,
-      created,
-      heapUsedBytes,
-      heapLimitBytes,
-      inFlight,
-      requestLimit,
-    ];
-    if (
-      !values.every((value) => Number.isFinite(value) && value >= 0) ||
-      limit <= 0 ||
-      heapLimitBytes <= 0 ||
-      requestLimit <= 0
-    )
-      throw new Error('Invalid capacity metrics');
-    capacity = {
-      active,
-      pending,
-      limit,
-      rejectedCapacity,
-      rejectedMemory,
-      created,
-      heapUsedBytes,
-      heapLimitBytes,
-      inFlight,
-      requestLimit,
-    };
+    capacity = await readCapacity(endpoint, requestInit);
   } catch {
     // Upstream exceptions may contain authorization headers or private data.
     failure = new Error(`MCP availability check failed at ${stage}`);
