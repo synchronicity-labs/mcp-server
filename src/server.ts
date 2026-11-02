@@ -40,6 +40,7 @@ import { createProjectHistoryTools } from './tools/project-history.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
+import { createTimelineLipsyncTool } from './tools/timeline-lipsync.js';
 import {
   createTranslationPreviewTools,
   translationPreviewOperations,
@@ -167,6 +168,7 @@ const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'upload-media',
   'create-lipsync',
   'create-lipsync-from-assets',
+  'create-timeline-lipsync',
   'create-translate-and-dub',
   'get-translation-options',
   'estimate-translation-preview',
@@ -482,6 +484,8 @@ function isAppOnlyTool(tool: McpToolDefinition): boolean {
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
   if (isAppOnlyTool(tool)) return profile.supportsAppUi;
   if (tool.name === 'create-lipsync-from-assets') return profile.supportsAppUi;
+  // Kept out of the reviewed ChatGPT app listing; its embedded Studio has no timeline.
+  if (tool.name === 'create-timeline-lipsync') return profile.name !== 'chatgpt';
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
   return true;
 }
@@ -609,6 +613,7 @@ function createTools(
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),
     ...createAppTools(httpClient, undefined, getProfile),
+    createTimelineLipsyncTool(httpClient, getProfile),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
     ...createTranslationPreviewTools(operations, httpClient),

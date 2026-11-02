@@ -97,7 +97,8 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   clients.push(client);
   await client.connect(clientTransport);
   const tools = (await client.listTools()).tools;
-  expect(tools).toHaveLength(factory.toolCount);
+  // Every registered tool but create-timeline-lipsync, kept out of the ChatGPT app listing.
+  expect(tools).toHaveLength(factory.toolCount - 1);
   expect(tools.some((tool) => tool.name === 'generate_create-generation')).toBe(false);
   const options = await client.callTool({ name: 'get-translation-options', arguments: {} });
   expect(options.structuredContent).toEqual({

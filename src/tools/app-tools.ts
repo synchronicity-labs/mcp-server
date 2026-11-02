@@ -78,7 +78,7 @@ async function findProjectIdByName(
   return undefined;
 }
 
-async function getOrCreateProjectId(
+export async function getOrCreateProjectId(
   httpClient: HttpClient,
   requestedProjectName: string | undefined,
   defaultName: string,

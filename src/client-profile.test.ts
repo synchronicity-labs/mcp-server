@@ -215,8 +215,11 @@ describe('immutable client profiles', () => {
     await Promise.all(
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
+        // create-timeline-lipsync stays out of the ChatGPT app listing only.
+        const chatgpt = index < 2;
         const { tools } = await client.listTools();
-        expect(tools).toHaveLength(supportsUploads ? 12 : 8);
+        expect(tools).toHaveLength((supportsUploads ? 12 : 8) + (chatgpt ? 0 : 1));
+        expect(tools.some((tool) => tool.name === 'create-timeline-lipsync')).toBe(!chatgpt);
         expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
         // The initialize response carries the announced client's instructions.
@@ -399,6 +402,7 @@ describe('immutable client profiles', () => {
                 'get-playback-metadata',
                 'get-generation-continuation',
                 'create-lipsync',
+                'create-timeline-lipsync',
                 'voices_get-voices',
                 'generate_get-generation',
               ],
@@ -590,14 +594,15 @@ it.each([0, 1, 2])(
       vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
     );
     const factory = await createMcpServerFactory(config);
-    expect(factory.toolCount).toBe(10 + count);
+    expect(factory.toolCount).toBe(11 + count);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = (await chatgpt.client.listTools()).tools;
     const claudeTools = (await claude.client.listTools()).tools;
+    // create-timeline-lipsync stays out of the ChatGPT app listing.
     expect(chatTools).toHaveLength(10 + count);
     // Widget-only tools such as get-asset-creators (member emails) stay out of model-only catalogs.
-    expect(claudeTools).toHaveLength(6 + count);
+    expect(claudeTools).toHaveLength(7 + count);
     expect(claudeTools.map((tool) => tool.name)).not.toContain('get-asset-creators');
     expect(chatTools.map((tool) => tool.name)).toContain('get-asset-creators');
     expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
