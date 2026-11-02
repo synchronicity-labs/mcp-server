@@ -12,8 +12,8 @@ import {
 
 const seconds = z.number().finite().nonnegative();
 const frame = z.number().int().nonnegative();
-// The two ways Studio pins the face a clip lipsyncs; both are counted from
-// the clip's own first frame.
+// How Studio sets the face a clip lipsyncs: a point on it or a face track,
+// both counted from the clip's own first frame, or automatic detection.
 const speaker = z.union([
   z
     .object({
@@ -29,6 +29,11 @@ const speaker = z.union([
       faceTrackUrl: z
         .url({ protocol: /^https$/ })
         .describe('HTTPS URL of a JSON face track: one bounding box per frame of this clip.'),
+    })
+    .strict(),
+  z
+    .object({
+      detect: z.literal(true).describe('Detect the speaking face in this clip automatically.'),
     })
     .strict(),
 ]);
@@ -57,7 +62,7 @@ const clip = z
     speaker: speaker
       .optional()
       .describe(
-        'The face this clip lipsyncs: a point on it in one of the clip’s frames, or a face track. Omit to use options.active_speaker_detection.',
+        'The face this clip lipsyncs: a point on it in one of the clip’s frames, a face track, or automatic detection. Omit to use options.active_speaker_detection.',
       ),
   })
   .strict();
@@ -151,9 +156,11 @@ function clipOverride({ syncMode, speaker: face }: Clip) {
   const detection =
     face === undefined
       ? undefined
-      : 'faceTrackUrl' in face
-        ? { auto_detect: false, bounding_boxes_url: face.faceTrackUrl }
-        : { auto_detect: false, frame_number: face.frameNumber, coordinates: [face.x, face.y] };
+      : 'detect' in face
+        ? { auto_detect: true }
+        : 'faceTrackUrl' in face
+          ? { auto_detect: false, bounding_boxes_url: face.faceTrackUrl }
+          : { auto_detect: false, frame_number: face.frameNumber, coordinates: [face.x, face.y] };
   if (syncMode === undefined && detection === undefined) return {};
   return {
     optionsOverride: {

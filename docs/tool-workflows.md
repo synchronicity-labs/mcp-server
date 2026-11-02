@@ -28,9 +28,10 @@ original picture and sound, which is how a "No lipsync" range is expressed.
 
 A clip can pin the face it lipsyncs with `speaker`: either a point on the face
 (`frameNumber`, `x`, `y`, the frame counted from the clip's first frame) or a
-`faceTrackUrl` to a JSON file of one bounding box per frame of the clip. Both
-become the segment's `optionsOverride.active_speaker_detection` with
-`auto_detect: false`. Studio sends clips with a picked speaker in frames, so a
+`faceTrackUrl` to a JSON file of one bounding box per frame of the clip, both
+sent as the segment's `optionsOverride.active_speaker_detection` with
+`auto_detect: false`, or `{ detect: true }` for automatic detection in that
+clip, which Studio uses for clips too short to track. Studio sends clips with a picked speaker in frames, so a
 clip may give `startFrame`/`endFrame` (end inclusive) instead of seconds.
 Studio's "Do this with your agent" prompt for a timeline lists exactly these
 clips. The ChatGPT app doesn't get the tool, since its embedded Studio has no

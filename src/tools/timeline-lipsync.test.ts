@@ -127,7 +127,7 @@ describe('create-timeline-lipsync', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('passes a face picked in a frame, or a face track, as the clip’s speaker', async () => {
+  it('passes a face picked in a frame, a face track or detection as the clip’s speaker', async () => {
     const { request, tool } = setup();
     const track = 'https://cdn.example.test/asd-boxes/seg1.json';
 
@@ -148,6 +148,7 @@ describe('create-timeline-lipsync', () => {
           syncMode: 'bounce',
           speaker: { faceTrackUrl: track },
         },
+        { audioAssetId: A, startTime: 11, endTime: 11.5, speaker: { detect: true } },
       ],
     });
 
@@ -177,6 +178,12 @@ describe('create-timeline-lipsync', () => {
                 sync_mode: 'bounce',
                 active_speaker_detection: { auto_detect: false, bounding_boxes_url: track },
               },
+            },
+            {
+              startTime: 11,
+              endTime: 11.5,
+              audioInput: { refId: 'audio-1' },
+              optionsOverride: { active_speaker_detection: { auto_detect: true } },
             },
           ],
         }),
