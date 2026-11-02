@@ -167,6 +167,18 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     expect(catalog.find((t) => t.name === 'save-studio-draft')?._meta?.ui).toMatchObject({
       visibility: ['app'],
     });
+    const inferred = await runWithAuth('draft-user', 'openai-mcp', () =>
+      client.callTool({
+        name: 'update-studio-draft',
+        arguments: { projectId, draftId, expectedRevision: 4, patch: { visualId: null } },
+      }),
+    );
+    expect(inferred.isError).toBe(true);
+    expect(inferred.structuredContent).toMatchObject({
+      error: { code: 'PROJECT_INTENT_REQUIRED' },
+    });
+    expect(calls).toEqual([]);
+    expect(current.state.visualId).toBe(visualId);
     const result = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
         name: 'update-studio-draft',
@@ -175,6 +187,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
           draftId,
           expectedRevision: 4,
           patch: { options: { sync_mode: 'loop' } },
+          projectIntent: 'explicit',
         },
       }),
     );
@@ -201,7 +214,13 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     const stale = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
         name: 'update-studio-draft',
-        arguments: { projectId, draftId, expectedRevision: 4, patch: { model: 'lipsync-2' } },
+        arguments: {
+          projectId,
+          draftId,
+          expectedRevision: 4,
+          patch: { model: 'lipsync-2' },
+          projectIntent: 'explicit',
+        },
       }),
     );
     expect(stale.isError).toBe(true);
@@ -216,6 +235,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
           draftId,
           expectedRevision: 5,
           patch: { speech: { text: 'Do not submit this' } },
+          projectIntent: 'explicit',
         },
       }),
     );
@@ -225,7 +245,13 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     const invalid = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
         name: 'update-studio-draft',
-        arguments: { projectId, draftId, expectedRevision: 5, patch: { workflow: 'timeline' } },
+        arguments: {
+          projectId,
+          draftId,
+          expectedRevision: 5,
+          patch: { workflow: 'timeline' },
+          projectIntent: 'explicit',
+        },
       }),
     );
     expect(invalid.isError).toBe(true);

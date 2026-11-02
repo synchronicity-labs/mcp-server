@@ -1,10 +1,14 @@
 import { z } from 'zod';
 import { type ClientProfile, resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
-import { getOrCreateProjectId } from './app-tools.js';
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema, parseModelOptions } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
+import {
+  assertProjectDestination,
+  createProjectId,
+  newProjectFields,
+} from './project-destination.js';
 
 const seconds = z.number().finite().nonnegative();
 const clip = z
@@ -42,13 +46,23 @@ const input = z
       .describe(
         'Unique key for this generation. Reuse it with identical arguments when retrying after a lost response. Passed as the Idempotency-Key header.',
       ),
-    projectId: z.string().trim().min(1).optional().describe('Existing Sync project id.'),
+    ...newProjectFields,
+    projectId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        'Existing Sync project id, only for a project the user explicitly selected or one just created for this request.',
+      ),
     projectName: z
       .string()
       .trim()
       .min(1)
       .optional()
-      .describe('Project name to find or create. Cannot be combined with projectId.'),
+      .describe(
+        'Name for a NEW project only. Never search or reuse a matching name. Cannot be combined with projectId.',
+      ),
   })
   .strict();
 
@@ -109,7 +123,7 @@ export function createTimelineLipsyncTool(
     name: 'create-timeline-lipsync',
     title: 'Create timeline lipsync',
     description:
-      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset, the seconds on the video it covers, and optionally the part of the audio file it plays and its sync mode. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use create-lipsync. Defaults to sync-3. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generate_get-generation.',
+      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset, the seconds on the video it covers, and optionally the part of the audio file it plays and its sync mode. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use create-lipsync. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generate_get-generation.',
     inputSchema: input.shape,
     outputSchema: generationOutputSchema,
     annotations: {
@@ -125,16 +139,20 @@ export function createTimelineLipsyncTool(
     handler: async (rawArgs, context) => {
       const signal = context?.signal;
       const args = input.parse(rawArgs);
-      if (args.projectId !== undefined && args.projectName !== undefined)
-        throw new Error('Provide either projectId or projectName, not both.');
+      assertProjectDestination(args.projectId, args.projectName, args.projectCreationKey);
       assertPlaceable(args.clips);
 
+      // Like create-lipsync: a new project unless the user picked one.
       const projectId =
         args.projectId ??
-        (await getOrCreateProjectId(
+        (await createProjectId(
           httpClient,
-          args.projectName,
-          (context?.clientProfile ?? getProfile()).defaultProjectName,
+          {
+            name: args.projectName ?? (context?.clientProfile ?? getProfile()).defaultProjectName,
+            projectCreationKey: args.projectCreationKey,
+            idempotencyKey: args.idempotencyKey,
+            defaultWorkflow: 'lipsync',
+          },
           signal,
         ));
       signal?.throwIfAborted();
