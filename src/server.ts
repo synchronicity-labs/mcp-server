@@ -37,6 +37,7 @@ import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
+import { withProjectIntent } from './tools/project-intent.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
@@ -65,6 +66,9 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
     text: 'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ',
   },
   { text: ASSET_THUMBNAIL_INSTRUCTIONS },
+  {
+    text: 'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new create-lipsync or create-translate-and-dub calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ',
+  },
   {
     text: 'For what a past generation actually cost, use get-generation-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lip sync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generate_estimate-cost or start a paid generation to answer a past-cost question. ',
   },
@@ -108,7 +112,7 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
     text: 'Before quoting script-driven lipsync, call generate_estimate-cost with the actual replacement script when its schema supports script; use measured audioDuration if the replacement audio already exists. Explain the returned durationEstimate and label script-based pricing approximate until synthesis determines the actual length. Never substitute the full source video duration for replacement speech. Disclose speech synthesis separately. If those inputs are unavailable, estimate spoken duration from the script and label it approximate; do not present a source-video quote as the replacement-script price. Re-estimate after script, audio, model or sync-mode changes. ',
   },
   {
-    text: 'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and an integration-specific project unless projectId or projectName is supplied. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.',
+    text: 'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and a NEW project. projectName names a new project and never reuses an existing one. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.',
   },
 ];
 
@@ -528,7 +532,7 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
   if (tool.name === 'create-lipsync') {
     for (const key of ['video', 'image', 'audio']) delete inputSchema[key];
     description =
-      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; supply projectId for an existing project or projectName to find or create one; otherwise the client default is used. Poll the returned id with generate_get-generation.';
+      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_get-voices. Defaults to sync-3; new work creates a NEW project, even with a duplicate projectName. Supply a fresh projectCreationKey for keyed creation; preserve it on retries. Use projectId only for an explicit user selection and supply projectIntent=explicit. Poll the returned id with generate_get-generation.';
     for (const key of ['videoAssetId', 'imageAssetId', 'audioAssetId']) {
       inputSchema[key] = z
         .string()
@@ -621,7 +625,7 @@ function createTools(
         : tool,
     ),
   ];
-  const tools = allTools.map(withGenerationStatusCard);
+  const tools = allTools.map(withProjectIntent).map(withGenerationStatusCard);
   return config.transport === 'http'
     ? tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
     : tools;

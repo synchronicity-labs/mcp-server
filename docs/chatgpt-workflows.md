@@ -1,3 +1,39 @@
+# Project destination safety
+
+A new workflow request creates a new project. A workflow label, matching project
+name, or open editor never selects existing work. `create-lipsync` and
+`create-translate-and-dub` accept `projectName` only as the label of a new project;
+there is no name-based lookup or shared default-project reuse.
+
+Keyed generation without `projectId` requires a fresh UUID `projectCreationKey`.
+MCP derives a separate namespaced project UUID from that key and the generation
+key, then uses the API's idempotent project creation. Preserve both keys and the
+name on uncertain retries. A new intentional action gets new keys. Copying an
+existing project UUID into the creation-key field cannot select that project.
+New projects persist the chosen workflow as `defaultWorkflow`.
+
+For social video URLs, create the new project before importing, preserve its
+creation UUID for retries, then carry the returned project ID through import,
+estimation and generation. This avoids making separate import and output
+projects. Existing projects may be used only for an explicit user project
+selection/update; ambiguous names require clarification before writing.
+
+Every model-visible write with a `projectId` requires `projectIntent: explicit`.
+Missing intent returns `PROJECT_INTENT_REQUIRED` before upstream reads or writes.
+This covers imports, generation, speech/translation/dialogue preparation, draft
+changes and mounted-view actions. The marker is an explicit caller declaration;
+server/tool/model-context instructions require it to reflect the user's request.
+It does not replace authorization, revision checks or paid-action confirmation.
+MCP strips it before API dispatch, retaining the existing idempotency fingerprints.
+App-only draft synchronization and asset-based lipsync remain scoped to the UI's
+intentional project selection and private recovery state.
+
+Deploy the updated embedded UI with these MCP descriptors. Cached older widgets
+fail closed on guarded writes and must reopen; never silently retry a refused
+write or discard the saved operation. Refresh the published tool schemas and
+verify a fresh ChatGPT widget. No backend migration or API contract change is
+required. Local tests and bundle builds do not imply production activation.
+
 # Expanding ChatGPT workflows
 
 Tracking: [CRAFT-6457](https://linear.app/sync-labs/issue/CRAFT-6457).

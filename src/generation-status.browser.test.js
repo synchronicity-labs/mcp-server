@@ -114,6 +114,7 @@ it.each([
         name: descriptor.name,
         arguments: {
           projectId,
+          projectIntent: 'explicit',
           videoAssetId: 'video-1',
           audioAssetId: 'audio-1',
         },

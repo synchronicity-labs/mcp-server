@@ -498,7 +498,10 @@ describe('immutable client profiles', () => {
                   }),
               projectName: 'Explicit project',
             };
-            const result = await client.callTool({ name: 'create-lipsync', arguments: args });
+            const result = await client.callTool({
+              name: 'create-lipsync',
+              arguments: { ...args, projectIntent: 'explicit' },
+            });
             expect(result.isError).not.toBe(true);
             const posts = calls.filter((call) => call.path === '/v2/generate');
             const body = posts.at(-1)!.body;

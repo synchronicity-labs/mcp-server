@@ -119,12 +119,19 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
         openWorldHint: false,
       });
       expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(
-        [...Object.keys(fields), 'viewId', 'id', 'expectedRevision', 'syncAnalytics'].sort(),
+        [
+          ...Object.keys(fields),
+          'viewId',
+          'id',
+          'expectedRevision',
+          'projectIntent',
+          'syncAnalytics',
+        ].sort(),
       );
       const input = { viewId, id, expectedRevision: 1, ...fields };
       for (let attempt = 0; attempt < 2; attempt++) {
         const result = await runWithAuth('view-user', 'openai-mcp', () =>
-          client.callTool({ name, arguments: input }),
+          client.callTool({ name, arguments: { ...input, projectIntent: 'explicit' } }),
         );
         expect(result.isError).not.toBe(true);
         expect(result.structuredContent).toMatchObject({
@@ -150,6 +157,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
           projectId,
           generationId,
           workflow: 'lipsync',
+          projectIntent: 'explicit',
         },
       }),
     );

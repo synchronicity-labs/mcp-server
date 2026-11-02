@@ -29,9 +29,13 @@ Claude and unknown clients also expose `create-lipsync`, `voices_get-voices`, an
 Upload local media in authenticated Sync and use **Copy ID** in the same organization,
 or **Copy URL**. Unsupported file/widget calls return this guidance without uploading.
 
-Defaults are `ChatGPT generations`, `Claude generations`, or `Sync generations` for
-unknown clients. Supply `projectId` to select an existing project by its canonical ID,
-or `projectName` to find or create a named project. These fields are mutually exclusive.
+New requests create projects named `ChatGPT generations`, `Claude generations`, or
+`Sync generations` for unknown clients. `projectName` labels a new project; matching
+names are never reused. Keyed creation requires a fresh UUID `projectCreationKey`,
+retained with the generation key on retries. Supply `projectId` and
+`projectIntent: explicit` only for an explicit project selection/update. Workflow
+labels and an open editor never authorize existing-project writes.
+`projectId` and `projectName` are mutually exclusive.
 An explicit project ID is checked for access before any file transfer; an inaccessible
 or deleted project fails without falling back to a new project. Muse remains an unknown client until its
 actual handshake alias is verified. Client names affect presentation only, never
@@ -39,7 +43,7 @@ organization access or credit permissions. No Muse origin or attachment contract
 
 ## Request cancellation
 
-Explicit MCP request cancellation propagates to project lookup, upload admission,
+Explicit MCP request cancellation propagates to project creation, upload admission,
 file transfer, asset registration, generation submission, and generated API tools.
 The server checks cancellation before starting another write. Tool API calls have
 a 65-second transport deadline; generation polling uses the API default wait window;
@@ -76,8 +80,9 @@ one intentional generation action and reuse the same key and payload after an
 ambiguous response. A new intentional generation uses a new key. The backend
 owns replay, conflict detection and credit accounting; MCP does not retry writes.
 
-Use the explicit canonical `projectId` and durable asset IDs or stable URLs for
-keyed submissions. Stage ChatGPT files with `upload-media` first, then use the
+For a new project, preserve `projectCreationKey` with the generation key. For an
+explicitly selected project, retain its canonical `projectId` and supply
+`projectIntent: explicit`. Use durable asset IDs or stable URLs for keyed submissions. Stage ChatGPT files with `upload-media` first, then use the
 returned asset IDs. Re-transferring transient file inputs can produce different
 asset IDs and a changed-payload conflict. Keys accept 1-128 ASCII letters,
 digits, periods, underscores, tildes and hyphens. Omitting the key preserves
