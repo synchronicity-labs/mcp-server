@@ -84,6 +84,36 @@ describe('create-timeline-lipsync', () => {
       'audioEndTime',
     ],
     [
+      'a clip given both seconds and frames',
+      [{ audioAssetId: A, startTime: 0, endTime: 2, startFrame: 0, endFrame: 48 }],
+      'startTime and endTime, or startFrame and endFrame',
+    ],
+    [
+      'a clip with only a start frame',
+      [{ audioAssetId: A, startFrame: 10 }],
+      'startTime and endTime, or startFrame and endFrame',
+    ],
+    [
+      'clips sharing a frame',
+      [
+        { audioAssetId: A, startFrame: 0, endFrame: 48 },
+        { audioAssetId: B, startFrame: 48, endFrame: 96 },
+      ],
+      'Clips overlap',
+    ],
+    [
+      'a picked frame outside its clip',
+      [
+        {
+          audioAssetId: A,
+          startFrame: 0,
+          endFrame: 48,
+          speaker: { frameNumber: 49, x: 1, y: 1 },
+        },
+      ],
+      'frameNumber',
+    ],
+    [
       'an empty audio range',
       [{ audioAssetId: A, startTime: 0, endTime: 2, audioStartTime: 2, audioEndTime: 1 }],
       'audioEndTime',
@@ -95,6 +125,70 @@ describe('create-timeline-lipsync', () => {
       message,
     );
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it('passes a face picked in a frame, a face track or detection as the clip’s speaker', async () => {
+    const { request, tool } = setup();
+    const track = 'https://cdn.example.test/asd-boxes/seg1.json';
+
+    await tool.handler({
+      videoAssetId: VIDEO,
+      projectId: PROJECT,
+      clips: [
+        {
+          audioAssetId: A,
+          startFrame: 0,
+          endFrame: 119,
+          speaker: { frameNumber: 12, x: 640, y: 360 },
+        },
+        {
+          audioAssetId: B,
+          startTime: 6,
+          endTime: 10,
+          syncMode: 'bounce',
+          speaker: { faceTrackUrl: track },
+        },
+        { audioAssetId: A, startTime: 11, endTime: 11.5, speaker: { detect: true } },
+      ],
+    });
+
+    expect(request).toHaveBeenCalledWith(
+      'post',
+      '/v2/generate',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          segments: [
+            {
+              startFrame: 0,
+              endFrame: 119,
+              audioInput: { refId: 'audio-1' },
+              optionsOverride: {
+                active_speaker_detection: {
+                  auto_detect: false,
+                  frame_number: 12,
+                  coordinates: [640, 360],
+                },
+              },
+            },
+            {
+              startTime: 6,
+              endTime: 10,
+              audioInput: { refId: 'audio-2' },
+              optionsOverride: {
+                sync_mode: 'bounce',
+                active_speaker_detection: { auto_detect: false, bounding_boxes_url: track },
+              },
+            },
+            {
+              startTime: 11,
+              endTime: 11.5,
+              audioInput: { refId: 'audio-1' },
+              optionsOverride: { active_speaker_detection: { auto_detect: true } },
+            },
+          ],
+        }),
+      }),
+    );
   });
 
   it.each([true, false])(

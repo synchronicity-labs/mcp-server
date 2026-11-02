@@ -11,11 +11,45 @@ import {
 } from './project-destination.js';
 
 const seconds = z.number().finite().nonnegative();
+const frame = z.number().int().nonnegative();
+// How Studio sets the face a clip lipsyncs: a point on it or a face track,
+// both counted from the clip's own first frame, or automatic detection.
+const speaker = z.union([
+  z
+    .object({
+      frameNumber: frame.describe(
+        'Frame of this clip, counted from its first frame, showing the face.',
+      ),
+      x: z.number().finite().describe('Pixel x of the face in that frame of the video.'),
+      y: z.number().finite().describe('Pixel y of the face in that frame of the video.'),
+    })
+    .strict(),
+  z
+    .object({
+      faceTrackUrl: z
+        .url({ protocol: /^https$/ })
+        .describe('HTTPS URL of a JSON face track: one bounding box per frame of this clip.'),
+    })
+    .strict(),
+  z
+    .object({
+      detect: z.literal(true).describe('Detect the speaking face in this clip automatically.'),
+    })
+    .strict(),
+]);
 const clip = z
   .object({
     audioAssetId: z.uuid().describe('Sync asset id of the audio clip.'),
-    startTime: seconds.describe('Second on the video where this clip starts.'),
-    endTime: seconds.describe('Second on the video where this clip ends.'),
+    startTime: seconds
+      .optional()
+      .describe(
+        'Second on the video where this clip starts. Give startTime and endTime, or startFrame and endFrame.',
+      ),
+    endTime: seconds.optional().describe('Second on the video where this clip ends.'),
+    startFrame: frame
+      .optional()
+      .describe('First frame of the video this clip covers, used when its speaker is picked.'),
+    endFrame: frame.optional().describe('Last frame of the video this clip covers, inclusive.'),
     audioStartTime: seconds
       .optional()
       .describe('Second into the audio file this clip plays from. Omit to start at 0.'),
@@ -25,6 +59,11 @@ const clip = z
     syncMode: modelOptionsSchema.shape.sync_mode.describe(
       'How this clip fits when its audio and video lengths differ. Omit to use options.sync_mode.',
     ),
+    speaker: speaker
+      .optional()
+      .describe(
+        'The face this clip lipsyncs: a point on it in one of the clip’s frames, a face track, or automatic detection. Omit to use options.active_speaker_detection.',
+      ),
   })
   .strict();
 const input = z
@@ -68,20 +107,67 @@ const input = z
 
 type Clip = z.infer<typeof clip>;
 
+type Span = { start: number; end: number };
+
+/** A clip's stretch of the video, in seconds or in frames (end inclusive). */
+function spanOf({ startTime, endTime, startFrame, endFrame }: Clip): {
+  unit: 'seconds' | 'frames';
+  span: Span;
+} {
+  const given = [startTime, endTime, startFrame, endFrame].filter((v) => v !== undefined).length;
+  if (given === 2 && startTime !== undefined && endTime !== undefined)
+    return { unit: 'seconds', span: { start: startTime, end: endTime } };
+  if (given === 2 && startFrame !== undefined && endFrame !== undefined)
+    return { unit: 'frames', span: { start: startFrame, end: endFrame + 1 } };
+  throw new Error('Give each clip startTime and endTime, or startFrame and endFrame.');
+}
+
 /** Clips must have a positive span and may not share any part of the video. */
 function assertPlaceable(clips: Clip[]): void {
-  for (const { startTime, endTime, audioStartTime, audioEndTime } of clips) {
-    if (endTime <= startTime) throw new Error('Each clip must end after it starts.');
-    if (audioEndTime !== undefined && audioEndTime <= (audioStartTime ?? 0))
+  const byUnit = { seconds: [] as Span[], frames: [] as Span[] };
+  for (const c of clips) {
+    const { unit, span } = spanOf(c);
+    if (span.end <= span.start + (unit === 'frames' ? 1 : 0))
+      throw new Error('Each clip must end after it starts.');
+    if (c.audioEndTime !== undefined && c.audioEndTime <= (c.audioStartTime ?? 0))
       throw new Error(
         'Each clip’s audioEndTime must be after its audioStartTime, which defaults to 0.',
       );
+    if (
+      unit === 'frames' &&
+      c.speaker &&
+      'frameNumber' in c.speaker &&
+      c.speaker.frameNumber >= span.end - span.start
+    )
+      throw new Error('A speaker’s frameNumber must be one of its clip’s frames.');
+    byUnit[unit].push(span);
   }
-  const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i]!.startTime < sorted[i - 1]!.endTime)
-      throw new Error('Clips overlap on the video; each part of the video takes one clip.');
+  for (const spans of Object.values(byUnit)) {
+    const sorted = spans.sort((a, b) => a.start - b.start);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i]!.start < sorted[i - 1]!.end)
+        throw new Error('Clips overlap on the video; each part of the video takes one clip.');
+    }
   }
+}
+
+/** Per-clip settings, in the shape the API's segment override takes. */
+function clipOverride({ syncMode, speaker: face }: Clip) {
+  const detection =
+    face === undefined
+      ? undefined
+      : 'detect' in face
+        ? { auto_detect: true }
+        : 'faceTrackUrl' in face
+          ? { auto_detect: false, bounding_boxes_url: face.faceTrackUrl }
+          : { auto_detect: false, frame_number: face.frameNumber, coordinates: [face.x, face.y] };
+  if (syncMode === undefined && detection === undefined) return {};
+  return {
+    optionsOverride: {
+      ...(syncMode === undefined ? {} : { sync_mode: syncMode }),
+      ...(detection === undefined ? {} : { active_speaker_detection: detection }),
+    },
+  };
 }
 
 /**
@@ -102,14 +188,15 @@ export function generationBody(args: z.infer<typeof input>, projectId: string) {
       ...[...refs].map(([assetId, refId]) => ({ type: 'audio', assetId, refId })),
     ],
     segments: args.clips.map((c) => ({
-      startTime: c.startTime,
-      endTime: c.endTime,
+      ...(c.startFrame === undefined
+        ? { startTime: c.startTime, endTime: c.endTime }
+        : { startFrame: c.startFrame, endFrame: c.endFrame }),
       audioInput: {
         refId: refs.get(c.audioAssetId)!,
         ...(c.audioStartTime === undefined ? {} : { startTime: c.audioStartTime }),
         ...(c.audioEndTime === undefined ? {} : { endTime: c.audioEndTime }),
       },
-      ...(c.syncMode === undefined ? {} : { optionsOverride: { sync_mode: c.syncMode } }),
+      ...clipOverride(c),
     })),
     projectId,
   };
@@ -123,7 +210,7 @@ export function createTimelineLipsyncTool(
     name: 'create-timeline-lipsync',
     title: 'Create timeline lipsync',
     description:
-      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset, the seconds on the video it covers, and optionally the part of the audio file it plays and its sync mode. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use create-lipsync. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generate_get-generation.',
+      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset, the seconds (or frames) of the video it covers, and optionally the part of the audio file it plays, its sync mode and the face it lipsyncs. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use create-lipsync. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generate_get-generation.',
     inputSchema: input.shape,
     outputSchema: generationOutputSchema,
     annotations: {
