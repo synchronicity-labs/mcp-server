@@ -6,6 +6,7 @@ export const GENERATION_STATUS_URI = 'ui://sync/generation-status-v1.html';
 const submissionTools = new Set([
   'create-lipsync',
   'create-lipsync-from-assets',
+  'create-timeline-lipsync',
   'create-translate-and-dub',
   'create-dialogue-video',
   'generate_create-generation',

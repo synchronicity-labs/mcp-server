@@ -122,13 +122,15 @@ The hosted server exposes a curated set of tools to every client:
 
 | Area | Tools |
 | --- | --- |
-| Lip sync | `create-lipsync`, `generate_estimate-cost`, `generate_get-generation`, `generate_get-generations`, `get-generation-continuation`, `get-generation-costs`, `models_get` |
+| Lip sync | `create-lipsync`, `create-timeline-lipsync`¹, `generate_estimate-cost`, `generate_get-generation`, `generate_get-generations`, `get-generation-continuation`, `get-generation-costs`, `models_get` |
 | Translation and dubbing | `create-translate-and-dub`, `get-translation-options`, `estimate-translation-preview`, `create-translation-preview`, `get-translation-preview` |
 | Speech and voices | `create-speech-preview`, `get-speech-options`, `get-speech-preview`, `voices_get-voices`, `voices_clone-voice` |
 | Edit Dialogue | `get-dialogue-options`, `upload-dialogue-source`, `create-dialogue-transcription`, `get-dialogue-transcription`, `create-dialogue-preview`, `get-dialogue-preview`, `estimate-dialogue-video`, `create-dialogue-video` |
 | Assets | `assets_create`, `assets_create-upload-url`, `assets_get`, `assets_get-all`, `assets_count`, `assets_get-download-url`, `assets_update`, `assets_delete`, `get-playback-metadata`, `get-audio-trim`, `trim-audio` |
 | Projects | `projects_create`, `projects_get`, `projects_get-all`, `projects_get-generations`, `rename-project` |
 | Account | `get-account-context`, `get-account-usage` |
+
+¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
 Clients with app support also get the tools behind the embedded Studio app:
 Studio views and drafts, the upload widget and app helpers. Those are clients

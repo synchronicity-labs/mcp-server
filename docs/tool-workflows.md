@@ -14,6 +14,21 @@ before calling it, then poll its generation ID through completion. The current
 charges. See the [workflow integration and release plan](chatgpt-workflows.md)
 for the remaining combined-pricing and embedded UI work.
 
+## Lipsync a timeline
+
+`create-timeline-lipsync` reproduces a Studio timeline: one video and several
+audio clips, each placed on a stretch of the video. A clip names its audio
+asset, its `startTime` and `endTime` in seconds on the video, and optionally
+`audioStartTime`/`audioEndTime` (the part of the audio file it plays) and a
+`syncMode`. The tool sends each distinct audio asset once, as a `refId` input,
+and each clip as a `segments` entry reading its part of that audio, with
+`syncMode` as the segment's `optionsOverride.sync_mode`. Clips may come in any
+order but must not overlap. Parts of the video no clip covers keep their
+original picture and sound, which is how a "No lipsync" range is expressed.
+Studio's "Do this with your agent" prompt for a timeline lists exactly these
+clips. The ChatGPT app doesn't get the tool, since its embedded Studio has no
+timeline.
+
 ## Quote replacement speech
 
 For “make this video say this script”, pass the replacement `script` to

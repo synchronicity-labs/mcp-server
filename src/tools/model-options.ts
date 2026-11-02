@@ -25,3 +25,12 @@ export const modelOptionsSchema = z
     model_mode: z.enum(['lips', 'face', 'head']).optional(),
   })
   .strict();
+
+/** The API takes speaker detection as an object; agents may send a boolean. */
+export function parseModelOptions(value: unknown): z.infer<typeof modelOptionsSchema> | undefined {
+  const options = modelOptionsSchema.optional().parse(value);
+  if (typeof options?.active_speaker_detection === 'boolean') {
+    options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
+  }
+  return options;
+}
