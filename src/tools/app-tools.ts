@@ -13,7 +13,7 @@ import {
   resolveMedia,
   uploadMediaAsset,
 } from './media-upload.js';
-import { modelOptionsSchema } from './model-options.js';
+import { modelOptionsSchema, parseModelOptions } from './model-options.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 
 type ProjectSummary = { id: string; name: string | null };
@@ -352,13 +352,10 @@ export function createAppTools(
           idempotencyKey?: string;
         };
 
-        const options = modelOptionsSchema.optional().parse(args.options);
+        const options = parseModelOptions(args.options);
         if (args.continuation !== undefined) {
           generationContextSchema.parse(args.continuation);
           z.uuid().parse(requestedProjectId);
-        }
-        if (typeof options?.active_speaker_detection === 'boolean') {
-          options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
         }
 
         // Validate the shape up front, before re-hosting any bytes.

@@ -3,7 +3,7 @@ import { type ClientProfile, resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import { getOrCreateProjectId } from './app-tools.js';
 import type { McpToolDefinition } from './generator.js';
-import { modelOptionsSchema } from './model-options.js';
+import { modelOptionsSchema, parseModelOptions } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
 
 const seconds = z.number().finite().nonnegative();
@@ -58,12 +58,10 @@ type Clip = z.infer<typeof clip>;
 function assertPlaceable(clips: Clip[]): void {
   for (const { startTime, endTime, audioStartTime, audioEndTime } of clips) {
     if (endTime <= startTime) throw new Error('Each clip must end after it starts.');
-    if (
-      audioStartTime !== undefined &&
-      audioEndTime !== undefined &&
-      audioEndTime <= audioStartTime
-    )
-      throw new Error('Each clip’s audioEndTime must be after its audioStartTime.');
+    if (audioEndTime !== undefined && audioEndTime <= (audioStartTime ?? 0))
+      throw new Error(
+        'Each clip’s audioEndTime must be after its audioStartTime, which defaults to 0.',
+      );
   }
   const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
   for (let i = 1; i < sorted.length; i++) {
@@ -81,9 +79,10 @@ export function generationBody(args: z.infer<typeof input>, projectId: string) {
   const refs = new Map<string, string>();
   for (const { audioAssetId } of args.clips)
     if (!refs.has(audioAssetId)) refs.set(audioAssetId, `audio-${refs.size + 1}`);
+  const options = parseModelOptions(args.options);
   return {
     model: args.model ?? 'sync-3',
-    ...(args.options === undefined ? {} : { options: args.options }),
+    ...(options === undefined ? {} : { options }),
     input: [
       { type: 'video', assetId: args.videoAssetId },
       ...[...refs].map(([assetId, refId]) => ({ type: 'audio', assetId, refId })),

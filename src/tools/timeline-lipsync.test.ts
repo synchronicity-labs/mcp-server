@@ -79,6 +79,11 @@ describe('create-timeline-lipsync', () => {
       'end after it starts',
     ],
     [
+      'an audio range that ends at its default start',
+      [{ audioAssetId: A, startTime: 0, endTime: 2, audioEndTime: 0 }],
+      'audioEndTime',
+    ],
+    [
       'an empty audio range',
       [{ audioAssetId: A, startTime: 0, endTime: 2, audioStartTime: 2, audioEndTime: 1 }],
       'audioEndTime',
@@ -91,6 +96,30 @@ describe('create-timeline-lipsync', () => {
     );
     expect(request).not.toHaveBeenCalled();
   });
+
+  it.each([true, false])(
+    'sends speaker detection %s as the object the API takes, like create-lipsync',
+    async (detect) => {
+      const { request, tool } = setup();
+
+      await tool.handler({
+        videoAssetId: VIDEO,
+        projectId: PROJECT,
+        options: { active_speaker_detection: detect, sync_mode: 'bounce' },
+        clips: [{ audioAssetId: A, startTime: 0, endTime: 2 }],
+      });
+
+      expect(request).toHaveBeenCalledWith(
+        'post',
+        '/v2/generate',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            options: { active_speaker_detection: { auto_detect: detect }, sync_mode: 'bounce' },
+          }),
+        }),
+      );
+    },
+  );
 
   it('is offered to agents but kept out of the ChatGPT app listing', () => {
     const { tool } = setup();
