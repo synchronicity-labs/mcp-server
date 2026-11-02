@@ -1,7 +1,8 @@
 import type {
   ReadResourceCallback,
+  ReadResourceResult,
   ResourceMetadata,
-} from '@modelcontextprotocol/sdk/server/mcp.js';
+} from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 import {
   createUploadWidgetTool,
@@ -128,18 +129,14 @@ describe('registerUploadWidgetResource', () => {
     const legacyRegistration = registrations.find(
       (registration) => registration.uri === 'ui://sync/upload-widget-v6.html',
     );
-    const extra = {
-      signal: new AbortController().signal,
-      requestId: 1,
-      sendNotification: async () => {},
-      sendRequest: async () => {
-        throw new Error('not implemented');
-      },
-    } satisfies Parameters<ReadResourceCallback>[1];
-    const result = await legacyRegistration?.readCallback(
+    // The widget read ignores the request context; only its shape is required.
+    const ctx = {
+      mcpReq: { id: 1, signal: new AbortController().signal },
+    } as unknown as Parameters<ReadResourceCallback>[1];
+    const result = (await legacyRegistration?.readCallback(
       new URL('ui://sync/upload-widget-v6.html'),
-      extra,
-    );
+      ctx,
+    )) as ReadResourceResult | undefined;
 
     expect(result?.contents[0]).toMatchObject({
       uri: 'ui://sync/upload-widget-v6.html',

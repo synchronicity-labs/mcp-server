@@ -7,22 +7,25 @@ describe('HTTP request metrics', () => {
 
     const finishOk = metrics.start();
     const finishError = metrics.start();
-    expect(metrics.snapshot()).toMatchObject({ total: 2, inFlight: 2, completed: 0 });
+    const finishLimited = metrics.start();
+    expect(metrics.snapshot()).toMatchObject({ total: 3, inFlight: 3, completed: 0 });
 
     finishOk({ statusCode: 200, aborted: false, responseDelivered: true, durationMs: 12 });
     finishError({ statusCode: 503, aborted: false, responseDelivered: true, durationMs: 34 });
     finishError({ statusCode: 503, aborted: false, responseDelivered: true, durationMs: 34 });
+    finishLimited({ statusCode: 429, aborted: false, responseDelivered: true, durationMs: 1 });
 
     expect(metrics.snapshot()).toEqual({
-      total: 2,
+      total: 3,
       inFlight: 0,
-      completed: 2,
+      completed: 3,
       aborted: 0,
       status2xx: 1,
       status3xx: 0,
-      status4xx: 0,
+      status4xx: 1,
+      status429: 1,
       status5xx: 1,
-      durationMsTotal: 46,
+      durationMsTotal: 47,
       durationMsMax: 34,
     });
   });
@@ -38,6 +41,7 @@ describe('HTTP request metrics', () => {
       status2xx: 0,
       status3xx: 0,
       status4xx: 0,
+      status429: 0,
       status5xx: 0,
     });
   });

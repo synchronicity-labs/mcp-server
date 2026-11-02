@@ -1,6 +1,5 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 import { resolveClientProfile } from './client-profile.js';
 import {
@@ -10,6 +9,7 @@ import {
   registerTools,
   SERVER_INSTRUCTIONS,
   selectHostedHttpTools,
+  serverInstructions,
 } from './server.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { generationOutputSchema } from './tools/output-schemas.js';
@@ -213,6 +213,15 @@ describe('SERVER_INSTRUCTIONS', () => {
     expect(SERVER_INSTRUCTIONS).toContain('exact structuredContent.outputUrl');
     expect(SERVER_INSTRUCTIONS).not.toContain('open-upload-widget');
     expect(SERVER_INSTRUCTIONS).not.toContain('tts_create');
+  });
+
+  it('keeps ChatGPT and Studio guidance out of model-only clients', () => {
+    expect(serverInstructions(resolveClientProfile('openai-mcp'))).toBe(SERVER_INSTRUCTIONS);
+    const modelOnly = serverInstructions(resolveClientProfile('claude-code'));
+    expect(modelOnly).not.toContain('When Studio publishes');
+    expect(modelOnly).not.toContain('In ChatGPT');
+    expect(modelOnly).toContain('exactly one visual input');
+    expect(modelOnly).toContain('assets_create-upload-url');
   });
 });
 

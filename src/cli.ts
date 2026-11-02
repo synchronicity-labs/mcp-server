@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { resolveConfig } from './config.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 

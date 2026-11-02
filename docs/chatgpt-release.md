@@ -10,11 +10,9 @@ source, with explicit intent on selected-project writes including `trim-audio`.
 New conversational workflows create fresh projects instead of reusing names.
 
 The analytics candidate below is retained as the first previous resource. The
-oldest retained resource `feb7f2a9…` and the superseded, unreleased project-safety
-candidate `b7c35f1b…` move intact to `deploy/chatgpt-retired/`.
+oldest retained resource `feb7f2a9…` moves intact to `deploy/chatgpt-retired/`.
 
-Merge UI follow-up #7486 before this MCP release. The API prerequisite below
-still applies. Refresh publisher tool metadata and open a fresh widget after
+Both UI source PRs are merged. The API prerequisite below still applies. Refresh publisher tool metadata and open a fresh widget after
 release; production deployment and ChatGPT host acceptance are separate checks.
 
 ## ChatGPT analytics candidate (CRAFT-7540)
@@ -453,7 +451,7 @@ the frontend's original manifest, and source/build provenance in `release.json`.
 Compression keeps the generated artifact small; the manifest hashes the
 uncompressed HTML. The manifest verifies the exact uncompressed bytes recorded in each release.
 
-`npm run build && npm run package:chatgpt` expands and validates every included
+`pnpm run build && pnpm run package:chatgpt` expands and validates every included
 release in `chatgpt-dist/`. Docker copies only that verified output to its final
 image. No registry credentials, local environment files, or preview settings are
 part of the frontend package. The Docker context excludes local environment
@@ -526,8 +524,8 @@ Update `deploy/chatgpt/releases.json` to select the new hash and retain publishe
 hashes. Packaging rejects missing, undeclared, duplicate, or unsafe release paths.
 The generated catalog is copied into the production image with the verified HTML.
 
-Run `npm run build`, `npm run package:chatgpt`, and
-`npm run verify:chatgpt-package`, then build/test the image as in CI. Review the
+Run `pnpm run build`, `pnpm run package:chatgpt`, and
+`pnpm run verify:chatgpt-package`, then build/test the image as in CI. Review the
 new provenance and artifact checksum in the PR. Deployment selects the manifest's current release; prior releases stay addressable through its previous list.
 
 To roll back the UI, change the checked-in manifest's `current` to a retained hash,

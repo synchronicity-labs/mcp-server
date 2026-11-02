@@ -1,12 +1,12 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CancelledNotificationSchema,
   InitializedNotificationSchema,
   JSONRPCMessageSchema,
   JSONRPCNotificationSchema,
-  SUPPORTED_PROTOCOL_VERSIONS,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/core';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import type { McpServer } from '@modelcontextprotocol/server';
+import { SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
 import type { Request, Response } from 'express';
 
 export function isSessionControlRequest(body: unknown): boolean {
@@ -33,7 +33,7 @@ export class HttpSession {
   #closed = false;
   constructor(
     readonly clientName: string,
-    private readonly createServer: (clientName?: string) => McpServer,
+    private readonly createServer: (clientName?: string, handshakeClientName?: string) => McpServer,
     private readonly reportProtocol: (version: string) => void,
     private readonly reportError: (details: Record<string, unknown>) => void = () => {},
   ) {}
@@ -84,13 +84,15 @@ export class HttpSession {
     }
     for (const result of parsed) {
       if (!result.success) continue;
-      const notification = JSONRPCNotificationSchema.safeParse(result.data);
-      if (!notification.success) continue;
-      if (InitializedNotificationSchema.safeParse(notification.data).success)
+      const batchNotification = JSONRPCNotificationSchema.safeParse(result.data);
+      if (!batchNotification.success) continue;
+      if (InitializedNotificationSchema.safeParse(batchNotification.data).success)
         this.#initialized = true;
-      const cancelled = CancelledNotificationSchema.safeParse(notification.data);
-      if (cancelled.success && cancelled.data.params.requestId !== undefined)
-        await this.#active.get(cancelled.data.params.requestId)?.cancel(notification.data);
+      const batchCancelled = CancelledNotificationSchema.safeParse(batchNotification.data);
+      if (batchCancelled.success && batchCancelled.data.params.requestId !== undefined)
+        await this.#active
+          .get(batchCancelled.data.params.requestId)
+          ?.cancel(batchNotification.data);
     }
     if (isSessionControlRequest(body)) {
       res.status(202).end();
@@ -113,8 +115,8 @@ export class HttpSession {
       res.status(400).json({ error: 'Request ID is already in flight in this session' });
       return;
     }
-    const server = this.createServer(initialize ? undefined : this.clientName);
-    const transport = new StreamableHTTPServerTransport({
+    const server = this.createServer(initialize ? undefined : this.clientName, this.clientName);
+    const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
@@ -138,10 +140,10 @@ export class HttpSession {
     if (!initialize)
       for (const id of ids)
         this.#active.set(id, {
-          cancel: async (notification) => {
+          cancel: async (cancelNotification) => {
             if (completed.has(id)) return;
-            const parsed = JSONRPCNotificationSchema.parse(notification);
-            transport.onmessage?.(parsed);
+            const cancelMessage = JSONRPCNotificationSchema.parse(cancelNotification);
+            transport.onmessage?.(cancelMessage);
             if (ids.length === 1) {
               res.destroy();
               await server.close();

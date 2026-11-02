@@ -20,7 +20,7 @@ No tool action is replayed by session recovery.
 
 ## Authenticated synthetic check
 
-Run `npm run monitor:mcp` against `MCP_MONITOR_URL` (default
+Run `pnpm run monitor:mcp` against `MCP_MONITOR_URL` (default
 `https://mcp.sync.so/mcp`). Supply `MCP_MONITOR_ACCESS_TOKEN` through the runner's
 secret injection. It must be a **fresh OAuth access token**, not an API key.
 The runner must own a dedicated monitoring account's credential refresh lifecycle;
@@ -67,7 +67,7 @@ An increase in initialization traffic alone is not proof of more end users.
 
 ## Regression and release checks
 
-`npm run test:memory:http` sends real HTTP initialization/discovery requests with
+`pnpm run test:memory:http` sends real HTTP initialization/discovery requests with
 fresh sessions and no DELETE, at a virtual 160 sessions/minute for 45 minutes.
 It checks bounded sessions, retained heap, zero admission refusals and cleanup.
 Time is accelerated for CI; this is not a wall-clock production soak.
@@ -90,6 +90,20 @@ The normal Porter workflow deploys reviewed merges to `mcp-server/main` in
 project 11208, cluster 4151. The widget source hotfix targets `sync-api-v2/main`;
 its immutable build is packaged in the MCP image. Keep one production replica:
 this release does not introduce cross-pod session/upload routing.
+
+After `porter apply`, the deploy job runs `scripts/smoke-deploy.mjs`. It waits up
+to 10 minutes for `/health` to report a process started after the deploy began,
+then checks both OAuth discovery documents and the unauthenticated `/mcp` 401
+challenge. A red deploy run means the new process never served or the public
+surface changed; it does not roll back on its own.
+
+Deploys run one at a time (`concurrency` in the deploy workflow). Each run
+deploys the current tip of `main`, whichever commit triggered it. When `/health`
+already reports that revision, the run skips the deploy but still runs the smoke
+check against the serving process, so a rerun can't pass while the tip is broken. A late run or a rerun therefore never
+rolls production back. When a new run replaces a pending one in the queue, the
+survivor still ships the tip. Rerunning a deploy redeploys the tip of `main`; to
+roll back, revert on `main`.
 
 Before merging, record the deployed image, current widget digest, green checks
 and reviewer approval. The baseline observed on 2026-10-28 was image

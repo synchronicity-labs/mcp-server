@@ -74,15 +74,14 @@ describe('combined translation generation', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it.each([
-    null,
-    {},
-    { id: 'another-project' },
-  ])('refuses an unverified project: %j', async (response) => {
-    const { tool, request } = fixture(vi.fn(async () => response));
-    await expect(tool.handler(translationInput)).rejects.toThrow('verify access');
-    expect(request).toHaveBeenCalledTimes(1);
-  });
+  it.each([null, {}, { id: 'another-project' }])(
+    'refuses an unverified project: %j',
+    async (response) => {
+      const { tool, request } = fixture(vi.fn(async () => response));
+      await expect(tool.handler(translationInput)).rejects.toThrow('verify access');
+      expect(request).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it.each([401, 403, 404])('does not submit when project access fails with %s', async (status) => {
     const failure = new ApiRequestError('Not accessible', status);
@@ -95,24 +94,25 @@ describe('combined translation generation', () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    402, 409, 503,
-  ])('preserves a rejected or ambiguous create outcome without an implicit retry: %s', async (status) => {
-    const failure = new ApiRequestError(
-      'Submission uncertain',
-      status,
-      'IDEMPOTENCY_OUTCOME_UNKNOWN',
-      2000,
-      'known-generation',
-    );
-    const request = vi
-      .fn<HttpClient['request']>()
-      .mockResolvedValueOnce({ id: projectId })
-      .mockRejectedValueOnce(failure);
-    const { tool } = fixture(request);
-    await expect(tool.handler(translationInput)).rejects.toBe(failure);
-    expect(request).toHaveBeenCalledTimes(2);
-  });
+  it.each([402, 409, 503])(
+    'preserves a rejected or ambiguous create outcome without an implicit retry: %s',
+    async (status) => {
+      const failure = new ApiRequestError(
+        'Submission uncertain',
+        status,
+        'IDEMPOTENCY_OUTCOME_UNKNOWN',
+        2000,
+        'known-generation',
+      );
+      const request = vi
+        .fn<HttpClient['request']>()
+        .mockResolvedValueOnce({ id: projectId })
+        .mockRejectedValueOnce(failure);
+      const { tool } = fixture(request);
+      await expect(tool.handler(translationInput)).rejects.toBe(failure);
+      expect(request).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('keeps the same key and body when the caller explicitly retries a lost response', async () => {
     const writes: unknown[] = [];

@@ -11,44 +11,46 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
       options: --ipc=host
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - name: Install pnpm
+        uses: ./.github/actions/install-pnpm
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '22'
-          cache: npm
+          node-version-file: .nvmrc
+          cache: pnpm
       - name: Record exact revision
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git rev-parse HEAD
-      - run: npm ci --ignore-scripts
-      - run: npm run patch:mcp-sdk
-      - run: npm run lint
-      - run: npm run test:monitor
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm run test:memory
-      - run: npm run test:memory -- --burst
-      - run: npm run package:chatgpt
-      - run: npm run verify:chatgpt-package
-      - run: npm run test:memory:http
-      - run: npm test -- --no-file-parallelism
-      - run: npm test
-      - run: npm run test:browser
-      - run: npm audit
-      - run: npm audit --omit=dev
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm run lint
+      - run: pnpm run knip
+      - run: pnpm run test:scripts
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - run: pnpm run test:memory
+      - run: pnpm run test:memory --burst
+      - run: pnpm run package:chatgpt
+      - run: pnpm run verify:chatgpt-package
+      - run: pnpm run test:memory:http
+      - run: pnpm test --no-file-parallelism
+      - run: pnpm test
+      - run: pnpm run test:browser
+      - run: pnpm audit
+      - run: pnpm audit --prod
       - run: git diff --exit-code
   packaged-image:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false

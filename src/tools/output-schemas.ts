@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const generationOutputSchema = {
   id: z.string().describe('Sync generation id.').optional(),
+  projectId: z.string().nullable().describe('Sync project containing this generation.').optional(),
   status: z.string().describe('Current generation status.').optional(),
   model: z.string().describe('Model used for the generation.').optional(),
   outputUrl: z

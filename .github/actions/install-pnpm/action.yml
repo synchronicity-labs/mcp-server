@@ -1,0 +1,9 @@
+name: Install pnpm binary
+description: Download the pinned pnpm binary from GitHub Releases, or from the npm registry when GitHub fails.
+
+runs:
+  using: composite
+  steps:
+    - name: Download pnpm release binary
+      shell: bash
+      run: '"$GITHUB_ACTION_PATH/install-pnpm.sh"'

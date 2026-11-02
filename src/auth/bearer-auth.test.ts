@@ -36,42 +36,43 @@ async function withProtectedRoute(
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
-it.each([
-  200, 401, 403, 429, 500, 503, 404,
-])('translates upstream %s through real HTTP middleware', async (status) => {
-  const mock = vi.fn(async () =>
-    Response.json(
-      { sub: 'user', client_id: 'client', expires_at: 4000000000 },
-      { status, headers: { 'Retry-After': '17' } },
-    ),
-  );
-  vi.stubGlobal('fetch', mock);
-  await withProtectedRoute(async (url, reached) => {
-    const res = await nativeFetch(url, { headers: { Authorization: 'Bearer fake-token' } });
-    expect(res.status).toBe(
-      status === 200
-        ? 200
-        : status === 401 || status === 403
-          ? 401
-          : status === 429
-            ? 429
-            : status >= 500
-              ? 503
-              : 502,
+it.each([200, 401, 403, 429, 500, 503, 404])(
+  'translates upstream %s through real HTTP middleware',
+  async (status) => {
+    const mock = vi.fn(async () =>
+      Response.json(
+        { sub: 'user', client_id: 'client', expires_at: 4000000000 },
+        { status, headers: { 'Retry-After': '17' } },
+      ),
     );
-    expect(reached()).toBe(status === 200 ? 1 : 0);
-    if (status === 401 || status === 403)
-      expect(res.headers.get('www-authenticate')).toContain(
-        'resource_metadata="https://mcp.example/metadata"',
+    vi.stubGlobal('fetch', mock);
+    await withProtectedRoute(async (url, reached) => {
+      const res = await nativeFetch(url, { headers: { Authorization: 'Bearer fake-token' } });
+      expect(res.status).toBe(
+        status === 200
+          ? 200
+          : status === 401 || status === 403
+            ? 401
+            : status === 429
+              ? 429
+              : status >= 500
+                ? 503
+                : 502,
       );
-    else if (status !== 200) {
-      expect(res.headers.get('www-authenticate')).toBeNull();
-      expect(res.headers.get('retry-after')).toBe('17');
-      expect(await res.json()).toMatchObject({ error: 'temporarily_unavailable' });
-    }
-    expect(mock).toHaveBeenCalledTimes(1);
-  });
-});
+      expect(reached()).toBe(status === 200 ? 1 : 0);
+      if (status === 401 || status === 403)
+        expect(res.headers.get('www-authenticate')).toContain(
+          'resource_metadata="https://mcp.example/metadata"',
+        );
+      else if (status !== 200) {
+        expect(res.headers.get('www-authenticate')).toBeNull();
+        expect(res.headers.get('retry-after')).toBe('17');
+        expect(await res.json()).toMatchObject({ error: 'temporarily_unavailable' });
+      }
+      expect(mock).toHaveBeenCalledTimes(1);
+    });
+  },
+);
 it('preserves missing-token and expired-token SDK challenges', async () => {
   const mock = vi.fn(async () =>
     Response.json({ sub: 'user', client_id: 'client', expires_at: 1 }),
@@ -132,7 +133,8 @@ it('aborts a native HTTP partial body by the full five-second deadline', async (
   }
 }, 10000);
 it.each(['0', '17', 'Thu, 24 Sep 2026 15:00:00 GMT'])('accepts Retry-After %s', (value) =>
-  expect(parseRetryAfter(value)).toBe(value));
+  expect(parseRetryAfter(value)).toBe(value),
+);
 it.each([
   '-1',
   '1.5',

@@ -11,6 +11,20 @@ export const newProjectFields = {
     ),
 };
 
+export function assertProjectDestination(
+  projectId?: string,
+  projectName?: string,
+  projectCreationKey?: string,
+): void {
+  if (projectId !== undefined && !projectId.trim()) throw new Error('projectId must not be empty.');
+  if (projectId !== undefined && projectName !== undefined)
+    throw new Error('Provide either projectId or projectName, not both.');
+  if (projectId !== undefined && projectCreationKey !== undefined)
+    throw new Error('Provide either projectId or projectCreationKey, not both.');
+  if (projectName !== undefined && !projectName.trim())
+    throw new Error('projectName must not be empty.');
+}
+
 export async function createProjectId(
   http: HttpClient,
   {

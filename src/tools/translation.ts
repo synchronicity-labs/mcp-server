@@ -6,7 +6,11 @@ import { generationContextHeaders, generationContextSchema } from './generation-
 import type { McpToolDefinition } from './generator.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
-import { createProjectId, newProjectFields } from './project-destination.js';
+import {
+  assertProjectDestination,
+  createProjectId,
+  newProjectFields,
+} from './project-destination.js';
 import { translationPreviewAvailable } from './translation-preview.js';
 
 export function translationOperation(operations: ParsedOperation[]): ParsedOperation | undefined {
@@ -82,9 +86,9 @@ export function createTranslationTools(
       },
       handler: async (args, context) => {
         const input = schema.parse(args);
-        context?.signal?.throwIfAborted();
-        if (input.projectId && (input.projectName || input.projectCreationKey))
-          throw new Error('Provide projectId or a new project name/UUID, not both.');
+        const signal = context?.signal;
+        signal?.throwIfAborted();
+        assertProjectDestination(input.projectId, input.projectName, input.projectCreationKey);
         if (input.continuation && !input.projectId)
           throw new Error('A continuation requires its explicitly selected projectId.');
         const projectId =
@@ -97,11 +101,11 @@ export function createTranslationTools(
               idempotencyKey: input.idempotencyKey,
               defaultWorkflow: 'translate_and_dub',
             },
-            context?.signal,
+            signal,
           ));
         const project = input.projectId
           ? await httpClient.request('get', `/v2/projects/${projectId}`, {
-              signal: context?.signal,
+              signal,
             })
           : { id: projectId };
         if (
@@ -112,7 +116,7 @@ export function createTranslationTools(
         ) {
           throw new Error('Sync could not verify access to this project. Refresh and try again.');
         }
-        context?.signal?.throwIfAborted();
+        signal?.throwIfAborted();
         const options = input.options;
         if (typeof options?.active_speaker_detection === 'boolean') {
           options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
@@ -121,10 +125,10 @@ export function createTranslationTools(
           httpClient,
           args,
           ['translate_and_dub'],
-          context?.signal,
+          signal,
         );
         return httpClient.request('post', '/v2/generate', {
-          signal: context?.signal,
+          signal,
           headers: { ...lineage, 'Idempotency-Key': input.idempotencyKey },
           body: {
             model: input.model,

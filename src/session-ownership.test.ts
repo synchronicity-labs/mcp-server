@@ -1,11 +1,12 @@
 import { type EventEmitter, once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { startHttpServer } from './http-server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const heap = vi.hoisted(() => ({ used_heap_size: 20, heap_size_limit: 100 }));
 vi.mock('node:v8', () => ({ getHeapStatistics: () => heap }));
@@ -36,27 +37,29 @@ beforeAll(async () => {
   vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffset);
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  upstream = createServer(async (req, res) => {
-    const path = new URL(req.url ?? '/', 'http://fixture.invalid').pathname;
-    const token = req.headers.authorization;
-    res.setHeader('Content-Type', 'application/json');
-    if (path === '/v2/oauth/userinfo') {
-      const kind = token?.replace('Bearer ', '');
-      res.end(
-        JSON.stringify({
-          sub: kind === 'foreign-sub' ? 'other' : 'owner',
-          client_id: kind === 'foreign-client' ? 'other' : 'client',
-          ...(kind === 'missing-org'
-            ? {}
-            : { organization_id: kind === 'foreign-org' ? 'other' : 'org' }),
-          expires_at: 4000000000,
-        }),
-      );
-      return;
-    }
-    res.statusCode = 404;
-    res.end('{}');
-  });
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      const path = new URL(req.url ?? '/', 'http://fixture.invalid').pathname;
+      const token = req.headers.authorization;
+      res.setHeader('Content-Type', 'application/json');
+      if (path === '/v2/oauth/userinfo') {
+        const kind = token?.replace('Bearer ', '');
+        res.end(
+          JSON.stringify({
+            sub: kind === 'foreign-sub' ? 'other' : 'owner',
+            client_id: kind === 'foreign-client' ? 'other' : 'client',
+            ...(kind === 'missing-org'
+              ? {}
+              : { organization_id: kind === 'foreign-org' ? 'other' : 'org' }),
+            expires_at: 4000000000,
+          }),
+        );
+        return;
+      }
+      res.statusCode = 404;
+      res.end('{}');
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;
@@ -77,20 +80,20 @@ beforeAll(async () => {
       toolCount: 1,
       createServer: () => {
         const server = new McpServer({ name: 'ownership-fixture', version: '1' });
-        server.registerTool('hold', { inputSchema: {} }, async (_args, context) => {
+        server.registerTool('hold', { inputSchema: z.object({}) }, async (_args, context) => {
           activeHolds++;
           started.resolve();
           const onAbort = () => {
             aborted = true;
             release.resolve();
           };
-          context.signal.addEventListener('abort', onAbort, { once: true });
+          context.mcpReq.signal.addEventListener('abort', onAbort, { once: true });
           try {
             await release.promise;
             return { content: [{ type: 'text' as const, text: 'completed' }] };
           } finally {
             activeHolds--;
-            context.signal.removeEventListener('abort', onAbort);
+            context.mcpReq.signal.removeEventListener('abort', onAbort);
           }
         });
         return server;
@@ -169,28 +172,26 @@ async function initialize(token = 'owner') {
   return id;
 }
 const list = { jsonrpc: '2.0', id: 2, method: 'tools/list' };
-it.each([
-  'foreign-sub',
-  'foreign-client',
-  'foreign-org',
-  'missing-org',
-])('blocks %s reuse, SSE and deletion while allowing owner refresh', async (token) => {
-  const id = await initialize();
-  for (const method of ['POST', 'GET', 'DELETE']) {
-    const denied = await request(id, token, method, method === 'POST' ? list : undefined);
-    expect(denied.status).toBe(404);
-    expect(await denied.json()).toEqual({ error: 'Session not found' });
-  }
-  const refreshed = await request(id, 'owner-refreshed', 'POST', list);
-  expect(refreshed.status).toBe(200);
-  expect(await refreshed.text()).toContain('hold');
-  const deleted = await request(id, 'owner-refreshed', 'DELETE');
-  expect(deleted.status).toBe(200);
-  await deleted.text();
-  const gone = await request(id, 'owner', 'POST', list);
-  expect(gone.status).toBe(404);
-  await gone.text();
-});
+it.each(['foreign-sub', 'foreign-client', 'foreign-org', 'missing-org'])(
+  'blocks %s reuse, SSE and deletion while allowing owner refresh',
+  async (token) => {
+    const id = await initialize();
+    for (const method of ['POST', 'GET', 'DELETE']) {
+      const denied = await request(id, token, method, method === 'POST' ? list : undefined);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual({ error: 'Session not found' });
+    }
+    const refreshed = await request(id, 'owner-refreshed', 'POST', list);
+    expect(refreshed.status).toBe(200);
+    expect(await refreshed.text()).toContain('hold');
+    const deleted = await request(id, 'owner-refreshed', 'DELETE');
+    expect(deleted.status).toBe(200);
+    await deleted.text();
+    const gone = await request(id, 'owner', 'POST', list);
+    expect(gone.status).toBe(404);
+    await gone.text();
+  },
+);
 it('rejects foreign cancellation and accepts cancellation by a refreshed owner token', async () => {
   started = deferred<void>();
   release = deferred<void>();

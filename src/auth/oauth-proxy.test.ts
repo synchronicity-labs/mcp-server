@@ -1,11 +1,12 @@
 import { type EventEmitter, once } from 'node:events';
 import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { resolveConfig } from '../config.js';
 import { startHttpServer } from '../http-server.js';
+import { asyncRequestListener } from '../test-fixtures/request-listener.js';
 import { closeFixtureServers } from './fixture-cleanup.js';
 
 let upstream: Server | undefined;
@@ -29,42 +30,44 @@ beforeAll(async () => {
     logs.push(String(chunk));
     return true;
   });
-  upstream = createServer(async (req, res) => {
-    let body = '';
-    for await (const chunk of req) body += chunk;
-    calls.push({
-      path: req.url ?? '',
-      body: new URLSearchParams(body),
-      authorization: req.headers.authorization,
-    });
-    if (dropUpstreamResponse) {
-      res.destroy();
-      return;
-    }
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
-      res.statusCode = userinfoStatus;
-      res.setHeader('Retry-After', '9');
-      res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
-      return;
-    }
-    if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      calls.push({
+        path: req.url ?? '',
+        body: new URLSearchParams(body),
+        authorization: req.headers.authorization,
+      });
+      if (dropUpstreamResponse) {
+        res.destroy();
+        return;
+      }
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === `${apiPrefix}/v2/oauth/userinfo`) {
+        res.statusCode = userinfoStatus;
+        res.setHeader('Retry-After', '9');
+        res.end(JSON.stringify({ sub: 'fake-user', client_id: 'client', expires_at: 4000000000 }));
+        return;
+      }
+      if (req.url?.startsWith(`${apiPrefix}/v2/oauth/register/`)) {
+        res.end(
+          JSON.stringify({
+            client_id: 'client',
+            redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+          }),
+        );
+        return;
+      }
+      res.statusCode = upstreamStatus;
       res.end(
-        JSON.stringify({
-          client_id: 'client',
-          redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
-        }),
+        upstreamBody ??
+          (upstreamStatus === 401
+            ? JSON.stringify({ error: 'invalid_client' })
+            : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
       );
-      return;
-    }
-    res.statusCode = upstreamStatus;
-    res.end(
-      upstreamBody ??
-        (upstreamStatus === 401
-          ? JSON.stringify({ error: 'invalid_client' })
-          : JSON.stringify({ access_token: 'fake-access-token', token_type: 'Bearer' })),
-    );
-  });
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;
@@ -206,39 +209,39 @@ const failures = [
   },
 ];
 for (const path of ['/token', '/revoke']) {
-  it.each(failures)(`${path}: rejects $name before forwarding`, async ({
-    body,
-    header,
-    status,
-    error,
-  }) => {
-    const before = calls.length;
-    const res = await post(path, body, header);
-    expect(res.status).toBe(status);
-    expect(await res.json()).toMatchObject({ error });
-    expect(res.headers.get('www-authenticate')).toBe(status === 401 ? 'Basic realm="oauth"' : null);
-    expect(calls.length).toBe(before);
-  });
-  it.each([
-    'post',
-    'basic',
-  ])(`${path}: preserves %s credentials without a warm registration cache`, async (method) => {
-    const before = calls.length;
-    const credentials = method === 'post' ? '&client_id=client&client_secret=fake-secret' : '';
-    const res = await post(
-      path,
-      `grant_type=authorization_code&code=fake-code&code_verifier=fake-verifier&token=fake-token${credentials}`,
-      method === 'basic' ? basic() : undefined,
-    );
-    expect(res.status).toBe(200);
-    expect(calls.length).toBe(before + 1);
-    const sent = calls.at(-1);
-    expect(sent?.path).toBe(`${apiPrefix}/v2/oauth${path}`);
-    expect(sent?.body.get('client_id')).toBe('client');
-    expect(sent?.body.get('client_secret')).toBe('fake-secret');
-    expect(sent?.body.get('code_verifier')).toBe('fake-verifier');
-    expect(sent?.authorization).toBeUndefined();
-  });
+  it.each(failures)(
+    `${path}: rejects $name before forwarding`,
+    async ({ body, header, status, error }) => {
+      const before = calls.length;
+      const res = await post(path, body, header);
+      expect(res.status).toBe(status);
+      expect(await res.json()).toMatchObject({ error });
+      expect(res.headers.get('www-authenticate')).toBe(
+        status === 401 ? 'Basic realm="oauth"' : null,
+      );
+      expect(calls).toHaveLength(before);
+    },
+  );
+  it.each(['post', 'basic'])(
+    `${path}: preserves %s credentials without a warm registration cache`,
+    async (method) => {
+      const before = calls.length;
+      const credentials = method === 'post' ? '&client_id=client&client_secret=fake-secret' : '';
+      const res = await post(
+        path,
+        `grant_type=authorization_code&code=fake-code&code_verifier=fake-verifier&token=fake-token${credentials}`,
+        method === 'basic' ? basic() : undefined,
+      );
+      expect(res.status).toBe(200);
+      expect(calls).toHaveLength(before + 1);
+      const sent = calls.at(-1);
+      expect(sent?.path).toBe(`${apiPrefix}/v2/oauth${path}`);
+      expect(sent?.body.get('client_id')).toBe('client');
+      expect(sent?.body.get('client_secret')).toBe('fake-secret');
+      expect(sent?.body.get('code_verifier')).toBe('fake-verifier');
+      expect(sent?.authorization).toBeUndefined();
+    },
+  );
   it(`${path}: includes Basic challenge for backend authentication rejection`, async () => {
     upstreamStatus = 401;
     try {
@@ -282,6 +285,7 @@ it('redirects browser authorization separately from server-side token and API tr
   expect(calls.slice(before).map((call) => call.path)).toEqual([`${apiPrefix}/v2/oauth/token`]);
 });
 it.each([
+  // oxlint-disable-next-line eslint/no-script-url -- the fixture proves configuration rejects a script URL
   'javascript:alert(1)',
   'https://user:password@studio.fixture/authorize',
   'https://studio.fixture/authorize?client_secret=private',
@@ -376,59 +380,59 @@ it.each([
   expect(logged).not.toContain('private-client');
 });
 
-it.each([
-  'post',
-  'basic',
-])('correlates successful code and refresh exchanges for %s', async (method) => {
-  for (const grant of ['authorization_code', 'refresh_token']) {
-    const before = logs.length;
-    const requestId = `scan-${method}-${grant}`;
-    const response = await fetch(`${url}/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-request-id': requestId,
-        ...(method === 'basic' ? { Authorization: basic() } : {}),
-      },
-      body:
-        `grant_type=${grant}&code=private-code&refresh_token=private-refresh` +
-        (method === 'post' ? '&client_id=private-client&client_secret=private-secret' : ''),
-    });
-    expect(response.status).toBe(200);
-    expect(response.headers.get('x-request-id')).toBe(requestId);
-    expect(await response.json()).toEqual({
-      access_token: 'fake-access-token',
-      token_type: 'Bearer',
-    });
-    const entries = logs.slice(before).map((line) => JSON.parse(line));
-    expect(entries).toContainEqual(
-      expect.objectContaining({
-        event: 'oauth_exchange_succeeded',
-        requestId,
-        oauthPath: 'token',
-        source: 'upstream',
-        statusCode: 200,
-        grantType: grant,
-        bodyClientId: method === 'post' ? 'present' : 'missing',
-        bodyClientSecret: method === 'post' ? 'present' : 'missing',
-        authorizationScheme: method === 'post' ? 'none' : 'basic',
-      }),
-    );
-    expect(entries).toContainEqual(
-      expect.objectContaining({ event: 'http_request', requestId, statusCode: 200 }),
-    );
-    const logged = logs.slice(before).join('');
-    for (const secret of [
-      'private-code',
-      'private-refresh',
-      'private-client',
-      'private-secret',
-      'fake-access-token',
-      basic(),
-    ])
-      expect(logged).not.toContain(secret);
-  }
-});
+it.each(['post', 'basic'])(
+  'correlates successful code and refresh exchanges for %s',
+  async (method) => {
+    for (const grant of ['authorization_code', 'refresh_token']) {
+      const before = logs.length;
+      const requestId = `scan-${method}-${grant}`;
+      const response = await fetch(`${url}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'x-request-id': requestId,
+          ...(method === 'basic' ? { Authorization: basic() } : {}),
+        },
+        body:
+          `grant_type=${grant}&code=private-code&refresh_token=private-refresh` +
+          (method === 'post' ? '&client_id=private-client&client_secret=private-secret' : ''),
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('x-request-id')).toBe(requestId);
+      expect(await response.json()).toEqual({
+        access_token: 'fake-access-token',
+        token_type: 'Bearer',
+      });
+      const entries = logs.slice(before).map((line) => JSON.parse(line));
+      expect(entries).toContainEqual(
+        expect.objectContaining({
+          event: 'oauth_exchange_succeeded',
+          requestId,
+          oauthPath: 'token',
+          source: 'upstream',
+          statusCode: 200,
+          grantType: grant,
+          bodyClientId: method === 'post' ? 'present' : 'missing',
+          bodyClientSecret: method === 'post' ? 'present' : 'missing',
+          authorizationScheme: method === 'post' ? 'none' : 'basic',
+        }),
+      );
+      expect(entries).toContainEqual(
+        expect.objectContaining({ event: 'http_request', requestId, statusCode: 200 }),
+      );
+      const logged = logs.slice(before).join('');
+      for (const secret of [
+        'private-code',
+        'private-refresh',
+        'private-client',
+        'private-secret',
+        'fake-access-token',
+        basic(),
+      ])
+        expect(logged).not.toContain(secret);
+    }
+  },
+);
 
 it('identifies an upstream rejected secret without treating it as missing', async () => {
   const before = logs.length;
@@ -501,7 +505,7 @@ it('rejects duplicate Authorization headers before Node can silently select one'
   );
   expect(result.status).toBe(400);
   expect(JSON.parse(result.body)).toMatchObject({ error: 'invalid_request' });
-  expect(calls.length).toBe(before);
+  expect(calls).toHaveLength(before);
 });
 it.each(['post', 'basic'])('preserves refresh-token credentials for %s clients', async (method) => {
   const response = await post(
@@ -514,42 +518,43 @@ it.each(['post', 'basic'])('preserves refresh-token credentials for %s clients',
   expect(calls.at(-1)?.body.get('refresh_token')).toBe('fake-refresh');
   expect(calls.at(-1)?.body.get('client_secret')).toBe('fake-secret');
 });
-it.each([
-  200, 401, 403, 429, 503,
-])('combined actual /mcp route preserves userinfo %s semantics', async (status) => {
-  // Each scenario starts after explicit revocation, outside the success cache.
-  expect(
-    (await post('/revoke', 'token=fake-token&client_id=client&client_secret=fake-secret')).status,
-  ).toBe(200);
-  userinfoStatus = status;
-  try {
-    const response = await fetch(`${url}/mcp`, {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer fake-token',
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-03-26',
-          capabilities: {},
-          clientInfo: { name: 'auth-fixture', version: '1' },
+it.each([200, 401, 403, 429, 503])(
+  'combined actual /mcp route preserves userinfo %s semantics',
+  async (status) => {
+    // Each scenario starts after explicit revocation, outside the success cache.
+    expect(
+      (await post('/revoke', 'token=fake-token&client_id=client&client_secret=fake-secret')).status,
+    ).toBe(200);
+    userinfoStatus = status;
+    try {
+      const response = await fetch(`${url}/mcp`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer fake-token',
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
         },
-      }),
-    });
-    expect(response.status).toBe(status === 403 ? 401 : status);
-    if (status === 429 || status === 503) {
-      expect(response.headers.get('retry-after')).toBe('9');
-      expect(response.headers.get('www-authenticate')).toBeNull();
-      expect(await response.json()).toMatchObject({ error: 'temporarily_unavailable' });
-    } else {
-      await response.text();
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 'auth-fixture', version: '1' },
+          },
+        }),
+      });
+      expect(response.status).toBe(status === 403 ? 401 : status);
+      if (status === 429 || status === 503) {
+        expect(response.headers.get('retry-after')).toBe('9');
+        expect(response.headers.get('www-authenticate')).toBeNull();
+        expect(await response.json()).toMatchObject({ error: 'temporarily_unavailable' });
+      } else {
+        await response.text();
+      }
+    } finally {
+      userinfoStatus = 200;
     }
-  } finally {
-    userinfoStatus = 200;
-  }
-});
+  },
+);

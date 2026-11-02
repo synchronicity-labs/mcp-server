@@ -1,8 +1,8 @@
 import type {
+  CallToolResult,
   ReadResourceCallback,
   ResourceMetadata,
-} from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
@@ -751,7 +751,7 @@ export const UPLOAD_WIDGET_HTML = `
 
 export function registerUploadWidgetResource(server: UploadWidgetResourceServer): void {
   for (const uri of UPLOAD_WIDGET_RESOURCE_URIS) {
-    const version = uri.match(/upload-widget-(v\d+)\.html$/)?.[1] ?? 'current';
+    const version = /upload-widget-(v\d+)\.html$/.exec(uri)?.[1] ?? 'current';
     server.registerResource(
       `sync-upload-widget-${version}`,
       uri,

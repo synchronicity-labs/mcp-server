@@ -1,7 +1,5 @@
-import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
-
+import type { AuthInfo, OAuthClientInformationFull } from '@modelcontextprotocol/server';
+import { ProxyOAuthServerProvider } from '@modelcontextprotocol/server-legacy/auth';
 import { createTokenVerifier } from './verification-cache.js';
 
 const CONFIDENTIAL_CLIENT_AUTH_METHOD = 'client_secret_post';

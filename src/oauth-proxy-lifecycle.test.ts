@@ -1,11 +1,12 @@
 import { type EventEmitter, once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { closeFixtureServers } from './auth/fixture-cleanup.js';
 import { OAUTH_PROXY_TIMEOUT_MS, startHttpServer } from './http-server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 let upstream: Server | undefined;
 let hosted: Server | undefined;
@@ -23,37 +24,39 @@ const scenarios = new Map<string, Scenario>();
 beforeAll(async () => {
   for (const event of events) previous.set(event, emitter.listeners(event));
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-  upstream = createServer(async (req, res) => {
-    let raw = '';
-    for await (const chunk of req) raw += chunk;
-    const scenario = scenarios.get(new URLSearchParams(raw).get('client_id') ?? '');
-    if (!scenario) {
-      res.writeHead(500);
-      res.end();
-      return;
-    }
-    scenario.calls++;
-    scenario.started = true;
-    res.once('close', () => {
-      if (!res.writableEnded) scenario.closed = true;
-    });
-    if (scenario.mode === 'headers') return;
-    res.setHeader('Content-Type', 'application/json');
-    // Even an upstream's unsafe cache policy must not reach token clients.
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    if (scenario.mode === 'body') {
-      res.write('{"private":"fixture-secret');
-      return;
-    }
-    res.statusCode = scenario.mode === 'error' ? 401 : 200;
-    res.end(
-      JSON.stringify(
-        scenario.mode === 'error'
-          ? { error: 'invalid_client' }
-          : { access_token: 'fixture-token', token_type: 'Bearer' },
-      ),
-    );
-  });
+  upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      let raw = '';
+      for await (const chunk of req) raw += chunk;
+      const scenario = scenarios.get(new URLSearchParams(raw).get('client_id') ?? '');
+      if (!scenario) {
+        res.writeHead(500);
+        res.end();
+        return;
+      }
+      scenario.calls++;
+      scenario.started = true;
+      res.once('close', () => {
+        if (!res.writableEnded) scenario.closed = true;
+      });
+      if (scenario.mode === 'headers') return;
+      res.setHeader('Content-Type', 'application/json');
+      // Even an upstream's unsafe cache policy must not reach token clients.
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      if (scenario.mode === 'body') {
+        res.write('{"private":"fixture-secret');
+        return;
+      }
+      res.statusCode = scenario.mode === 'error' ? 401 : 200;
+      res.end(
+        JSON.stringify(
+          scenario.mode === 'error'
+            ? { error: 'invalid_client' }
+            : { access_token: 'fixture-token', token_type: 'Bearer' },
+        ),
+      );
+    }),
+  );
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   const listen = express.application.listen;
@@ -116,22 +119,22 @@ function start(path: string, mode: Scenario['mode'], signal?: AbortSignal) {
   return { scenario, response };
 }
 for (const path of ['/token', '/revoke']) {
-  it.each([
-    'success',
-    'error',
-  ] as const)(`${path}: forces no-store on %s without altering the response`, async (mode) => {
-    const { scenario, response } = start(path, mode);
-    const res = await response;
-    expect(res.status).toBe(mode === 'error' ? 401 : 200);
-    expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(res.headers.get('pragma')).toBe('no-cache');
-    expect(await res.json()).toEqual(
-      mode === 'error'
-        ? { error: 'invalid_client' }
-        : { access_token: 'fixture-token', token_type: 'Bearer' },
-    );
-    expect(scenario.calls).toBe(1);
-  });
+  it.each(['success', 'error'] as const)(
+    `${path}: forces no-store on %s without altering the response`,
+    async (mode) => {
+      const { scenario, response } = start(path, mode);
+      const res = await response;
+      expect(res.status).toBe(mode === 'error' ? 401 : 200);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      expect(res.headers.get('pragma')).toBe('no-cache');
+      expect(await res.json()).toEqual(
+        mode === 'error'
+          ? { error: 'invalid_client' }
+          : { access_token: 'fixture-token', token_type: 'Bearer' },
+      );
+      expect(scenario.calls).toBe(1);
+    },
+  );
   it.each(['headers', 'body'] as const)(
     `${path}: bounds stalled %s and closes upstream without retries`,
     async (mode) => {
@@ -150,19 +153,19 @@ for (const path of ['/token', '/revoke']) {
     },
     OAUTH_PROXY_TIMEOUT_MS + 3_000,
   );
-  it.each([
-    'headers',
-    'body',
-  ] as const)(`${path}: aborts stalled %s after caller disconnect`, async (mode) => {
-    const stop = new AbortController();
-    const { scenario, response } = start(path, mode, stop.signal);
-    const rejected = expect(response).rejects.toThrow();
-    await vi.waitFor(() => expect(scenario.started).toBe(true));
-    stop.abort();
-    await rejected;
-    await vi.waitFor(() => expect(scenario.closed).toBe(true));
-    expect(scenario.calls).toBe(1);
-  });
+  it.each(['headers', 'body'] as const)(
+    `${path}: aborts stalled %s after caller disconnect`,
+    async (mode) => {
+      const stop = new AbortController();
+      const { scenario, response } = start(path, mode, stop.signal);
+      const rejected = expect(response).rejects.toThrow();
+      await vi.waitFor(() => expect(scenario.started).toBe(true));
+      stop.abort();
+      await rejected;
+      await vi.waitFor(() => expect(scenario.closed).toBe(true));
+      expect(scenario.calls).toBe(1);
+    },
+  );
   it(`${path}: marks local credential rejections non-cacheable before forwarding`, async () => {
     const before = [...scenarios.values()].reduce((n, s) => n + s.calls, 0);
     const res = await fetch(url + path, {

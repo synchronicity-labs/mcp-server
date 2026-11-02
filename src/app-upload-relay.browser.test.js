@@ -3,6 +3,7 @@ import express from 'express';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { appUploadHandler, createAppUploadCors, relayUploadTool } from './app-upload-relay.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const upstreamAddress = vi.hoisted(() => ({ port: 0 }));
 vi.mock('node:https', async () => {
@@ -20,14 +21,16 @@ it('transfers a local 11 MB File from a sandboxed browser across CORS through th
   let received = 0;
   let wrongByte = false;
   let storageCalls = 0;
-  const storage = createServer(async (req, res) => {
-    storageCalls++;
-    for await (const chunk of req) {
-      received += chunk.length;
-      if (chunk.some((byte) => byte !== 97)) wrongByte = true;
-    }
-    res.writeHead(200).end();
-  });
+  const storage = createServer(
+    asyncRequestListener(async (req, res) => {
+      storageCalls++;
+      for await (const chunk of req) {
+        received += chunk.length;
+        if (chunk.some((byte) => byte !== 97)) wrongByte = true;
+      }
+      res.writeHead(200).end();
+    }),
+  );
   await new Promise((r) => storage.listen(0, '127.0.0.1', r));
   upstreamAddress.port = storage.address().port;
   const app = express();

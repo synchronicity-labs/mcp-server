@@ -1,7 +1,6 @@
 import { once } from 'node:events';
-import { createServer } from 'node:http';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, expect, it } from 'vitest';
 import { createMcpServerFactory } from './server.js';
 import { translationInput, translationSpec } from './test-fixtures/translation.js';
@@ -11,7 +10,7 @@ const newId = '00000000-0000-4000-8000-000000000011';
 const secondId = '00000000-0000-4000-8000-000000000012';
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
-  for (const close of cleanup.splice(0).reverse()) await close();
+  for (let close = cleanup.pop(); close; close = cleanup.pop()) await close();
 });
 
 async function fixture() {
@@ -30,7 +29,19 @@ async function fixture() {
   }> = [];
   const acceptedKeys = new Map<string, string>();
   let loseResponse = false;
-  const upstream = createServer(async (req, res) => {
+  const generate = (req: IncomingMessage, res: ServerResponse, body: Record<string, unknown>) => {
+    const key = req.headers['idempotency-key'] as string | undefined;
+    if (key && acceptedKeys.has(key) && acceptedKeys.get(key) !== JSON.stringify(body))
+      return void res.writeHead(409).end(JSON.stringify({ message: 'Idempotency conflict' }));
+    if (!key || !acceptedKeys.has(key)) generations.push(body);
+    if (key) acceptedKeys.set(key, JSON.stringify(body));
+    if (loseResponse) {
+      loseResponse = false;
+      return req.socket.destroy();
+    }
+    return void res.end(JSON.stringify({ id: newId, status: 'PENDING' }));
+  };
+  const handle = async (req: IncomingMessage, res: ServerResponse) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api-json') return void res.end(JSON.stringify(translationSpec));
     let text = '';
@@ -54,19 +65,13 @@ async function fixture() {
     }
     if (req.method === 'GET' && req.url?.startsWith('/v2/projects'))
       return void res.end(JSON.stringify({ items: [...projects.values()] }));
-    if (req.url === '/v2/generate') {
-      const key = req.headers['idempotency-key'] as string | undefined;
-      if (key && acceptedKeys.has(key) && acceptedKeys.get(key) !== JSON.stringify(body))
-        return void res.writeHead(409).end(JSON.stringify({ message: 'Idempotency conflict' }));
-      if (!key || !acceptedKeys.has(key)) generations.push(body);
-      if (key) acceptedKeys.set(key, JSON.stringify(body));
-      if (loseResponse) {
-        loseResponse = false;
-        return req.socket.destroy();
-      }
-      return void res.end(JSON.stringify({ id: newId, status: 'PENDING' }));
-    }
+    if (req.url === '/v2/generate') return generate(req, res, body);
     res.writeHead(404).end('{}');
+  };
+  const upstream = createServer((req, res) => {
+    void handle(req, res).catch((error: unknown) => {
+      res.writeHead(500).end(String(error));
+    });
   });
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -114,7 +119,7 @@ it('starts fresh Spanish translation of an imported YouTube video despite an exi
   const createdId = [...projects.keys()].find((id) => id !== existingId)!;
   expect(projects.get(createdId)?.name).toBe('Translate and Dub');
   expect(
-    calls.find((call) => call.method === 'POST' && call.path === '/v2/projects')?.body
+    calls.find((request) => request.method === 'POST' && request.path === '/v2/projects')?.body
       .defaultWorkflow,
   ).toBe('translate_and_dub');
   expect(generations).toEqual([
@@ -123,9 +128,9 @@ it('starts fresh Spanish translation of an imported YouTube video despite an exi
       dubParams: { targetLang: 'es', sourceLang: 'auto' },
     }),
   ]);
-  expect(calls.some((call) => call.method === 'GET' && call.path?.startsWith('/v2/projects'))).toBe(
-    false,
-  );
+  expect(
+    calls.some((request) => request.method === 'GET' && request.path?.startsWith('/v2/projects')),
+  ).toBe(false);
 });
 
 it('creates separate projects for repeated workflow names instead of resolving by name', async () => {
@@ -146,22 +151,22 @@ it('creates separate projects for repeated workflow names instead of resolving b
   expect(generations.every((item) => item.projectId !== existingId)).toBe(true);
 });
 
-it.each([
-  'create-lipsync',
-  'create-translate-and-dub',
-])('refuses an inferred existing project before any upstream work: %s', async (name) => {
-  const { call, calls, projects, original } = await fixture();
-  const result = await call(name, {
-    ...(name === 'create-lipsync'
-      ? { videoAssetId: newId, audioAssetId: secondId }
-      : translationInput),
-    projectId: existingId,
-  });
-  expect(result.isError).toBe(true);
-  expect(result.structuredContent).toMatchObject({ error: { code: 'PROJECT_INTENT_REQUIRED' } });
-  expect(calls).toEqual([]);
-  expect(projects.get(existingId)).toEqual(original);
-});
+it.each(['create-lipsync', 'create-translate-and-dub'])(
+  'refuses an inferred existing project before any upstream work: %s',
+  async (name) => {
+    const { call, calls, projects, original } = await fixture();
+    const result = await call(name, {
+      ...(name === 'create-lipsync'
+        ? { videoAssetId: newId, audioAssetId: secondId }
+        : translationInput),
+      projectId: existingId,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ error: { code: 'PROJECT_INTENT_REQUIRED' } });
+    expect(calls).toEqual([]);
+    expect(projects.get(existingId)).toEqual(original);
+  },
+);
 
 it('honors an explicit update to the selected existing project without creating another project', async () => {
   const { call, projects, generations } = await fixture();
@@ -186,7 +191,7 @@ it('retains project identity after a lost generation response without name reuse
   expect(projects.size).toBe(2);
   expect(generations).toHaveLength(1);
   expect(generations[0]?.projectId).not.toBe(existingId);
-  const writes = calls.filter((call) => call.path === '/v2/generate');
+  const writes = calls.filter((request) => request.path === '/v2/generate');
   expect(writes).toHaveLength(2);
   expect(writes[1]).toEqual(writes[0]);
 });

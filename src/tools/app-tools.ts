@@ -15,7 +15,11 @@ import {
 } from './media-upload.js';
 import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
-import { createProjectId, newProjectFields } from './project-destination.js';
+import {
+  assertProjectDestination,
+  createProjectId,
+  newProjectFields,
+} from './project-destination.js';
 
 function providedCount(...values: unknown[]): number {
   return values.filter(Boolean).length;
@@ -326,18 +330,7 @@ export function createAppTools(
           throw new Error('Provide either a video or an image, not both.');
         }
 
-        if (requestedProjectId !== undefined && !requestedProjectId.trim()) {
-          throw new Error('projectId must not be empty.');
-        }
-        if (requestedProjectId !== undefined && projectName !== undefined) {
-          throw new Error('Provide either projectId or projectName, not both.');
-        }
-        if (requestedProjectId !== undefined && projectCreationKey !== undefined) {
-          throw new Error('Provide either projectId or projectCreationKey, not both.');
-        }
-        if (projectName !== undefined && !projectName.trim()) {
-          throw new Error('projectName must not be empty.');
-        }
+        assertProjectDestination(requestedProjectId, projectName, projectCreationKey);
 
         // Reject malformed ChatGPT file params before making project or upload requests.
         assertValidFileParam('video', video);

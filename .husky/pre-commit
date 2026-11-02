@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -e
+
+# Husky puts node_modules/.bin on PATH, so the tools start without pnpm.
+# Tasks only check files, so lint-staged needs no backup stash; the stash stack
+# is shared by every worktree of this repository.
+lint-staged --concurrent false --no-stash
+node scripts/check-staged-file-size.mjs

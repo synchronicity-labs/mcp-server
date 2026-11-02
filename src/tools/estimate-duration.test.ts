@@ -1,6 +1,5 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { ParsedOperation } from '../openapi/types.js';
@@ -80,14 +79,12 @@ describe('replacement speech estimates', () => {
     expect(() => resolveEstimateDuration({ script: text })).toThrow();
   });
 
-  it.each([
-    0,
-    -1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-  ])('refuses invalid measured duration %s', (audioDuration) => {
-    expect(() => resolveEstimateDuration({ audioDuration })).toThrow();
-  });
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'refuses invalid measured duration %s',
+    (audioDuration) => {
+      expect(() => resolveEstimateDuration({ audioDuration })).toThrow();
+    },
+  );
 
   it.each(['cut_off', 'silence'])('requires video length for %s quotes', (syncMode) => {
     expect(() => resolveEstimateDuration({ audioDuration: 2.5, syncMode })).toThrow(

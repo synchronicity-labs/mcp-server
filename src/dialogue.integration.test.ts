@@ -1,12 +1,13 @@
 import { once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Client } from '@modelcontextprotocol/client';
+import type { McpServer } from '@modelcontextprotocol/server';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
+import { asyncRequestListener } from './test-fixtures/request-listener.js';
 import { routeUploadSourceToFixture } from './test-fixtures/upload-source.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
@@ -79,9 +80,9 @@ const spec = {
     ]),
   ),
 };
-const upstreams: Server[] = [],
-  clients: Client[] = [],
-  servers: McpServer[] = [];
+const clients: Client[] = [],
+  servers: McpServer[] = [],
+  upstreams: Server[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
   for (const server of servers.splice(0)) await server.close();
@@ -109,109 +110,116 @@ async function fixture(
 ) {
   const calls: { path: string; body?: Record<string, unknown>; token?: string; key?: string }[] =
     [];
-  const upstream = createServer(async (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api-json') {
-      const current = structuredClone(spec);
-      if (options.keyedPreview)
-        Object.assign(current.paths['/v2/dialogue-edits']!.post!, {
-          parameters: [
-            { name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } },
-          ],
-        });
-      res.end(JSON.stringify(current));
-      return;
-    }
-    if (req.url === '/external.mp4') {
-      calls.push({ path: req.url });
-      res.setHeader('Content-Type', 'video/mp4');
-      res.end('external video bytes');
-      return;
-    }
-    if (req.url === '/storage') {
-      let bytes = '';
-      for await (const chunk of req) bytes += chunk.toString();
-      calls.push({ path: req.url, body: { bytes } });
-      res.statusCode = options.uploadRejected ? 403 : 200;
-      res.end();
-      return;
-    }
-    let raw = '';
-    for await (const chunk of req) raw += chunk.toString();
-    const body = raw ? JSON.parse(raw) : undefined;
-    calls.push({
-      path: req.url!,
-      body,
-      token: req.headers.authorization,
-      key: req.headers['idempotency-key'] as string | undefined,
-    });
-    if (options.denied) {
-      res.statusCode = 403;
-      res.end(JSON.stringify({ message: 'Project denied' }));
-      return;
-    }
-    let value: unknown;
-    if (req.url === `/v2/projects/${projectId}`) value = { id: projectId };
-    else if (req.url === `/v2/assets/${videoAssetId}`)
-      value = {
-        id: videoAssetId,
-        type: 'VIDEO',
-        url: options.external
-          ? externalUrl
-          : options.rotatingAssetUrl
-            ? `${sourceVideoUrl}?read=${calls.length}`
-            : sourceVideoUrl,
-      };
-    else if (req.url === '/v2/assets/upload')
-      value = { uploadUrl: `http://${req.headers.host}/storage`, url: sourceVideoUrl };
-    else if (req.url === '/v2/assets' || req.url === `/v2/assets/${uploadedAssetId}`)
-      value = {
-        id: uploadedAssetId,
-        type: 'VIDEO',
-        url: sourceVideoUrl,
-        name: 'Interview.mp4',
-        durationSeconds: 2,
-      };
-    else if (req.url?.startsWith('/v2/transcriptions')) {
-      if (req.method === 'POST' && body.sourceVideoUrl !== sourceVideoUrl) {
-        res.statusCode = 422;
-        res.end(
-          JSON.stringify({
-            message:
-              'Transcription sources must be hosted in sync. labs storage. Upload the file via POST /v2/assets/upload first, then transcribe the returned url.',
-          }),
-        );
+  const upstream = createServer(
+    asyncRequestListener(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/api-json') {
+        const current = structuredClone(spec);
+        if (options.keyedPreview)
+          Object.assign(current.paths['/v2/dialogue-edits']!.post!, {
+            parameters: [
+              {
+                name: 'Idempotency-Key',
+                in: 'header',
+                required: false,
+                schema: { type: 'string' },
+              },
+            ],
+          });
+        res.end(JSON.stringify(current));
         return;
       }
-      value = {
-        id: transcriptionId,
-        status: 'COMPLETED',
-        sourceVideoUrl: options.mismatched ? 'https://cdn.sync.so/other.mp4' : sourceVideoUrl,
-        transcript,
-      };
-    } else if (req.url?.startsWith('/v2/dialogue-edits')) {
-      if (req.method === 'POST' && options.lostPreview) {
-        res.statusCode = 503;
-        res.end(JSON.stringify({ message: 'Unknown outcome' }));
+      if (req.url === '/external.mp4') {
+        calls.push({ path: req.url });
+        res.setHeader('Content-Type', 'video/mp4');
+        res.end('external video bytes');
         return;
       }
-      value = {
-        id: dialogueEditId,
-        status: options.previewStatus ?? 'COMPLETED',
-        sourceVideoUrl,
-        sourceTranscript: transcript,
-        edits,
-        voiceId: 'original-speaker',
-        ...(options.partialDetail ? { partialDetail: options.partialDetail } : {}),
-      };
-    } else if (req.url === '/v2/analyze/cost') value = estimate;
-    else if (req.url === '/v2/generate') value = { id: dialogueEditId, status: 'PENDING' };
-    else {
-      res.statusCode = 404;
-      value = {};
-    }
-    res.end(JSON.stringify(value));
-  });
+      if (req.url === '/storage') {
+        let bytes = '';
+        for await (const chunk of req) bytes += chunk.toString();
+        calls.push({ path: req.url, body: { bytes } });
+        res.statusCode = options.uploadRejected ? 403 : 200;
+        res.end();
+        return;
+      }
+      let raw = '';
+      for await (const chunk of req) raw += chunk.toString();
+      const body = raw ? JSON.parse(raw) : undefined;
+      calls.push({
+        path: req.url!,
+        body,
+        token: req.headers.authorization,
+        key: req.headers['idempotency-key'] as string | undefined,
+      });
+      if (options.denied) {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ message: 'Project denied' }));
+        return;
+      }
+      let value: unknown;
+      if (req.url === `/v2/projects/${projectId}`) value = { id: projectId };
+      else if (req.url === `/v2/assets/${videoAssetId}`)
+        value = {
+          id: videoAssetId,
+          type: 'VIDEO',
+          url: options.external
+            ? externalUrl
+            : options.rotatingAssetUrl
+              ? `${sourceVideoUrl}?read=${calls.length}`
+              : sourceVideoUrl,
+        };
+      else if (req.url === '/v2/assets/upload')
+        value = { uploadUrl: `http://${req.headers.host}/storage`, url: sourceVideoUrl };
+      else if (req.url === '/v2/assets' || req.url === `/v2/assets/${uploadedAssetId}`)
+        value = {
+          id: uploadedAssetId,
+          type: 'VIDEO',
+          url: sourceVideoUrl,
+          name: 'Interview.mp4',
+          durationSeconds: 2,
+        };
+      else if (req.url?.startsWith('/v2/transcriptions')) {
+        if (req.method === 'POST' && body.sourceVideoUrl !== sourceVideoUrl) {
+          res.statusCode = 422;
+          res.end(
+            JSON.stringify({
+              message:
+                'Transcription sources must be hosted in sync. labs storage. Upload the file via POST /v2/assets/upload first, then transcribe the returned url.',
+            }),
+          );
+          return;
+        }
+        value = {
+          id: transcriptionId,
+          status: 'COMPLETED',
+          sourceVideoUrl: options.mismatched ? 'https://cdn.sync.so/other.mp4' : sourceVideoUrl,
+          transcript,
+        };
+      } else if (req.url?.startsWith('/v2/dialogue-edits')) {
+        if (req.method === 'POST' && options.lostPreview) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ message: 'Unknown outcome' }));
+          return;
+        }
+        value = {
+          id: dialogueEditId,
+          status: options.previewStatus ?? 'COMPLETED',
+          sourceVideoUrl,
+          sourceTranscript: transcript,
+          edits,
+          voiceId: 'original-speaker',
+          ...(options.partialDetail ? { partialDetail: options.partialDetail } : {}),
+        };
+      } else if (req.url === '/v2/analyze/cost') value = estimate;
+      else if (req.url === '/v2/generate') value = { id: dialogueEditId, status: 'PENDING' };
+      else {
+        res.statusCode = 404;
+        value = {};
+      }
+      res.end(JSON.stringify(value));
+    }),
+  );
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
@@ -233,77 +241,105 @@ async function fixture(
     );
   return { calls, client, call, port: (upstream.address() as AddressInfo).port };
 }
-it.each([
-  undefined,
-  'COMPLETED',
-  'COMPLETED_PARTIAL',
-] as const)('transcribes, preserves preview quality (%s), estimates and submits the canonical preview through MCP', async (previewStatus) => {
-  const partialDetail = previewStatus
-    ? { slotsTotal: 1, slotsOk: 0, failedSlots: [{ index: 0, errorCode: 'QC_SEAM_STEP' }] }
-    : undefined;
-  const { calls, client, call } = await fixture({ previewStatus, partialDetail });
-  const tools = (await client.listTools()).tools;
-  expect(
-    tools.find((tool) => tool.name === 'create-dialogue-preview')?._meta?.[
-      'openai/widgetAccessible'
-    ],
-  ).toBe(true);
-  for (const tool of tools.filter((candidate) => candidate.name.includes('dialogue')))
-    expect(tool.title, tool.name).toBeTruthy();
-  expect((await call('create-dialogue-transcription', source)).isError).not.toBe(true);
-  expect(calls.find((c) => c.path === '/v2/transcriptions')?.body).toEqual({
-    sourceVideoUrl,
-    projectId,
-    maxSourceSeconds: 600,
-  });
-  const preview = await call('create-dialogue-preview', { ...source, transcriptionId, edits });
-  expect(preview.isError).not.toBe(true);
-  const recovered = await call('get-dialogue-preview', { ...source, id: dialogueEditId });
-  expect(recovered.isError).not.toBe(true);
-  for (const result of [preview, recovered]) {
-    if (partialDetail)
-      expect(result.structuredContent).toMatchObject({ status: previewStatus, partialDetail });
-    else expect(result.structuredContent).not.toHaveProperty('partialDetail');
-  }
-  expect(calls.find((c) => c.path === '/v2/dialogue-edits')?.body).toEqual({
-    sourceVideoUrl,
-    projectId,
-    transcript,
-    edits,
-    transcriptionJobId: transcriptionId,
-  });
-  const input = {
-    ...source,
-    dialogueEditId,
-    model: 'sync-3',
-    options: { active_speaker_detection: true },
-  };
-  expect((await call('estimate-dialogue-video', input)).structuredContent).toEqual(estimate);
-  expect(
-    (await call('create-dialogue-video', { ...input, idempotencyKey: 'dialogue-request' })).isError,
-  ).not.toBe(true);
-  const generation = calls.find((c) => c.path === '/v2/generate')!;
-  expect(generation.body).toEqual({
-    projectId,
-    model: 'sync-3',
-    input: [{ type: 'video', assetId: videoAssetId }],
-    dialogueEdit: { id: dialogueEditId },
-    options: { active_speaker_detection: { auto_detect: true } },
-  });
-  expect(calls.find((c) => c.path === '/v2/analyze/cost')?.body).toEqual(generation.body);
-  expect(generation.key).toBe('dialogue-request');
-  expect(calls.every((c) => c.token === 'Bearer dialogue-reader')).toBe(true);
-});
-it.each([
-  { denied: true },
-  { mismatched: true },
-])('blocks preview creation for inaccessible or different source: %j', async (options) => {
-  const { call, calls } = await fixture(options);
-  expect(
-    (await call('create-dialogue-preview', { ...source, transcriptionId, edits })).isError,
-  ).toBe(true);
-  expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
-});
+it.each([false, true])(
+  'advertises account-scoped dialogue writes with keyedPreview=%s',
+  async (keyedPreview) => {
+    const { client } = await fixture({ keyedPreview });
+    const tools = (await client.listTools()).tools;
+    for (const name of ['create-dialogue-preview', 'create-dialogue-video']) {
+      const tool = tools.find((candidate) => candidate.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool?.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      });
+      expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
+      expect(tool?._meta?.ui).toMatchObject({ visibility: ['model', 'app'] });
+      expect(tool?.inputSchema.required).toEqual(
+        expect.arrayContaining(['projectId', 'videoAssetId']),
+      );
+      expect(tool?.inputSchema.properties).not.toHaveProperty('sourceVideoUrl');
+      expect(tool?.inputSchema.properties).not.toHaveProperty('voiceId');
+    }
+    // Copying a saved external source can still fetch an open-world URL.
+    expect(
+      tools.find((tool) => tool.name === 'upload-dialogue-source')?.annotations?.openWorldHint,
+    ).toBe(true);
+  },
+);
+it.each([undefined, 'COMPLETED', 'COMPLETED_PARTIAL'] as const)(
+  'transcribes, preserves preview quality (%s), estimates and submits the canonical preview through MCP',
+  async (previewStatus) => {
+    const partialDetail = previewStatus
+      ? { slotsTotal: 1, slotsOk: 0, failedSlots: [{ index: 0, errorCode: 'QC_SEAM_STEP' }] }
+      : undefined;
+    const { calls, client, call } = await fixture({ previewStatus, partialDetail });
+    const tools = (await client.listTools()).tools;
+    expect(
+      tools.find((tool) => tool.name === 'create-dialogue-preview')?._meta?.[
+        'openai/widgetAccessible'
+      ],
+    ).toBe(true);
+    for (const tool of tools.filter((candidate) => candidate.name.includes('dialogue')))
+      expect(tool.title, tool.name).toBeTruthy();
+    expect((await call('create-dialogue-transcription', source)).isError).not.toBe(true);
+    expect(calls.find((c) => c.path === '/v2/transcriptions')?.body).toEqual({
+      sourceVideoUrl,
+      projectId,
+      maxSourceSeconds: 600,
+    });
+    const preview = await call('create-dialogue-preview', { ...source, transcriptionId, edits });
+    expect(preview.isError).not.toBe(true);
+    const recovered = await call('get-dialogue-preview', { ...source, id: dialogueEditId });
+    expect(recovered.isError).not.toBe(true);
+    for (const result of [preview, recovered]) {
+      if (partialDetail)
+        expect(result.structuredContent).toMatchObject({ status: previewStatus, partialDetail });
+      else expect(result.structuredContent).not.toHaveProperty('partialDetail');
+    }
+    expect(calls.find((c) => c.path === '/v2/dialogue-edits')?.body).toEqual({
+      sourceVideoUrl,
+      projectId,
+      transcript,
+      edits,
+      transcriptionJobId: transcriptionId,
+    });
+    const input = {
+      ...source,
+      dialogueEditId,
+      model: 'sync-3',
+      options: { active_speaker_detection: true },
+    };
+    expect((await call('estimate-dialogue-video', input)).structuredContent).toEqual(estimate);
+    expect(
+      (await call('create-dialogue-video', { ...input, idempotencyKey: 'dialogue-request' }))
+        .isError,
+    ).not.toBe(true);
+    const generation = calls.find((c) => c.path === '/v2/generate')!;
+    expect(generation.body).toEqual({
+      projectId,
+      model: 'sync-3',
+      input: [{ type: 'video', assetId: videoAssetId }],
+      dialogueEdit: { id: dialogueEditId },
+      options: { active_speaker_detection: { auto_detect: true } },
+    });
+    expect(calls.find((c) => c.path === '/v2/analyze/cost')?.body).toEqual(generation.body);
+    expect(generation.key).toBe('dialogue-request');
+    expect(calls.every((c) => c.token === 'Bearer dialogue-reader')).toBe(true);
+  },
+);
+it.each([{ denied: true }, { mismatched: true }])(
+  'blocks preview creation for inaccessible or different source: %j',
+  async (options) => {
+    const { call, calls } = await fixture(options);
+    expect(
+      (await call('create-dialogue-preview', { ...source, transcriptionId, edits })).isError,
+    ).toBe(true);
+    expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
+  },
+);
 it('does not retry an ambiguous paid preview and reuses the original voice without false rerun lineage', async () => {
   const { call, calls } = await fixture({ lostPreview: true });
   expect(
@@ -330,7 +366,7 @@ it('rejects ambiguous transcript identity before any preview synthesis', async (
     edits,
   });
   expect(response.isError).toBe(true);
-  expect(calls.some((call) => call.path === '/v2/dialogue-edits')).toBe(false);
+  expect(calls.some((request) => request.path === '/v2/dialogue-edits')).toBe(false);
 });
 
 it('forwards one frozen keyed preview through explicit recovery even when asset playback signatures rotate', async () => {

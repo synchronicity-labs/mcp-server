@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { expect, it } from 'vitest';
 import { z } from 'zod';

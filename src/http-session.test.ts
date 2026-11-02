@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
@@ -28,12 +28,12 @@ it('releases every SDK graph and isolates request-zero cancellation between tabs
     };
     server.registerTool(
       'hold',
-      { inputSchema: { slot: z.number() } },
+      { inputSchema: z.object({ slot: z.number() }) },
       async ({ slot }, context) => {
         started.add(slot);
         await new Promise<void>((resolve) => {
           finish.set(slot, resolve);
-          context.signal.addEventListener(
+          context.mcpReq.signal.addEventListener(
             'abort',
             () => {
               cancelled.add(slot);
@@ -173,7 +173,9 @@ it('releases every SDK graph and isolates request-zero cancellation between tabs
       else await tabs[1]!.close();
       await expect.poll(() => settled, { timeout: 1000 }).toBe(true);
       await request;
-      expect(cancelled.has(slot)).toBe(true);
+      await expect
+        .poll(() => cancelled.has(slot), { message: `slot ${slot} (${action})`, timeout: 1000 })
+        .toBe(true);
     }
   } finally {
     for (const stop of stops) stop.abort();

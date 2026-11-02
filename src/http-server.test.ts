@@ -184,8 +184,7 @@ describe('MCP session sweeping', () => {
 
     await expect(runSessionSweepSafely({ sweep }, logEvent)).resolves.toBeUndefined();
 
-    expect(logEvent).toHaveBeenCalledOnce();
-    expect(logEvent).toHaveBeenCalledWith('mcp_session_sweep_error', {
+    expect(logEvent).toHaveBeenCalledExactlyOnceWith('mcp_session_sweep_error', {
       error: expect.objectContaining({
         name: 'Error',
         message: 'sweep failed',

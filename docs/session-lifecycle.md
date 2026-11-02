@@ -67,6 +67,11 @@ session, and distinguish DELETE from idle expiry. Treat app-only heartbeat/draft
 tools as widget traffic; shared tools alone do not reliably identify the caller.
 Do not claim this production evidence until the instrumented revision is deployed.
 
+`node scripts/summarize-session-lifecycle.mjs < logs.jsonl` reads structured logs
+on stdin and prints one JSON line per client, presentation profile and protocol:
+closed sessions, sessions with zero or one tool call, total requests, tool calls
+and lifetime, and closure reasons. It never prints `sessionRef` values.
+
 ## Validation
 
 `http-session.test.ts` verifies graph closure after every response, repeated
@@ -76,8 +81,8 @@ expiry recovery and cancellation. `client-profile.test.ts` uses the request-scop
 HTTP path for concurrent ChatGPT/Codex/generic discovery, file bridge uploads,
 resource reads and cancellation before generation submission.
 
-`npm run test:memory:http` runs accelerated fresh-session churn with packaged UI
-reads. `npm run test:memory:http -- --soak-minutes=20` uses real elapsed time,
+`pnpm run test:memory:http` runs accelerated fresh-session churn with packaged UI
+reads. `pnpm run test:memory:http --soak-minutes=20` uses real elapsed time,
 fresh abandoned contexts plus eight reused contexts, harmless app-opening calls,
 periodic packaged HTML reads, actual expiry and stable heap/count assertions.
 These local tests use fixture identities and do not establish real ChatGPT

@@ -1,11 +1,6 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import {
-  type CallToolResult,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  type Resource,
-  type Tool,
-} from '@modelcontextprotocol/sdk/types.js';
+import { createRequire } from 'node:module';
+import type { CallToolResult, Resource, Tool } from '@modelcontextprotocol/server';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { relayUploadTool } from './app-upload-relay.js';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from './asset-thumbnail.js';
@@ -21,6 +16,12 @@ import {
   UNSUPPORTED_UPLOAD_MESSAGE,
 } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
+import { GENERATION_STATUS_HTML } from './generation-status-html.js';
+import {
+  GENERATION_STATUS_METADATA,
+  GENERATION_STATUS_URI,
+  withGenerationStatusCard,
+} from './generation-status.js';
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
@@ -40,36 +41,89 @@ import { withProjectIntent } from './tools/project-intent.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
-import { createTranslationTools, translationOperation } from './tools/translation.js';
 import {
   createTranslationPreviewTools,
   translationPreviewOperations,
 } from './tools/translation-preview.js';
+import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
+
+// Report the published package version, not a hand-maintained copy.
+const { version: PACKAGE_VERSION } = createRequire(import.meta.url)('../package.json') as {
+  version: string;
+};
 
 const SERVER_DESCRIPTION =
   'Sync makes photos talk, lip-syncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
-export const SERVER_INSTRUCTIONS =
-  'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. ' +
-  'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ' +
-  ASSET_THUMBNAIL_INSTRUCTIONS +
-  'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new create-lipsync or create-translate-and-dub calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ' +
-  'For what a past generation actually cost, use get-generation-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lip sync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generate_estimate-cost or start a paid generation to answer a past-cost question. ' +
-  'In ChatGPT, default new lipsync and image-to-video requests to sync-3, the latest lipsync model, unless the user explicitly chooses another model. Preserve the selected model on an existing draft or an idempotent retry. ' +
-  'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ' +
-  'When trim-audio is available, offer prefix audio preparation for an over-limit lip-sync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lip-sync uses cut_off and preserves the original media. ' +
-  'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ' +
-  'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ' +
-  'For a request such as “Translate this YouTube link to Spanish”, first call assets_create with the social URL, type=VIDEO and the selected projectId. YouTube, TikTok, Instagram and Facebook video links are imported into saved assets. A 409 import_in_progress means the import is running: wait retryAfterMs (15 seconds if absent), then repeat the identical assets_create request until it returns an asset. Keep the URL and project unchanged; do not submit a generation while importing or treat importJobId as an asset ID. On import_failed, import_not_enabled, import_unavailable or an import limit error, explain the returned reason and stop; offer a file upload instead of repeatedly starting imports. Once ready, estimate and confirm the paid translation before calling create-translate-and-dub when available with the returned asset id as videoAssetId. ' +
-  'When create-translate-and-dub is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generate_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ' +
-  'When standalone translation-preview tools are available, the app can translate saved audio before final lip-sync. Confirm the source audio, language and quote before create-translation-preview. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, estimate and confirm a separate create-lipsync-from-assets using that audio; do not send it through create-translate-and-dub again. ' +
-  'When create-speech-preview is available, the app can synthesize a standalone audio preview for its video input. Confirm script, voice and estimated cost. Persist and reuse its idempotencyKey after uncertain admission, poll the same returned job, and never synthesize again because asset attachment failed. ' +
-  'When Studio publishes a draftId, use get-studio-draft and update-studio-draft to change its selections/settings. Chat prose does not select media in Studio. Use the current expectedRevision and confirm UI application only after appliedRevision equals revision. These tools do not start paid work. ' +
-  'When Studio publishes a viewId, read get-studio-view, then use open-studio-project to open a project, refresh-studio-project after a rename, refresh-studio-assets after uploads, show-studio-generation to display an accepted job/result, or continue-studio-generation for an explicitly requested continuation. Only an applied receipt confirms UI display. Never repeat backend or paid work to refresh the UI. ' +
-  'Before quoting script-driven lipsync, call generate_estimate-cost with the actual replacement script when its schema supports script; use measured audioDuration if the replacement audio already exists. Explain the returned durationEstimate and label script-based pricing approximate until synthesis determines the actual length. Never substitute the full source video duration for replacement speech. Disclose speech synthesis separately. If those inputs are unavailable, estimate spoken duration from the script and label it approximate; do not present a source-video quote as the replacement-script price. Re-estimate after script, audio, model or sync-mode changes. ' +
-  'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and a NEW project. projectName names a new project and never reuses an existing one. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.';
+// Paragraphs marked appOnly apply only inside the ChatGPT app and its Studio bridge.
+const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
+  {
+    text: 'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. ',
+  },
+  {
+    text: 'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ',
+  },
+  { text: ASSET_THUMBNAIL_INSTRUCTIONS },
+  {
+    text: 'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new create-lipsync or create-translate-and-dub calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ',
+  },
+  {
+    text: 'For what a past generation actually cost, use get-generation-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lip sync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generate_estimate-cost or start a paid generation to answer a past-cost question. ',
+  },
+  {
+    text: 'In ChatGPT, default new lipsync and image-to-video requests to sync-3, the latest lipsync model, unless the user explicitly chooses another model. Preserve the selected model on an existing draft or an idempotent retry. ',
+    appOnly: true,
+  },
+  {
+    text: 'When voices_clone-voice is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for create-lipsync with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ',
+  },
+  {
+    text: 'When trim-audio is available, offer prefix audio preparation for an over-limit lip-sync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lip-sync uses cut_off and preserves the original media. ',
+  },
+  {
+    text: 'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ',
+  },
+  {
+    text: 'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by create-dialogue-video. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ',
+  },
+  {
+    text: 'For a request such as “Translate this YouTube link to Spanish”, first call assets_create with the social URL, type=VIDEO and the selected projectId. YouTube, TikTok, Instagram and Facebook video links are imported into saved assets. A 409 import_in_progress means the import is running: wait retryAfterMs (15 seconds if absent), then repeat the identical assets_create request until it returns an asset. Keep the URL and project unchanged; do not submit a generation while importing or treat importJobId as an asset ID. On import_failed, import_not_enabled, import_unavailable or an import limit error, explain the returned reason and stop; offer a file upload instead of repeatedly starting imports. Once ready, estimate and confirm the paid translation before calling create-translate-and-dub when available with the returned asset id as videoAssetId. ',
+  },
+  {
+    text: 'When create-translate-and-dub is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generate_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ',
+  },
+  {
+    text: 'When standalone translation-preview tools are available, the app can translate saved audio before final lip-sync. Confirm the source audio, language and quote before create-translation-preview. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, estimate and confirm a separate create-lipsync-from-assets using that audio; do not send it through create-translate-and-dub again. ',
+  },
+  {
+    text: 'When create-speech-preview is available, the app can synthesize a standalone audio preview for its video input. Confirm script, voice and estimated cost. Persist and reuse its idempotencyKey after uncertain admission, poll the same returned job, and never synthesize again because asset attachment failed. ',
+  },
+  {
+    text: 'When Studio publishes a draftId, use get-studio-draft and update-studio-draft to change its selections/settings. Chat prose does not select media in Studio. Use the current expectedRevision and confirm UI application only after appliedRevision equals revision. These tools do not start paid work. ',
+    appOnly: true,
+  },
+  {
+    text: 'When Studio publishes a viewId, read get-studio-view, then use open-studio-project to open a project, refresh-studio-project after a rename, refresh-studio-assets after uploads, show-studio-generation to display an accepted job/result, or continue-studio-generation for an explicitly requested continuation. Only an applied receipt confirms UI display. Never repeat backend or paid work to refresh the UI. ',
+    appOnly: true,
+  },
+  {
+    text: 'Before quoting script-driven lipsync, call generate_estimate-cost with the actual replacement script when its schema supports script; use measured audioDuration if the replacement audio already exists. Explain the returned durationEstimate and label script-based pricing approximate until synthesis determines the actual length. Never substitute the full source video duration for replacement speech. Disclose speech synthesis separately. If those inputs are unavailable, estimate spoken duration from the script and label it approximate; do not present a source-video quote as the replacement-script price. Re-estimate after script, audio, model or sync-mode changes. ',
+  },
+  {
+    text: 'create-lipsync accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_get-voices and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and a NEW project. projectName names a new project and never reuses an existing one. Prefer a projectId returned by projects_get-all when selecting an existing project. When available, use projects_get-generations for history within that project; generate_get-generations is the organization feed. Create once, then poll generate_get-generation by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputUrl verbatim, preserving signed query parameters.',
+  },
+];
+
+export const SERVER_INSTRUCTIONS = INSTRUCTION_PARTS.map((part) => part.text).join('');
+const MODEL_ONLY_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.appOnly)
+  .map((part) => part.text)
+  .join('');
+
+export function serverInstructions(profile: ClientProfile): string {
+  return profile.supportsAppUi ? SERVER_INSTRUCTIONS : MODEL_ONLY_INSTRUCTIONS;
+}
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
@@ -283,7 +337,9 @@ export function registerTools(
         annotations: tool.annotations,
         _meta: createToolDescriptorMeta(tool.meta),
       },
-      async (args, context): Promise<CallToolResult> => {
+      async (args, ctx): Promise<CallToolResult> => {
+        // Tools take the request's signal and _meta, not the SDK handler context.
+        const context = { signal: ctx.mcpReq.signal, _meta: ctx.mcpReq._meta };
         try {
           if (tool.resultFormat === 'mcp') {
             return await tool.handler((args ?? {}) as Record<string, unknown>, context);
@@ -405,8 +461,30 @@ function isStructuredContent(result: unknown): result is Record<string, unknown>
   return result !== null && typeof result === 'object' && !Array.isArray(result);
 }
 
+// Studio bridge tools need a viewId or draftId that only the ChatGPT widget publishes.
+const STUDIO_BRIDGE_TOOLS = new Set([
+  'get-studio-view',
+  'open-studio-project',
+  'refresh-studio-project',
+  'refresh-studio-assets',
+  'show-studio-generation',
+  'continue-studio-generation',
+  'get-studio-draft',
+  'update-studio-draft',
+]);
+
+/** Tools that only work inside the ChatGPT app UI, including widget-only (non-model) tools. */
+function isAppOnlyTool(tool: McpToolDefinition): boolean {
+  const visibility = asRecord(tool.meta?.ui).visibility;
+  return (
+    APP_UI_TOOLS.has(tool.name) ||
+    STUDIO_BRIDGE_TOOLS.has(tool.name) ||
+    (Array.isArray(visibility) && !visibility.includes('model'))
+  );
+}
+
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
-  if (APP_UI_TOOLS.has(tool.name)) return profile.supportsAppUi;
+  if (isAppOnlyTool(tool)) return profile.supportsAppUi;
   if (tool.name === 'create-lipsync-from-assets') return profile.supportsAppUi;
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
   return true;
@@ -459,9 +537,7 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
       inputSchema[key] = z
         .string()
         .optional()
-        .describe(
-          'Existing Sync asset ID in the same organization. Upload in authenticated Sync and use Copy ID.',
-        );
+        .describe('Existing Sync asset ID in the same organization.');
     }
     inputSchema.videoUrl = z
       .string()
@@ -549,10 +625,10 @@ function createTools(
         : tool,
     ),
   ];
-  const guardedTools = allTools.map(withProjectIntent);
+  const tools = allTools.map(withProjectIntent).map(withGenerationStatusCard);
   return config.transport === 'http'
-    ? guardedTools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-    : guardedTools;
+    ? tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
+    : tools;
 }
 
 function createProfiledServer(
@@ -566,6 +642,9 @@ function createProfiledServer(
     descriptors: Map<ClientProfile['name'], Tool[]>;
   },
   httpClientName?: string,
+  // An initialize request resolves the profile through the handshake, but its
+  // response carries the instructions, so they follow the announced client.
+  handshakeClientName?: string,
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined = httpClientName;
@@ -578,8 +657,10 @@ function createProfiledServer(
   const tools =
     sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
   const server = new McpServer(
-    { name: 'sync', version: '0.1.0', description: SERVER_DESCRIPTION },
-    { instructions: SERVER_INSTRUCTIONS },
+    { name: 'sync', version: PACKAGE_VERSION, description: SERVER_DESCRIPTION },
+    {
+      instructions: serverInstructions(resolveClientProfile(httpClientName ?? handshakeClientName)),
+    },
   );
   // Keep the SDK's input/output validation and execution. Hidden upload tools remain
   // callable only to return an actionable error; they cannot perform any upload.
@@ -592,7 +673,7 @@ function createProfiledServer(
           handler: async (...parameters: Parameters<typeof tool.handler>) => {
             const [args] = parameters;
             if (!profile) throw new Error('Complete MCP initialization before calling tools.');
-            if (APP_UI_TOOLS.has(tool.name) && !profile.supportsAppUi)
+            if (isAppOnlyTool(tool) && !profile.supportsAppUi)
               throw new Error(
                 'Open the Sync app in ChatGPT, or use the Sync tools in this client.',
               );
@@ -622,12 +703,36 @@ function createProfiledServer(
     config.transport === 'http' ? resourceMetadataUrl(config.port) : undefined,
   );
   const resources: Resource[] = [];
+  resources.push({
+    name: 'sync-generation-status',
+    uri: GENERATION_STATUS_URI,
+    ...GENERATION_STATUS_METADATA,
+  });
+  server.registerResource(
+    'sync-generation-status',
+    GENERATION_STATUS_URI,
+    GENERATION_STATUS_METADATA,
+    async () => {
+      if (!getProfile().supportsAppUi)
+        throw new Error('This interface requires an app-compatible client.');
+      return {
+        contents: [
+          {
+            uri: GENERATION_STATUS_URI,
+            mimeType: GENERATION_STATUS_METADATA.mimeType,
+            text: GENERATION_STATUS_HTML,
+            _meta: GENERATION_STATUS_METADATA._meta,
+          },
+        ],
+      };
+    },
+  );
   registerUploadWidgetResource({
     registerResource: (name, uri, metadata, read) => {
       resources.push({ name, uri, ...metadata });
-      return server.registerResource(name, uri, metadata, async (url, extra) => {
+      return server.registerResource(name, uri, metadata, async (url, ctx) => {
         if (!getProfile().supportsUploads) throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
-        return read(url, extra);
+        return read(url, ctx);
       });
     },
   });
@@ -657,13 +762,15 @@ function createProfiledServer(
     );
   }
   let descriptors: Tool[] = [];
-  server.server.setRequestHandler(ListToolsRequestSchema, () => {
+  server.server.setRequestHandler('tools/list', () => {
     if (!profile) throw new Error('Complete MCP initialization before listing tools.');
     return { tools: descriptors };
   });
-  server.server.setRequestHandler(ListResourcesRequestSchema, () => ({
+  server.server.setRequestHandler('resources/list', () => ({
     resources: resources.filter((resource) =>
-      resource.name === 'sync-app' ? getProfile().supportsAppUi : getProfile().supportsUploads,
+      resource.name === 'sync-app' || resource.name === 'sync-generation-status'
+        ? getProfile().supportsAppUi
+        : getProfile().supportsUploads,
     ),
   }));
   const onInitialized = server.server.oninitialized;
@@ -688,7 +795,12 @@ function createProfiledServer(
         name: tool.name,
         title: tool.title?.toLowerCase(),
         description: tool.description,
-        inputSchema: z.toJSONSchema(toolInputSchema(tool.inputSchema)) as Tool['inputSchema'],
+        // Only the ChatGPT app UI sends syncAnalytics; other clients never see the field.
+        inputSchema: z.toJSONSchema(
+          initializedProfile.supportsAppUi
+            ? toolInputSchema(tool.inputSchema)
+            : toolSchema(tool.inputSchema),
+        ) as Tool['inputSchema'],
         ...(tool.outputSchema
           ? {
               outputSchema: {
@@ -719,9 +831,10 @@ export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpSer
   return createProfiledServer(config, operations, authHeaders, chatgptApp, previousApps);
 }
 
-export async function createMcpServerFactory(
-  config: SyncMcpConfig,
-): Promise<{ createServer: (clientName?: string) => McpServer; toolCount: number }> {
+export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
+  createServer: (clientName?: string, handshakeClientName?: string) => McpServer;
+  toolCount: number;
+}> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
   // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
@@ -754,7 +867,7 @@ export async function createMcpServerFactory(
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: new Set(tools.map((tool) => tool.name)).size,
-    createServer: (clientName) =>
+    createServer: (clientName, handshakeClientName) =>
       createProfiledServer(
         config,
         operations,
@@ -763,6 +876,7 @@ export async function createMcpServerFactory(
         previousApps,
         sharedCatalog,
         clientName,
+        handshakeClientName,
       ),
   };
 }

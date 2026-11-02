@@ -1,29 +1,35 @@
 {
   "name": "@sync.so/mcp-server",
   "version": "0.1.4",
-  "description": "MCP server for the Sync API \u2014 give AI agents the ability to create lipsync videos, manage assets, and more",
+  "description": "MCP server for the Sync API — give AI agents the ability to create lipsync videos, manage assets, and more",
   "keywords": [
-    "mcp",
-    "sync",
-    "lipsync",
     "ai",
-    "video",
-    "model-context-protocol"
+    "lipsync",
+    "mcp",
+    "model-context-protocol",
+    "sync",
+    "video"
   ],
+  "homepage": "https://sync.so/docs",
+  "bugs": {
+    "url": "https://github.com/synchronicity-labs/mcp-server/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/synchronicity-labs/mcp-server.git"
   },
-  "homepage": "https://sync.so/docs",
-  "bugs": {
-    "url": "https://github.com/synchronicity-labs/mcp-server/issues"
-  },
-  "type": "module",
   "bin": {
     "mcp-server": "./dist/cli.js",
     "sync-mcp": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "deploy/generation-status",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -33,60 +39,71 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": [
-    "dist",
-    "scripts/patch-mcp-sdk.mjs",
-    "README.md",
-    "LICENSE"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
-    "postinstall": "node scripts/patch-mcp-sdk.mjs",
-    "patch:mcp-sdk": "node scripts/patch-mcp-sdk.mjs",
-    "build": "tsc -b && chmod +x dist/cli.js",
+    "build": "tsc -b tsconfig.build.json && chmod +x dist/cli.js",
     "package:chatgpt": "node scripts/package-chatgpt.mjs",
     "verify:chatgpt-package": "node scripts/verify-chatgpt-package.mjs",
     "clean": "rm -rf dist .cache",
-    "dev": "tsc -b --watch",
-    "lint": "biome check ./src ./scripts",
-    "lint:fix": "biome check --fix ./src ./scripts",
-    "format": "biome format --write ./src ./scripts",
+    "dev": "tsc -b tsconfig.build.json --watch",
+    "lint": "oxlint src scripts && oxfmt --check",
+    "knip": "knip && knip --cycles",
+    "lint:fix": "oxlint --fix src scripts && oxfmt",
+    "format": "oxfmt",
     "test": "vitest run",
     "test:memory": "node --expose-gc --max-old-space-size=512 scripts/verify-session-memory.mjs",
     "test:memory:http": "node --expose-gc --max-old-space-size=512 scripts/verify-http-memory.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "pnpm run clean && pnpm run build",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "monitor:mcp": "node scripts/check-mcp.mjs",
-    "test:monitor": "node --test scripts/check-mcp.test.mjs"
+    "prepare": "husky",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "capture:wire": "node scripts/capture-wire.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "@modelcontextprotocol/server-legacy": "2.4.0",
     "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.3.1",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.2",
     "ipaddr.js": "^2.5.0",
     "undici": "^6.29.1",
-    "zod": "^4.6.6"
-  },
-  "overrides": {
-    "hono": "^4.12.24",
-    "@hono/node-server": "^2.1.3",
-    "fast-uri": "^3.1.9",
-    "path-to-regexp": "^8.4.2",
-    "qs": "^6.15.2",
-    "ip-address": "^10.7.4"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.7",
-    "@playwright/test": "1.58.2",
+    "@playwright/test": "1.64.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^22.5.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.12"
-  }
+    "@types/node": "^22.20.5",
+    "husky": "^9.1.7",
+    "knip": "6.44.0",
+    "lint-staged": "^17.6.0",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
+    "oxlint-tsgolint": "7.0.2005",
+    "typescript": "^7.0.2",
+    "vitest": "5.0.5"
+  },
+  "lint-staged": {
+    "package.json": "oxfmt --check --no-error-on-unmatched-pattern",
+    "*.{js,ts,mjs,cjs,mts,cts}": [
+      "oxlint --no-error-on-unmatched-pattern",
+      "oxfmt --check --no-error-on-unmatched-pattern"
+    ]
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.22.1",
+      "onFail": "error"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@12.14.0"
 }

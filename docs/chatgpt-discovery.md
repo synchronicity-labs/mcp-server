@@ -46,6 +46,41 @@ authorized. Optional package 2.0.1 is an unsubmitted draft, not the published
 version. Support has been asked for actionable held-tool review requirements
 and confirmation of in-chat discovery eligibility/indexing.
 
+### Dialogue tool review follow-up
+
+The October 28 report names `create-dialogue-preview` and `create-dialogue-video`
+with “This new tool definition needs further review before it can be published.”
+This generic finding does not identify a failed runtime call or its review cause.
+
+Both descriptors now set `openWorldHint: false`: they accept saved source and job
+IDs accessible to the connected Sync account, with no arbitrary source URL,
+destination or voice input. External hosting and provider processing alone do
+not make that a tool with open-ended entities. Both remain non-read-only and
+destructive because they queue synthesis/generation work that can incur charges;
+neither promises unconditional idempotency. The preview descriptor discloses
+source-voice cloning, synthesis charges, required approval, asynchronous polling,
+partial failures and conditional keyed recovery. `upload-dialogue-source` keeps
+`openWorldHint: true` because it can fetch a saved external source URL.
+
+After the reviewed change is merged and deployed:
+
+1. Scan Tools on the existing production publisher connection. Inspect both
+   exact tool names and verify the updated descriptions, schemas and annotations.
+2. Submit the held definitions for review. If the same generic finding persists,
+   use the publisher support/appeal flow with the app ID above, the deployed SHA,
+   scan timestamp and exact findings; request an actionable reason. Do not rename
+   tools, weaken write/destructive hints or add an executor to bypass the hold.
+3. After approval, publish the approved update and refresh the installed
+   connection. Verify both names in the published catalog and a fresh chat.
+4. With an authorized demo account and source, exercise transcription, an
+   explicitly approved preview, preview polling, final cost estimate, an
+   explicitly approved final generation and result polling. Verify access denial
+   and retry recovery separately. Record actual published availability and
+   provider-backed results; fixture tests are not evidence of either.
+
+Reference: [OpenAI MCP server review requirements](https://developers.openai.com/plugins/deploy/app-review)
+and [tool annotation guidelines](https://developers.openai.com/plugins/plugin-guidelines#correct-annotation).
+
 ### October 12 baseline results
 
 Completed 135 trials: all 15 prompts repeated three times in each of the three

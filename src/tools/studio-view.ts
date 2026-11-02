@@ -70,10 +70,10 @@ export function createStudioViewTools(
       ...actions[type],
       description: actions[type].description + instructions,
       schema,
-      bodySchema: schema.transform(({ id, expectedRevision, ...fields }) => ({
+      bodySchema: schema.transform(({ id, expectedRevision, ...commandFields }) => ({
         id,
         expectedRevision,
-        command: command.parse({ ...fields, type }),
+        command: command.parse({ ...commandFields, type }),
       })),
       suffix: '/actions',
       method: 'post' as const,

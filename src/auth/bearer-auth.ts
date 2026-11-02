@@ -1,8 +1,6 @@
-import {
-  type BearerAuthMiddlewareOptions,
-  requireBearerAuth as sdkRequireBearerAuth,
-} from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { AuthInfo } from '@modelcontextprotocol/server';
+import type { BearerAuthMiddlewareOptions } from '@modelcontextprotocol/server-legacy/auth';
+import { requireBearerAuth as sdkRequireBearerAuth } from '@modelcontextprotocol/server-legacy/auth';
 import type { RequestHandler } from 'express';
 import { VerificationUnavailableError } from './token-verification.js';
 
@@ -10,7 +8,11 @@ type Options = Omit<BearerAuthMiddlewareOptions, 'verifier'> & {
   verifier: { verifyAccessToken(token: string, signal?: AbortSignal): Promise<AuthInfo> };
 };
 
-/** Preserve SDK authentication checks; only translate dependency failures locally. */
+/**
+ * Preserve SDK authentication checks; only translate dependency failures locally.
+ * Uses the frozen v1 middleware from server-legacy: the token verifier throws its
+ * error classes, and the challenge and status mapping in docs/ depend on it.
+ */
 export function requireBearerAuth(options: Options): RequestHandler {
   return async (req, res, next) => {
     const [scheme, token] = (req.headers.authorization ?? '').split(' ');

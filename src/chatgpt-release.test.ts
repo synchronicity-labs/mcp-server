@@ -111,7 +111,7 @@ describe('packaged UI selection', () => {
     { current: '../outside', previous: [] },
     { current, previous: [current] },
     { current, previous: [previous, previous] },
-    { current, previous: Array(10).fill(previous) },
+    { current, previous: Array.from({ length: 10 }, () => previous) },
   ])('rejects unsafe or ambiguous release manifests: %j', (value) => {
     expect(chatgptReleaseSchema.safeParse(value).success).toBe(false);
   });

@@ -168,6 +168,48 @@ describe('generateTools', () => {
     });
   });
 
+  it('serializes array, boolean and object parameters without [object Object]', async () => {
+    const [tool] = generateTools(
+      [
+        {
+          operationId: 'AssetsController_getAll',
+          method: 'get',
+          path: '/v2/assets/{id}',
+          summary: 'Get asset',
+          tags: ['Assets'],
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'types', in: 'query', required: false, schema: { type: 'array' } },
+            { name: 'public', in: 'query', required: false, schema: { type: 'boolean' } },
+            { name: 'filter', in: 'query', required: false, schema: { type: 'object' } },
+          ],
+          isMultipart: false,
+        },
+      ],
+      mockHttpClient,
+    );
+    await tool?.handler({
+      id: 'a/b c',
+      types: ['VIDEO', 'AUDIO'],
+      public: false,
+      filter: { projectId: 'p1' },
+    });
+    expect(mockHttpClient.request).toHaveBeenCalledWith('get', '/v2/assets/a%2Fb%20c', {
+      query: { types: 'VIDEO,AUDIO', public: 'false', filter: '{"projectId":"p1"}' },
+      body: undefined,
+    });
+  });
+
+  it('JSON-encodes an object path parameter and escapes it', async () => {
+    const tools = generateTools(operations, mockHttpClient);
+    await tools[1]?.handler({ id: { key: 'x/y' } });
+    expect(mockHttpClient.request).toHaveBeenCalledWith(
+      'get',
+      `/v2/generate/${encodeURIComponent('{"key":"x/y"}')}`,
+      { query: undefined, body: undefined },
+    );
+  });
+
   it('handles allOf composed body schemas', async () => {
     const opWithAllOf: ParsedOperation[] = [
       {

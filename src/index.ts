@@ -14,12 +14,7 @@ export { resolveConfig } from './config.js';
 export type { HttpClient } from './http-client.js';
 export { createHttpClient } from './http-client.js';
 export { startHttpServer } from './http-server.js';
-export type {
-  JsonSchema,
-  OpenApiSpec,
-  ParsedOperation,
-  ParsedParameter,
-} from './openapi/index.js';
+export type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from './openapi/index.js';
 
 export { fetchSpec, loadSpecFromFile, parseSpec } from './openapi/index.js';
 export { createMcpServerFactory, createSyncMcpServer } from './server.js';

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { AuthInfo } from '@modelcontextprotocol/server';
 import { VerificationUnavailableError, verifySyncAccessToken } from './token-verification.js';
 
 export const VERIFICATION_CACHE_MS = 15_000;
