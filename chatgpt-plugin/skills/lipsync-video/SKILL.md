@@ -18,6 +18,7 @@ Ask only for what is missing. Never invent the words.
 
 | Step | Tool |
 | --- | --- |
+| Save files from the chat | `upload-media` |
 | Import a social link | `projects_create`, `assets_create` |
 | Pick a voice (script only) | `voices_get-voices` |
 | Quote | `generate_estimate-cost` |
@@ -27,11 +28,12 @@ Ask only for what is missing. Never invent the words.
 
 ## Steps
 
-1. **Social links.** Create a project first with `projects_create`, using a new random UUID as `id`, a short `name` and `defaultWorkflow: "lipsync"`. Then call `assets_create` with the link, `type: "VIDEO"`, that `projectId` and `projectIntent: "explicit"`.
+1. **Save files.** For each file in this conversation (the video, or the user's audio), call `upload-media` once with `mediaType` `video` or `audio`. Use the returned asset IDs from here on, including for every retry; a file re-sent later becomes a different asset.
+2. **Social links.** Create a project first with `projects_create`, using a new random UUID as `id`, a short `name` and `defaultWorkflow: "lipsync"`. Then call `assets_create` with the link, `type: "VIDEO"`, that `projectId` and `projectIntent: "explicit"`.
    - A 409 `import_in_progress` means the import is still running. Wait `retryAfterMs` (15 seconds if absent) and repeat the identical request until it returns an asset.
    - On `import_failed`, `import_not_enabled`, `import_unavailable` or a limit error, explain the reason, offer a file upload instead, and stop.
-2. **Voice.** For a script, call `voices_get-voices`, suggest two or three fitting voices unless one was named, and use the returned `id` as `voiceId`.
-3. **Length.** If the audio is noticeably longer or shorter than the video, ask how to handle it, and pass the answer as `options.sync_mode`:
+3. **Voice.** For a script, call `voices_get-voices`, suggest two or three fitting voices unless one was named, and use the returned `id` as `voiceId`.
+4. **Length.** If the audio is noticeably longer or shorter than the video, ask how to handle it, and pass the answer as `options.sync_mode`:
    - `cut_off`: trim the longer one to match
    - `loop`: repeat the video from the start
    - `bounce`: play the video forward, then in reverse
@@ -39,17 +41,17 @@ Ask only for what is missing. Never invent the words.
    - `remap`: speed up or slow down the video to match the audio
 
    If the audio is over a length limit, offer `trim-audio` to keep its first part, then quote again.
-4. **Speakers.** If more than one face is visible, ask which person should speak. Leave `options.active_speaker_detection` unset unless the user picks a speaker.
-5. **Quote.** Call `generate_estimate-cost` with the model (default `sync-3`) and the measured `audioDuration`, or the `script` for script input. For `cut_off` or `silence`, also pass `videoDuration` and `syncMode`. Label script quotes approximate and say speech synthesis is excluded.
-6. **Confirm.** Show the video, speech, voice, any sync mode and the estimate, then wait for approval, unless this exact request and cost were already approved.
-7. **Create.** Call `create-lipsync` once with:
-   - the video (`video`, `videoUrl` or `videoAssetId`);
-   - the speech (`audio`, `audioUrl`, `audioAssetId`, or `script` with `voiceId`);
+5. **Speakers.** If more than one face is visible, ask which person should speak. Leave `options.active_speaker_detection` unset unless the user picks a speaker.
+6. **Quote.** Call `generate_estimate-cost` with the model (default `sync-3`) and the measured `audioDuration`, or the `script` for script input. For `cut_off` or `silence`, also pass `videoDuration` and `syncMode`. Label script quotes approximate and say speech synthesis is excluded.
+7. **Confirm.** Show the video, speech, voice, any sync mode and the estimate, then wait for approval, unless this exact request and cost were already approved.
+8. **Create.** Call `create-lipsync` once with:
+   - the video as `videoAssetId` (saved or imported above) or `videoUrl`;
+   - the speech as `audioAssetId`, `audioUrl`, or `script` with `voiceId`;
    - the model and any `options`;
    - a new `idempotencyKey`.
 
-   For a project you just created in step 1, pass its `projectId` with `projectIntent: "explicit"`. Otherwise pass a new random UUID as `projectCreationKey` and a short `projectName`. On a lost response, retry once with the same keys and inputs.
-8. **Wait and deliver.** Poll `generate_get-generation` with the same `id` and `wait: true` until `COMPLETED` or `FAILED`. Give the exact `outputUrl`, unchanged, and offer one next step.
+   For a project you just created in step 2, pass its `projectId` with `projectIntent: "explicit"`. Otherwise pass a new random UUID as `projectCreationKey` and a short `projectName`. On a lost response, retry once with the same keys and inputs.
+9. **Wait and deliver.** Poll `generate_get-generation` with the same `id` and `wait: true` until `COMPLETED` or `FAILED`. Give the exact `outputUrl`, unchanged, and offer one next step.
 
 ## Rules
 
