@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set up sync. labs"
+  short_description: "Check your account and make your first talking video"
+  default_prompt: "Use $setup to get started with sync. labs."
+policy:
+  allow_implicit_invocation: false

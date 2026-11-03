@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "sync-labs": {
+      "url": "https://mcp.sync.so/mcp"
+    }
+  }
+}

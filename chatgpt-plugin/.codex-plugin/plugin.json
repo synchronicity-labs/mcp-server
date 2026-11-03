@@ -1,0 +1,68 @@
+{
+  "author": {
+    "name": "sync. labs"
+  },
+  "description": "Lipsync videos, make photos and characters talk, translate and dub videos, and fix spoken words with sync. labs.",
+  "keywords": [
+    "lipsync",
+    "lip sync",
+    "lip-sync",
+    "ai lip sync",
+    "lip syncing",
+    "dubbing",
+    "ai dubbing",
+    "video dubbing",
+    "dub video",
+    "video translation",
+    "translate video",
+    "video translator",
+    "video localization",
+    "talking photo",
+    "make a photo talk",
+    "photo to video",
+    "talking avatar",
+    "ai avatar",
+    "talking head",
+    "talking character",
+    "voice cloning",
+    "edit dialogue",
+    "dialogue replacement",
+    "change words in video",
+    "sync labs"
+  ],
+  "interface": {
+    "capabilities": [
+      "Make photos and AI characters talk from a script or audio",
+      "Lipsync any video, including AI-generated clips, to new audio or a script",
+      "Translate and dub videos or YouTube and TikTok links with matching lips",
+      "Fix or remove spoken words in the speaker's own voice",
+      "Clone your own voice for scripts",
+      "Open sync. Studio to choose media and review results",
+      "Browse projects and past generations"
+    ],
+    "category": "Creativity",
+    "defaultPrompt": [
+      "Create a friendly cartoon character and make it say hello",
+      "Lipsync my video to this new audio track",
+      "Dub this YouTube video into Spanish with matching lips"
+    ],
+    "developerName": "sync. labs",
+    "displayName": "sync. labs",
+    "logo": "./assets/logo.png",
+    "longDescription": "Use sync. labs to lipsync videos, make photos and characters talk, translate and dub videos, and fix spoken words without reshooting.\n\nWith sync. labs you can:\n• Make a photo talk. Turn a portrait, a product mascot or a character you just created in ChatGPT into a talking video from a script or an audio recording.\n• Lipsync a video to new audio. Match a speaker's lips to a voiceover, a new take, a song or a typed script, including AI-generated clips.\n• Translate and dub a video. Dub an uploaded video or a YouTube, TikTok, Instagram or Facebook link into another language with lips that match the new audio.\n• Fix spoken words. Change or remove a few words in a single-speaker video while keeping the original voice.\n• Clone your own voice, or a voice you have permission to use, and use it with scripts.\n• Open sync. Studio in ChatGPT to choose media, review previews and download results, or browse your existing projects.\n\nBuilt for creators, marketers, educators and localization teams who make talking-head videos, dubbed versions, or quick dialogue fixes.\n\nRequires a sync. labs account. sync. labs does not create subtitle-only output, standalone audio voiceovers, or general timeline edits such as trimming or adding music. Fixing spoken words changes individual words; it does not replace a whole script.",
+    "privacyPolicyURL": "https://sync.so/privacy",
+    "shortDescription": "Lipsync, dub & talking photos",
+    "termsOfServiceURL": "https://sync.so/terms",
+    "websiteURL": "https://sync.so",
+    "supportURL": "https://support.sync.so"
+  },
+  "name": "app-6a398355fbc08191a232e7eeeacb73d5",
+  "version": "2.0.4",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup/SKILL.md"
+    }
+  }
+}
