@@ -19,7 +19,7 @@ async function fixture() {
     name: 'Translate and Dub',
     draft: 'Original video and language',
   };
-  const projects = new Map([[existingId, { ...original }]]);
+  const projects = new Map<string, Record<string, unknown>>([[existingId, { ...original }]]);
   const generations: Record<string, unknown>[] = [];
   const calls: Array<{
     method?: string;
@@ -163,10 +163,44 @@ it.each(['create-lipsync', 'create-translate-and-dub'])(
     });
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({ error: { code: 'PROJECT_INTENT_REQUIRED' } });
-    expect(calls).toEqual([]);
+    expect(calls.map((request) => `${request.method} ${request.path}`)).toEqual([
+      `GET /v2/projects/${existingId}`,
+    ]);
     expect(projects.get(existingId)).toEqual(original);
   },
 );
+
+it('accepts the empty project just created for this request without projectIntent', async () => {
+  const { call, projects, generations } = await fixture();
+  projects.set(newId, {
+    id: newId,
+    name: 'Talking Owl',
+    draft: '',
+    createdAt: new Date().toISOString(),
+    generations: [],
+  });
+  const result = await call('create-lipsync', {
+    videoAssetId: translationInput.videoAssetId,
+    audioAssetId: secondId,
+    projectId: newId,
+  });
+  expect(result.isError).not.toBe(true);
+  expect(projects.size).toBe(2);
+  expect(generations).toEqual([expect.objectContaining({ projectId: newId })]);
+});
+
+it('creates a new project for a keyed request that has no projectCreationKey', async () => {
+  const { call, projects, original, generations } = await fixture();
+  const result = await call('create-lipsync', {
+    videoAssetId: translationInput.videoAssetId,
+    audioAssetId: secondId,
+    idempotencyKey: 'legacy-keyed-request',
+  });
+  expect(result.isError).not.toBe(true);
+  expect(projects.size).toBe(2);
+  expect(projects.get(existingId)).toEqual(original);
+  expect(generations).toEqual([expect.objectContaining({ projectId: newId })]);
+});
 
 it('honors an explicit update to the selected existing project without creating another project', async () => {
   const { call, projects, generations } = await fixture();

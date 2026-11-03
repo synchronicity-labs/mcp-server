@@ -1,8 +1,34 @@
 import { z } from 'zod';
-import { ApiRequestError } from '../http-client.js';
+import { ApiRequestError, type HttpClient } from '../http-client.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 
-export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
+// A project this new with no generations can only be the one created for this request,
+// which clients holding a tool list from before projectIntent existed pass without it.
+const FRESH_PROJECT_MS = 30 * 60_000;
+const freshProjectSchema = z.object({
+  createdAt: z.string(),
+  generations: z.array(z.unknown()).length(0),
+});
+
+async function isFreshEmptyProject(
+  http: HttpClient,
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const project = freshProjectSchema.safeParse(
+      await http.request('get', `/v2/projects/${encodeURIComponent(projectId)}`, { signal }),
+    );
+    if (!project.success) return false;
+    const age = Date.now() - Date.parse(project.data.createdAt);
+    return age >= 0 && age <= FRESH_PROJECT_MS;
+  } catch {
+    signal?.throwIfAborted();
+    return false;
+  }
+}
+
+export function withProjectIntent(tool: McpToolDefinition, http: HttpClient): McpToolDefinition {
   if (!('projectId' in tool.inputSchema) || tool.annotations?.readOnlyHint) return tool;
   const ui = tool.meta?.ui as { visibility?: string[] } | undefined;
   if (ui?.visibility?.length === 1 && ui.visibility[0] === 'app') return tool;
@@ -21,9 +47,13 @@ export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
         ),
     },
   };
-  const input = (args: Record<string, unknown>) => {
+  const input = async (args: Record<string, unknown>, signal?: AbortSignal) => {
     const { projectIntent, ...fields } = args;
-    if (fields.projectId !== undefined && projectIntent !== 'explicit')
+    if (
+      typeof fields.projectId === 'string' &&
+      projectIntent !== 'explicit' &&
+      !(await isFreshEmptyProject(http, fields.projectId, signal))
+    )
       throw new ApiRequestError(
         'Existing project use requires an explicit user selection. Create a new project for a new workflow request; do not reuse a matching name or the active editor.',
         400,
@@ -35,13 +65,13 @@ export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
     ? {
         ...definition,
         resultFormat: 'mcp',
-        handler: (args: Record<string, unknown>, context?: ToolRequestContext) =>
-          tool.handler(input(args), context),
+        handler: async (args: Record<string, unknown>, context?: ToolRequestContext) =>
+          tool.handler(await input(args, context?.signal), context),
       }
     : {
         ...definition,
         resultFormat: 'json',
-        handler: (args: Record<string, unknown>, context?: ToolRequestContext) =>
-          tool.handler(input(args), context),
+        handler: async (args: Record<string, unknown>, context?: ToolRequestContext) =>
+          tool.handler(await input(args, context?.signal), context),
       };
 }
