@@ -1,7 +1,13 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { HttpClient } from './http-client.js';
+import { ApiRequestError, cameFromApi, type HttpClient } from './http-client.js';
+import { schemaProperty } from './openapi/parser.js';
+import type { ParsedOperation } from './openapi/types.js';
+import {
+  getToolAnalytics,
+  runWithToolAnalytics,
+  type ToolAttribution,
+} from './tool-analytics-context.js';
 import type { McpToolDefinition } from './tools/generator.js';
 
 export const uiAnalyticsSchema = z
@@ -21,8 +27,6 @@ const attributionSchema = uiAnalyticsSchema.extend({
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
 });
-type Attribution = z.infer<typeof attributionSchema>;
-const context = new AsyncLocalStorage<Attribution>();
 const toolNames = [
   'open-sync-app',
   'create-lipsync',
@@ -49,8 +53,55 @@ const eventSchema = z
   })
   .strict();
 
-export function getToolAnalytics(): Attribution | undefined {
-  return context.getStore();
+/** Which tool events the API accepts, read from its published schema. */
+export type ToolAnalytics = { tools: ReadonlySet<string>; errorDetails: boolean };
+
+// The API rejects a whole event for an unknown tool or field, so new ones wait until
+// the deployed API's schema lists them.
+export function toolAnalyticsSupport(operations: ParsedOperation[]): ToolAnalytics | undefined {
+  const operation = operations.find(
+    (candidate) => candidate.operationId === 'analytics_captureChatgptEvent',
+  );
+  if (!operation) return undefined;
+  const schema = operation.requestBody?.schema;
+  const names = schemaProperty(schema, 'tool_name')?.enum;
+  return {
+    tools: new Set(
+      Array.isArray(names) ? names.filter((name) => typeof name === 'string') : toolNames,
+    ),
+    errorDetails: ['error_source', 'error_status', 'error_code'].every((key) =>
+      Boolean(schemaProperty(schema, key)),
+    ),
+  };
+}
+
+const ERROR_CODE = /^[A-Za-z0-9_.:-]{1,80}$/;
+
+type ReportedError = { status?: unknown; code?: unknown } | undefined;
+
+function errorCode(error: unknown, reported: ReportedError): unknown {
+  if (error instanceof ApiRequestError) return error.code;
+  if (error instanceof z.ZodError) return 'invalid_arguments';
+  if (error instanceof Error && ['AbortError', 'TimeoutError'].includes(error.name))
+    return 'aborted';
+  return reported?.code;
+}
+
+// Why a call failed, without its message: messages can echo user input.
+function errorDetails(error: unknown, result: unknown) {
+  const reported =
+    result && typeof result === 'object' && 'structuredContent' in result
+      ? (result.structuredContent as { error?: ReportedError } | undefined)?.error
+      : undefined;
+  const status = error instanceof ApiRequestError ? error.status : reported?.status;
+  const code = errorCode(error, reported);
+  return {
+    error_source: cameFromApi(error) ? 'api' : 'mcp',
+    ...(typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+      ? { error_status: status }
+      : {}),
+    ...(typeof code === 'string' && ERROR_CODE.test(code) ? { error_code: code } : {}),
+  };
 }
 
 export async function trackToolExecution<T>(
@@ -60,13 +111,13 @@ export async function trackToolExecution<T>(
   profile: string,
   http: HttpClient,
   execute: (args: Record<string, unknown>) => Promise<T>,
-  enabled = true,
+  analytics?: ToolAnalytics,
 ): Promise<T> {
   const { syncAnalytics, ...businessArgs } = args;
   if (profile !== 'chatgpt') return execute(businessArgs);
   const ui = uiAnalyticsSchema.safeParse(syncAnalytics);
   const session = meta?.['openai/session'];
-  const attribution: Attribution = {
+  const attribution: ToolAttribution = {
     version: 1,
     invocation_source: 'unknown',
     ...(ui.success ? ui.data : {}),
@@ -76,19 +127,23 @@ export async function trackToolExecution<T>(
         }
       : {}),
   };
-  return context.run(attribution, async () => {
+  return runWithToolAnalytics(attribution, async () => {
     const started = performance.now();
     let outcome: 'success' | 'error' = 'error';
+    let result: T | undefined;
+    let failure: unknown;
     try {
-      const result = await execute(businessArgs);
+      result = await execute(businessArgs);
       outcome =
         result && typeof result === 'object' && 'isError' in result && result.isError
           ? 'error'
           : 'success';
       return result;
+    } catch (error) {
+      failure = error;
+      throw error;
     } finally {
-      const tool = z.enum(toolNames).safeParse(name);
-      if (enabled && tool.success && attribution.invocation_source !== 'background') {
+      if (analytics?.tools.has(name) && attribution.invocation_source !== 'background') {
         void http
           .request('post', '/v2/analytics/chatgpt-events', {
             signal: AbortSignal.timeout(1500),
@@ -96,9 +151,12 @@ export async function trackToolExecution<T>(
               event: 'chatgpt_tool_called',
               event_id: randomUUID(),
               attribution,
-              tool_name: tool.data,
+              tool_name: name,
               outcome,
               duration_ms: Math.min(performance.now() - started, 3_600_000),
+              ...(outcome === 'error' && analytics.errorDetails
+                ? errorDetails(failure, result)
+                : {}),
             },
           })
           .catch(() => undefined);
@@ -124,7 +182,7 @@ export function createAnalyticsTool(http: HttpClient): McpToolDefinition {
     },
     handler: async (args) => {
       const event = eventSchema.parse(args);
-      const attribution = context.getStore();
+      const attribution = getToolAnalytics();
       await http.request('post', '/v2/analytics/chatgpt-events', {
         signal: AbortSignal.timeout(1500),
         body: {

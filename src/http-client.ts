@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
-import { getToolAnalytics } from './chatgpt-analytics.js';
+import { getToolAnalytics } from './tool-analytics-context.js';
 
 /** API-key analytics labels; bearer credentials use the API's MCP source namespace. */
 const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
@@ -40,6 +40,13 @@ export class ApiRequestError extends Error {
     super(message);
     this.name = 'ApiRequestError';
   }
+}
+
+// Errors built from an API response, as opposed to this server's own checks.
+const apiResponseErrors = new WeakSet<ApiRequestError>();
+
+export function cameFromApi(error: unknown): boolean {
+  return error instanceof ApiRequestError && apiResponseErrors.has(error);
 }
 
 type AuthHeaders = Record<string, string>;
@@ -156,7 +163,7 @@ export function createHttpClient(
             code === 'import_in_progress' || code === 'import_failed'
               ? importErrorDetailsSchema.safeParse(parsed)
               : undefined;
-          throw new ApiRequestError(
+          const error = new ApiRequestError(
             `API request failed: ${response.status} ${response.statusText} - ${message}`,
             response.status,
             code,
@@ -164,6 +171,8 @@ export function createHttpClient(
             knownId.success ? knownId.data : undefined,
             importDetails?.success ? importDetails.data : undefined,
           );
+          apiResponseErrors.add(error);
+          throw error;
         }
 
         return parsed;

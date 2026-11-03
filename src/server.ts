@@ -8,7 +8,12 @@ import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { loadToken } from './auth/token-store.js';
-import { createAnalyticsTool, trackToolExecution, uiAnalyticsSchema } from './chatgpt-analytics.js';
+import {
+  createAnalyticsTool,
+  toolAnalyticsSupport,
+  trackToolExecution,
+  uiAnalyticsSchema,
+} from './chatgpt-analytics.js';
 import { type ChatgptApp, createOpenSyncAppTool, loadChatgptAppReleases } from './chatgpt-app.js';
 import {
   type ClientProfile,
@@ -698,6 +703,7 @@ function createProfiledServer(
   );
   const tools =
     sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
+  const analytics = toolAnalyticsSupport(operations);
   const server = new McpServer(
     { name: 'sync', version: PACKAGE_VERSION, description: SERVER_DESCRIPTION },
     {
@@ -735,9 +741,7 @@ function createProfiledServer(
               httpClient,
               (businessArgs) =>
                 tool.handler(businessArgs, { ...parameters[1], clientProfile: profile }),
-              operations.some(
-                (operation) => operation.operationId === 'analytics_captureChatgptEvent',
-              ),
+              analytics,
             );
           },
         }) as McpToolDefinition,

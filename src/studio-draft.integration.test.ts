@@ -155,10 +155,14 @@ it('routes chat draft edits through the authenticated API without confirming UI 
   try {
     const catalog = (await client.listTools()).tools;
     expect(catalog.find((t) => t.name === 'get-studio-draft')).toBeDefined();
-    for (const name of ['update-studio-draft', 'save-studio-draft'])
+    // A chat edit asks the user first; Studio's own compare-and-set autosave must not.
+    for (const [name, destructiveHint] of [
+      ['update-studio-draft', true],
+      ['save-studio-draft', false],
+    ] as const)
       expect(catalog.find((tool) => tool.name === name)?.annotations).toMatchObject({
         readOnlyHint: false,
-        destructiveHint: true,
+        destructiveHint,
       });
     expect(catalog.find((tool) => tool.name === 'ack-studio-draft')?.annotations).toMatchObject({
       readOnlyHint: false,

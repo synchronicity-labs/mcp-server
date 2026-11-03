@@ -30,7 +30,7 @@ Delivers one MP4 where only the agreed words change. Everything else keeps the o
 1. **Support.** Call `get-dialogue-options`. If Edit Dialogue isn't available, say so and stop. Note whether it advertises `keyedPreview`.
 2. **Project.** Call `projects_create` with a new random UUID as `id`, a short `name` and `defaultWorkflow: "edit_dialogue"`. Pass the returned `projectId` with `projectIntent: "explicit"` in every later call.
 3. **Save the video.** For a file, use `upload-media` with `mediaType: "video"`. For a URL, use `assets_create` with `type: "VIDEO"` and the project.
-4. **Transcribe.** Call `create-dialogue-transcription`, then `get-dialogue-transcription` with the returned `id` until it completes. If the API rejects the video's storage, call `upload-dialogue-source` and use its new asset ID for every later step.
+4. **Transcribe.** Call `create-dialogue-transcription`, then `get-dialogue-transcription` with the returned `id` until it completes. If the transcription result includes a `videoAssetId`, the video was copied into Sync storage: use that ID for every later step.
 5. **Agree the edits.** Show the transcript lines around the fix. Turn the request into edits that use the transcript's word IDs:
    - `{ "kind": "change", "wordId": "w35", "replacement": "Mia" }`, adding `"pronunciation": "Meeah"` only for a name the voice might say wrong;
    - `{ "kind": "remove", "wordIds": ["w12", "w13"] }`.

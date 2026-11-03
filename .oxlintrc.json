@@ -194,7 +194,7 @@
     },
     {
       "files": [
-        "src/dialogue.integration.test.ts"
+        "src/test-fixtures/dialogue.ts"
       ],
       "rules": {
         "eslint/complexity": [

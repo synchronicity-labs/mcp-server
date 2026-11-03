@@ -182,11 +182,14 @@ export function createStudioDraftTools(
       name: 'save-studio-draft',
       title: 'Save Studio draft',
       description:
-        'Studio-only replacement of the editable snapshot and current recovery lock, guarded by compare-and-set. Overwrites existing draft selections and settings. No provider work is performed.',
+        'Studio-only save of its own editable snapshot and recovery lock. Compare-and-set against the revision Studio last read, so it never replaces newer edits from chat or another Studio. No provider work is performed.',
       inputSchema: save.shape,
       outputSchema: draft.shape,
       meta: appOnly,
-      annotations: writeAnnotations,
+      // ChatGPT asks the user before a destructive widget call (and Android fails it), so a
+      // background autosave marked destructive never reached the API and Studio re-read
+      // the missing draft about once a minute. Compare-and-set cannot discard unseen edits.
+      annotations: { ...writeAnnotations, destructiveHint: false },
       handler: async (args, context) => {
         const input = save.parse(args);
         return draft.parse(
