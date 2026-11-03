@@ -40,10 +40,8 @@ export async function createProjectId(
   },
   signal?: AbortSignal,
 ): Promise<string> {
-  if (idempotencyKey && !projectCreationKey)
-    throw new Error(
-      'A new project needs a fresh projectCreationKey. Persist it with the idempotencyKey and reuse both on retries.',
-    );
+  // Clients holding a tool list from before projectCreationKey existed still send keyed
+  // requests. They get an unkeyed new project; only a lost-response retry can then conflict.
   let id: string | undefined;
   if (projectCreationKey !== undefined) {
     z.uuid().parse(projectCreationKey);
