@@ -141,8 +141,7 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
   );
   expect(inferred.isError).toBe(true);
   expect(inferred.structuredContent).toMatchObject({ error: { code: 'PROJECT_INTENT_REQUIRED' } });
-  expect(calls.map((request) => request.path)).toEqual([`/v2/projects/${projectId}`]);
-  calls.length = 0;
+  expect(calls).toEqual([]);
   for (const [index, importStatus] of stages.entries()) {
     const result = await call('assets_create', args);
     expect(result.isError).toBe(true);

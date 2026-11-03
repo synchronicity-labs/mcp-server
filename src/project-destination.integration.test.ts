@@ -2,10 +2,34 @@ import { once } from 'node:events';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, expect, it } from 'vitest';
+import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
 import { translationInput, translationSpec } from './test-fixtures/translation.js';
 
 const existingId = '00000000-0000-4000-8000-000000000010';
+const projectSpec = {
+  ...translationSpec,
+  paths: {
+    ...translationSpec.paths,
+    '/v2/projects': {
+      post: {
+        operationId: 'ProjectsController_create',
+        tags: ['Projects'],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name'],
+                properties: { id: { type: 'string' }, name: { type: 'string' } },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
 const newId = '00000000-0000-4000-8000-000000000011';
 const secondId = '00000000-0000-4000-8000-000000000012';
 const cleanup: Array<() => Promise<void>> = [];
@@ -19,7 +43,7 @@ async function fixture() {
     name: 'Translate and Dub',
     draft: 'Original video and language',
   };
-  const projects = new Map<string, Record<string, unknown>>([[existingId, { ...original }]]);
+  const projects = new Map([[existingId, { ...original }]]);
   const generations: Record<string, unknown>[] = [];
   const calls: Array<{
     method?: string;
@@ -43,7 +67,7 @@ async function fixture() {
   };
   const handle = async (req: IncomingMessage, res: ServerResponse) => {
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api-json') return void res.end(JSON.stringify(translationSpec));
+    if (req.url === '/api-json') return void res.end(JSON.stringify(projectSpec));
     let text = '';
     for await (const chunk of req) text += chunk.toString();
     const body = text ? JSON.parse(text) : {};
@@ -101,8 +125,8 @@ async function fixture() {
     loseNextResponse: () => {
       loseResponse = true;
     },
-    call: (name: string, args: Record<string, unknown>) =>
-      client.callTool({ name, arguments: args }),
+    call: (name: string, args: Record<string, unknown>, token = 'user-token') =>
+      runWithAuth(token, 'openai-mcp', () => client.callTool({ name, arguments: args })),
   };
 }
 
@@ -163,44 +187,10 @@ it.each(['create-lipsync', 'create-translate-and-dub'])(
     });
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({ error: { code: 'PROJECT_INTENT_REQUIRED' } });
-    expect(calls.map((request) => `${request.method} ${request.path}`)).toEqual([
-      `GET /v2/projects/${existingId}`,
-    ]);
+    expect(calls).toEqual([]);
     expect(projects.get(existingId)).toEqual(original);
   },
 );
-
-it('accepts the empty project just created for this request without projectIntent', async () => {
-  const { call, projects, generations } = await fixture();
-  projects.set(newId, {
-    id: newId,
-    name: 'Talking Owl',
-    draft: '',
-    createdAt: new Date().toISOString(),
-    generations: [],
-  });
-  const result = await call('create-lipsync', {
-    videoAssetId: translationInput.videoAssetId,
-    audioAssetId: secondId,
-    projectId: newId,
-  });
-  expect(result.isError).not.toBe(true);
-  expect(projects.size).toBe(2);
-  expect(generations).toEqual([expect.objectContaining({ projectId: newId })]);
-});
-
-it('creates a new project for a keyed request that has no projectCreationKey', async () => {
-  const { call, projects, original, generations } = await fixture();
-  const result = await call('create-lipsync', {
-    videoAssetId: translationInput.videoAssetId,
-    audioAssetId: secondId,
-    idempotencyKey: 'legacy-keyed-request',
-  });
-  expect(result.isError).not.toBe(true);
-  expect(projects.size).toBe(2);
-  expect(projects.get(existingId)).toEqual(original);
-  expect(generations).toEqual([expect.objectContaining({ projectId: newId })]);
-});
 
 it('honors an explicit update to the selected existing project without creating another project', async () => {
   const { call, projects, generations } = await fixture();
@@ -242,4 +232,47 @@ it('does not interpret an old project UUID as the destination of a new creation'
   expect(projects.size).toBe(2);
   expect(projects.get(existingId)).toEqual(original);
   expect(generations[0]?.projectId).not.toBe(existingId);
+});
+
+it('accepts a project this connection just created without projectIntent, including a retry', async () => {
+  const { call, generations, loseNextResponse } = await fixture();
+  const created = await call('projects_create', { id: secondId, name: 'Talking Owl' });
+  expect(created.isError).not.toBe(true);
+  const args = {
+    videoAssetId: translationInput.videoAssetId,
+    audioAssetId: newId,
+    projectId: secondId,
+    idempotencyKey: 'owl-1',
+  };
+  loseNextResponse();
+  expect((await call('create-lipsync', args)).isError).toBe(true);
+  expect((await call('create-lipsync', args)).isError).not.toBe(true);
+  expect(generations).toEqual([expect.objectContaining({ projectId: secondId })]);
+});
+
+it('refuses a project another connection created', async () => {
+  const { call, calls } = await fixture();
+  const otherId = '00000000-0000-4000-8000-000000000013';
+  await call('projects_create', { id: otherId, name: 'Talking Owl' }, 'other-token');
+  const writes = calls.length;
+  const result = await call('create-lipsync', {
+    videoAssetId: translationInput.videoAssetId,
+    audioAssetId: newId,
+    projectId: otherId,
+  });
+  expect(result.structuredContent).toMatchObject({ error: { code: 'PROJECT_INTENT_REQUIRED' } });
+  expect(calls).toHaveLength(writes);
+});
+
+it('creates a new project for a keyed request that has no projectCreationKey', async () => {
+  const { call, projects, original, generations } = await fixture();
+  const result = await call('create-lipsync', {
+    videoAssetId: translationInput.videoAssetId,
+    audioAssetId: secondId,
+    idempotencyKey: 'legacy-keyed-request',
+  });
+  expect(result.isError).not.toBe(true);
+  expect(projects.size).toBe(2);
+  expect(projects.get(existingId)).toEqual(original);
+  expect(generations).toEqual([expect.objectContaining({ projectId: newId })]);
 });

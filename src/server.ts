@@ -630,9 +630,7 @@ function createTools(
         : tool,
     ),
   ];
-  const tools = allTools
-    .map((tool) => withProjectIntent(tool, httpClient))
-    .map(withGenerationStatusCard);
+  const tools = allTools.map(withProjectIntent).map(withGenerationStatusCard);
   return config.transport === 'http'
     ? tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
     : tools;

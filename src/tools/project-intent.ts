@@ -1,34 +1,43 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { ApiRequestError, type HttpClient } from '../http-client.js';
+import { getAuthToken } from '../auth/async-context.js';
+import { ApiRequestError } from '../http-client.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 
-// A project this new with no generations can only be the one created for this request,
-// which clients holding a tool list from before projectIntent existed pass without it.
-const FRESH_PROJECT_MS = 30 * 60_000;
-const freshProjectSchema = z.object({
-  createdAt: z.string(),
-  generations: z.array(z.unknown()).length(0),
-});
+// Clients holding a tool list from before projectIntent existed create a project, then
+// pass its id without projectIntent. Accept only projects this connection just created.
+const CREATED_PROJECT_TTL_MS = 30 * 60_000;
+const createdProjects = new Map<string, number>();
 
-async function isFreshEmptyProject(
-  http: HttpClient,
-  projectId: string,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  try {
-    const project = freshProjectSchema.safeParse(
-      await http.request('get', `/v2/projects/${encodeURIComponent(projectId)}`, { signal }),
-    );
-    if (!project.success) return false;
-    const age = Date.now() - Date.parse(project.data.createdAt);
-    return age >= 0 && age <= FRESH_PROJECT_MS;
-  } catch {
-    signal?.throwIfAborted();
-    return false;
-  }
+function createdProjectKey(projectId: string): string {
+  const credential = createHash('sha256')
+    .update(getAuthToken() ?? '')
+    .digest('hex');
+  return `${credential}\0${projectId}`;
 }
 
-export function withProjectIntent(tool: McpToolDefinition, http: HttpClient): McpToolDefinition {
+function rememberCreatedProject(result: unknown): void {
+  const project = z.object({ id: z.string().min(1) }).safeParse(result);
+  if (!project.success) return;
+  const now = Date.now();
+  for (const [key, expires] of createdProjects) if (expires <= now) createdProjects.delete(key);
+  createdProjects.set(createdProjectKey(project.data.id), now + CREATED_PROJECT_TTL_MS);
+}
+
+function createdHere(projectId: string): boolean {
+  return (createdProjects.get(createdProjectKey(projectId)) ?? 0) > Date.now();
+}
+
+export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
+  if (tool.name === 'projects_create' && tool.resultFormat !== 'mcp')
+    return {
+      ...tool,
+      handler: async (args: Record<string, unknown>, context?: ToolRequestContext) => {
+        const result = await tool.handler(args, context);
+        rememberCreatedProject(result);
+        return result;
+      },
+    };
   if (!('projectId' in tool.inputSchema) || tool.annotations?.readOnlyHint) return tool;
   const ui = tool.meta?.ui as { visibility?: string[] } | undefined;
   if (ui?.visibility?.length === 1 && ui.visibility[0] === 'app') return tool;
@@ -47,12 +56,12 @@ export function withProjectIntent(tool: McpToolDefinition, http: HttpClient): Mc
         ),
     },
   };
-  const input = async (args: Record<string, unknown>, signal?: AbortSignal) => {
+  const input = (args: Record<string, unknown>) => {
     const { projectIntent, ...fields } = args;
     if (
-      typeof fields.projectId === 'string' &&
+      fields.projectId !== undefined &&
       projectIntent !== 'explicit' &&
-      !(await isFreshEmptyProject(http, fields.projectId, signal))
+      !(typeof fields.projectId === 'string' && createdHere(fields.projectId))
     )
       throw new ApiRequestError(
         'Existing project use requires an explicit user selection. Create a new project for a new workflow request; do not reuse a matching name or the active editor.',
@@ -65,13 +74,13 @@ export function withProjectIntent(tool: McpToolDefinition, http: HttpClient): Mc
     ? {
         ...definition,
         resultFormat: 'mcp',
-        handler: async (args: Record<string, unknown>, context?: ToolRequestContext) =>
-          tool.handler(await input(args, context?.signal), context),
+        handler: (args: Record<string, unknown>, context?: ToolRequestContext) =>
+          tool.handler(input(args), context),
       }
     : {
         ...definition,
         resultFormat: 'json',
-        handler: async (args: Record<string, unknown>, context?: ToolRequestContext) =>
-          tool.handler(await input(args, context?.signal), context),
+        handler: (args: Record<string, unknown>, context?: ToolRequestContext) =>
+          tool.handler(input(args), context),
       };
 }

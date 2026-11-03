@@ -177,8 +177,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     expect(inferred.structuredContent).toMatchObject({
       error: { code: 'PROJECT_INTENT_REQUIRED' },
     });
-    expect(calls.filter((request) => request.method !== 'GET')).toEqual([]);
-    calls.length = 0;
+    expect(calls).toEqual([]);
     expect(current.state.visualId).toBe(visualId);
     const result = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
