@@ -24,6 +24,8 @@ describe('ChatGPT plugin package', () => {
     expect(existsSync(join(root, manifest.interface.logo))).toBe(true);
     expect(existsSync(join(root, manifest.extensions['com.openai'].onboardingSkill))).toBe(true);
     expect(manifest.interface.defaultPrompt.length).toBeLessThanOrEqual(3);
+    // The publisher blocks submission when the subtitle is longer.
+    expect(manifest.interface.shortDescription.length).toBeLessThanOrEqual(30);
   });
 
   it.each(skills)('%s names itself and has a display interface', (skill) => {
