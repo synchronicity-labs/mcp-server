@@ -179,9 +179,10 @@ export function generationBody(args: z.infer<typeof input>, projectId: string) {
   const refs = new Map<string, string>();
   for (const { audioAssetId } of args.clips)
     if (!refs.has(audioAssetId)) refs.set(audioAssetId, `audio-${refs.size + 1}`);
-  const options = parseModelOptions(args.options);
+  const model = args.model ?? 'sync-3';
+  const options = parseModelOptions(args.options, { model });
   return {
-    model: args.model ?? 'sync-3',
+    model,
     ...(options === undefined ? {} : { options }),
     input: [
       { type: 'video', assetId: args.videoAssetId },

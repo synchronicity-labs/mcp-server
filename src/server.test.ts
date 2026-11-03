@@ -1,11 +1,13 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { resolveClientProfile } from './client-profile.js';
+import { ApiRequestError } from './http-client.js';
 import {
   createJsonToolResult,
   createToolDescriptorMeta,
   createToolErrorResult,
+  logToolError,
   registerTools,
   SERVER_INSTRUCTIONS,
   selectHostedHttpTools,
@@ -69,6 +71,46 @@ describe('createToolErrorResult', () => {
         },
       },
     });
+  });
+
+  it.each([
+    [429, 'concurrency_limit_reached', 'generate_get-generation'],
+    [402, 'generation_plan_duration_exceeded', 'trim-audio'],
+    [402, 'free_tier_generations_exhausted', 'Sending the same request again fails'],
+    [400, undefined, 'Sending the same request again fails'],
+  ])('tells the agent what to do after a %i %s', (status, code, guidance) => {
+    const result = createToolErrorResult(new ApiRequestError('rejected', status, code));
+    expect(result.structuredContent).toMatchObject({
+      error: { status, nextStep: expect.stringContaining(guidance) },
+    });
+    expect(result.content).toEqual([{ type: 'text', text: expect.stringContaining(guidance) }]);
+  });
+
+  it('logs the tool, profile, status and code of a failed call', () => {
+    const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    try {
+      logToolError(() => 'chatgpt')(
+        'create-lipsync',
+        new ApiRequestError('limit', 429, 'concurrency_limit_reached'),
+      );
+      expect(JSON.parse(String(write.mock.calls[0]?.[0]))).toMatchObject({
+        event: 'mcp_tool_error',
+        tool: 'create-lipsync',
+        profile: 'chatgpt',
+        status: 429,
+        code: 'concurrency_limit_reached',
+        message: 'limit',
+      });
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it('leaves a retryable conflict without a next step', () => {
+    const result = createToolErrorResult(
+      new ApiRequestError('importing', 409, 'import_in_progress'),
+    );
+    expect(result.structuredContent).not.toHaveProperty('error.nextStep');
   });
 
   it.each([null, undefined])('handles a nullish thrown value: %s', (error: null | undefined) => {

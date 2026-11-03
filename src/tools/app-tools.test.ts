@@ -2,7 +2,7 @@ import { access, mkdtemp, rm } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveClientProfile } from '../client-profile.js';
-import type { HttpClient } from '../http-client.js';
+import { ApiRequestError, type HttpClient } from '../http-client.js';
 import { UploadRuntime } from '../upload-runtime.js';
 import { createAppTools } from './app-tools.js';
 
@@ -226,6 +226,143 @@ describe('createAppTools — create-lipsync', () => {
       assetType: 'IMAGE',
       input: { type: 'image', assetId: 'asset-1' },
     });
+  });
+
+  it.each([
+    ['application/octet-stream', 'image/jpeg', 'image/jpeg'],
+    ['image/webp; charset=binary', undefined, 'image/webp'],
+    ['application/octet-stream', undefined, 'image/png'],
+  ])(
+    'registers a %s download declared as %s with storage as %s',
+    async (header, declared, stored) => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: (name: string) => (name === 'content-length' ? '8' : header) },
+        body: Readable.toWeb(Readable.from([new Uint8Array(8)])),
+      } as unknown as Response);
+      const { uploadTool, request } = setup();
+      await uploadTool.handler({
+        mediaType: 'image',
+        file: chatGptFile('https://files.oai/face', declared ? { mime_type: declared } : {}),
+      });
+      expect(request).toHaveBeenCalledWith('post', '/v2/assets/upload', {
+        body: { fileName: 'chatgpt-upload-image', contentType: stored, size: 8 },
+        signal: expect.any(Object),
+      });
+    },
+  );
+
+  it('answers an identical request with the generation that is still running', async () => {
+    const { tool, request } = setup();
+    const args = (call: number) => ({
+      image: chatGptFile(`https://files.oai/fox-${call}.png`, { mime_type: 'image/png' }),
+      script: 'Hi there.',
+      voiceId: 'voice-1',
+      idempotencyKey: `attempt-${call}`,
+    });
+    // ChatGPT re-sends the same file under a fresh download URL on every call.
+    const sameFile = (call: number) => ({
+      ...args(call),
+      image: { ...args(call).image, file_id: 'file-fox' },
+    });
+    await tool.handler(sameFile(1));
+    request.mockResolvedValueOnce({ id: 'gen-1', status: 'PROCESSING' });
+    await expect(tool.handler(sameFile(2))).resolves.toEqual({ id: 'gen-1', status: 'PROCESSING' });
+    expect(request.mock.calls.filter(([, path]) => path === '/v2/generate')).toHaveLength(1);
+    expect(request.mock.calls.filter(([, path]) => path === '/v2/assets/upload')).toHaveLength(1);
+
+    // Once it finishes, the same request is a new generation.
+    request.mockResolvedValueOnce({ id: 'gen-1', status: 'COMPLETED' });
+    await tool.handler(sameFile(3));
+    expect(request.mock.calls.filter(([, path]) => path === '/v2/generate')).toHaveLength(2);
+  });
+
+  const scriptOnImage = { imageAssetId: 'image-1', script: 'Hi there.', voiceId: 'voice-1' };
+  const posts = (request: ReturnType<typeof setup>['request']) =>
+    request.mock.calls.filter(([method, path]) => method === 'post' && path === '/v2/generate');
+
+  it('submits overlapping identical calls once and gives both the generation', async () => {
+    const { tool, request } = setup();
+    const answer = request.getMockImplementation()!;
+    let release!: () => void;
+    const accepted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    request.mockImplementation(async (method, path, options) => {
+      if (method === 'post' && path === '/v2/generate') await accepted;
+      return answer(method, path, options);
+    });
+    const calls = [tool.handler(scriptOnImage), tool.handler(scriptOnImage)];
+    release();
+    await expect(Promise.all(calls)).resolves.toEqual([
+      { id: 'gen-1', status: 'PENDING' },
+      { id: 'gen-1', status: 'PENDING' },
+    ]);
+    expect(posts(request)).toHaveLength(1);
+  });
+
+  it('gives a waiting identical call the first attempt failure without submitting again', async () => {
+    const { tool, request } = setup();
+    const answer = request.getMockImplementation()!;
+    let fail!: (error: Error) => void;
+    const outcome = new Promise<never>((_, reject) => {
+      fail = reject;
+    });
+    request.mockImplementation(async (method, path, options) =>
+      method === 'post' && path === '/v2/generate' ? outcome : answer(method, path, options),
+    );
+    const calls = [tool.handler(scriptOnImage), tool.handler(scriptOnImage)];
+    fail(new ApiRequestError('outcome unknown', 503, 'IDEMPOTENCY_OUTCOME_UNKNOWN'));
+    for (const call of calls) await expect(call).rejects.toThrow('outcome unknown');
+    expect(posts(request)).toHaveLength(1);
+  });
+
+  it('reports a failed status read instead of submitting again', async () => {
+    const { tool, request } = setup();
+    await tool.handler(scriptOnImage);
+    request.mockRejectedValueOnce(new ApiRequestError('unavailable', 503));
+    await expect(tool.handler(scriptOnImage)).rejects.toThrow('unavailable');
+    expect(posts(request)).toHaveLength(1);
+
+    // A generation that no longer exists frees the request.
+    request.mockRejectedValueOnce(new ApiRequestError('not found', 404));
+    await tool.handler(scriptOnImage);
+    expect(posts(request)).toHaveLength(2);
+  });
+
+  it('treats a different asset behind an empty URL as a different request', async () => {
+    const { tool, request } = setup();
+    for (const videoAssetId of ['video-1', 'video-2'])
+      await tool.handler({ videoUrl: '', videoAssetId, audioAssetId: 'audio-1' });
+    expect(posts(request).map(([, , options]) => options?.body)).toEqual([
+      expect.objectContaining({
+        input: [{ type: 'video', assetId: 'video-1' }, expect.anything()],
+      }),
+      expect.objectContaining({
+        input: [{ type: 'video', assetId: 'video-2' }, expect.anything()],
+      }),
+    ]);
+  });
+
+  it('drops reasoning for models without it and speaker detection for a still image', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      imageAssetId: 'image-1',
+      script: 'Hi there.',
+      voiceId: 'voice-1',
+      options: {
+        sync_mode: 'cut_off',
+        reasoning_enabled: true,
+        active_speaker_detection: { auto_detect: true },
+      },
+    });
+    expect(lastGenerateBody(request)).toMatchObject({
+      model: 'sync-3',
+      options: { sync_mode: 'cut_off' },
+    });
+    expect(lastGenerateBody(request)).not.toHaveProperty('options.reasoning_enabled');
+    expect(lastGenerateBody(request)).not.toHaveProperty('options.active_speaker_detection');
   });
 
   it.each([false, true])(

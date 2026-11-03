@@ -327,6 +327,7 @@ export function registerTools(
   server: McpServer,
   tools: McpToolDefinition[],
   authMetadataUrl?: string,
+  onToolError?: (tool: string, error: unknown) => void,
 ): void {
   for (const tool of tools) {
     server.registerTool(
@@ -349,6 +350,7 @@ export function registerTools(
           const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
           return createJsonToolResult(result, tool.outputSchema);
         } catch (error) {
+          onToolError?.(tool.name, error);
           return createToolErrorResult(error, authMetadataUrl);
         }
       },
@@ -356,14 +358,49 @@ export function registerTools(
   }
 }
 
+// Agents resend a rejected request every few seconds unless told what changes the outcome.
+const RESUBMIT_FAILS =
+  'Sending the same request again fails the same way. Explain the message to the user and change the request before trying again.';
+const NEXT_STEP_BY_CODE: Record<string, string> = {
+  concurrency_limit_reached:
+    'A generation is still running for this account. Poll generate_get-generation with its id, or list running ones with generate_get-generations and status PROCESSING, until it finishes, then submit once. Submitting again before then fails the same way.',
+  generation_plan_duration_exceeded:
+    'This plan limits how long the output can be. Shorten the script or audio (trim-audio keeps the first part of saved audio), quote again, then create once.',
+};
+
+function nextStep(error: ApiRequestError): string | undefined {
+  if (error.code && NEXT_STEP_BY_CODE[error.code]) return NEXT_STEP_BY_CODE[error.code];
+  return [400, 402, 403, 422].includes(error.status) ? RESUBMIT_FAILS : undefined;
+}
+
+/** One stdout line per failed tool call, for the hosted server's logs. */
+export function logToolError(profile: () => string): (tool: string, error: unknown) => void {
+  return (tool, error) => {
+    const api = error instanceof ApiRequestError ? error : undefined;
+    process.stdout.write(
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'mcp_tool_error',
+        tool,
+        profile: profile(),
+        status: api?.status,
+        code: api?.code,
+        message: (error instanceof Error ? error.message : String(error)).slice(0, 300),
+      })}\n`,
+    );
+  };
+}
+
 export function createToolErrorResult(error: unknown, authMetadataUrl?: string): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ApiRequestError) {
+    const next = nextStep(error);
     const structuredContent = {
       error: {
         message,
         status: error.status,
         ...(error.code ? { code: error.code } : {}),
+        ...(next ? { nextStep: next } : {}),
         ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
         ...(error.generationId ? { generationId: error.generationId } : {}),
         ...error.importDetails,
@@ -706,6 +743,8 @@ function createProfiledServer(
         }) as McpToolDefinition,
     ),
     config.transport === 'http' ? resourceMetadataUrl(config.port) : undefined,
+    // stdout is the protocol channel over stdio.
+    config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,
   );
   const resources: Resource[] = [];
   resources.push({

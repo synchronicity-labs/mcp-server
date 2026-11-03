@@ -494,3 +494,22 @@ it('checks source access before downloading an external dialogue video', async (
     false,
   );
 });
+
+it('shows agents the edit shapes and rejects a malformed edit before any write', async () => {
+  const { calls, client, call } = await fixture();
+  const preview = (await client.listTools()).tools.find(
+    (tool) => tool.name === 'create-dialogue-preview',
+  );
+  if (!preview) throw new Error('create-dialogue-preview is not listed');
+  const properties = preview.inputSchema.properties as Record<string, { items?: unknown }>;
+  const items = JSON.stringify(properties.edits?.items);
+  for (const field of ['"change"', '"remove"', '"replacement"', '"wordIds"'])
+    expect(items).toContain(field);
+  const result = await call('create-dialogue-preview', {
+    ...source,
+    transcriptionId,
+    edits: [{ kind: 'change', wordId: 'w1' }],
+  });
+  expect(result.isError).toBe(true);
+  expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
+});

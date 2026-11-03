@@ -33,6 +33,19 @@ const DEFAULT_CONTENT_TYPE: Record<MediaKind, string> = {
   audio: 'audio/mpeg',
 };
 
+// ChatGPT file links often answer with a generic type such as application/octet-stream,
+// which Sync storage rejects, so use the first declared type of the expected kind.
+export function mediaContentType(
+  kind: MediaKind,
+  ...declared: Array<string | null | undefined>
+): string {
+  for (const value of declared) {
+    const type = value?.split(';')[0]?.trim().toLowerCase();
+    if (type?.startsWith(`${kind}/`)) return type;
+  }
+  return DEFAULT_CONTENT_TYPE[kind];
+}
+
 // The host of a URL, for error messages — so a failure says *where* it tried to
 // reach, not just "fetch failed".
 function hostOf(url: string): string {
@@ -126,8 +139,11 @@ async function rehostUpload(
       await cancelResponseBody(download);
       throw new Error(`The uploaded ${kind} URL returned HTTP ${download.status}.`);
     }
-    const contentType =
-      download.headers.get('content-type') ?? file.mime_type ?? DEFAULT_CONTENT_TYPE[kind];
+    const contentType = mediaContentType(
+      kind,
+      download.headers.get('content-type'),
+      file.mime_type,
+    );
     const fileName = file.file_name ?? `chatgpt-upload-${kind}`;
 
     const declaredSizeHeader = download.headers.get('content-length');
