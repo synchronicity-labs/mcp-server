@@ -125,8 +125,8 @@ async function fixture() {
     loseNextResponse: () => {
       loseResponse = true;
     },
-    call: (name: string, args: Record<string, unknown>, token = 'user-token') =>
-      runWithAuth(token, 'openai-mcp', () => client.callTool({ name, arguments: args })),
+    call: (name: string, args: Record<string, unknown>, token = 'user-token', owner?: string) =>
+      runWithAuth(token, 'openai-mcp', () => client.callTool({ name, arguments: args }), owner),
   };
 }
 
@@ -275,4 +275,23 @@ it('creates a new project for a keyed request that has no projectCreationKey', a
   expect(projects.size).toBe(2);
   expect(projects.get(existingId)).toEqual(original);
   expect(generations).toEqual([expect.objectContaining({ projectId: newId })]);
+});
+
+it('keeps accepting a created project after the access token refreshes', async () => {
+  const { call, generations } = await fixture();
+  const refreshedId = '00000000-0000-4000-8000-000000000014';
+  await call(
+    'projects_create',
+    { id: refreshedId, name: 'Talking Owl' },
+    'token-before',
+    'owner-1',
+  );
+  const result = await call(
+    'create-lipsync',
+    { videoAssetId: translationInput.videoAssetId, audioAssetId: newId, projectId: refreshedId },
+    'token-after',
+    'owner-1',
+  );
+  expect(result.isError).not.toBe(true);
+  expect(generations).toEqual([expect.objectContaining({ projectId: refreshedId })]);
 });

@@ -788,8 +788,11 @@ export async function startHttpServer(
             : {}),
         });
       }
-      await runWithAuth(token, session.clientName, () =>
-        session.handleRequest(req, res, !!initializedSessionId),
+      await runWithAuth(
+        token,
+        session.clientName,
+        () => session.handleRequest(req, res, !!initializedSessionId),
+        JSON.stringify([owner.sub, owner.clientId, owner.organizationId]),
       );
       if (initializedSessionId && res.statusCode >= 400)
         await sessions.remove(initializedSessionId, 'initialization_failed');

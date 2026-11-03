@@ -1,19 +1,21 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { getAuthToken } from '../auth/async-context.js';
+import { getAuthOwner, getAuthToken } from '../auth/async-context.js';
 import { ApiRequestError } from '../http-client.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 
 // Clients holding a tool list from before projectIntent existed create a project, then
-// pass its id without projectIntent. Accept only projects this connection just created.
+// pass its id without projectIntent. Accept only projects this same user just created.
 const CREATED_PROJECT_TTL_MS = 30 * 60_000;
 const createdProjects = new Map<string, number>();
 
 function createdProjectKey(projectId: string): string {
-  const credential = createHash('sha256')
-    .update(getAuthToken() ?? '')
-    .digest('hex');
-  return `${credential}\0${projectId}`;
+  const owner =
+    getAuthOwner() ??
+    createHash('sha256')
+      .update(getAuthToken() ?? '')
+      .digest('hex');
+  return `${owner}\0${projectId}`;
 }
 
 function rememberCreatedProject(result: unknown): void {
