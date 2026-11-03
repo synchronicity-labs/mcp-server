@@ -135,7 +135,7 @@ const APP_UI_TOOLS = new Set([
   'register-studio-view',
   'ack-studio-view',
 ]);
-const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'track-chatgpt-event',
   'get-studio-view',
   'open-studio-project',

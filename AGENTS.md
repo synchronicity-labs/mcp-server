@@ -23,6 +23,7 @@ Every merge to `main` deploys production. Treat each merge as a release.
 | `src/rate-limits.ts` | Request limits per verified user and OAuth client, plus per-address limits on rejected credentials |
 | `src/auth/` | OAuth proxy provider (SDK `server-legacy`), bearer verification, device auth for stdio |
 | `src/chatgpt-app.ts`, `deploy/chatgpt/` | Immutable ChatGPT UI releases built from sync-api-v2 `apps/chatgpt`; see `docs/chatgpt-release.md` |
+| `chatgpt-plugin/` | ChatGPT plugin listing package: manifest, listing copy and skills; see `docs/chatgpt-plugin.md` |
 | `scripts/` | Memory and session suites, UI packaging, monitor, post-deploy smoke check, pre-commit size check |
 | `docs/` | Maintainer notes (`docs/maintainers.md`), release, availability and auth details |
 
@@ -58,7 +59,8 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 
 ## Invariants
 
-- **Tool names, schemas and `_meta` are a published contract.** OpenAI rescans the ChatGPT app on every deploy. Keep ChatGPT and Codex descriptors byte-identical unless the change is intended. Say so in the PR when they move.
+- **Tool names, schemas and `_meta` are a published contract.** Keep ChatGPT and Codex descriptors byte-identical unless the change is intended. Say so in the PR when they move.
+- **ChatGPT keeps calling with the old schema after a deploy.** OpenAI scans the app on its own schedule (gaps of two days observed), not on deploy, and chats can keep the previous definitions after a scan. Keep accepting calls shaped by the previous schema, then run Rescan in the publisher (`docs/chatgpt-plugin.md`). A new required field or a new refusal breaks ChatGPT generation until then.
 - **Never change the OAuth issuer `https://mcp.sync.so/` or `/authorize`, `/token`, `/register`, `/revoke`.** Changing any of them forces every connected user to reconnect.
 - **Generated tool names come from API operationIds.** Renaming a controller method in sync-api-v2 silently drops a hosted tool unless `HOSTED_HTTP_TOOL_ALLOWLIST` follows.
 - **App-only tools stay out of model-only clients.** Studio bridge tools and widget-only tools (`ui.visibility` without `model`) are hidden, and refuse direct calls, outside the ChatGPT app.
