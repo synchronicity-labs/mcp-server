@@ -619,22 +619,17 @@ it('forwards a caller-owned submission key through hosted MCP as an API header',
     projectId: 'selected-project',
     idempotencyKey: 'action_A._~-09',
   };
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const result = await client.callTool({
-      name: 'create-lipsync',
-      arguments: { ...args, projectIntent: 'explicit' },
-    });
-    expect(result.isError).not.toBe(true);
-  }
-  const submissions = calls.filter(
+  const result = await client.callTool({
+    name: 'create-lipsync',
+    arguments: { ...args, projectIntent: 'explicit' },
+  });
+  expect(result.isError).not.toBe(true);
+  const submission = calls.find(
     (call) => call.token === 'Bearer submission-key' && call.path === '/v2/generate',
   );
-  expect(submissions).toHaveLength(2);
-  for (const submission of submissions) {
-    expect(submission.idempotencyKey).toBe('action_A._~-09');
-    expect(submission.body).not.toHaveProperty('idempotencyKey');
-    expect(submission.body.projectId).toBe('selected-project');
-  }
+  expect(submission?.idempotencyKey).toBe('action_A._~-09');
+  expect(submission?.body).not.toHaveProperty('idempotencyKey');
+  expect(submission?.body.projectId).toBe('selected-project');
 });
 
 it.each(['', 'contains space', 'comma,key', 'a'.repeat(129)])(

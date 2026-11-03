@@ -26,20 +26,27 @@ function providedCount(...values: unknown[]): number {
   return values.filter(Boolean).length;
 }
 
-// A ChatGPT file is named by its file_id; its download_url changes on every call.
+// Picks the source the way resolveMedia does. A ChatGPT file is named by its file_id;
+// its download_url changes on every call.
 function mediaIdentity(url: unknown, assetId: unknown, file: unknown): unknown {
-  return (
-    url ?? assetId ?? (file && typeof file === 'object' && 'file_id' in file ? file.file_id : file)
-  );
+  if (assetId) return ['asset', assetId];
+  if (url) return ['url', url];
+  if (file && typeof file === 'object' && 'file_id' in file) return ['file', file.file_id];
+  return file;
 }
 
-/** What makes two create-lipsync calls the same request, ignoring keys and new-project names. */
+/**
+ * What makes two create-lipsync calls the same request, ignoring keys and new-project
+ * names. The client is part of it because each client has its own default project.
+ */
 function lipsyncSubmission(
   args: Record<string, unknown>,
   model: string,
   options: unknown,
+  client: string,
 ): unknown[] {
   return [
+    client,
     mediaIdentity(args.videoUrl, args.videoAssetId, args.video),
     mediaIdentity(args.imageUrl, args.imageAssetId, args.image),
     mediaIdentity(args.audioUrl, args.audioAssetId, args.audio),
@@ -369,74 +376,102 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
-        const submission = lipsyncSubmission(args, resolvedModel, options);
-        const running = await submissions.running(submission, signal);
-        if (running) return running;
-
-        const projectId =
-          requestedProjectId?.trim() ??
-          (await createProjectId(
-            httpClient,
-            {
-              name:
-                projectName?.trim() || (context?.clientProfile ?? getProfile()).defaultProjectName,
-              projectCreationKey,
-              idempotencyKey,
-              defaultWorkflow: hasImage ? 'image_to_video' : 'lipsync',
-            },
-            signal,
-          ));
-        if (requestedProjectId !== undefined) {
-          // Check access before transferring files. Generation admission checks it again.
-          await httpClient.request('get', `/v2/projects/${encodeURIComponent(projectId)}`, {
-            signal,
-          });
-        }
-
-        const lineage = await generationContextHeaders(
-          httpClient,
-          args,
-          ['lipsync', 'image_to_video', 'translate_and_dub'],
-          signal,
-        );
-
-        // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
-        const driver = hasScript
-          ? {
-              type: 'text',
-              provider: {
-                name: provider ?? 'elevenlabs',
-                voiceId,
-                script,
-                ...(stability === undefined ? {} : { stability }),
-                ...(similarityBoost === undefined ? {} : { similarityBoost }),
+        const submit = async () => {
+          const projectId =
+            requestedProjectId?.trim() ??
+            (await createProjectId(
+              httpClient,
+              {
+                name:
+                  projectName?.trim() ||
+                  (context?.clientProfile ?? getProfile()).defaultProjectName,
+                projectCreationKey,
+                idempotencyKey,
+                defaultWorkflow: hasImage ? 'image_to_video' : 'lipsync',
               },
-            }
-          : await resolveMedia(httpClient, 'audio', audioUrl, audioAssetId, audio, runtime, signal);
-        const visual = hasImage
-          ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image, runtime, signal)
-          : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video, runtime, signal);
+              signal,
+            ));
+          if (requestedProjectId !== undefined) {
+            // Check access before transferring files. Generation admission checks it again.
+            await httpClient.request('get', `/v2/projects/${encodeURIComponent(projectId)}`, {
+              signal,
+            });
+          }
 
-        signal?.throwIfAborted();
-        const generation = await httpClient.request('post', '/v2/generate', {
-          signal,
-          ...(idempotencyKey || Object.keys(lineage).length
+          const lineage = await generationContextHeaders(
+            httpClient,
+            args,
+            ['lipsync', 'image_to_video', 'translate_and_dub'],
+            signal,
+          );
+
+          // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
+          const driver = hasScript
             ? {
-                headers: {
-                  ...lineage,
-                  ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+                type: 'text',
+                provider: {
+                  name: provider ?? 'elevenlabs',
+                  voiceId,
+                  script,
+                  ...(stability === undefined ? {} : { stability }),
+                  ...(similarityBoost === undefined ? {} : { similarityBoost }),
                 },
               }
-            : {}),
-          body: {
-            model: resolvedModel,
-            ...(options === undefined ? {} : { options }),
-            input: [visual, driver],
-            projectId,
-          },
-        });
-        submissions.remember(submission, generation);
-        return generation;
+            : await resolveMedia(
+                httpClient,
+                'audio',
+                audioUrl,
+                audioAssetId,
+                audio,
+                runtime,
+                signal,
+              );
+          const visual = hasImage
+            ? await resolveMedia(
+                httpClient,
+                'image',
+                imageUrl,
+                imageAssetId,
+                image,
+                runtime,
+                signal,
+              )
+            : await resolveMedia(
+                httpClient,
+                'video',
+                videoUrl,
+                videoAssetId,
+                video,
+                runtime,
+                signal,
+              );
+
+          signal?.throwIfAborted();
+          const generation = await httpClient.request('post', '/v2/generate', {
+            signal,
+            ...(idempotencyKey || Object.keys(lineage).length
+              ? {
+                  headers: {
+                    ...lineage,
+                    ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+                  },
+                }
+              : {}),
+            body: {
+              model: resolvedModel,
+              ...(options === undefined ? {} : { options }),
+              input: [visual, driver],
+              projectId,
+            },
+          });
+          return generation;
+        };
+        const client = (context?.clientProfile ?? getProfile()).name;
+        return submissions.once(
+          lipsyncSubmission(args, resolvedModel, options, client),
+          submit,
+          signal,
+        );
       },
     },
   ];

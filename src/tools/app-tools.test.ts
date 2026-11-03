@@ -2,7 +2,7 @@ import { access, mkdtemp, rm } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveClientProfile } from '../client-profile.js';
-import type { HttpClient } from '../http-client.js';
+import { ApiRequestError, type HttpClient } from '../http-client.js';
 import { UploadRuntime } from '../upload-runtime.js';
 import { createAppTools } from './app-tools.js';
 
@@ -276,6 +276,57 @@ describe('createAppTools — create-lipsync', () => {
     request.mockResolvedValueOnce({ id: 'gen-1', status: 'COMPLETED' });
     await tool.handler(sameFile(3));
     expect(request.mock.calls.filter(([, path]) => path === '/v2/generate')).toHaveLength(2);
+  });
+
+  const scriptOnImage = { imageAssetId: 'image-1', script: 'Hi there.', voiceId: 'voice-1' };
+  const posts = (request: ReturnType<typeof setup>['request']) =>
+    request.mock.calls.filter(([method, path]) => method === 'post' && path === '/v2/generate');
+
+  it('submits overlapping identical calls once and gives both the generation', async () => {
+    const { tool, request } = setup();
+    const answer = request.getMockImplementation()!;
+    let release!: () => void;
+    const accepted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    request.mockImplementation(async (method, path, options) => {
+      if (method === 'post' && path === '/v2/generate') await accepted;
+      return answer(method, path, options);
+    });
+    const calls = [tool.handler(scriptOnImage), tool.handler(scriptOnImage)];
+    release();
+    await expect(Promise.all(calls)).resolves.toEqual([
+      { id: 'gen-1', status: 'PENDING' },
+      { id: 'gen-1', status: 'PENDING' },
+    ]);
+    expect(posts(request)).toHaveLength(1);
+  });
+
+  it('reports a failed status read instead of submitting again', async () => {
+    const { tool, request } = setup();
+    await tool.handler(scriptOnImage);
+    request.mockRejectedValueOnce(new ApiRequestError('unavailable', 503));
+    await expect(tool.handler(scriptOnImage)).rejects.toThrow('unavailable');
+    expect(posts(request)).toHaveLength(1);
+
+    // A generation that no longer exists frees the request.
+    request.mockRejectedValueOnce(new ApiRequestError('not found', 404));
+    await tool.handler(scriptOnImage);
+    expect(posts(request)).toHaveLength(2);
+  });
+
+  it('treats a different asset behind an empty URL as a different request', async () => {
+    const { tool, request } = setup();
+    for (const videoAssetId of ['video-1', 'video-2'])
+      await tool.handler({ videoUrl: '', videoAssetId, audioAssetId: 'audio-1' });
+    expect(posts(request).map(([, , options]) => options?.body)).toEqual([
+      expect.objectContaining({
+        input: [{ type: 'video', assetId: 'video-1' }, expect.anything()],
+      }),
+      expect.objectContaining({
+        input: [{ type: 'video', assetId: 'video-2' }, expect.anything()],
+      }),
+    ]);
   });
 
   it('drops reasoning for models without it and speaker detection for a still image', async () => {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getAuthOwner, getAuthToken } from '../auth/async-context.js';
-import type { HttpClient } from '../http-client.js';
+import { ApiRequestError, type HttpClient } from '../http-client.js';
 
 // Agents resubmit a request every few seconds while its generation is still rendering,
 // uploading the same files again each time. A free plan runs one generation at a time,
@@ -9,14 +9,33 @@ import type { HttpClient } from '../http-client.js';
 const REMEMBER_MS = 30 * 60_000;
 const TERMINAL_STATUSES = new Set(['COMPLETED', 'FAILED', 'REJECTED', 'CANCELED', 'CANCELLED']);
 
+type Entry = { expires: number } & (
+  | { submitting: Promise<unknown>; id?: never }
+  | { id: string; submitting?: never }
+);
+
 export type RunningSubmissions = {
-  running: (request: unknown, signal?: AbortSignal) => Promise<unknown>;
-  remember: (request: unknown, generation: unknown) => void;
+  /** Runs `submit` unless an identical request is still submitting or rendering. */
+  once: (
+    request: unknown,
+    submit: () => Promise<unknown>,
+    signal?: AbortSignal,
+  ) => Promise<unknown>;
 };
 
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
 export function createRunningSubmissions(http: HttpClient): RunningSubmissions {
-  const submissions = new Map<string, { id: string; expires: number }>();
-  const key = (request: unknown) => {
+  const entries = new Map<string, Entry>();
+  const keyOf = (request: unknown) => {
     const owner =
       getAuthOwner() ??
       createHash('sha256')
@@ -27,35 +46,62 @@ export function createRunningSubmissions(http: HttpClient): RunningSubmissions {
       .digest('hex');
   };
 
+  // A failed read leaves the entry in place: the generation may still be running.
+  async function stillRunning(id: string, signal?: AbortSignal): Promise<unknown> {
+    try {
+      const generation = await http.request('get', `/v2/generate/${encodeURIComponent(id)}`, {
+        signal,
+      });
+      const status = (generation as { status?: unknown } | null)?.status;
+      return typeof status === 'string' && !TERMINAL_STATUSES.has(status) ? generation : undefined;
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 404) return undefined;
+      throw error;
+    }
+  }
+
   return {
-    async running(request, signal) {
-      const submission = key(request);
-      const entry = submissions.get(submission);
-      if (!entry) return undefined;
-      if (entry.expires > Date.now()) {
-        try {
-          const generation = await http.request(
-            'get',
-            `/v2/generate/${encodeURIComponent(entry.id)}`,
-            { signal },
-          );
-          const status = (generation as { status?: unknown } | null)?.status;
-          if (typeof status === 'string' && !TERMINAL_STATUSES.has(status)) return generation;
-        } catch {
-          // An unreadable generation is no reason to block a new submission.
-          signal?.throwIfAborted();
+    async once(request, submit, signal) {
+      const key = keyOf(request);
+      for (;;) {
+        const entry = entries.get(key);
+        if (!entry) break;
+        if (entry.expires <= Date.now()) {
+          entries.delete(key);
+          break;
         }
+        if (entry.submitting) {
+          try {
+            return await untilAborted(entry.submitting, signal);
+          } catch {
+            // That attempt failed and released the request; look again.
+            signal?.throwIfAborted();
+            continue;
+          }
+        }
+        const generation = await stillRunning(entry.id, signal);
+        if (generation) return generation;
+        if (entries.get(key) === entry) entries.delete(key);
+        break;
       }
-      submissions.delete(submission);
-      return undefined;
-    },
-    remember(request, generation) {
-      const id = (generation as { id?: unknown } | null)?.id;
-      if (typeof id !== 'string') return;
+
       const now = Date.now();
-      for (const [submission, entry] of submissions)
-        if (entry.expires <= now) submissions.delete(submission);
-      submissions.set(key(request), { id, expires: now + REMEMBER_MS });
+      for (const [other, { expires }] of entries) if (expires <= now) entries.delete(other);
+      const submitting = submit();
+      const reservation: Entry = { submitting, expires: now + REMEMBER_MS };
+      entries.set(key, reservation);
+      try {
+        const generation = await submitting;
+        const id = (generation as { id?: unknown } | null)?.id;
+        if (entries.get(key) === reservation) {
+          if (typeof id === 'string') entries.set(key, { id, expires: Date.now() + REMEMBER_MS });
+          else entries.delete(key);
+        }
+        return generation;
+      } catch (error) {
+        if (entries.get(key) === reservation) entries.delete(key);
+        throw error;
+      }
     },
   };
 }
