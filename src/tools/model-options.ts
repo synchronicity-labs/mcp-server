@@ -21,16 +21,31 @@ export const modelOptionsSchema = z
       ])
       .optional(),
     occlusion_detection_enabled: z.boolean().optional(),
-    reasoning_enabled: z.boolean().optional(),
+    reasoning_enabled: z
+      .boolean()
+      .optional()
+      .describe('Only lipsync-2-pro supports reasoning; it is ignored for other models.'),
     model_mode: z.enum(['lips', 'face', 'head']).optional(),
   })
   .strict();
 
-/** The API takes speaker detection as an object; agents may send a boolean. */
-export function parseModelOptions(value: unknown): z.infer<typeof modelOptionsSchema> | undefined {
+const REASONING_MODELS = new Set(['lipsync-2-pro', 'sync-2-pro']);
+
+/**
+ * The API takes speaker detection as an object; agents may send a boolean. Agents also
+ * turn on reasoning for models without it, and speaker detection for a still image, and
+ * the API rejects both, so drop them rather than fail the whole request.
+ */
+export function parseModelOptions(
+  value: unknown,
+  request: { model: string; image?: boolean },
+): z.infer<typeof modelOptionsSchema> | undefined {
   const options = modelOptionsSchema.optional().parse(value);
-  if (typeof options?.active_speaker_detection === 'boolean') {
+  if (!options) return options;
+  if (typeof options.active_speaker_detection === 'boolean') {
     options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
   }
+  if (!REASONING_MODELS.has(request.model)) delete options.reasoning_enabled;
+  if (request.image) delete options.active_speaker_detection;
   return options;
 }

@@ -228,6 +228,76 @@ describe('createAppTools — create-lipsync', () => {
     });
   });
 
+  it.each([
+    ['application/octet-stream', 'image/jpeg', 'image/jpeg'],
+    ['image/webp; charset=binary', undefined, 'image/webp'],
+    ['application/octet-stream', undefined, 'image/png'],
+  ])(
+    'registers a %s download declared as %s with storage as %s',
+    async (header, declared, stored) => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: (name: string) => (name === 'content-length' ? '8' : header) },
+        body: Readable.toWeb(Readable.from([new Uint8Array(8)])),
+      } as unknown as Response);
+      const { uploadTool, request } = setup();
+      await uploadTool.handler({
+        mediaType: 'image',
+        file: chatGptFile('https://files.oai/face', declared ? { mime_type: declared } : {}),
+      });
+      expect(request).toHaveBeenCalledWith('post', '/v2/assets/upload', {
+        body: { fileName: 'chatgpt-upload-image', contentType: stored, size: 8 },
+        signal: expect.any(Object),
+      });
+    },
+  );
+
+  it('answers an identical request with the generation that is still running', async () => {
+    const { tool, request } = setup();
+    const args = (call: number) => ({
+      image: chatGptFile(`https://files.oai/fox-${call}.png`, { mime_type: 'image/png' }),
+      script: 'Hi there.',
+      voiceId: 'voice-1',
+      idempotencyKey: `attempt-${call}`,
+    });
+    // ChatGPT re-sends the same file under a fresh download URL on every call.
+    const sameFile = (call: number) => ({
+      ...args(call),
+      image: { ...args(call).image, file_id: 'file-fox' },
+    });
+    await tool.handler(sameFile(1));
+    request.mockResolvedValueOnce({ id: 'gen-1', status: 'PROCESSING' });
+    await expect(tool.handler(sameFile(2))).resolves.toEqual({ id: 'gen-1', status: 'PROCESSING' });
+    expect(request.mock.calls.filter(([, path]) => path === '/v2/generate')).toHaveLength(1);
+    expect(request.mock.calls.filter(([, path]) => path === '/v2/assets/upload')).toHaveLength(1);
+
+    // Once it finishes, the same request is a new generation.
+    request.mockResolvedValueOnce({ id: 'gen-1', status: 'COMPLETED' });
+    await tool.handler(sameFile(3));
+    expect(request.mock.calls.filter(([, path]) => path === '/v2/generate')).toHaveLength(2);
+  });
+
+  it('drops reasoning for models without it and speaker detection for a still image', async () => {
+    const { tool, request } = setup();
+    await tool.handler({
+      imageAssetId: 'image-1',
+      script: 'Hi there.',
+      voiceId: 'voice-1',
+      options: {
+        sync_mode: 'cut_off',
+        reasoning_enabled: true,
+        active_speaker_detection: { auto_detect: true },
+      },
+    });
+    expect(lastGenerateBody(request)).toMatchObject({
+      model: 'sync-3',
+      options: { sync_mode: 'cut_off' },
+    });
+    expect(lastGenerateBody(request)).not.toHaveProperty('options.reasoning_enabled');
+    expect(lastGenerateBody(request)).not.toHaveProperty('options.active_speaker_detection');
+  });
+
   it.each([false, true])(
     'preserves the primary upload outcome when cleanup fails (upload fails: %s)',
     async (uploadFails) => {

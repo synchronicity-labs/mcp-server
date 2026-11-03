@@ -20,9 +20,39 @@ import {
   createProjectId,
   newProjectFields,
 } from './project-destination.js';
+import { createRunningSubmissions } from './running-submissions.js';
 
 function providedCount(...values: unknown[]): number {
   return values.filter(Boolean).length;
+}
+
+// A ChatGPT file is named by its file_id; its download_url changes on every call.
+function mediaIdentity(url: unknown, assetId: unknown, file: unknown): unknown {
+  return (
+    url ?? assetId ?? (file && typeof file === 'object' && 'file_id' in file ? file.file_id : file)
+  );
+}
+
+/** What makes two create-lipsync calls the same request, ignoring keys and new-project names. */
+function lipsyncSubmission(
+  args: Record<string, unknown>,
+  model: string,
+  options: unknown,
+): unknown[] {
+  return [
+    mediaIdentity(args.videoUrl, args.videoAssetId, args.video),
+    mediaIdentity(args.imageUrl, args.imageAssetId, args.image),
+    mediaIdentity(args.audioUrl, args.audioAssetId, args.audio),
+    args.script,
+    args.voiceId,
+    args.provider,
+    args.stability,
+    args.similarityBoost,
+    model,
+    options,
+    args.projectId,
+    args.continuation,
+  ];
 }
 
 function assertSingleSource(kind: MediaKind, count: number): void {
@@ -63,6 +93,7 @@ export function createAppTools(
   runtime: UploadRuntime = uploadRuntime,
   getProfile: () => ClientProfile = () => resolveClientProfile(),
 ): McpToolDefinition[] {
+  const submissions = createRunningSubmissions(httpClient);
   const tools: McpToolDefinition[] = [
     {
       name: 'upload-media',
@@ -288,7 +319,11 @@ export function createAppTools(
           projectCreationKey?: string;
         };
 
-        const options = parseModelOptions(args.options);
+        const resolvedModel = model ?? 'sync-3';
+        const options = parseModelOptions(args.options, {
+          model: resolvedModel,
+          image: providedCount(imageUrl, imageAssetId, image) > 0,
+        });
         if (args.continuation !== undefined) {
           generationContextSchema.parse(args.continuation);
           z.uuid().parse(requestedProjectId);
@@ -334,6 +369,10 @@ export function createAppTools(
         assertValidFileParam('image', image);
         assertValidFileParam('audio', audio);
 
+        const submission = lipsyncSubmission(args, resolvedModel, options);
+        const running = await submissions.running(submission, signal);
+        if (running) return running;
+
         const projectId =
           requestedProjectId?.trim() ??
           (await createProjectId(
@@ -378,10 +417,8 @@ export function createAppTools(
           ? await resolveMedia(httpClient, 'image', imageUrl, imageAssetId, image, runtime, signal)
           : await resolveMedia(httpClient, 'video', videoUrl, videoAssetId, video, runtime, signal);
 
-        const resolvedModel = model ?? 'sync-3';
-
         signal?.throwIfAborted();
-        return httpClient.request('post', '/v2/generate', {
+        const generation = await httpClient.request('post', '/v2/generate', {
           signal,
           ...(idempotencyKey || Object.keys(lineage).length
             ? {
@@ -398,6 +435,8 @@ export function createAppTools(
             projectId,
           },
         });
+        submissions.remember(submission, generation);
+        return generation;
       },
     },
   ];
