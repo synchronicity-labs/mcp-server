@@ -29,7 +29,7 @@ export function createStudioViewTools(
   if (!supportsStudioViews(operations)) return [];
   const viewId = z.uuid();
   const instructions =
-    ' First get-studio-view for the exact published viewId, use its expectedRevision and a fresh UUID id; retry an uncertain handoff with the SAME id/body. Do not replace unresolved actions, guess a widget, or overwrite stale edits. This never repeats backend creation or paid work. Check the action receipt through get-studio-view: only applied confirms UI display; pending/blocked/failed do not. Draft selection/settings edits use get-studio-draft and update-studio-draft.';
+    ' First get-studio-view for the exact published viewId, use its expectedRevision and a fresh UUID id; retry an uncertain handoff with the SAME id/body. Do not replace unresolved actions, guess a widget, or overwrite stale edits. On "Studio context is stale", get-studio-view again and retry once with its expectedRevision and a fresh id. On STUDIO_VIEW_NOT_OPEN, Studio is not open in this chat: tell the user to open Studio, then get-studio-view again; do not keep retrying. This never repeats backend creation or paid work. Check the action receipt through get-studio-view: only applied confirms UI display; pending/blocked/failed do not. Draft selection/settings edits use get-studio-draft and update-studio-draft.';
   const actions = {
     'open-project': {
       name: 'open-studio-project',
