@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { HttpClient } from '../http-client.js';
+import { ApiRequestError, type HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import { uploadRuntime } from '../upload-runtime.js';
 import { generationContextHeaders, generationContextSchema } from './generation-context.js';
@@ -89,6 +89,29 @@ export function createDialogueTools(
     signal?.throwIfAborted();
     return { ...input, sourceVideoUrl: asset.url, sourceName: asset.name ?? 'dialogue-source.mp4' };
   }
+  async function copyToSyncStorage(
+    input: Awaited<ReturnType<typeof source>>,
+    signal?: AbortSignal,
+  ) {
+    const assetId = await uploadMediaAsset(
+      httpClient,
+      'video',
+      {
+        download_url: input.sourceVideoUrl,
+        file_id: input.videoAssetId,
+        file_name: input.sourceName,
+      },
+      uploadRuntime,
+      signal,
+      { projectId: input.projectId, name: input.sourceName },
+    );
+    const asset = z
+      .object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url() })
+      .passthrough()
+      .parse(await httpClient.request('get', `/v2/assets/${assetId}`, { signal }));
+    if (asset.id !== assetId) throw new Error('Could not verify the uploaded video.');
+    return asset;
+  }
   async function checkedJob(
     tool: McpToolDefinition,
     args: Record<string, unknown>,
@@ -152,47 +175,38 @@ export function createDialogueTools(
         asset: z.object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url() }).passthrough(),
       },
       annotations: writeHints,
-      handler: async (args, context) => {
-        const input = await source(args, context?.signal);
-        const assetId = await uploadMediaAsset(
-          httpClient,
-          'video',
-          {
-            download_url: input.sourceVideoUrl,
-            file_id: input.videoAssetId,
-            file_name: input.sourceName,
-          },
-          uploadRuntime,
-          context?.signal,
-          { projectId: input.projectId, name: input.sourceName },
-        );
-        const asset = z
-          .object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url() })
-          .passthrough()
-          .parse(
-            await httpClient.request('get', `/v2/assets/${assetId}`, { signal: context?.signal }),
-          );
-        if (asset.id !== assetId) throw new Error('Could not verify the uploaded video.');
-        return { asset };
-      },
+      handler: async (args, context) => ({
+        asset: await copyToSyncStorage(await source(args, context?.signal), context?.signal),
+      }),
     },
     {
       name: 'create-dialogue-transcription',
       title: 'Transcribe a video for Edit Dialogue',
       description:
-        'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. If the API rejects external storage, call upload-dialogue-source and use its returned asset id for the rest of the workflow. Does not replace dialogue or generate a video.',
+        'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. A video outside Sync storage is copied there first; the result then carries the videoAssetId of that copy, which the rest of the workflow must use. Does not replace dialogue or generate a video.',
       inputSchema: sourceSchema.shape,
       annotations: writeHints,
       handler: async (args, context) => {
         const input = await source(args, context?.signal);
-        return transcribe.handler(
-          {
-            sourceVideoUrl: input.sourceVideoUrl,
-            projectId: input.projectId,
-            maxSourceSeconds: 600,
-          },
-          context,
-        );
+        const start = (sourceVideoUrl: string) =>
+          transcribe.handler(
+            { sourceVideoUrl, projectId: input.projectId, maxSourceSeconds: 600 },
+            context,
+          );
+        try {
+          return await start(input.sourceVideoUrl);
+        } catch (error) {
+          // Agents rarely made the copy themselves after this rejection, so make it here.
+          if (
+            !(error instanceof ApiRequestError) ||
+            error.status !== 422 ||
+            !error.message.includes('must be hosted in sync. labs storage')
+          )
+            throw error;
+          const copy = await copyToSyncStorage(input, context?.signal);
+          const job = object.parse(await start(copy.url));
+          return { ...job, videoAssetId: copy.id };
+        }
       },
     },
     {

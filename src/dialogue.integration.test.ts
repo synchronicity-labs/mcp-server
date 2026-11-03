@@ -420,18 +420,14 @@ it('refuses keyed preview admission when the upstream has no idempotency contrac
   });
 });
 
-it('uploads an external dialogue source before transcribing and uses the uploaded asset through generation', async () => {
+it('copies an external dialogue source when transcription asks and uses the copy through generation', async () => {
   const { calls, call, port } = await fixture({ external: true });
   const transport = routeUploadSourceToFixture(port);
   try {
-    expect((await call('create-dialogue-transcription', source)).isError).toBe(true);
-    const uploaded = await call('upload-dialogue-source', source);
-    expect(uploaded.isError).not.toBe(true);
-    expect(uploaded.structuredContent).toMatchObject({
-      asset: { id: uploadedAssetId, url: sourceVideoUrl },
-    });
+    const transcription = await call('create-dialogue-transcription', source);
+    expect(transcription.isError).not.toBe(true);
+    expect(transcription.structuredContent).toMatchObject({ videoAssetId: uploadedAssetId });
     const hosted = { projectId, videoAssetId: uploadedAssetId };
-    expect((await call('create-dialogue-transcription', hosted)).isError).not.toBe(true);
     expect(
       (await call('get-dialogue-transcription', { ...hosted, id: transcriptionId })).isError,
     ).not.toBe(true);
