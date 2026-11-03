@@ -204,8 +204,14 @@ export function createDialogueTools(
           )
             throw error;
           const copy = await copyToSyncStorage(input, context?.signal);
-          const job = object.parse(await start(copy.url));
-          return { ...job, videoAssetId: copy.id };
+          try {
+            return { ...object.parse(await start(copy.url)), videoAssetId: copy.id };
+          } catch (retryError) {
+            // Name the saved copy so a retry transcribes it instead of copying again.
+            if (retryError instanceof Error)
+              retryError.message += ` The video is saved in Sync storage as asset ${copy.id}; retry with videoAssetId ${copy.id}.`;
+            throw retryError;
+          }
         }
       },
     },

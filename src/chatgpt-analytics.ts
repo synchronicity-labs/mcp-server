@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { ApiRequestError, cameFromApi, type HttpClient } from './http-client.js';
+import { schemaProperty } from './openapi/parser.js';
 import type { ParsedOperation } from './openapi/types.js';
 import {
   getToolAnalytics,
@@ -62,16 +63,15 @@ export function toolAnalyticsSupport(operations: ParsedOperation[]): ToolAnalyti
     (candidate) => candidate.operationId === 'analytics_captureChatgptEvent',
   );
   if (!operation) return undefined;
-  const properties = (operation.requestBody?.schema.properties ?? {}) as Record<
-    string,
-    { enum?: unknown }
-  >;
-  const names = properties.tool_name?.enum;
+  const schema = operation.requestBody?.schema;
+  const names = schemaProperty(schema, 'tool_name')?.enum;
   return {
     tools: new Set(
       Array.isArray(names) ? names.filter((name) => typeof name === 'string') : toolNames,
     ),
-    errorDetails: ['error_source', 'error_status', 'error_code'].every((key) => key in properties),
+    errorDetails: ['error_source', 'error_status', 'error_code'].every((key) =>
+      Boolean(schemaProperty(schema, key)),
+    ),
   };
 }
 

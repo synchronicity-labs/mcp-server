@@ -82,6 +82,17 @@ describe('ChatGPT analytics transport', () => {
         }),
       ),
     ).toEqual({ tools: new Set(['upload-media']), errorDetails: true });
+    const [wrapped] = operation({});
+    wrapped!.requestBody!.schema = {
+      allOf: [
+        { properties: { tool_name: { enum: ['upload-media'] } } },
+        { properties: { error_source: {}, error_status: {}, error_code: {} } },
+      ],
+    };
+    expect(toolAnalyticsSupport([wrapped!])).toEqual({
+      tools: new Set(['upload-media']),
+      errorDetails: true,
+    });
   });
 
   it.each([
@@ -156,10 +167,21 @@ describe('ChatGPT analytics transport', () => {
   it('returns the original successful result when telemetry rejects', async () => {
     const http = { request: vi.fn().mockRejectedValue(new Error('offline')) };
     await expect(
-      trackToolExecution('create-lipsync', {}, undefined, 'chatgpt', http, async () => ({
-        id: 'accepted',
-      })),
+      trackToolExecution(
+        'create-lipsync',
+        {},
+        undefined,
+        'chatgpt',
+        http,
+        async () => ({ id: 'accepted' }),
+        { tools: new Set(['create-lipsync']), errorDetails: true },
+      ),
     ).resolves.toEqual({ id: 'accepted' });
+    expect(http.request).toHaveBeenCalledWith(
+      'post',
+      '/v2/analytics/chatgpt-events',
+      expect.objectContaining({ body: expect.objectContaining({ outcome: 'success' }) }),
+    );
   });
 
   it('bounds UI telemetry and strips identity before the authenticated HTTP request', async () => {
