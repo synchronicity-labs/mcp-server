@@ -302,6 +302,22 @@ describe('createAppTools — create-lipsync', () => {
     expect(posts(request)).toHaveLength(1);
   });
 
+  it('gives a waiting identical call the first attempt failure without submitting again', async () => {
+    const { tool, request } = setup();
+    const answer = request.getMockImplementation()!;
+    let fail!: (error: Error) => void;
+    const outcome = new Promise<never>((_, reject) => {
+      fail = reject;
+    });
+    request.mockImplementation(async (method, path, options) =>
+      method === 'post' && path === '/v2/generate' ? outcome : answer(method, path, options),
+    );
+    const calls = [tool.handler(scriptOnImage), tool.handler(scriptOnImage)];
+    fail(new ApiRequestError('outcome unknown', 503, 'IDEMPOTENCY_OUTCOME_UNKNOWN'));
+    for (const call of calls) await expect(call).rejects.toThrow('outcome unknown');
+    expect(posts(request)).toHaveLength(1);
+  });
+
   it('reports a failed status read instead of submitting again', async () => {
     const { tool, request } = setup();
     await tool.handler(scriptOnImage);

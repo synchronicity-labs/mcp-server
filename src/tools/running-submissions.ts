@@ -63,27 +63,17 @@ export function createRunningSubmissions(http: HttpClient): RunningSubmissions {
   return {
     async once(request, submit, signal) {
       const key = keyOf(request);
-      for (;;) {
-        const entry = entries.get(key);
-        if (!entry) break;
-        if (entry.expires <= Date.now()) {
-          entries.delete(key);
-          break;
-        }
-        if (entry.submitting) {
-          try {
-            return await untilAborted(entry.submitting, signal);
-          } catch {
-            // That attempt failed and released the request; look again.
-            signal?.throwIfAborted();
-            continue;
-          }
-        }
+      const entry = entries.get(key);
+      if (entry && entry.expires > Date.now()) {
+        // A failed or uncertain first attempt is the answer for every call that waited on it.
+        if (entry.submitting) return untilAborted(entry.submitting, signal);
         const generation = await stillRunning(entry.id, signal);
         if (generation) return generation;
-        if (entries.get(key) === entry) entries.delete(key);
-        break;
+        // Another identical call may have started a submission during the read.
+        const current = entries.get(key);
+        if (current?.submitting) return untilAborted(current.submitting, signal);
       }
+      if (entries.get(key) === entry) entries.delete(key);
 
       const now = Date.now();
       for (const [other, { expires }] of entries) if (expires <= now) entries.delete(other);
