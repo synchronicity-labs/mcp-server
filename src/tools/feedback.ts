@@ -9,7 +9,7 @@ import type { McpToolDefinition } from './generator.js';
  * as it happens, through the API's POST /v2/feedback (captured for daily triage). The tool
  * exists only when the connected API publishes that operation.
  */
-export const FEEDBACK_OPERATION_ID = 'feedback_submit';
+export const FEEDBACK_OPERATION_ID = 'agentFeedback_submit';
 
 export function feedbackOperation(operation: ParsedOperation): boolean {
   return (

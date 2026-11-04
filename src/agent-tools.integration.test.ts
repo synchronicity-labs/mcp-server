@@ -57,7 +57,7 @@ function spec(feedback: boolean) {
       ...(feedback
         ? {
             '/v2/feedback': {
-              post: op('feedback_submit', 'Feedback', {
+              post: op('agentFeedback_submit', 'Feedback', {
                 requestBody: body({ kind: { type: 'string' }, message: { type: 'string' } }),
               }),
             },

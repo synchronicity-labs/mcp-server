@@ -1,3 +1,4 @@
+import { FEEDBACK_OPERATION_ID } from '../tools/feedback.js';
 import type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from './types.js';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
@@ -31,7 +32,9 @@ export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
         method === 'post' &&
         operation.operationId === 'analytics_captureChatgptEvent';
       const isFeedbackCollector =
-        path === '/v2/feedback' && method === 'post' && operation.operationId === 'feedback_submit';
+        path === '/v2/feedback' &&
+        method === 'post' &&
+        operation.operationId === FEEDBACK_OPERATION_ID;
       if (
         !isChatgptCollector &&
         !isFeedbackCollector &&
