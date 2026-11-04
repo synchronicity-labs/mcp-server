@@ -56,7 +56,11 @@ import { withProjectIntent } from './tools/project-intent.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
-import { createTimelineLipsyncTool, timelineClipLimit } from './tools/timeline-lipsync.js';
+import {
+  createTimelineLipsyncTool,
+  timelineClipLimit,
+  timelineKeepsClips,
+} from './tools/timeline-lipsync.js';
 import {
   createTranslationPreviewTools,
   translationPreviewOperations,
@@ -693,7 +697,10 @@ function createTools(
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),
     ...createAppTools(httpClient, undefined, getProfile),
-    createTimelineLipsyncTool(httpClient, getProfile, timelineClipLimit(operations)),
+    createTimelineLipsyncTool(httpClient, getProfile, {
+      maxClips: timelineClipLimit(operations),
+      keptClips: timelineKeepsClips(operations),
+    }),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
     ...createTranslationPreviewTools(operations, httpClient),
