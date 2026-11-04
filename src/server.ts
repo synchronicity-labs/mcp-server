@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import type { CallToolResult, Resource, Tool } from '@modelcontextprotocol/server';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -68,11 +67,13 @@ import {
 } from './tools/translation-preview.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
-
-// Report the published package version, not a hand-maintained copy.
-const { version: PACKAGE_VERSION } = createRequire(import.meta.url)('../package.json') as {
-  version: string;
-};
+import {
+  type AvailableUpdate,
+  type UpdateCheck,
+  updateInstruction,
+  updateToolNotice,
+} from './update-check.js';
+import { PACKAGE_VERSION } from './version.js';
 
 const SERVER_DESCRIPTION =
   'Sync makes photos talk, lip-syncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
@@ -146,10 +147,12 @@ export function serverInstructions(
   profile: ClientProfile,
   spendConfirmation = true,
   feedback = false,
+  update?: AvailableUpdate,
 ): string {
   const instructions =
     (profile.supportsAppUi ? SERVER_INSTRUCTIONS : MODEL_ONLY_INSTRUCTIONS) +
-    (feedback && profile.name !== 'chatgpt' ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '');
+    (feedback && profile.name !== 'chatgpt' ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '') +
+    (update ? ` ${updateInstruction(update)}` : '');
   return spendConfirmation
     ? instructions
     : UNATTENDED_INSTRUCTIONS_PREFIX + applyEdits(instructions, INSTRUCTION_EDITS);
@@ -362,6 +365,7 @@ export function registerTools(
   tools: McpToolDefinition[],
   authMetadataUrl?: string,
   onToolError?: (tool: string, error: unknown) => void,
+  decorateResult: (result: CallToolResult) => CallToolResult = (result) => result,
 ): void {
   for (const tool of tools) {
     server.registerTool(
@@ -385,13 +389,15 @@ export function registerTools(
         };
         try {
           if (tool.resultFormat === 'mcp') {
-            return await tool.handler((args ?? {}) as Record<string, unknown>, context);
+            return decorateResult(
+              await tool.handler((args ?? {}) as Record<string, unknown>, context),
+            );
           }
           const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
-          return createJsonToolResult(result, tool.outputSchema);
+          return decorateResult(createJsonToolResult(result, tool.outputSchema));
         } catch (error) {
           onToolError?.(tool.name, error);
-          return createToolErrorResult(error, authMetadataUrl);
+          return decorateResult(createToolErrorResult(error, authMetadataUrl));
         }
       },
     );
@@ -739,6 +745,7 @@ function createProfiledServer(
   // An initialize request resolves the profile through the handshake, but its
   // response carries the instructions, so they follow the announced client.
   handshakeClientName?: string,
+  updateCheck?: UpdateCheck,
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined = httpClientName;
@@ -762,6 +769,8 @@ function createProfiledServer(
         resolveClientProfile(httpClientName ?? handshakeClientName),
         config.spendConfirmation,
         operations.some(feedbackOperation),
+        // The hosted server deploys on every merge, so only local installs report updates.
+        config.transport === 'stdio' ? updateCheck?.available() : undefined,
       ),
     },
   );
@@ -808,6 +817,7 @@ function createProfiledServer(
     config.transport === 'http' ? resourceMetadataUrl(config.port) : undefined,
     // stdout is the protocol channel over stdio.
     config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,
+    config.transport === 'stdio' && updateCheck ? withUpdateNotice(updateCheck) : undefined,
   );
   const resources: Resource[] = [];
   resources.push({
@@ -928,14 +938,45 @@ function createProfiledServer(
   return server;
 }
 
-export async function createSyncMcpServer(config: SyncMcpConfig): Promise<McpServer> {
+/**
+ * Adds the update notice to the first tool result after the check finds a newer version,
+ * once per session, including when it finished after the instructions were sent. It is a
+ * trailing text block, so structuredContent and the leading JSON text stay unchanged.
+ */
+function withUpdateNotice(updateCheck: UpdateCheck): (result: CallToolResult) => CallToolResult {
+  let delivered = false;
+  return (result) => {
+    const update = delivered ? undefined : updateCheck.available();
+    if (!update) return result;
+    delivered = true;
+    return {
+      ...result,
+      content: [...(result.content ?? []), { type: 'text', text: updateToolNotice(update) }],
+    };
+  };
+}
+
+export async function createSyncMcpServer(
+  config: SyncMcpConfig,
+  options: { updateCheck?: UpdateCheck } = {},
+): Promise<McpServer> {
   const log = (message: string) => {
     process.stderr.write(message);
   };
   const authHeaders = config.transport === 'http' ? {} : await resolveAuth(config, log);
   const operations = parseSpec(await fetchSpec(config.baseUrl));
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
-  return createProfiledServer(config, operations, authHeaders, chatgptApp, previousApps);
+  return createProfiledServer(
+    config,
+    operations,
+    authHeaders,
+    chatgptApp,
+    previousApps,
+    undefined,
+    undefined,
+    undefined,
+    options.updateCheck,
+  );
 }
 
 export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{

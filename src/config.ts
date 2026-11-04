@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { resolveChatgptRelease } from './chatgpt-release.js';
 import { parseSpendConfirmation } from './spend-confirmation.js';
+import { parseUpdateCheck } from './update-check.js';
 
 export type SyncMcpConfig = {
   apiKey?: string;
@@ -10,6 +11,8 @@ export type SyncMcpConfig = {
   port: number;
   /** False when the operator pre-approved spending; see spend-confirmation.ts. */
   spendConfirmation?: boolean;
+  /** stdio only: false skips the daily npm check for a newer version; see update-check.ts. */
+  updateCheck?: boolean;
   chatgptApp?: {
     directory: string;
     previousDirectories?: string[];
@@ -73,6 +76,8 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
       overrides.spendConfirmation ??
       parseSpendConfirmation(process.env.SYNC_MCP_SPEND_CONFIRMATION) ??
       true,
+    updateCheck:
+      overrides.updateCheck ?? parseUpdateCheck(process.env.SYNC_MCP_UPDATE_CHECK) ?? true,
     chatgptApp:
       overrides.chatgptApp ??
       (release

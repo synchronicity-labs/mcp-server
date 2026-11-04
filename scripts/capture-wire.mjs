@@ -226,7 +226,12 @@ async function captureHttp(env, port) {
 async function captureStdio(env, name) {
   const child = spawn(process.execPath, ['dist/cli.js'], {
     cwd: ROOT,
-    env: { ...env, SYNC_API_KEY: 'capture-key' },
+    // Off by default: the npm update check makes a capture depend on what is published.
+    env: {
+      ...env,
+      SYNC_API_KEY: 'capture-key',
+      SYNC_MCP_UPDATE_CHECK: env.SYNC_MCP_UPDATE_CHECK ?? 'off',
+    },
     stdio: ['pipe', 'pipe', 'ignore'],
   });
   let buffer = '';
