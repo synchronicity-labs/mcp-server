@@ -60,9 +60,13 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  * Read until done(state) or the budget runs out; returns the last state read.
  * `describe` turns a state into the progress message; `delayMs` lets a pending
  * state ask for a longer pause (an import's retryAfterMs).
+ *
+ * The budget bounds the whole call: no pause runs past it, and every read after
+ * the first gets a signal that aborts at the deadline, in which case the last
+ * state is returned. Only the caller's own cancellation is rethrown.
  */
 export async function pollUntil<T>(
-  read: () => Promise<T>,
+  read: (signal?: AbortSignal) => Promise<T>,
   done: (state: T) => boolean,
   context: ToolRequestContext | undefined,
   options: {
@@ -74,16 +78,34 @@ export async function pollUntil<T>(
 ): Promise<T> {
   const now = options.now ?? Date.now;
   const deadline = now() + (options.budgetMs ?? WAIT_BUDGET_MS);
-  let polls = 0;
-  for (;;) {
-    const state = await read();
-    polls += 1;
-    if (done(state)) return state;
+  let state = await read(context?.signal);
+  for (let polls = 1; !done(state); polls++) {
     await context?.progress?.(polls, options.describe?.(state));
     const pause =
       options.delayMs?.(state) ?? INTERVALS_MS[Math.min(polls, INTERVALS_MS.length) - 1]!;
-    const remaining = deadline - now();
-    if (remaining <= 0) return state;
-    await sleep(Math.min(pause, remaining), context?.signal);
+    // Sleeping into the deadline only to return the same state helps nobody.
+    if (deadline - now() <= pause) return state;
+    await sleep(pause, context?.signal);
+    const next = await boundedBy(deadline - now(), context?.signal, read);
+    if (next === TIMED_OUT) return state;
+    state = next;
+  }
+  return state;
+}
+
+export const TIMED_OUT = Symbol('timed out');
+
+/** Run `task` with a signal that also aborts after `ms`; a timeout yields TIMED_OUT. */
+export async function boundedBy<T>(
+  ms: number,
+  caller: AbortSignal | undefined,
+  task: (signal: AbortSignal) => Promise<T>,
+): Promise<T | typeof TIMED_OUT> {
+  const timeout = AbortSignal.timeout(Math.max(ms, 0));
+  try {
+    return await task(caller ? AbortSignal.any([caller, timeout]) : timeout);
+  } catch (error) {
+    if (timeout.aborted && !caller?.aborted) return TIMED_OUT;
+    throw error;
   }
 }

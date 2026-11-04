@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
-import { pollUntil, sleep, WAIT_BUDGET_MS, waitInput } from './job-wait.js';
+import { boundedBy, pollUntil, sleep, TIMED_OUT, WAIT_BUDGET_MS, waitInput } from './job-wait.js';
 
 /**
  * Agent-facing fixes for tools generated straight from the public OpenAPI spec. Each one
@@ -56,6 +56,12 @@ function withTranscriptionAsset(tool: JsonTool, http: HttpClient): JsonTool {
     description: `${tool.description} Pass assetId to transcribe a saved VIDEO or AUDIO asset instead of a source URL.`,
     inputSchema: {
       ...tool.inputSchema,
+      // An assetId replaces the source URL, so neither can stay required.
+      ...Object.fromEntries(
+        (['sourceVideoUrl', 'sourceAudioUrl'] as const)
+          .filter((key) => tool.inputSchema[key])
+          .map((key) => [key, tool.inputSchema[key]!.optional()]),
+      ),
       assetId: z
         .uuid()
         .optional()
@@ -91,7 +97,7 @@ function withJobWait(tool: JsonTool, label: string): JsonTool {
     description: `${tool.description} Pass wait: true to wait for the job on the server.`,
     inputSchema: { ...tool.inputSchema, wait: waitInput },
     handler: async ({ wait, ...args }, context) => {
-      const read = () => handler(args, context);
+      const read = (signal = context?.signal) => handler(args, { ...context, signal });
       if (wait !== true) return read();
       return pollUntil(
         read,
@@ -115,10 +121,19 @@ function withImportWait(tool: JsonTool): JsonTool {
     inputSchema: { ...tool.inputSchema, wait: waitInput },
     handler: async ({ wait, ...args }, context) => {
       const deadline = Date.now() + WAIT_BUDGET_MS;
+      let lastError: unknown;
       for (let attempt = 1; ; attempt++) {
         try {
-          return await handler(args, context);
+          if (attempt === 1) return await handler(args, context);
+          // Retries share the budget; one still in flight at the deadline returns the last 409.
+          const result = await boundedBy(deadline - Date.now(), context?.signal, (signal) =>
+            handler(args, { ...context, signal }),
+          );
+          if (result === TIMED_OUT) throw lastError;
+          return result;
         } catch (error) {
+          if (error === lastError) throw error;
+          lastError = error;
           const importing =
             error instanceof ApiRequestError &&
             error.status === 409 &&

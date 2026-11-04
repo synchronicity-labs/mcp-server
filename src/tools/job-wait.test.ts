@@ -33,13 +33,41 @@ describe('pollUntil', () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
+  it('returns the last state instead of waiting on a read still running at the deadline', async () => {
+    let reads = 0;
+    const started = Date.now();
+    const result = await pollUntil(
+      (signal) => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve('PENDING');
+        return new Promise<string>((_, reject) =>
+          signal?.addEventListener('abort', () => reject(signal.reason)),
+        );
+      },
+      () => false,
+      undefined,
+      { budgetMs: 80, delayMs: () => 0 },
+    );
+    expect(result).toBe('PENDING');
+    expect(reads).toBe(2);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it('does not sleep into the deadline just to return the same state', async () => {
+    const read = vi.fn(async () => 'PROCESSING');
+    const started = Date.now();
+    await pollUntil(read, () => false, undefined, { budgetMs: 1_000, delayMs: () => 5_000 });
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
   it('stops waiting when the call is cancelled', async () => {
     const controller = new AbortController();
     const waiting = pollUntil(
       async () => 'PROCESSING',
       () => false,
       { signal: controller.signal },
-      { delayMs: () => 60_000 },
+      { delayMs: () => 10_000 },
     );
     controller.abort(new Error('cancelled'));
     await expect(waiting).rejects.toThrow('cancelled');

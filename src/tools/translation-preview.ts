@@ -160,11 +160,11 @@ export function createTranslationPreviewTools(
       handler: async (args, context) => {
         const { wait, ...fields } = waitable.parse(args);
         const input = read.parse(fields);
-        const get = async () =>
+        const get = async (signal = context?.signal) =>
           jobSchema.parse(
             await http.request('get', `/v2/integrations/dubbing/${input.id}`, {
               query: { projectId: input.projectId },
-              signal: context?.signal,
+              signal,
             }),
           );
         if (!wait) return get();

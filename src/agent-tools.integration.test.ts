@@ -43,10 +43,14 @@ function spec(feedback: boolean) {
       },
       '/v2/transcriptions': {
         post: op('TranscriptionsController_createTranscription', 'Transcriptions', {
-          requestBody: body({
-            sourceVideoUrl: { type: 'string' },
-            sourceAudioUrl: { type: 'string' },
-          }),
+          // Required here, as some spec versions declare it: assetId must still work.
+          requestBody: body(
+            {
+              sourceVideoUrl: { type: 'string' },
+              sourceAudioUrl: { type: 'string' },
+            },
+            ['sourceVideoUrl'],
+          ),
         }),
       },
       '/v2/transcriptions/{id}': {
