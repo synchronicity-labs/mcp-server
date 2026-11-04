@@ -529,10 +529,14 @@ describe('immutable client profiles', () => {
               name: 'generate_get-generation',
               arguments: { id: 'generation', wait: true, timeout: 55 },
             });
-            expect(poll.structuredContent).toMatchObject({ outputUrl: signedUrl });
-            expect(JSON.parse((poll.content as Array<{ text: string }>)[0]!.text).outputUrl).toBe(
-              signedUrl,
-            );
+            // The API's name and the deprecated alias carry the same signed URL.
+            expect(poll.structuredContent).toMatchObject({
+              outputMediaUrl: signedUrl,
+              outputUrl: signedUrl,
+            });
+            const text = JSON.parse((poll.content as Array<{ text: string }>)[0]!.text);
+            expect(text.outputMediaUrl).toBe(signedUrl);
+            expect(text.outputUrl).toBe(signedUrl);
           }
         }
       }

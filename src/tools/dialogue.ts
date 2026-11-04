@@ -49,6 +49,16 @@ const dialogueEdits = z
   .max(100)
   .describe('User-approved changes/removals referencing timed word IDs in the source transcript.');
 
+/** transcriptionJobId is the API's name; transcriptionId is the older MCP name. */
+function transcriptionJobId(args: Record<string, unknown>): unknown {
+  const { transcriptionJobId: id, transcriptionId: alias } = args;
+  if (id && alias && id !== alias)
+    throw new Error(
+      'transcriptionJobId and transcriptionId name different transcriptions; pass transcriptionJobId only.',
+    );
+  return id ?? alias;
+}
+
 export function createDialogueTools(
   operations: ParsedOperation[],
   httpClient: HttpClient,
@@ -241,27 +251,33 @@ export function createDialogueTools(
           .describe(
             'Persist a unique key before creation when get-dialogue-options reports keyedPreview. Reuse only with identical inputs for an explicitly requested retry.',
           ),
-        transcriptionId: z
+        transcriptionJobId: z
           .uuid()
           .optional()
           .describe(
-            'Completed transcription ID for this source. Supply exactly one of transcriptionId or previousPreviewId.',
+            'Completed transcription ID for this source. Supply exactly one of transcriptionJobId or previousPreviewId.',
           ),
         previousPreviewId: z
           .uuid()
           .optional()
           .describe(
-            'Completed or partially completed preview ID for this source when reopening. Supply exactly one of previousPreviewId or transcriptionId.',
+            'Completed or partially completed preview ID for this source when reopening. Supply exactly one of previousPreviewId or transcriptionJobId.',
           ),
         edits: dialogueEdits,
+        transcriptionId: z
+          .uuid()
+          .optional()
+          .describe('Deprecated alias of transcriptionJobId.')
+          .meta({ deprecated: true }),
       }).shape,
       annotations: { ...writeHints, openWorldHint: false },
       handler: async (args, context) => {
         const key = previewKeySchema.optional().parse(args.idempotencyKey);
         if (key && !keyedPreview)
           throw new Error('This API does not support keyed dialogue preview recovery.');
-        if (Boolean(args.transcriptionId) === Boolean(args.previousPreviewId)) {
-          throw new Error('Provide one transcriptionId or previousPreviewId, not both.');
+        const transcriptionId = transcriptionJobId(args);
+        if (Boolean(transcriptionId) === Boolean(args.previousPreviewId)) {
+          throw new Error('Provide one transcriptionJobId or previousPreviewId, not both.');
         }
         const input = await source(args, context?.signal);
         const previous = args.previousPreviewId
@@ -269,11 +285,7 @@ export function createDialogueTools(
           : undefined;
         const transcriptJob =
           previous ??
-          (await checkedJob(
-            readTranscript,
-            { ...args, id: args.transcriptionId },
-            context?.signal,
-          ));
+          (await checkedJob(readTranscript, { ...args, id: transcriptionId }, context?.signal));
         if (
           transcriptJob.status !== 'COMPLETED' &&
           !(previous && transcriptJob.status === 'COMPLETED_PARTIAL')
@@ -286,7 +298,7 @@ export function createDialogueTools(
           transcript: previous ? previous.sourceTranscript : transcriptJob.transcript,
           edits: args.edits,
           ...(previous?.voiceId ? { voiceId: previous.voiceId } : {}),
-          ...(previous ? {} : { transcriptionJobId: args.transcriptionId }),
+          ...(previous ? {} : { transcriptionJobId: transcriptionId }),
           ...(previous && JSON.stringify(previous.edits) === JSON.stringify(args.edits)
             ? { rerunOfJobId: previous.id }
             : {}),

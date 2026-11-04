@@ -297,3 +297,38 @@ it('shows agents the edit shapes and rejects a malformed edit before any write',
   expect(result.isError).toBe(true);
   expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
 });
+
+it('takes the API name transcriptionJobId and still accepts transcriptionId', async () => {
+  const { calls, client, call } = await fixture();
+  const preview = (await client.listTools()).tools.find(
+    (tool) => tool.name === 'create-dialogue-preview',
+  );
+  const properties = preview?.inputSchema.properties as Record<string, { deprecated?: boolean }>;
+  expect(properties.transcriptionJobId?.deprecated).toBeUndefined();
+  expect(properties.transcriptionId?.deprecated).toBe(true);
+  expect(preview?.inputSchema.required).not.toContain('transcriptionJobId');
+  expect(preview?.inputSchema.required).not.toContain('transcriptionId');
+
+  const other = '00000000-0000-4000-8000-0000000000ff';
+  const conflict = await call('create-dialogue-preview', {
+    ...source,
+    transcriptionJobId: transcriptionId,
+    transcriptionId: other,
+    edits,
+  });
+  expect(conflict.isError).toBe(true);
+  expect(JSON.stringify(conflict.content)).toContain('pass transcriptionJobId only');
+  expect(calls.some((c) => c.path === '/v2/dialogue-edits')).toBe(false);
+
+  for (const ids of [
+    { transcriptionJobId: transcriptionId },
+    { transcriptionId },
+    { transcriptionJobId: transcriptionId, transcriptionId },
+  ])
+    expect((await call('create-dialogue-preview', { ...source, ...ids, edits })).isError).not.toBe(
+      true,
+    );
+  const bodies = calls.filter((c) => c.path === '/v2/dialogue-edits').map((c) => c.body);
+  expect(bodies).toHaveLength(3);
+  for (const body of bodies) expect(body).toMatchObject({ transcriptionJobId: transcriptionId });
+});

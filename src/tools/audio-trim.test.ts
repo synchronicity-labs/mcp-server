@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { parseSpec } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import { createAudioTrimTools } from './audio-trim.js';
@@ -106,5 +107,41 @@ describe('audio preparation tools', () => {
     expect(request).toHaveBeenLastCalledWith('get', `/v2/audio-trims/${id}`, {
       signal: undefined,
     });
+  });
+  it('takes the API name assetId and still accepts audioAssetId', async () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+    const other = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
+    const request = vi.fn().mockResolvedValue({
+      id,
+      status: 'queued',
+      assetId: null,
+      durationSeconds: null,
+      errorCode: null,
+      retryAfterMs: 2000,
+    });
+    const [trim] = createAudioTrimTools(operations, { request });
+    const schema = z.toJSONSchema(z.object(trim!.inputSchema)) as {
+      required?: string[];
+      properties: Record<string, { deprecated?: boolean }>;
+    };
+    expect(schema.required).not.toContain('assetId');
+    expect(schema.required).not.toContain('audioAssetId');
+    expect(schema.properties.assetId?.deprecated).toBeUndefined();
+    expect(schema.properties.audioAssetId?.deprecated).toBe(true);
+    expect(trim!.description).toContain(
+      'audio asset, passed as assetId, as a new reusable asset. Explain and confirm',
+    );
+    for (const source of [{ assetId: id }, { audioAssetId: id }, { assetId: id, audioAssetId: id }])
+      await trim!.handler({ ...source, durationSeconds: 15, idempotencyKey: id });
+    expect(request.mock.calls.map(([, , options]) => options.body)).toEqual(
+      [1, 2, 3].map(() => ({ assetId: id, durationSeconds: 15 })),
+    );
+    await expect(
+      trim!.handler({ assetId: id, audioAssetId: other, durationSeconds: 15, idempotencyKey: id }),
+    ).rejects.toThrow('assetId and audioAssetId name different assets');
+    await expect(trim!.handler({ durationSeconds: 15, idempotencyKey: id })).rejects.toThrow(
+      'Pass assetId.',
+    );
+    expect(request).toHaveBeenCalledTimes(3);
   });
 });

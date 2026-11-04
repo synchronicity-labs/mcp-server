@@ -204,7 +204,9 @@ it.each(['', '/api-proxy'])(
       arguments: { projectId, limit: 2, cursor: generationId },
     });
     expect(result.isError).not.toBe(true);
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(rows, null, 2) }]);
+    // The API's rows, each also naming its result outputMediaUrl like GET /v2/generations/{id}.
+    const named = rows.map((row) => ({ ...row, outputMediaUrl: row.outputUrl }));
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(named, null, 2) }]);
     expect(calls).toEqual([
       { path: `${basePath}/v2/projects/${projectId}`, query: {} },
       {

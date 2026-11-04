@@ -473,7 +473,8 @@ export const UPLOAD_WIDGET_HTML = `
         }
 
         function outputUrlFrom(value) {
-          return findStringByKeys(payloadFromToolResult(value), ["outputUrl", "output_url"], 0);
+          // outputMediaUrl is the API's name; outputUrl and output_url are older names.
+          return findStringByKeys(payloadFromToolResult(value), ["outputMediaUrl", "outputUrl", "output_url"], 0);
         }
 
         function voiceFromToolResult(value) {
@@ -566,12 +567,13 @@ export const UPLOAD_WIDGET_HTML = `
                 script: script,
                 voiceId: voice.id,
                 generationId: generationId,
+                outputMediaUrl: outputUrl,
                 outputUrl: outputUrl,
                 lipsyncStarted: true,
                 modelContent:
                   "Sync lipsync completed. generationId: " +
                   generationId +
-                  (outputUrl ? "; outputUrl: " + outputUrl : ""),
+                  (outputUrl ? "; outputMediaUrl: " + outputUrl : ""),
               });
               return;
             }

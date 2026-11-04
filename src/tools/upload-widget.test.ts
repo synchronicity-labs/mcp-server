@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import type {
   ReadResourceCallback,
   ReadResourceResult,
@@ -89,6 +90,48 @@ describe('UPLOAD_WIDGET_HTML', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("generate_get-generation"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="scriptInput"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="runLipsync"');
+  });
+});
+
+// Runs the widget's own result readers, as the ChatGPT iframe would.
+function widgetFunction(name: string): (value: unknown) => string {
+  const source = ['parseJson', 'payloadFromToolResult', 'findStringByKeys', name]
+    .map((fn) => {
+      const start = UPLOAD_WIDGET_HTML.indexOf(`        function ${fn}(`);
+      const end = UPLOAD_WIDGET_HTML.indexOf('\n        }\n', start);
+      if (start < 0 || end < 0) throw new Error(`The widget has no function ${fn}`);
+      return UPLOAD_WIDGET_HTML.slice(start, end + 10);
+    })
+    .join('\n');
+  return runInNewContext(`${source}\n${name}`) as (value: unknown) => string;
+}
+
+describe('widget generation result', () => {
+  const outputUrlFrom = widgetFunction('outputUrlFrom');
+  const url = 'https://fixture.invalid/result.mp4?Signature=a%2Fb';
+
+  it('reads the API name outputMediaUrl and the older outputUrl and output_url', () => {
+    for (const key of ['outputMediaUrl', 'outputUrl', 'output_url'])
+      expect(outputUrlFrom({ structuredContent: { status: 'COMPLETED', [key]: url } }), key).toBe(
+        url,
+      );
+    expect(
+      outputUrlFrom({ content: [{ type: 'text', text: JSON.stringify({ outputMediaUrl: url }) }] }),
+    ).toBe(url);
+    expect(outputUrlFrom({ structuredContent: { status: 'PENDING' } })).toBe('');
+  });
+
+  it('prefers outputMediaUrl when both names are present', () => {
+    expect(
+      outputUrlFrom({
+        structuredContent: { outputUrl: 'https://old.invalid', outputMediaUrl: url },
+      }),
+    ).toBe(url);
+  });
+
+  it('tells the model the API name', () => {
+    expect(UPLOAD_WIDGET_HTML).toContain('"; outputMediaUrl: " + outputUrl');
+    expect(UPLOAD_WIDGET_HTML).not.toContain('"; outputUrl: "');
   });
 });
 

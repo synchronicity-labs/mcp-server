@@ -175,6 +175,7 @@ async function fixture({
             status: req.method === 'GET' ? readStatus : 'PROCESSING',
             sourceLang: 'auto',
             targetLang: 'es',
+            cloningStrength: 7,
             outputMediaUrl:
               req.method === 'GET' ? 'https://media.example.test/translated.wav' : null,
             outputDurationSec: req.method === 'GET' ? 2 : null,
@@ -253,6 +254,8 @@ it.each(['http', 'stdio'] as const)(
     const completed = await call('get-translation-preview', { projectId, id: jobId });
     expect(completed.structuredContent).toMatchObject({
       status: 'COMPLETED',
+      // DubbingGenerationDto returns cloningStrength; the job no longer drops it.
+      cloningStrength: 7,
       outputMediaUrl: 'https://media.example.test/translated.wav',
     });
     expect(JSON.stringify(completed)).not.toContain('must-not-leak');
