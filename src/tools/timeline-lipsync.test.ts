@@ -232,6 +232,50 @@ describe('create-timeline-lipsync', () => {
       );
     });
 
+    it('plays the only dub over the whole output when outputAudio is omitted', async () => {
+      const { request, tool } = keptTool();
+
+      await tool.handler({
+        videoAssetId: VIDEO,
+        projectId: PROJECT,
+        clips: [
+          { audioAssetId: A, startTime: 0, endTime: 4, audioStartTime: 0, audioEndTime: 4 },
+          { startTime: 4, endTime: 9, lipsync: false },
+        ],
+      });
+
+      expect(request).toHaveBeenCalledWith(
+        'post',
+        '/v2/generate',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            input: [
+              { type: 'video', assetId: VIDEO },
+              { type: 'audio', assetId: A, refId: 'audio-1' },
+            ],
+            outputAudio: { refId: 'audio-1' },
+          }),
+        }),
+      );
+    });
+
+    it('leaves the choice to the API when kept clips meet several audios', async () => {
+      const { request, tool } = keptTool();
+
+      await tool.handler({
+        videoAssetId: VIDEO,
+        projectId: PROJECT,
+        clips: [
+          { audioAssetId: A, startTime: 0, endTime: 4 },
+          { audioAssetId: B, startTime: 4, endTime: 6 },
+          { startTime: 6, endTime: 9, lipsync: false },
+        ],
+      });
+
+      const [, , call] = request.mock.calls[0] as unknown as [string, string, { body: object }];
+      expect(call.body).not.toHaveProperty('outputAudio');
+    });
+
     it.each([
       [
         'a kept clip with audio',

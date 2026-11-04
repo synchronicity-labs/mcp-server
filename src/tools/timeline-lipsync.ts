@@ -282,9 +282,18 @@ export function generationBody(args: TimelineInput, projectId: string) {
         : { startFrame: c.startFrame, endFrame: c.endFrame }),
       ...(c.lipsync === false ? { lipsync: false } : audioPart(c)),
     })),
-    ...(args.outputAudio ? { outputAudio: { refId: refs.get(audioKey(args.outputAudio))! } } : {}),
+    ...outputAudioPart(),
     projectId,
   };
+
+  // Kept clips need one track over the whole output: outputAudio, or the only audio the clips
+  // use. Sent explicitly so the request says which track plays, not the API's default.
+  function outputAudioPart() {
+    if (args.outputAudio) return { outputAudio: { refId: refs.get(audioKey(args.outputAudio))! } };
+    if (args.clips.some((placed) => placed.lipsync === false) && refs.size === 1)
+      return { outputAudio: { refId: [...refs.values()][0]! } };
+    return {};
+  }
 
   function audioPart(c: Clip) {
     return {
