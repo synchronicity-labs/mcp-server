@@ -121,7 +121,40 @@ const input = z
   })
   .strict();
 
-type Clip = z.infer<typeof clip>;
+// Offered only when the API publishes segments[].lipsync and outputAudio.
+const keptClip = clip.extend({
+  lipsync: z
+    .literal(false)
+    .optional()
+    .describe(
+      'false keeps this part of the video exactly as it is: not lipsynced and not billed, while outputAudio still plays over it. Give no audio, syncMode or speaker. Use it for shots that should hear the dub without moving lips (listeners, people off camera or facing away).',
+    ),
+});
+const outputAudio = z
+  .object({
+    audioAssetId: z.uuid().optional().describe('Sync asset id of the audio.'),
+    audioUrl: z
+      .url({ protocol: /^https$/ })
+      .optional()
+      .describe('HTTPS URL of the audio.'),
+  })
+  .strict()
+  .describe(
+    'One audio that plays over the whole finished output from its first second, replacing the sound of every part, such as the full dubbed track. Defaults, when a clip sets lipsync: false, to the only audio the clips use.',
+  );
+const keptInput = input.extend({
+  clips: z
+    .array(keptClip)
+    .min(1)
+    .max(200)
+    .describe(
+      'Clips placed on the video, in any order, without overlapping. Parts no clip covers keep their original picture and sound; clips with lipsync: false keep their picture but play outputAudio.',
+    ),
+  outputAudio: outputAudio.optional(),
+});
+
+type Clip = z.infer<typeof keptClip>;
+type TimelineInput = z.infer<typeof keptInput>;
 
 type Span = { start: number; end: number; index: number; unit: 'seconds' | 'frames' };
 
@@ -150,8 +183,20 @@ function assertPlaceable(clips: Clip[], maxClips?: number): void {
       `A generation takes at most ${maxClips} clips; this request has ${clips.length}. Merge neighbouring clips of the same face, or split the video into parts.`,
     );
   const byUnit = { seconds: [] as Span[], frames: [] as Span[] };
+  if (clips.every((c) => c.lipsync === false))
+    throw new Error('Every clip sets lipsync: false, so there is nothing to lipsync.');
   clips.forEach((c, index) => {
-    if ((c.audioAssetId === undefined) === (c.audioUrl === undefined))
+    const kept = c.lipsync === false;
+    if (
+      kept &&
+      [c.audioAssetId, c.audioUrl, c.audioStartTime, c.audioEndTime, c.syncMode, c.speaker].some(
+        (value) => value !== undefined,
+      )
+    )
+      throw new Error(
+        `clips[${index}] sets lipsync: false, so it takes no audio, syncMode or speaker; outputAudio plays there.`,
+      );
+    if (!kept && (c.audioAssetId === undefined) === (c.audioUrl === undefined))
       throw new Error(`clips[${index}]: give audioAssetId or audioUrl, exactly one.`);
     const span = spanOf(c, index);
     if (span.end <= span.start + (span.unit === 'frames' ? 1 : 0))
@@ -207,12 +252,17 @@ function clipOverride({ syncMode, speaker: face }: Clip) {
  * of a Studio timeline. Each distinct audio asset becomes one input, and each
  * clip a segment that reads its part of that audio.
  */
-export function generationBody(args: z.infer<typeof input>, projectId: string) {
+export function generationBody(args: TimelineInput, projectId: string) {
   // One input per distinct audio, keyed by asset id or URL.
-  const audioKey = (c: Clip) => (c.audioAssetId ? `asset:${c.audioAssetId}` : `url:${c.audioUrl}`);
+  const audioKey = (c: { audioAssetId?: string; audioUrl?: string }) =>
+    c.audioAssetId ? `asset:${c.audioAssetId}` : `url:${c.audioUrl}`;
   const refs = new Map<string, string>();
-  for (const c of args.clips)
-    if (!refs.has(audioKey(c))) refs.set(audioKey(c), `audio-${refs.size + 1}`);
+  const audios = [
+    ...args.clips.filter((placed) => placed.lipsync !== false),
+    ...(args.outputAudio ? [args.outputAudio] : []),
+  ];
+  for (const audio of audios)
+    if (!refs.has(audioKey(audio))) refs.set(audioKey(audio), `audio-${refs.size + 1}`);
   const model = args.model ?? 'sync-3';
   const options = parseModelOptions(args.options, { model });
   return {
@@ -230,15 +280,22 @@ export function generationBody(args: z.infer<typeof input>, projectId: string) {
       ...(c.startFrame === undefined
         ? { startTime: c.startTime, endTime: c.endTime }
         : { startFrame: c.startFrame, endFrame: c.endFrame }),
+      ...(c.lipsync === false ? { lipsync: false } : audioPart(c)),
+    })),
+    ...(args.outputAudio ? { outputAudio: { refId: refs.get(audioKey(args.outputAudio))! } } : {}),
+    projectId,
+  };
+
+  function audioPart(c: Clip) {
+    return {
       audioInput: {
         refId: refs.get(audioKey(c))!,
         ...(c.audioStartTime === undefined ? {} : { startTime: c.audioStartTime }),
         ...(c.audioEndTime === undefined ? {} : { endTime: c.audioEndTime }),
       },
       ...clipOverride(c),
-    })),
-    projectId,
-  };
+    };
+  }
 }
 
 /** segments.maxItems on POST /v2/generate, when the API's spec publishes it. */
@@ -251,18 +308,32 @@ export function timelineClipLimit(operations: ParsedOperation[]): number | undef
   return typeof limit === 'number' && Number.isInteger(limit) && limit > 0 ? limit : undefined;
 }
 
+/** Whether the API takes segments[].lipsync: false and a top-level outputAudio. */
+export function timelineKeepsClips(operations: ParsedOperation[]): boolean {
+  const generate = operations.find(
+    (operation) => operation.method === 'post' && operation.path === '/v2/generate',
+  );
+  const body = generate?.requestBody?.schema;
+  const segment = schemaProperty(body, 'segments')?.items as Parameters<typeof schemaProperty>[0];
+  return !!schemaProperty(segment, 'lipsync') && !!schemaProperty(body, 'outputAudio');
+}
+
 export function createTimelineLipsyncTool(
   httpClient: HttpClient,
   getProfile: () => ClientProfile = () => resolveClientProfile(),
-  // The API's segment limit, read from its spec when it publishes one.
-  maxClips?: number,
+  // Read from the API's spec: its segment limit, and whether clips can be kept.
+  features: { maxClips?: number; keptClips?: boolean } = {},
 ): McpToolDefinition {
+  const schema = features.keptClips ? keptInput : input;
   return {
     name: 'create-timeline-lipsync',
     title: 'Create timeline lipsync',
     description:
-      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset or audio URL, the seconds (or frames) of the video it covers, and optionally the part of the audio file it plays, its sync mode and the face it lipsyncs. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use create-lipsync. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generate_get-generation and wait: true. Clips are checked before anything is created, and errors name the clip index.',
-    inputSchema: input.shape,
+      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset or audio URL, the seconds (or frames) of the video it covers, and optionally the part of the audio file it plays, its sync mode and the face it lipsyncs. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use create-lipsync. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generate_get-generation and wait: true. Clips are checked before anything is created, and errors name the clip index.' +
+      (features.keptClips
+        ? ' To dub a whole video while lipsyncing only some shots, pass the full dubbed track as outputAudio, lipsync the speaking shots with clips that play their part of it, and add clips with lipsync: false for the rest; the result plays the dub continuously with no cuts.'
+        : ''),
+    inputSchema: schema.shape,
     outputSchema: generationOutputSchema,
     annotations: {
       readOnlyHint: false,
@@ -276,9 +347,14 @@ export function createTimelineLipsyncTool(
     },
     handler: async (rawArgs, context) => {
       const signal = context?.signal;
-      const args = input.parse(rawArgs);
+      const args: TimelineInput = schema.parse(rawArgs);
       assertProjectDestination(args.projectId, args.projectName, args.projectCreationKey);
-      assertPlaceable(args.clips, maxClips);
+      assertPlaceable(args.clips, features.maxClips);
+      if (
+        args.outputAudio &&
+        (args.outputAudio.audioAssetId === undefined) === (args.outputAudio.audioUrl === undefined)
+      )
+        throw new Error('outputAudio: give audioAssetId or audioUrl, exactly one.');
 
       // Like create-lipsync: a new project unless the user picked one.
       const projectId =

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import { selectHostedHttpTools } from '../server.js';
-import { createTimelineLipsyncTool } from './timeline-lipsync.js';
+import { createTimelineLipsyncTool, timelineKeepsClips } from './timeline-lipsync.js';
 
 const VIDEO = '0be08891-00e2-4811-84d7-5c38f6bb602a';
 const A = '51ef4ef2-84af-4622-b0d0-c47ac04785da';
@@ -175,13 +175,127 @@ describe('create-timeline-lipsync', () => {
 
   it('refuses more clips than the API takes, before calling it', async () => {
     const request = vi.fn();
-    const tool = createTimelineLipsyncTool({ request } as unknown as HttpClient, undefined, 2);
+    const tool = createTimelineLipsyncTool({ request } as unknown as HttpClient, undefined, {
+      maxClips: 2,
+    });
     const clips = [0, 1, 2].map((i) => ({ audioAssetId: A, startTime: i, endTime: i + 0.5 }));
 
     await expect(tool.handler({ videoAssetId: VIDEO, projectId: PROJECT, clips })).rejects.toThrow(
       'at most 2 clips; this request has 3',
     );
     expect(request).not.toHaveBeenCalled();
+  });
+
+  describe('clips kept as they are', () => {
+    const dub = 'https://cdn.example.test/dubbing-1.flac';
+    const keptTool = () => {
+      const request = vi.fn(async () => ({ id: 'generation-1', status: 'PENDING' }));
+      const tool = createTimelineLipsyncTool({ request } as unknown as HttpClient, undefined, {
+        keptClips: true,
+      });
+      return { request, tool };
+    };
+
+    it('sends kept clips as lipsync: false segments and the full dub as outputAudio', async () => {
+      const { request, tool } = keptTool();
+
+      await tool.handler({
+        videoAssetId: VIDEO,
+        projectId: PROJECT,
+        outputAudio: { audioUrl: dub },
+        clips: [
+          { audioUrl: dub, startTime: 0, endTime: 4, audioStartTime: 0, audioEndTime: 4 },
+          { startTime: 4, endTime: 9, lipsync: false },
+        ],
+      });
+
+      expect(request).toHaveBeenCalledWith(
+        'post',
+        '/v2/generate',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            input: [
+              { type: 'video', assetId: VIDEO },
+              { type: 'audio', url: dub, refId: 'audio-1' },
+            ],
+            segments: [
+              {
+                startTime: 0,
+                endTime: 4,
+                audioInput: { refId: 'audio-1', startTime: 0, endTime: 4 },
+              },
+              { startTime: 4, endTime: 9, lipsync: false },
+            ],
+            outputAudio: { refId: 'audio-1' },
+          }),
+        }),
+      );
+    });
+
+    it.each([
+      [
+        'a kept clip with audio',
+        [
+          { audioAssetId: A, startTime: 0, endTime: 2 },
+          { audioAssetId: A, startTime: 2, endTime: 3, lipsync: false },
+        ],
+        'clips[1] sets lipsync: false, so it takes no audio',
+      ],
+      ['only kept clips', [{ startTime: 0, endTime: 2, lipsync: false }], 'nothing to lipsync'],
+    ])('refuses %s before calling the API', async (_case, clips, message) => {
+      const { request, tool } = keptTool();
+      await expect(
+        tool.handler({ videoAssetId: VIDEO, projectId: PROJECT, clips }),
+      ).rejects.toThrow(message);
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('is not offered by an API that cannot keep clips', async () => {
+      const { tool, request } = setup();
+      expect(tool.inputSchema).not.toHaveProperty('outputAudio');
+      await expect(
+        tool.handler({
+          videoAssetId: VIDEO,
+          projectId: PROJECT,
+          clips: [
+            { audioAssetId: A, startTime: 0, endTime: 2 },
+            { startTime: 2, endTime: 3, lipsync: false },
+          ],
+        }),
+      ).rejects.toThrow();
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('detects the API feature from its spec', () => {
+      const generate = (
+        segmentProperties: Record<string, unknown>,
+        top: Record<string, unknown>,
+      ) => [
+        {
+          method: 'post',
+          path: '/v2/generate',
+          requestBody: {
+            contentType: 'application/json',
+            schema: {
+              type: 'object',
+              properties: {
+                segments: {
+                  type: 'array',
+                  items: { type: 'object', properties: segmentProperties },
+                },
+                ...top,
+              },
+            },
+          },
+        },
+      ];
+      expect(
+        timelineKeepsClips(
+          generate({ lipsync: { type: 'boolean' } }, { outputAudio: { type: 'object' } }) as never,
+        ),
+      ).toBe(true);
+      expect(timelineKeepsClips(generate({}, {}) as never)).toBe(false);
+    });
   });
 
   it('passes a face picked in a frame, a face track or detection as the clip’s speaker', async () => {
