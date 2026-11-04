@@ -122,7 +122,8 @@ describe('update notice', () => {
       const result = await runWithAuth('token', 'claude-ai', () => texts(client));
       expect(result.texts).toHaveLength(1);
     }
-    expect(calls.some((call) => call.url.includes('registry.npmjs.org'))).toBe(false);
+    // Only the stub API is contacted, never the npm registry.
+    expect(new Set(calls.map((call) => new URL(call.url).hostname))).toEqual(new Set(['api.test']));
   });
 });
 

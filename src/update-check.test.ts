@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveConfig } from './config.js';
 import {
   compareVersions,
@@ -13,15 +13,16 @@ import {
 
 const LATEST_URL = 'https://registry.npmjs.org/@sync.so/mcp-server/latest';
 const NOW = Date.parse('2026-11-04T12:00:00.000Z');
+let tempDir: string;
 let cacheFile: string;
 
 beforeEach(async () => {
-  cacheFile = path.join(
-    await mkdtemp(path.join(tmpdir(), 'sync-update-check-')),
-    'nested',
-    'c.json',
-  );
+  tempDir = await mkdtemp(path.join(tmpdir(), 'sync-update-check-'));
+  cacheFile = path.join(tempDir, 'nested', 'c.json');
 });
+
+// One test points cacheFile elsewhere, so clean up by the directory, not the file.
+afterEach(() => rm(tempDir, { recursive: true, force: true }));
 
 function registry(version: unknown) {
   return vi.fn<typeof fetch>(async () => Response.json({ name: '@sync.so/mcp-server', version }));
@@ -106,31 +107,49 @@ describe('startUpdateCheck', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it('returns at once and gives up on a registry that never answers', async () => {
-    let aborted = false;
+  it('returns before the registry answers and never waits on it', async () => {
+    let answer: (response: Response) => void = () => undefined;
+    const pending = vi.fn<typeof fetch>(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const updateCheck = startUpdateCheck({ currentVersion: '0.1.4', cacheFile, fetch: pending });
+    let settled = false;
+    void updateCheck.done.then(() => (settled = true));
+    await vi.waitFor(() => expect(pending).toHaveBeenCalled());
+    // The request is in flight: the caller already has the check and nothing to report.
+    expect(settled).toBe(false);
+    expect(updateCheck.available()).toBeUndefined();
+
+    answer(Response.json({ version: '0.2.0' }));
+    await updateCheck.done;
+    expect(updateCheck.available()).toEqual({ current: '0.1.4', latest: '0.2.0' });
+  });
+
+  it('gives up on a registry that never answers', async () => {
+    let signal: AbortSignal | undefined;
     const hanging = vi.fn<typeof fetch>(
       (_, init) =>
         new Promise((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => {
-            aborted = true;
-            reject(init.signal?.reason);
-          });
+          signal = init?.signal ?? undefined;
+          signal?.addEventListener('abort', () => reject(signal?.reason));
         }),
     );
-    const startedAt = performance.now();
     const updateCheck = startUpdateCheck({
       currentVersion: '0.1.4',
       cacheFile,
       fetch: hanging,
-      timeoutMs: 50,
+      timeoutMs: 1,
     });
-    // Starting never waits on the network.
-    expect(performance.now() - startedAt).toBeLessThan(25);
-    expect(updateCheck.available()).toBeUndefined();
+    // Settles only through the timeout's abort; no wall-clock bound to race a busy worker.
     await updateCheck.done;
-    expect(aborted).toBe(true);
+    expect(signal?.aborted).toBe(true);
     expect(updateCheck.available()).toBeUndefined();
-    expect(performance.now() - startedAt).toBeLessThan(1_000);
+    expect(JSON.parse(await readFile(cacheFile, 'utf8'))).toEqual({
+      checkedAt: expect.any(String),
+    });
   });
 
   it('uses a fresh cache without asking the registry', async () => {
