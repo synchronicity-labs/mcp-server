@@ -14,6 +14,22 @@ type ToolOverride = {
 // agent what to do next, so the tool list reads like a runbook. Endpoints
 // without an entry fall back to the OpenAPI summary.
 const TOOL_OVERRIDES: Record<string, ToolOverride> = {
+  // --- Speakers to faces (timeline lipsync) ---
+  'transcriptions_get-speaker-analysis': {
+    title: 'Read which face belongs to each speaker',
+    description:
+      'Read which face in the video belongs to each transcript speaker, by transcription id. Video transcriptions of your own media are analysed automatically; pass wait: true while status is processing. Each speaker is matched (with an avatar, the evidence and a faceTrack: one box per frame of the file where that face is visible) or uncertain (with a reason). To lipsync only the people talking on camera, give each create-timeline-lipsync clip of a matched speaker the url from transcriptions_slice-speaker-face-track as speaker.faceTrackUrl, and keep (lipsync: false, when available) clips of uncertain speakers or where the slice url is null.',
+  },
+  'transcriptions_analyze-speakers': {
+    title: 'Match speakers to faces',
+    description:
+      "Start, or retry, the speaker-to-face analysis for a completed video transcription. Pass the transcription's revision and sourceVideoUrl from transcriptions_get-transcription-job. Read transcriptions_get-speaker-analysis first: it usually already exists. Unbilled; up to 2 minutes of video and 8 speakers; 3 calls a minute.",
+  },
+  'transcriptions_slice-speaker-face-track': {
+    title: "Cut a clip's face track",
+    description:
+      "Cut a matched speaker's face track to one clip and get a url for create-timeline-lipsync speaker.faceTrackUrl, so that clip lipsyncs exactly that person. Frames are [startFrame, endFrame) at the video's fps: for a timeline clip pass its startFrame and endFrame + 1. url is null when the face is on none of those frames; keep that clip (lipsync: false) or use detect.",
+  },
   // --- Discovery ---
   models_get: {
     title: 'List Sync models',
