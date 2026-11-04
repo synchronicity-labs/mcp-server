@@ -23,6 +23,12 @@ customer media or paid calls are involved in the catalog capture.
   discovery documents and challenge behavior. Stdio adds optional idempotencyKey
   inputs to raw generation, raw dialogue-edit and raw TTS tools. Two new stdio
   capture profiles are additive to the comparison.
+- Coverage regression tests mutate the valid real capture and assert rejection
+  for missing HTTP/stdio profiles, a tool absent from only one client, unknown
+  tools/owners/classifications, app/stdio leaks, widget visibility drift, forbidden
+  ChatGPT tools, missing wrappers and changed parser selections/exclusions. These
+  run in the skills CI job after a fresh capture; no copied descriptor baseline
+  or production-only test hook is used.
 - Admission tests send actual HTTP requests to a local listener, verify identical
   keys reach headers and stay out of JSON, and reject invalid/missing required
   keys before I/O. The three tests fail against the original generator and pass

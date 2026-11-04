@@ -218,6 +218,13 @@ new registrations, wrapper replacements and filtered operations; never update
 the baseline merely to silence a failure. The live schema and installed server
 always determine what the agent can actually call.
 
+`pnpm skills:check` also runs `scripts/skill-coverage.spec.mjs` against that fresh
+capture. Its committed negative cases reject missing profiles, a workflow missing
+from one profile, app/stdio leaks, widget visibility changes, unknown ownership,
+missing wrappers and changed parser exclusions. This capture-dependent suite runs
+in the skills CI job after build/packaging; the earlier `test:scripts` command
+covers scripts that do not need the built server.
+
 For inspection without another capture:
 
 ```bash
