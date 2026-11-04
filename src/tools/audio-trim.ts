@@ -28,12 +28,18 @@ export function createAudioTrimTools(
   http: HttpClient,
 ): McpToolDefinition[] {
   if (!supportsAudioTrimming(operations)) return [];
+  // assetId is the API's name for the source; audioAssetId is the older MCP name.
   const create = z
     .object({
-      audioAssetId: z.uuid(),
+      assetId: z.uuid().optional().describe('Saved AUDIO asset to shorten.'),
       projectId: z.uuid().optional(),
       durationSeconds: z.number().min(0.01).max(3600),
       idempotencyKey: z.uuid(),
+      audioAssetId: z
+        .uuid()
+        .optional()
+        .describe('Deprecated alias of assetId.')
+        .meta({ deprecated: true }),
     })
     .strict();
   const read = z.object({ id: z.uuid() }).strict();
@@ -42,7 +48,7 @@ export function createAudioTrimTools(
       name: 'trim-audio',
       title: 'Prepare shorter audio',
       description:
-        'Save the first durationSeconds of authorized Sync audio as a new reusable asset. Explain and confirm the partial duration first. Persist one idempotencyKey and reuse it with identical inputs after an uncertain response. This prepares audio only: it never generates video, spends generation credits, or consumes a free generation. Poll get-audio-trim until completed, then use its assetId and actual duration for a fresh quote. Partial video lipsync must use cut_off; keep the original draft unchanged. Failed operations require an explicit new attempt.',
+        'Save the first durationSeconds of an authorized Sync audio asset, passed as assetId, as a new reusable asset. Explain and confirm the partial duration first. Persist one idempotencyKey and reuse it with identical inputs after an uncertain response. This prepares audio only: it never generates video, spends generation credits, or consumes a free generation. Poll get-audio-trim until completed, then use its assetId and actual duration for a fresh quote. Partial video lipsync must use cut_off; keep the original draft unchanged. Failed operations require an explicit new attempt.',
       inputSchema: create.shape,
       outputSchema: result.shape,
       annotations: {
@@ -52,10 +58,14 @@ export function createAudioTrimTools(
         openWorldHint: false,
       },
       handler: async (args, context) => {
-        const { audioAssetId, idempotencyKey, ...rest } = create.parse(args);
+        const { assetId, audioAssetId, idempotencyKey, ...rest } = create.parse(args);
+        const source = assetId ?? audioAssetId;
+        if (source === undefined) throw new Error('Pass assetId.');
+        if (assetId !== undefined && audioAssetId !== undefined && assetId !== audioAssetId)
+          throw new Error('assetId and audioAssetId name different assets; pass assetId only.');
         return result.parse(
           await http.request('post', '/v2/audio-trims', {
-            body: { ...rest, assetId: audioAssetId },
+            body: { ...rest, assetId: source },
             headers: { 'Idempotency-Key': idempotencyKey },
             signal: context?.signal,
           }),

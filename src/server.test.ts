@@ -252,7 +252,9 @@ describe('SERVER_INSTRUCTIONS', () => {
   it('describes only tools available to every profile and exact result handling', () => {
     expect(SERVER_INSTRUCTIONS).toContain('voices_get-voices');
     expect(SERVER_INSTRUCTIONS).toContain('Create once');
-    expect(SERVER_INSTRUCTIONS).toContain('exact structuredContent.outputUrl');
+    expect(SERVER_INSTRUCTIONS).toContain('exact structuredContent.outputMediaUrl verbatim');
+    expect(SERVER_INSTRUCTIONS).toContain('outputUrl is a deprecated alias with the same value');
+    expect(SERVER_INSTRUCTIONS).not.toContain('structuredContent.outputUrl');
     expect(SERVER_INSTRUCTIONS).not.toContain('open-upload-widget');
     expect(SERVER_INSTRUCTIONS).not.toContain('tts_create');
   });

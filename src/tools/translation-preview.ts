@@ -62,6 +62,7 @@ const jobSchema = z.object({
   sourceAudioUrl: z.string().optional(),
   sourceLang: z.string(),
   targetLang: z.string(),
+  cloningStrength: z.number().int().nullable().optional(),
   outputMediaUrl: z.string().nullable(),
   outputDurationSec: z.number().nonnegative().nullable(),
   error: z.object({ code: z.string(), message: z.string() }).nullable(),

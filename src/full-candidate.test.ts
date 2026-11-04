@@ -401,11 +401,15 @@ it('preserves profiles, authenticated writes and signed results across concurren
         arguments: { id: 'generation', wait: true },
       });
       expect(pending.structuredContent).toMatchObject({ id: 'generation', status: 'PENDING' });
+      expect(pending.structuredContent).not.toHaveProperty('outputMediaUrl');
       const result = await client.callTool({
         name: 'generate_get-generation',
         arguments: { id: 'generation', wait: true },
       });
-      expect(result.structuredContent).toMatchObject({ outputUrl: signedUrl });
+      expect(result.structuredContent).toMatchObject({
+        outputMediaUrl: signedUrl,
+        outputUrl: signedUrl,
+      });
       const malformed = await client.callTool({
         name: 'generate_get-generation',
         arguments: { id: 'malformed' },

@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from '../asset-thumbnail.js';
-import { generationOutputSchema } from './output-schemas.js';
+import { generationDtoOutputSchema, generationOutputSchema } from './output-schemas.js';
 
 type ToolOverride = {
   title?: string;
@@ -103,13 +103,13 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // --- Generate + poll ---
   'generate_create-generation': {
     description:
-      'Create a lipsync video. Provide a video input (or an image for sync-3) and an audio input, each by `url` or `assetId`. Returns a generation `id` — call generate_get-generation with `wait: true` and omit `timeout` to use the API default. If still pending, poll the same id; when completed, read `outputUrl`. To choose which face to sync in a multi-person video, pass `options.active_speaker_detection` (auto_detect, or coordinates + frame_number).',
+      'Create a lipsync video. Provide a video input (or an image for sync-3) and an audio input, each by `url` or `assetId`. Returns a generation `id` — call generate_get-generation with `wait: true` and omit `timeout` to use the API default. If still pending, poll the same id; when completed, read `outputMediaUrl` (`outputUrl` is a deprecated alias). To choose which face to sync in a multi-person video, pass `options.active_speaker_detection` (auto_detect, or coordinates + frame_number).',
     outputSchema: generationOutputSchema,
   },
   'generate_get-generation': {
     title: 'Get a generation',
     description:
-      'Get a generation by id. Pass `wait: true` and omit `timeout` to use the API default. If still pending, poll the same generation id again; never resubmit the generation. When status is COMPLETED, copy the exact `structuredContent.outputUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited.',
+      'Get a generation by id. Pass `wait: true` and omit `timeout` to use the API default. If still pending, poll the same generation id again; never resubmit the generation. When status is COMPLETED, copy the exact `structuredContent.outputMediaUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited. `outputUrl` is a deprecated alias with the same value.',
     outputSchema: generationOutputSchema,
   },
   'generate_get-generations': {
@@ -124,8 +124,8 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generations_get-by-id': {
     description:
-      'Get a generation by id (organization-scoped). Returns status and, when COMPLETED, `outputUrl`.',
-    outputSchema: generationOutputSchema,
+      'Get a generation by id (organization-scoped). Returns status and, when COMPLETED, `outputMediaUrl` (`outputUrl` is a deprecated alias).',
+    outputSchema: generationDtoOutputSchema,
   },
   generations_delete: {
     description:
