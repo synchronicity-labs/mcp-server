@@ -155,8 +155,27 @@ Options:
   --base-url <url>    API base URL (default: https://api.sync.so)
   --transport <type>  stdio (default) or http
   --port <port>       HTTP port (default: 3002, only with --transport http)
+  --no-spend-confirmation
+                      Unattended automation: drop the cost-quote and confirm-before-paying
+                      instructions (or set SYNC_MCP_SPEND_CONFIRMATION=off)
   -h, --help          Show this help message
 ```
+
+### Unattended automation
+
+By default the tools tell the agent to quote a paid action and wait for the user's
+approval. When the server runs a pipeline or a scheduled agent whose operator has already
+approved spending, start it with `--no-spend-confirmation` (or
+`SYNC_MCP_SPEND_CONFIRMATION=off`). The agent then creates jobs without quoting or asking,
+and estimate tools stay available. Agents cannot change this setting.
+
+Job tools take `wait: true` to wait on the server (up to about 50 seconds per call, with
+progress notifications when the client sends a `progressToken`): `generate_get-generation`,
+`get-translation-preview`, `transcriptions_get-transcription-job` and social imports
+through `assets_create`.
+
+When the API offers it, `send-feedback` lets agents report confusing errors, wrong results
+and missing capabilities to the Sync team.
 
 Environment variables and the HTTP server's session, memory, upload and
 diagnostics limits are in [HTTP server configuration](docs/http-server.md).

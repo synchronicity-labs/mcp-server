@@ -23,6 +23,10 @@ export type ToolRequestContext = {
   signal?: AbortSignal;
   // Internal session presentation, supplied by the server wrapper, never tool arguments.
   clientProfile?: ClientProfile;
+  // The client's self-reported handshake name, for attribution only.
+  clientName?: string;
+  // Sends notifications/progress when the caller passed a progressToken; a no-op otherwise.
+  progress?: (progress: number, message?: string) => Promise<void>;
 };
 
 type JsonMcpToolDefinition = McpToolBaseDefinition & {

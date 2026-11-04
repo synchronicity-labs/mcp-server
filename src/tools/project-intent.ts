@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { getAuthOwner, getAuthToken } from '../auth/async-context.js';
 import { ApiRequestError } from '../http-client.js';
+import { projectTargetTools } from './generated-adapters.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 
 // Clients holding a tool list from before projectIntent existed create a project, then
@@ -40,7 +41,12 @@ export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
         return result;
       },
     };
-  if (!('projectId' in tool.inputSchema) || tool.annotations?.readOnlyHint) return tool;
+  if (
+    !('projectId' in tool.inputSchema) ||
+    tool.annotations?.readOnlyHint ||
+    projectTargetTools.has(tool)
+  )
+    return tool;
   const ui = tool.meta?.ui as { visibility?: string[] } | undefined;
   if (ui?.visibility?.length === 1 && ui.visibility[0] === 'app') return tool;
   const definition = {
