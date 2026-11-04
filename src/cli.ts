@@ -3,13 +3,17 @@
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { resolveConfig } from './config.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
+import { startConfiguredUpdateCheck } from './update-check.js';
+import { PACKAGE_VERSION } from './version.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const config = resolveConfig(parseArgs(args));
 
   if (config.transport === 'stdio') {
-    const server = await createSyncMcpServer(config);
+    // Started before auth and the spec fetch, and never awaited.
+    const updateCheck = startConfiguredUpdateCheck(config, PACKAGE_VERSION);
+    const server = await createSyncMcpServer(config, { updateCheck });
     const transport = new StdioServerTransport();
     await server.connect(transport);
   } else {
@@ -26,6 +30,7 @@ function parseArgs(args: string[]): Partial<{
   transport: 'stdio' | 'http';
   port: number;
   spendConfirmation: boolean;
+  updateCheck: boolean;
 }> {
   const result: Record<string, unknown> = {};
 
@@ -47,6 +52,8 @@ function parseArgs(args: string[]): Partial<{
       i++;
     } else if (arg === '--no-spend-confirmation') {
       result.spendConfirmation = false;
+    } else if (arg === '--no-update-check') {
+      result.updateCheck = false;
     } else if (arg === '--help' || arg === '-h') {
       printUsage();
       process.exit(0);
@@ -67,6 +74,8 @@ Options:
   --no-spend-confirmation
                       Unattended automation: drop the cost-quote and confirm-before-paying
                       instructions (or set SYNC_MCP_SPEND_CONFIRMATION=off)
+  --no-update-check   Skip the daily npm check for a newer version (or set
+                      SYNC_MCP_UPDATE_CHECK=off; skipped when CI is set)
   -h, --help          Show this help message
 `);
 }

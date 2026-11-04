@@ -1,3 +1,4 @@
+import { PACKAGE_VERSION } from '../version.js';
 import { saveToken } from './token-store.js';
 
 export type DeviceAuthToken = {
@@ -25,7 +26,7 @@ export async function performDeviceAuth(
 ): Promise<DeviceAuthToken> {
   const startResponse = await fetch(`${baseUrl}/v2/device-auth/start`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-sync-mcp-version': PACKAGE_VERSION },
     body: JSON.stringify({ clientId: CLIENT_ID }),
   });
 
@@ -62,6 +63,7 @@ async function pollForToken(baseUrl: string, deviceCode: string): Promise<PollRe
 
     const pollResponse = await fetch(
       `${baseUrl}/v2/device-auth/poll?deviceCode=${encodeURIComponent(deviceCode)}`,
+      { headers: { 'x-sync-mcp-version': PACKAGE_VERSION } },
     );
 
     if (!pollResponse.ok) {

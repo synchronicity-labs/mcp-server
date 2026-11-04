@@ -75,7 +75,7 @@ For clients without remote MCP support, and for scripts and CI, run the server
 locally over stdio with a sync. [API key](https://sync.so/docs/api-reference/guides/authentication):
 
 ```bash
-claude mcp add sync -e SYNC_API_KEY=your-api-key -- npx -y @sync.so/mcp-server
+claude mcp add sync -e SYNC_API_KEY=your-api-key -- npx -y @sync.so/mcp-server@latest
 ```
 
 Or in a client's JSON config:
@@ -85,7 +85,7 @@ Or in a client's JSON config:
   "mcpServers": {
     "sync": {
       "command": "npx",
-      "args": ["-y", "@sync.so/mcp-server"],
+      "args": ["-y", "@sync.so/mcp-server@latest"],
       "env": { "SYNC_API_KEY": "your-api-key" }
     }
   }
@@ -97,7 +97,21 @@ URL it prints and enter the code. The token is cached at
 `~/.config/sync/mcp-credentials.json`.
 
 npm releases are published separately from the hosted deploy and can lag behind
-it, so prefer the hosted server when your client supports it.
+it, so prefer the hosted server when your client supports it. `@latest` makes npx
+fetch the newest release when the client restarts the server; without it, npx can
+keep running an old cached copy.
+
+#### Update notice
+
+At startup a local server asks the npm registry for the latest version, at most once
+a day (the answer is cached in `~/.config/sync/mcp-update-check.json`). The check runs
+in the background with a two-second limit and never delays startup or a tool call; if
+it fails, nothing is shown. When a newer version exists, the server's instructions and
+the first tool result of the session tell the agent to ask you to restart with
+`npx -y @sync.so/mcp-server@latest` or switch to the hosted server.
+
+To turn it off, set `SYNC_MCP_UPDATE_CHECK=off` or pass `--no-update-check`. It is
+also skipped when `CI` is set, and the hosted server never checks.
 
 ## What to ask
 
@@ -158,6 +172,8 @@ Options:
   --no-spend-confirmation
                       Unattended automation: drop the cost-quote and confirm-before-paying
                       instructions (or set SYNC_MCP_SPEND_CONFIRMATION=off)
+  --no-update-check   Skip the daily npm check for a newer version (or set
+                      SYNC_MCP_UPDATE_CHECK=off; skipped when CI is set)
   -h, --help          Show this help message
 ```
 

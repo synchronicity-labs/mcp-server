@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
 import { getToolAnalytics } from './tool-analytics-context.js';
+import { PACKAGE_VERSION } from './version.js';
 
 /** API-key analytics labels; bearer credentials use the API's MCP source namespace. */
 const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
@@ -17,6 +18,26 @@ const FIRST_CLASS_SOURCE_BY_CLIENT: Record<string, string> = {
 export function resolveSyncSource(clientName?: string): string {
   if (!clientName) return 'mcp';
   return FIRST_CLASS_SOURCE_BY_CLIENT[clientName.toLowerCase()] ?? `mcp:${clientName}`;
+}
+
+/**
+ * Who is calling: the analytics source, this server's version and the MCP client's
+ * handshake name when known. The API ignores headers it does not record.
+ */
+function clientHeaders(
+  authHeaders: AuthHeaders,
+  clientName: string | undefined,
+): Record<string, string> {
+  const syncSource = authHeaders.Authorization?.startsWith('Bearer ')
+    ? clientName
+      ? `mcp:${clientName}`
+      : 'mcp'
+    : resolveSyncSource(clientName);
+  return {
+    'x-sync-source': syncSource,
+    'x-sync-mcp-version': PACKAGE_VERSION,
+    ...(clientName ? { 'x-sync-mcp-client': clientName } : {}),
+  };
 }
 
 // Bound upstream calls independently of the API-defined polling window. No write retries.
@@ -99,16 +120,9 @@ export function createHttpClient(
           ? { Authorization: `Bearer ${perRequestToken}` }
           : { ...staticAuthHeaders };
 
-        const clientName = getClientName() ?? stdioClientName?.();
-        const syncSource = authHeaders.Authorization?.startsWith('Bearer ')
-          ? clientName
-            ? `mcp:${clientName}`
-            : 'mcp'
-          : resolveSyncSource(clientName);
-
         const headers: Record<string, string> = {
           ...authHeaders,
-          'x-sync-source': syncSource,
+          ...clientHeaders(authHeaders, getClientName() ?? stdioClientName?.()),
           ...options.headers,
           ...(getToolAnalytics() && { 'x-sync-analytics': JSON.stringify(getToolAnalytics()) }),
         };
