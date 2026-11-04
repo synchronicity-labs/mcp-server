@@ -16,6 +16,10 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+            - name: Use Node.js
+              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+              with:
+                  node-version: "22"
             - name: Check out the tip of main
               id: target
               env:
@@ -28,17 +32,15 @@ jobs:
                       echo "::notice::main has moved past $GITHUB_SHA. Using the tip, $tip."
                       git checkout --quiet --detach "$tip"
                   fi
-                  echo "sha=$tip" >> "$GITHUB_OUTPUT"
                   live=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r '.revision // empty' || true)
-                  if [ "$live" = "$tip" ]; then
-                      echo "::notice::Production already serves the tip of main, $tip. Checking it without redeploying."
-                      echo "deploy=false" >> "$GITHUB_OUTPUT"
-                      exit 0
+                  # Prove the whole range from the served revision. A later skills
+                  # push must not mask a runtime commit still awaiting deployment.
+                  if [[ "$live" =~ ^[a-fA-F0-9]{40}$ ]] && [ "$live" != "$tip" ]; then
+                      if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+                          git fetch --no-tags --unshallow origin main || true
+                      fi
                   fi
-                  {
-                      echo "deploy=true"
-                      echo "sha_short=$(git rev-parse --short "$tip")"
-                  } >> "$GITHUB_OUTPUT"
+                  TARGET_REVISION="$tip" LIVE_REVISION="$live" node scripts/plan-skill-deploy.mjs
             - name: Setup porter
               if: steps.target.outputs.deploy == 'true'
               uses: porter-dev/setup-porter@82aae6b91417e2a4e6cd4a1f6bd123fd316bd188 # v0.1.0
@@ -60,15 +62,11 @@ jobs:
                 PORTER_PROJECT: "11208"
                 PORTER_TAG: ${{ steps.target.outputs.sha_short }}
                 PORTER_TOKEN: ${{ secrets.PORTER_APP_11208_1181459491 }}
-            # Runs on skipped deploys too, so a rerun cannot pass while the live tip is broken.
-            - name: Use Node.js
-              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-              with:
-                  node-version: "22"
+            # A skills-only skip checks the actual served SHA, not the undeployed tip.
             - name: Smoke-check the deployed server
               timeout-minutes: 12
               run: node scripts/smoke-deploy.mjs
               env:
                 DEPLOY_STARTED_AT: ${{ steps.start.outputs.at }}
-                EXPECTED_REVISION: ${{ steps.target.outputs.sha }}
+                EXPECTED_REVISION: ${{ steps.target.outputs.expected_revision }}
                 SMOKE_ALLOW_EXISTING_PROCESS: ${{ steps.target.outputs.deploy != 'true' }}

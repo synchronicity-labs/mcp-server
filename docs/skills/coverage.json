@@ -1,0 +1,595 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "mcpCommit": "c10a02c387e2544e0d062c1863b77c25af91ed60",
+    "apiRepository": "synchronicity-labs/sync-api-v2",
+    "apiCommit": "45d267764646cb7fcaa129adcc583f04891429b1",
+    "apiSha256": "aca9488abe7f0a96e738be6c00eedb5a1781ec6381f4ecadb1a165b73ebca70a",
+    "spec": "fixtures/skills-openapi.generated.json"
+  },
+  "tools": [
+    {
+      "name": "track-chatgpt-event",
+      "owner": "sync-studio",
+      "kind": "widget-internal",
+      "scope": "app-profile-and-required-host-bridge",
+      "protocolTest": "src/chatgpt-analytics.integration.test.ts"
+    },
+    {
+      "name": "get-studio-view",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "open-studio-project",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "refresh-studio-project",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "refresh-studio-assets",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "show-studio-generation",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "continue-studio-generation",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "register-studio-view",
+      "owner": "sync-studio",
+      "kind": "widget-internal",
+      "scope": "app-profile-and-required-host-bridge",
+      "protocolTest": "src/studio-view.integration.test.ts"
+    },
+    {
+      "name": "ack-studio-view",
+      "owner": "sync-studio",
+      "kind": "widget-internal",
+      "scope": "app-profile-and-required-host-bridge",
+      "protocolTest": "src/studio-view.integration.test.ts"
+    },
+    {
+      "name": "get-studio-draft",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "update-studio-draft",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "save-studio-draft",
+      "owner": "sync-studio",
+      "kind": "widget-internal",
+      "scope": "app-profile-and-required-host-bridge",
+      "protocolTest": "src/studio-draft.integration.test.ts"
+    },
+    {
+      "name": "ack-studio-draft",
+      "owner": "sync-studio",
+      "kind": "widget-internal",
+      "scope": "app-profile-and-required-host-bridge",
+      "protocolTest": "src/studio-draft.integration.test.ts"
+    },
+    {
+      "name": "get-account-usage",
+      "owner": "sync-account",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-generation-costs",
+      "owner": "sync-account",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "rename-project",
+      "owner": "sync-projects",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-account-context",
+      "owner": "sync-account",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-asset-creators",
+      "owner": "sync-media",
+      "kind": "widget-internal",
+      "scope": "app-profile-and-required-host-bridge",
+      "protocolTest": "src/account-context.integration.test.ts"
+    },
+    {
+      "name": "get-playback-metadata",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-generation-continuation",
+      "owner": "sync-generations",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-speech-options",
+      "owner": "sync-speech",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "create-speech-preview",
+      "owner": "sync-speech",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-speech-preview",
+      "owner": "sync-speech",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-dialogue-options",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "upload-dialogue-source",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "create-dialogue-transcription",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-dialogue-transcription",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "create-dialogue-preview",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-dialogue-preview",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "estimate-dialogue-video",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "create-dialogue-video",
+      "owner": "sync-edit-dialogue",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "open-sync-app",
+      "owner": "sync-studio",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "open-upload-widget",
+      "owner": "sync-media",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "upload-media",
+      "owner": "sync-media",
+      "kind": "app-workflow",
+      "scope": "app-profile-and-required-host-bridge"
+    },
+    {
+      "name": "create-lipsync",
+      "owner": "sync-lipsync",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "create-lipsync-from-assets",
+      "owner": "sync-lipsync",
+      "kind": "widget-internal",
+      "scope": "app-profile-and-required-host-bridge",
+      "protocolTest": "src/generation-context.http.test.ts"
+    },
+    {
+      "name": "create-timeline-lipsync",
+      "owner": "sync-timeline-lipsync",
+      "kind": "workflow-or-helper",
+      "scope": "all-except-chatgpt-profile"
+    },
+    {
+      "name": "send-feedback",
+      "owner": "sync-troubleshoot",
+      "kind": "workflow-or-helper",
+      "scope": "all-except-chatgpt-profile"
+    },
+    {
+      "name": "create-translate-and-dub",
+      "owner": "sync-translate-and-dub",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-translation-options",
+      "owner": "sync-translate-and-dub",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "estimate-translation-preview",
+      "owner": "sync-translate-and-dub",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "create-translation-preview",
+      "owner": "sync-translate-and-dub",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-translation-preview",
+      "owner": "sync-translate-and-dub",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "trim-audio",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "get-audio-trim",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "voices_get-voices",
+      "owner": "sync-voices",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "voices_clone-voice",
+      "owner": "sync-voices",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "generate_get-generation",
+      "owner": "sync-generations",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "models_get",
+      "owner": "sync-account",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "projects_get-all",
+      "owner": "sync-projects",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "projects_get",
+      "owner": "sync-projects",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_get-all",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_count",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_get",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_update",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_delete",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_get-download-url",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_create-upload-url",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_create",
+      "owner": "sync-media",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "projects_create",
+      "owner": "sync-projects",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "generate_get-generations",
+      "owner": "sync-generations",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "projects_get-generations",
+      "owner": "sync-projects",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "generate_estimate-cost",
+      "owner": "sync-account",
+      "kind": "workflow-or-helper",
+      "scope": "hosted-and-stdio-subject-to-capability-and-auth"
+    },
+    {
+      "name": "assets_get-many",
+      "owner": "sync-media",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "generate_create-generation",
+      "owner": "sync-advanced-generation",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "generations_estimate-cost",
+      "owner": "sync-account",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "generations_get-count",
+      "owner": "sync-generations",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "generations_get-by-id",
+      "owner": "sync-generations",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "generations_delete",
+      "owner": "sync-generations",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "generations_get-download-url",
+      "owner": "sync-generations",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "generations_update-output-file-name",
+      "owner": "sync-generations",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "tts_create",
+      "owner": "sync-speech",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "tts_create-job",
+      "owner": "sync-speech",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "tts_get-job",
+      "owner": "sync-speech",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "projects_attach-asset",
+      "owner": "sync-projects",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "projects_detach-asset",
+      "owner": "sync-projects",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "projects_update",
+      "owner": "sync-projects",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "projects_delete",
+      "owner": "sync-projects",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "dialogue-edits_create-dialogue-edit",
+      "owner": "sync-edit-dialogue",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "dialogue-edits_get-dialogue-edit-job",
+      "owner": "sync-edit-dialogue",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "transcriptions_create-transcription",
+      "owner": "sync-transcribe",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "transcriptions_get-transcription-job",
+      "owner": "sync-transcribe",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "voices_get-voice",
+      "owner": "sync-voices",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    },
+    {
+      "name": "voices_delete-voice",
+      "owner": "sync-voices",
+      "kind": "stdio-generated",
+      "scope": "stdio-only-subject-to-current-public-spec-and-auth"
+    }
+  ],
+  "filteredApiOperations": [
+    "OrganizationsController_getWebhookSecret",
+    "GenerationHealthController_getGenerationHealth",
+    "HealthcheckController_getHealthcheck",
+    "BatchController_createBatch",
+    "BatchController_listBatches",
+    "BatchController_getBatch",
+    "AccountController_getAccount",
+    "DraftsController_create",
+    "DraftsController_list",
+    "DraftsController_get",
+    "DraftsController_update",
+    "DraftsController_remove",
+    "DraftsController_importAnalysis",
+    "ReviewProductionController_prepare",
+    "ReviewProductionController_get",
+    "AnalysisController_request",
+    "AnalysisController_get",
+    "ErrorsCatalogController_getErrorCatalog"
+  ],
+  "apiReplacements": {
+    "audio-trims_create": [
+      "trim-audio"
+    ],
+    "audio-trims_get": [
+      "get-audio-trim"
+    ],
+    "analytics_capture-chatgpt-event": [
+      "track-chatgpt-event"
+    ],
+    "agent-feedback_submit": [
+      "send-feedback"
+    ],
+    "generate_get-generation-costs": [
+      "get-generation-costs"
+    ],
+    "dubbing_estimate-dubbing-cost": [
+      "estimate-translation-preview"
+    ],
+    "dubbing_create-dubbing": [
+      "create-translation-preview"
+    ],
+    "dubbing_get-dubbing-generation": [
+      "get-translation-preview"
+    ],
+    "studio-drafts_get": [
+      "get-studio-draft"
+    ],
+    "studio-drafts_save": [
+      "save-studio-draft",
+      "update-studio-draft"
+    ],
+    "studio-drafts_acknowledge": [
+      "ack-studio-draft"
+    ],
+    "studio-views_get": [
+      "get-studio-view"
+    ],
+    "studio-views_register": [
+      "register-studio-view"
+    ],
+    "studio-views_request": [
+      "open-studio-project",
+      "refresh-studio-project",
+      "refresh-studio-assets",
+      "show-studio-generation",
+      "continue-studio-generation"
+    ],
+    "studio-views_acknowledge": [
+      "ack-studio-view"
+    ]
+  }
+}

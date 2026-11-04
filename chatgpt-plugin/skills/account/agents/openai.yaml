@@ -1,0 +1,4 @@
+interface:
+  display_name: "Account and Costs"
+  short_description: "Check Sync usage, limits and generation costs"
+  default_prompt: "Use $account to check my remaining allowance and recent generation costs."

@@ -334,7 +334,9 @@ async function capture({ out, spec }) {
       http: await captureHttp(env, await freePort()),
       stdio: {
         'claude-code': await captureStdio(env, 'claude-code'),
+        'claude-ai': await captureStdio(env, 'claude-ai'),
         'openai-mcp': await captureStdio(env, 'openai-mcp'),
+        'openai-mcp (Codex)': await captureStdio(env, 'openai-mcp (Codex)'),
       },
     };
     writeFileSync(out, `${JSON.stringify(sortKeys(result), null, 2)}\n`);

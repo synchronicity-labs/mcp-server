@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "skills": [
+    {
+      "name": "sync-setup",
+      "title": "Connect Sync",
+      "availability": "all",
+      "plugin": {
+        "name": "setup",
+        "interfaceYaml": "interface:\n  display_name: \"Set up sync. labs\"\n  short_description: \"Check your account and make your first talking video\"\n  default_prompt: \"Use $setup to get started with sync. labs.\"\npolicy:\n  allow_implicit_invocation: false\n"
+      }
+    },
+    {
+      "name": "sync-lipsync",
+      "title": "Lip Sync",
+      "availability": "all",
+      "plugin": {
+        "name": "lipsync-video",
+        "interfaceYaml": "interface:\n  display_name: \"Lipsync a video\"\n  short_description: \"Sync a video's lips to new audio, a song or a typed script\"\n  default_prompt: \"Use $lipsync-video to lipsync my video to this new audio.\"\n"
+      }
+    },
+    {
+      "name": "sync-talking-photo",
+      "title": "Talking Photo",
+      "availability": "all",
+      "plugin": {
+        "name": "talking-photo",
+        "interfaceYaml": "interface:\n  display_name: \"Make a photo talk\"\n  short_description: \"Turn a photo or character into a talking video from a script or audio\"\n  default_prompt: \"Use $talking-photo to make this photo say my script.\"\n"
+      }
+    },
+    {
+      "name": "sync-edit-dialogue",
+      "title": "Edit Dialogue",
+      "availability": "all",
+      "plugin": {
+        "name": "edit-dialogue",
+        "interfaceYaml": "interface:\n  display_name: \"Fix spoken words\"\n  short_description: \"Change or remove a few words in the speaker's own voice\"\n  default_prompt: \"Use $edit-dialogue to change a word I said in this video.\"\n"
+      }
+    },
+    {
+      "name": "sync-translate-and-dub",
+      "title": "Translate and Dub",
+      "availability": "all",
+      "plugin": {
+        "name": "translate-and-dub",
+        "interfaceYaml": "interface:\n  display_name: \"Translate and dub a video\"\n  short_description: \"Dub a video or social link into another language with matching lips\"\n  default_prompt: \"Use $translate-and-dub to dub this video into Spanish.\"\n"
+      }
+    },
+    {
+      "name": "sync-timeline-lipsync",
+      "title": "Timeline Lip Sync",
+      "availability": "except-chatgpt",
+      "plugin": null
+    },
+    {
+      "name": "sync-speech",
+      "title": "Speech",
+      "availability": "all",
+      "plugin": {
+        "name": "speech",
+        "interfaceYaml": "interface:\n  display_name: \"Speech\"\n  short_description: \"Create and review speech audio with Sync\"\n  default_prompt: \"Use $speech to preview this script in an available voice and show me the cost first.\"\n"
+      }
+    },
+    {
+      "name": "sync-voices",
+      "title": "Voices",
+      "availability": "all",
+      "plugin": {
+        "name": "voices",
+        "interfaceYaml": "interface:\n  display_name: \"Voices\"\n  short_description: \"Choose and manage saved voices with Sync\"\n  default_prompt: \"Use $voices to help me choose one of my saved voices.\"\n"
+      }
+    },
+    {
+      "name": "sync-media",
+      "title": "Media Library",
+      "availability": "all",
+      "plugin": {
+        "name": "media",
+        "interfaceYaml": "interface:\n  display_name: \"Media Library\"\n  short_description: \"Upload and manage your media in Sync\"\n  default_prompt: \"Use $media to find my recent video uploads.\"\n"
+      }
+    },
+    {
+      "name": "sync-projects",
+      "title": "Projects",
+      "availability": "all",
+      "plugin": {
+        "name": "projects",
+        "interfaceYaml": "interface:\n  display_name: \"Projects\"\n  short_description: \"Find and organize your projects in Sync\"\n  default_prompt: \"Use $projects to find and organize my Sync projects.\"\n"
+      }
+    },
+    {
+      "name": "sync-generations",
+      "title": "Generations",
+      "availability": "all",
+      "plugin": {
+        "name": "generations",
+        "interfaceYaml": "interface:\n  display_name: \"Generations\"\n  short_description: \"Find results and resume your Sync jobs\"\n  default_prompt: \"Use $generations to check my latest video and give me its result.\"\n"
+      }
+    },
+    {
+      "name": "sync-account",
+      "title": "Account and Costs",
+      "availability": "all",
+      "plugin": {
+        "name": "account",
+        "interfaceYaml": "interface:\n  display_name: \"Account and Costs\"\n  short_description: \"Check Sync usage, limits and generation costs\"\n  default_prompt: \"Use $account to check my remaining allowance and recent generation costs.\"\n"
+      }
+    },
+    {
+      "name": "sync-studio",
+      "title": "Embedded Studio",
+      "availability": "app-only",
+      "plugin": {
+        "name": "studio",
+        "interfaceYaml": "interface:\n  display_name: \"Embedded Studio\"\n  short_description: \"Navigate and configure embedded Sync Studio\"\n  default_prompt: \"Use $studio to open my selected project in Sync.\"\n"
+      }
+    },
+    {
+      "name": "sync-transcribe",
+      "title": "Transcription",
+      "availability": "all-with-limits",
+      "plugin": {
+        "name": "transcribe",
+        "interfaceYaml": "interface:\n  display_name: \"Transcription\"\n  short_description: \"Read timed transcripts from supported media\"\n  default_prompt: \"Use $transcribe to get a timed transcript of this video.\"\n"
+      }
+    },
+    {
+      "name": "sync-advanced-generation",
+      "title": "Advanced Generation",
+      "availability": "stdio-only",
+      "plugin": null
+    },
+    {
+      "name": "sync-troubleshoot",
+      "title": "Troubleshooting",
+      "availability": "all",
+      "plugin": {
+        "name": "troubleshoot",
+        "interfaceYaml": "interface:\n  display_name: \"Troubleshooting\"\n  short_description: \"Diagnose and recover interrupted Sync work\"\n  default_prompt: \"Use $troubleshoot to help me recover this failed Sync job.\"\n"
+      }
+    }
+  ]
+}

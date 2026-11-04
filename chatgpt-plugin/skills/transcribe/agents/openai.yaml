@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transcription"
+  short_description: "Read timed transcripts from supported media"
+  default_prompt: "Use $transcribe to get a timed transcript of this video."

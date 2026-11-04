@@ -1,0 +1,4 @@
+interface:
+  display_name: "Speech"
+  short_description: "Create and review speech audio with Sync"
+  default_prompt: "Use $speech to preview this script in an available voice and show me the cost first."

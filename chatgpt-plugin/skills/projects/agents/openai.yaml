@@ -1,0 +1,4 @@
+interface:
+  display_name: "Projects"
+  short_description: "Find and organize your projects in Sync"
+  default_prompt: "Use $projects to find and organize my Sync projects."

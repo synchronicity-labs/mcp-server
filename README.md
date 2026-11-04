@@ -5,8 +5,8 @@ and dub them into other languages, clone voices, and manage assets and projects
 from a chat or a coding session.
 
 sync. hosts this server at **`https://mcp.sync.so/mcp`**. You sign in with your
-sync. account, so there is nothing to install and no API key to copy. Every merge
-to this repository's `main` deploys there.
+sync. account, so there is nothing to install and no API key to copy. Runtime changes merged to `main` deploy there; changes confined to the skills
+catalog and its installation docs do not restart the service.
 
 ## Connect your agent
 
@@ -99,6 +99,16 @@ URL it prints and enter the code. The token is cached at
 npm releases are published separately from the hosted deploy and can lag behind
 it, so prefer the hosted server when your client supports it.
 
+## Install official Sync skills
+
+The [sixteen official skills](docs/skills.md) give your agent guided workflows
+for lip sync, Edit Dialogue, talking photos, translation, speech, voices, media,
+projects, generations, account/costs, Studio, transcription, timeline and raw
+stdio generation, setup and troubleshooting. Install all or selected
+`skills/sync-*/` folders; [installation and usage](docs/skills.md#install-the-skills)
+cover Claude Code, Codex and other skill-capable hosts. Skills require a connected
+Sync MCP server and respect the tools actually available in that client.
+
 ## What to ask
 
 Paste prompts like these into your agent. Asset IDs come from your sync. library.
@@ -138,9 +148,12 @@ whose MCP handshake name selects the ChatGPT or Codex app profile (`openai-mcp`,
 `openai-mcp (Codex)`; see `src/client-profile.ts`). Other clients don't see these
 tools, and their calls to them are refused.
 
-The local stdio server has all of these, plus a tool for every other public API
-operation in the [OpenAPI spec](https://api.sync.so/api-json), such as
-`projects_delete` and `voices_delete-voice`.
+The local stdio server also generates tools for parser-selected public API
+operations in the [OpenAPI spec](https://api.sync.so/api-json), such as
+`projects_delete` and `voices_delete-voice`. It does not expose every API endpoint:
+native Batch, direct Account, webhook-secret administration, reviewed/draft
+dubbing and other filtered API areas are outside the current MCP surface.
+The [coverage inventory](docs/skills/coverage.json) records the exact exclusions.
 
 [Tool workflows](docs/tool-workflows.md) describes how the multi-step and paid
 tools behave.
@@ -183,13 +196,13 @@ diagnostics limits are in [HTTP server configuration](docs/http-server.md).
 ## How It Works
 
 1. At startup, the server fetches the public OpenAPI spec from `{baseUrl}/api-json`
-   and turns each operation into an MCP tool with a Zod input schema.
+   and turns selected operations into MCP tools with a Zod input schema.
 2. Hand-written tools add multi-step workflows on the same API, such as translate
    and dub, Edit Dialogue, speech previews and cost lookups.
 3. Each tool call is an authenticated request to the sync. API, with your OAuth
    token (hosted) or API key (local).
 
-Over stdio, a new public API operation becomes a tool on the next restart. The
+Over stdio, a new parser-selected public API operation becomes a tool on the next restart. The
 hosted server only exposes tools on its allowlist, so a new hosted tool ships with
 a release of this repository.
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Media Library"
+  short_description: "Upload and manage your media in Sync"
+  default_prompt: "Use $media to find my recent video uploads."

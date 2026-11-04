@@ -1,0 +1,4 @@
+interface:
+  display_name: "Embedded Studio"
+  short_description: "Navigate and configure embedded Sync Studio"
+  default_prompt: "Use $studio to open my selected project in Sync."

@@ -1,44 +1,57 @@
 ---
 name: translate-and-dub
-description: Translate a video's speech into another language with sync. labs and re-sync the lips to the dubbed audio, from an uploaded video or a YouTube, TikTok, Instagram or Facebook link, into one or several languages. Use for "dub this video into Spanish", "translate my YouTube video to Japanese", AI dubbing, or localizing a video for other markets. Not for subtitles only, translating a text document, or lip-syncing audio the user already has (lipsync-video).
+description: "Translate spoken video or saved audio with Sync, review translated speech, and optionally render matching lips. Use for language localization and dubbing, not subtitle-only output or text-document translation."
+license: MIT
 ---
 
-# Translate and dub a video
+# Translate speech and render the result
 
-Delivers one dubbed MP4 per target language, with lips matched to the new audio.
+For “Dub this video into Spanish”, resolve source media, target language and
+whether the user wants a complete video or an audio preview first. Discover
+supported source/target languages and model choices; never invent language codes.
 
-## Inputs
+Save the video in an explicitly selected or newly created project. Import social
+links through the asset tool and wait for a saved VIDEO asset before generation.
+Keep import URL/project stable, respect backoff, and stop on terminal failures.
 
-- **Video**: a video file in this conversation, a Sync video asset ID, or a YouTube, TikTok, Instagram or Facebook link.
-- **Target language(s)**: ask if none was given. Use `sourceLang: "auto"` unless the user names the spoken language.
+## Complete video
+
+Estimate the combined workflow with `workflow: "translate-and-dub"` when the
+estimate schema supports it. Otherwise the lip-sync estimate is not the total:
+disclose missing dubbing/provider charges and resolve authorization for them.
+Confirm language, source, model and costs. Persist an idempotency key and, for
+new-project creation, a projectCreationKey. Submit once with the saved video.
+Read the returned generation ID through completion; the API owns both stages.
+Do not create a second job to “finish” the dub.
+
+## Review translated audio before video
+
+Use the separate preview quote with an accessible audio asset/project. If quoted
+duration is shorter than source duration, explain the limit and get agreement
+before preparing a new shortened asset. Quote that saved asset; the estimate
+does not trim the original. This path is not full-video translation unless the
+whole source is included.
+
+Confirm preview language and displayed cost. Persist a UUID preview key before
+creation; retain the immutable request and job ID. Read the same preview job.
+`recoveryRequired` means provider acceptance is uncertain, not permission to
+create again. Save/register returned translated audio separately if needed;
+attachment failure never justifies another translation.
+
+Present translated audio for review. If video is then requested, estimate and
+authorize a separate lip-sync using the saved translated audio. Do not send it
+through the combined Translate & Dub tool again. Return exact completed media
+URLs and make clear whether the result is audio, video, partial or pending.
 
 ## Tools
 
 | Step | Tool |
 | --- | --- |
-| Check languages | `get-translation-options` |
-| Create the project | `projects_create` |
-| Save the video | `upload-media` (file) or `assets_create` (link) |
-| Quote | `generate_estimate-cost` |
-| Create | `create-translate-and-dub` |
-| Wait for the result | `generate_get-generation` |
+| Available operations | `get-translation-options`, `projects_create`, `assets_create`, `generate_estimate-cost`, `create-translate-and-dub`, `estimate-translation-preview`, `create-translation-preview`, `get-translation-preview`, `trim-audio`, `get-audio-trim`, `create-lipsync`, `generate_get-generation` |
 
-## Steps
+## Tool and account boundaries
 
-1. **Languages.** Call `get-translation-options` and check that every requested language is supported. Name the closest supported option for any that is not.
-2. **Project.** Call `projects_create` with a new random UUID as `id`, a short `name` and `defaultWorkflow: "translate_and_dub"`. Use the returned `projectId` with `projectIntent: "explicit"` in every later call.
-3. **Save the video.**
-   - **File:** call `upload-media` with `mediaType: "video"`.
-   - **Link:** call `assets_create` with the URL, `type: "VIDEO"`, the `projectId` and `projectIntent: "explicit"`. A 409 `import_in_progress` means the import is running: wait `retryAfterMs` (15 seconds if absent) and repeat the identical request until it returns an asset. On `import_failed`, `import_not_enabled`, `import_unavailable` or a limit error, explain the reason, offer a file upload, and stop.
-
-   Never pass an `importJobId` as an asset ID.
-4. **Quote.** Call `generate_estimate-cost` with `workflow: "translate-and-dub"`, `model: "sync-3"` and the video's duration in seconds. Show the returned breakdown and say that any external voice-provider charges it lists are extra.
-5. **Confirm.** Show the video, the language(s) and the estimate per language, then wait for approval, unless this exact request and cost were already approved.
-6. **Create.** For each target language, call `create-translate-and-dub` once with `videoAssetId`, `targetLang`, `sourceLang`, `model: "sync-3"`, the `projectId` with `projectIntent: "explicit"`, and its own new `idempotencyKey`. On a lost response, retry that language once with the same key and inputs.
-7. **Wait and deliver.** Poll `generate_get-generation` with each returned `id` and `wait: true` until it is `COMPLETED` or `FAILED`. Dubbing takes longer than plain lipsync, so tell the user it may take a few minutes. Give each exact `outputUrl`, unchanged, labelled with its language.
-
-## Rules
-
-- One paid job per language. Never resubmit a language to check progress.
-- If a language fails, report it and keep the others.
-- Don't offer subtitles, captions or a translated transcript as a substitute; this workflow produces dubbed video only.
+Discover actual tool schemas and host prefixes. Resolve the intended account before
+writes, preserve existing authorization within scope, and follow stricter tool
+contracts. Missing tools require a clear supported alternative, not guessed API
+calls. Keep credentials and signed media links out of git and public evidence.

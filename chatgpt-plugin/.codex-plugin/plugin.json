@@ -57,7 +57,7 @@
     "supportURL": "https://support.sync.so"
   },
   "name": "app-6a398355fbc08191a232e7eeeacb73d5",
-  "version": "2.0.4",
+  "version": "2.1.0",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "extensions": {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generations"
+  short_description: "Find results and resume your Sync jobs"
+  default_prompt: "Use $generations to check my latest video and give me its result."

@@ -15,7 +15,13 @@ the live server when OpenAI scans it.
 
 ## Skills
 
-Each skill is one workflow: `skills/<name>/SKILL.md` and
+The fourteen package skills are generated from top-level `skills/` and
+`skills/catalog.json`; edit those sources, then run `pnpm skills:sync-plugin`.
+See [the catalog and installation guide](skills.md). Keep the original five
+published names and setup policy stable. Timeline and advanced raw generation
+are not packaged for ChatGPT.
+
+Each generated skill is one workflow: `skills/<name>/SKILL.md` and
 `skills/<name>/agents/openai.yaml`.
 
 - **`SKILL.md`** starts with `name` and `description`. ChatGPT reads only these

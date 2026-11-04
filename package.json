@@ -59,7 +59,10 @@
     "monitor:mcp": "node scripts/check-mcp.mjs",
     "prepare": "husky",
     "test:scripts": "node --test scripts/*.test.mjs",
-    "capture:wire": "node scripts/capture-wire.mjs"
+    "capture:wire": "node scripts/capture-wire.mjs",
+    "skills:sync-plugin": "node scripts/sync-plugin-skills.mjs",
+    "skills:coverage": "node scripts/check-skill-coverage.mjs",
+    "skills:check": "node scripts/check-skills.mjs && node scripts/check-skill-coverage.mjs && vitest run src/chatgpt-plugin.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.4.0",
@@ -86,7 +89,8 @@
     "oxlint": "1.90.0",
     "oxlint-tsgolint": "7.0.2005",
     "typescript": "^7.0.2",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "yaml": "2.9.1"
   },
   "lint-staged": {
     "package.json": "oxfmt --check --no-error-on-unmatched-pattern",

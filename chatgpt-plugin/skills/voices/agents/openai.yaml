@@ -1,0 +1,4 @@
+interface:
+  display_name: "Voices"
+  short_description: "Choose and manage saved voices with Sync"
+  default_prompt: "Use $voices to help me choose one of my saved voices."

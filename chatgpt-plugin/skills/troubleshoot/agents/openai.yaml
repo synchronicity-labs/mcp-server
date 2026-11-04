@@ -1,0 +1,4 @@
+interface:
+  display_name: "Troubleshooting"
+  short_description: "Diagnose and recover interrupted Sync work"
+  default_prompt: "Use $troubleshoot to help me recover this failed Sync job."

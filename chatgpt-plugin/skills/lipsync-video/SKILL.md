@@ -1,60 +1,113 @@
 ---
 name: lipsync-video
-description: Lip-sync an existing video to new speech with sync. labs, from a voiceover, a re-recorded take, a song, or a typed script that sync. labs voices, including AI-generated clips and YouTube, TikTok, Instagram or Facebook links. Use for "lipsync this video to this audio", "make him say…", "match the lips to my voiceover" or "sync this clip to the song". Not for still pictures (talking-photo), translating speech into another language (translate-and-dub) or changing a few words in the original voice (edit-dialogue).
+description: Lip-sync an existing video to supplied audio or a new script with Sync. Use for voiceovers, re-recorded takes, songs, or making a video say new words. Targeted corrections in the original voice belong to Edit Dialogue; translation and talking photos are separate workflows.
 ---
 
-# Lipsync a video
+# Lip-sync a video with Sync
 
-Delivers one MP4 of the video with lips matched to the new speech.
-
-## Inputs
-
-- **Video**: a video file in this conversation, a public video URL, a Sync video asset ID, or a YouTube, TikTok, Instagram or Facebook link.
-- **Speech**: an audio file, audio URL or Sync audio asset, or a script plus a voice.
-
-Ask only for what is missing. Never invent the words.
+Deliver a completed video whose lips match the user's replacement speech.
+Require one video plus one audio performance, or a script and an available
+voice. Ask only for missing inputs; never invent the script.
 
 ## Tools
 
+Names are logical MCP names; optional helpers depend on client capabilities.
+
 | Step | Tool |
 | --- | --- |
-| Save files from the chat | `upload-media` |
-| Import a social link | `projects_create`, `assets_create` |
-| Pick a voice (script only) | `voices_get-voices` |
-| Quote | `generate_estimate-cost` |
-| Shorten long audio | `trim-audio`, `get-audio-trim` |
-| Create | `create-lipsync` |
-| Wait for the result | `generate_get-generation` |
+| Discover models and voices | `models_get`, `voices_get-voices` |
+| Create the project | `projects_create` |
+| Register or import media | `assets_create` |
+| Upload files, when supported | `assets_create-upload-url`, `upload-media` |
+| Read metadata, when available | `assets_get`, `get-playback-metadata` |
+| Quote and create | `generate_estimate-cost`, `create-lipsync` |
+| Track the result | `generate_get-generation` |
+| Widget-owned submission (not model-callable) | `create-lipsync-from-assets` |
 
-## Steps
+The Studio widget owns its saved-asset submission action; conversation uses
+`create-lipsync` and must not manufacture a widget request.
 
-1. **Save files.** For each file in this conversation (the video, or the user's audio), call `upload-media` once with `mediaType` `video` or `audio`. Use the returned asset IDs from here on, including for every retry; a file re-sent later becomes a different asset.
-2. **Social links.** Create a project first with `projects_create`, using a new random UUID as `id`, a short `name` and `defaultWorkflow: "lipsync"`. Then call `assets_create` with the link, `type: "VIDEO"`, that `projectId` and `projectIntent: "explicit"`.
-   - A 409 `import_in_progress` means the import is still running. Wait `retryAfterMs` (15 seconds if absent) and repeat the identical request until it returns an asset.
-   - On `import_failed`, `import_not_enabled`, `import_unavailable` or a limit error, explain the reason, offer a file upload instead, and stop.
-3. **Voice.** For a script, call `voices_get-voices`, suggest two or three fitting voices unless one was named, and use the returned `id` as `voiceId`.
-4. **Length.** If the audio is noticeably longer or shorter than the video, ask how to handle it, and pass the answer as `options.sync_mode`:
-   - `cut_off`: trim the longer one to match
-   - `loop`: repeat the video from the start
-   - `bounce`: play the video forward, then in reverse
-   - `silence`: keep the video silent where the audio runs out
-   - `remap`: speed up or slow down the video to match the audio
+## Discover and prepare
 
-   If the audio is over a length limit, offer `trim-audio` to keep its first part, then quote again.
-5. **Speakers.** If more than one face is visible, ask which person should speak. Leave `options.active_speaker_detection` unset unless the user picks a speaker.
-6. **Quote.** Call `generate_estimate-cost` with the model (default `sync-3`) and the measured `audioDuration`, or the `script` for script input. For `cut_off` or `silence`, also pass `videoDuration` and `syncMode`. Label script quotes approximate and say speech synthesis is excluded.
-7. **Confirm.** Show the video, speech, voice, any sync mode and the estimate, then wait for approval, unless this exact request and cost were already approved.
-8. **Create.** Call `create-lipsync` once with:
-   - the video as `videoAssetId` (saved or imported above) or `videoUrl`;
-   - the speech as `audioAssetId`, `audioUrl`, or `script` with `voiceId`;
-   - the model and any `options`;
-   - a new `idempotencyKey`.
+Use an authenticated Sync MCP connection. Discover tools and read their current
+schemas; names below are logical names and may have host prefixes. If a needed
+tool is missing, explain the gap and point to
+[Sync MCP setup](https://github.com/synchronicity-labs/mcp-server#connect-your-agent).
+Do not guess endpoints or require an embedded Studio widget.
 
-   For a project you just created in step 2, pass its `projectId` with `projectIntent: "explicit"`. Otherwise pass a new random UUID as `projectCreationKey` and a short `projectName`. On a lost response, retry once with the same keys and inputs.
-9. **Wait and deliver.** Poll `generate_get-generation` with the same `id` and `wait: true` until `COMPLETED` or `FAILED`. Give the exact `outputUrl`, unchanged, and offer one next step.
+1. Resolve the intended account if several are connected. Call `models_get` and
+   choose a non-deprecated lip-sync model. Preserve a supported user selection;
+   otherwise prefer `sync-3` if returned. If unavailable, resolve a supported
+   choice rather than inventing a model name.
+2. Default new work to a new project. Create one with `projects_create`, a fresh
+   UUID `id`, a short name, and `defaultWorkflow: "lipsync"`. Preserve the ID on
+   retries. Reuse an existing project only when explicitly selected by the user;
+   matching names or an open editor do not select it. Pass `projectId` and
+   `projectIntent: "explicit"` where supported for this selected/new project.
+3. Resolve the media:
+   - Saved assets: use their durable IDs; verify access as needed with `assets_get`.
+   - Direct media URLs: use the URL inputs accepted by `create-lipsync`.
+   - Local files: use `upload-media` only if exposed and the host can supply its
+     required file object. Otherwise call `assets_create-upload-url`, PUT raw
+     bytes to its `uploadUrl` with the matching Content-Type, then register its
+     returned `url` through `assets_create`. If the host cannot upload, request
+     an accessible URL or saved asset. Never send a local path as a remote URL.
+   - Supported social links: call `assets_create` with the project, URL, and
+     `type: "VIDEO"`. On `import_in_progress`, respect `retryAfterMs` (15 seconds
+     if absent) and repeat the identical import request. Stop on terminal import
+     errors and offer file upload. An `importJobId` is not an asset ID.
+4. For scripts, use `voices_get-voices` and the returned Sync voice `id` as
+   `voiceId`. Resolve an unspecified voice with the user. Do not create a new
+   voice clone as an implicit part of selecting a voice.
 
-## Rules
+Save returned asset IDs and reuse them. Inspect available metadata through
+`assets_get` or `get-playback-metadata`; do not invent durations. If several
+faces make the speaker ambiguous, resolve the intended person before submission.
+Do not invent face coordinates or enable a speaker-selection option without
+the user's intent.
 
-- Use `sync-3` unless the user picks another model; take model names only from `models_get`.
-- Never reuse an older project unless the user explicitly asks for it.
-- Never start a second paid generation to check progress or to refresh a result.
+## Quote and submit
+
+For a material audio/video length mismatch, resolve a supported `sync_mode`:
+`cut_off` ends at the shorter input; `loop` repeats video; `bounce` alternates
+forward/reverse; `silence` preserves the longer duration, with silence after
+audio ends; `remap` adjusts video timing to audio. Explain the relevant choice
+and avoid silently trimming the user's content. Respect model and account limits.
+
+Call `generate_estimate-cost` with the chosen model and measured `audioDuration`,
+or the replacement `script` when audio does not yet exist. Use `videoDuration`
+and `syncMode` for `cut_off` or `silence`. Do not quote the full source video
+duration for a shorter replacement performance. Label script estimates as
+approximate and disclose that speech synthesis is excluded. Show returned
+amounts/units without inventing prices or a total for unquoted stages.
+
+Show the source, speech/script, voice if any, model, duration handling, and costs.
+Get approval before paid work unless existing authorization already covers this
+configuration and spending; follow any stricter tool contract. Disclose and
+resolve authorization for excluded synthesis charges. Requote changed inputs.
+Never change server spending controls to bypass confirmation.
+
+Before submission, retain the exact approved inputs, selected project, account,
+and a fresh `idempotencyKey` in resumable task context. Do not store credentials.
+Call `create-lipsync` with exactly one video source and one audio source or
+`script` plus `voiceId`, the model, approved options, project, and key. Do not
+pass equivalent URL/asset aliases together.
+
+## Track and deliver
+
+Retain the returned generation ID immediately. Use `generate_get-generation`
+with that ID; use `wait: true` if supported and respect server backoff. Continue
+until `COMPLETED`, `FAILED`, or `REJECTED`, within a reasonable interactive
+session window. If still pending at handoff, give the ID, status, and a resume
+instruction. Do not invent completion time.
+
+On an uncertain submission response, recover using a returned job ID first.
+Only retry creation when the tool contract permits, with identical inputs and
+the original idempotency key; stop after one reconciliation attempt if still
+uncertain. A new paid request needs new authorization. Status checks and expired
+result links never justify starting another generation.
+
+On completion, return the exact `outputUrl` unchanged and the generation ID.
+On failure, report the returned reason and a practical next action. A submitted
+job is not a completed video. Preserve signed URL strings exactly and keep them
+out of repository files and public logs.

@@ -9,7 +9,9 @@ sync.'s MCP server. It runs two ways from the same code:
 - **Hosted** at `https://mcp.sync.so/mcp`: Streamable HTTP, OAuth proxied to `api.sync.so`, one Porter replica. ChatGPT, Claude.ai, Claude Code, Cursor and Codex connect here.
 - **stdio** through `npx @sync.so/mcp-server` with `SYNC_API_KEY`, for local clients.
 
-Every merge to `main` deploys production. Treat each merge as a release.
+Runtime changes merged to `main` deploy production. Skills-only ranges skip
+restarts using `scripts/plan-skill-deploy.mjs`; see `docs/skills.md`. Treat runtime
+merges as releases.
 
 ## Where things live
 
@@ -23,6 +25,7 @@ Every merge to `main` deploys production. Treat each merge as a release.
 | `src/rate-limits.ts` | Request limits per verified user and OAuth client, plus per-address limits on rejected credentials |
 | `src/auth/` | OAuth proxy provider (SDK `server-legacy`), bearer verification, device auth for stdio |
 | `src/chatgpt-app.ts`, `deploy/chatgpt/` | Immutable ChatGPT UI releases built from sync-api-v2 `apps/chatgpt`; see `docs/chatgpt-release.md` |
+| `skills/`, `docs/skills/` | Canonical portable skills, catalog and MCP coverage inventory; see `docs/skills.md` |
 | `chatgpt-plugin/` | ChatGPT plugin listing package: manifest, listing copy and skills; see `docs/chatgpt-plugin.md` |
 | `scripts/` | Memory and session suites, UI packaging, monitor, post-deploy smoke check, pre-commit size check |
 | `docs/` | Maintainer notes (`docs/maintainers.md`), release, availability and auth details |
@@ -33,6 +36,8 @@ Every merge to `main` deploys production. Treat each merge as a release.
 pnpm install              # also installs the pre-commit hook
 pnpm run lint             # type-aware Oxlint, then oxfmt --check
 pnpm run knip             # unused files, exports and dependencies, then import cycles
+pnpm skills:sync-plugin    # after editing canonical skills/catalog
+pnpm skills:check          # after build and package:chatgpt
 pnpm run typecheck
 pnpm run build
 pnpm test                 # vitest; see the note below on loaded machines
@@ -72,8 +77,8 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 ## Verifying a change
 
 1. Run the commands above that your change touches.
-2. For anything that can change what clients see, capture the wire before and after. After `pnpm run build && pnpm run package:chatgpt`, run `pnpm run capture:wire capture --out before.json --spec api-json.json` on `main`, the same with `--out after.json` on your branch, then `pnpm run capture:wire diff before.json after.json`. Against a local stub API, a capture records, over HTTP, protocol negotiation, the OAuth documents and 401 challenge, and `initialize`, `tools/list`, resources, resource templates, prompts and an unknown-tool call for each client name. Over stdio it records only `initialize` and `tools/list`, for `claude-code` and `openai-mcp`. Pass the same `--spec` file to both; without it the script fetches `api.sync.so/api-json` into `.cache/`, which `pnpm run clean` deletes. Report the diff in the PR.
-3. After a merge, the deploy job's smoke step must pass: `/health` reports the merged `revision`, and the OAuth documents and the 401 challenge are unchanged.
+2. For anything that can change what clients see, capture the wire before and after. After `pnpm run build && pnpm run package:chatgpt`, run `pnpm run capture:wire capture --out before.json --spec api-json.json` on `main`, the same with `--out after.json` on your branch, then `pnpm run capture:wire diff before.json after.json`. Against a local stub API, a capture records, over HTTP, protocol negotiation, the OAuth documents and 401 challenge, and `initialize`, `tools/list`, resources, resource templates, prompts and an unknown-tool call for each client name. Over stdio it records only `initialize` and `tools/list`, for `claude-code`, `claude-ai`, `openai-mcp`, and `openai-mcp (Codex)`. Pass the same `--spec` file to both; without it the script fetches `api.sync.so/api-json` into `.cache/`, which `pnpm run clean` deletes. Report the diff in the PR.
+3. After a runtime deploy, smoke requires the selected tip's `revision` and a fresh process. A skills-only skip requires the revision already served. OAuth documents and the 401 challenge stay unchanged in both cases.
 
 ## Pull requests
 
