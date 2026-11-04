@@ -66,6 +66,16 @@ it('projects the authenticated account and keeps API-key identity null across th
       );
       return;
     }
+    if (req.url === '/v2/account') {
+      res.end(
+        JSON.stringify({
+          plan: { id: 'scale', name: 'Scale', privateToken: 'must-not-leak' },
+          limits: { concurrency: 15, maxOutputDurationSeconds: 1800, maxFileSizeBytes: 1 },
+          credits: { balance: 1 },
+        }),
+      );
+      return;
+    }
     if (req.url === '/v2/plans/limits') {
       res.end(JSON.stringify({ seats: 3, voiceClone: 5, privateToken: 'must-not-leak' }));
       return;
@@ -113,6 +123,8 @@ it('projects the authenticated account and keeps API-key identity null across th
               : account,
         organization: token === 'unnamed-user' ? { ...organization, name: null } : organization,
         limits: { seats: 3, voiceClone: 5 },
+        plan: { id: 'scale', name: 'Scale' },
+        generationLimits: { concurrency: 15, maxOutputDurationSeconds: 1800 },
         capabilities: { projectRenaming: true },
       });
       expect(JSON.stringify(result)).not.toContain('must-not-leak');
@@ -144,16 +156,19 @@ it('projects the authenticated account and keeps API-key identity null across th
     expect(calls).toEqual([
       '/v2/oauth/account',
       '/v2/plans/limits',
+      '/v2/account',
       '/v2/oauth/account',
       `/v2/organizations/${organization.id}/members`,
       `/v2/assets/count?userId=${account.id}&projectId=selected-project`,
       '/v2/oauth/account',
       '/v2/plans/limits',
+      '/v2/account',
       '/v2/oauth/account',
       `/v2/organizations/${organization.id}/members`,
       `/v2/assets/count?userId=${account.id}&projectId=selected-project`,
       '/v2/oauth/account',
       '/v2/plans/limits',
+      '/v2/account',
       '/v2/oauth/account',
       `/v2/organizations/${organization.id}/members`,
       `/v2/assets/count?userId=${account.id}&projectId=selected-project`,

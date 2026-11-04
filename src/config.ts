@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { resolveChatgptRelease } from './chatgpt-release.js';
+import { parseSpendConfirmation } from './spend-confirmation.js';
 
 export type SyncMcpConfig = {
   apiKey?: string;
@@ -7,6 +8,8 @@ export type SyncMcpConfig = {
   oauthAuthorizationUrl?: string;
   transport: 'stdio' | 'http';
   port: number;
+  /** False when the operator pre-approved spending; see spend-confirmation.ts. */
+  spendConfirmation?: boolean;
   chatgptApp?: {
     directory: string;
     previousDirectories?: string[];
@@ -66,6 +69,10 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
     ),
     transport: overrides.transport ?? DEFAULT_CONFIG.transport,
     port: overrides.port ?? DEFAULT_CONFIG.port,
+    spendConfirmation:
+      overrides.spendConfirmation ??
+      parseSpendConfirmation(process.env.SYNC_MCP_SPEND_CONFIRMATION) ??
+      true,
     chatgptApp:
       overrides.chatgptApp ??
       (release

@@ -3,6 +3,7 @@ import type { HttpClient } from '../http-client.js';
 import { schemaProperty } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
+import { pollUntil, waitInput } from './job-wait.js';
 
 const PREVIEW_OPERATIONS = [
   ['post', '/v2/integrations/dubbing'],
@@ -91,10 +92,12 @@ export function createTranslationPreviewTools(
   const source = z.object({ projectId: z.uuid(), audioAssetId: z.uuid() }).strict();
   const create = source.extend({
     targetLang: z.string().trim().min(1),
-    sourceLang: z.string().default('auto'),
+    // Detected from the audio. Still accepted from callers holding the old tool list.
+    sourceLang: z.string().optional().describe('Optional; the source language is detected.'),
     idempotencyKey: z.uuid(),
   });
   const read = z.object({ projectId: z.uuid(), id: z.uuid() }).strict();
+  const waitable = read.extend({ wait: waitInput });
   return [
     {
       name: 'estimate-translation-preview',
@@ -131,10 +134,10 @@ export function createTranslationPreviewTools(
         openWorldHint: true,
       },
       handler: async (args, context) => {
-        const { idempotencyKey, ...body } = create.parse(args);
+        const { idempotencyKey, sourceLang, ...fields } = create.parse(args);
         return jobSchema.parse(
           await http.request('post', '/v2/integrations/dubbing', {
-            body,
+            body: { ...fields, sourceLang: sourceLang ?? 'auto' },
             headers: { 'Idempotency-Key': idempotencyKey },
             signal: context?.signal,
           }),
@@ -145,8 +148,8 @@ export function createTranslationPreviewTools(
       name: 'get-translation-preview',
       title: 'Read translated audio preview',
       description:
-        'Read the same project-authorized translation job. A recoveryRequired result means provider acceptance is uncertain; do not create another job. Does not start or retry translation.',
-      inputSchema: read.shape,
+        'Read the same project-authorized translation job; pass wait: true to wait for it on the server. A recoveryRequired result means provider acceptance is uncertain; do not create another job. Does not start or retry translation. When COMPLETED, outputMediaUrl can be registered with assets_create (type=AUDIO) or, when available, passed as a clip audioUrl to create-timeline-lipsync.',
+      inputSchema: waitable.shape,
       outputSchema: jobSchema.shape,
       annotations: {
         readOnlyHint: true,
@@ -155,12 +158,21 @@ export function createTranslationPreviewTools(
         openWorldHint: false,
       },
       handler: async (args, context) => {
-        const input = read.parse(args);
-        return jobSchema.parse(
-          await http.request('get', `/v2/integrations/dubbing/${input.id}`, {
-            query: { projectId: input.projectId },
-            signal: context?.signal,
-          }),
+        const { wait, ...fields } = waitable.parse(args);
+        const input = read.parse(fields);
+        const get = async (signal = context?.signal) =>
+          jobSchema.parse(
+            await http.request('get', `/v2/integrations/dubbing/${input.id}`, {
+              query: { projectId: input.projectId },
+              signal,
+            }),
+          );
+        if (!wait) return get();
+        return pollUntil(
+          get,
+          (job) => job.status === 'COMPLETED' || job.status === 'FAILED' || job.recoveryRequired,
+          context,
+          { describe: (job) => `translation ${job.status.toLowerCase()}` },
         );
       },
     },

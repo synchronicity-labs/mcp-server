@@ -25,6 +25,7 @@ function parseArgs(args: string[]): Partial<{
   baseUrl: string;
   transport: 'stdio' | 'http';
   port: number;
+  spendConfirmation: boolean;
 }> {
   const result: Record<string, unknown> = {};
 
@@ -44,6 +45,8 @@ function parseArgs(args: string[]): Partial<{
     } else if (arg === '--port' && next) {
       result.port = Number.parseInt(next, 10);
       i++;
+    } else if (arg === '--no-spend-confirmation') {
+      result.spendConfirmation = false;
     } else if (arg === '--help' || arg === '-h') {
       printUsage();
       process.exit(0);
@@ -61,6 +64,9 @@ Options:
   --base-url <url>    API base URL (default: https://api.sync.so)
   --transport <type>  stdio (default) or http
   --port <port>       HTTP port (default: 3002, only with --transport http)
+  --no-spend-confirmation
+                      Unattended automation: drop the cost-quote and confirm-before-paying
+                      instructions (or set SYNC_MCP_SPEND_CONFIRMATION=off)
   -h, --help          Show this help message
 `);
 }

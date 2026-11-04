@@ -30,23 +30,33 @@ import {
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
+import {
+  applyEdits,
+  DESCRIPTION_EDITS,
+  INSTRUCTION_EDITS,
+  UNATTENDED_INSTRUCTIONS_PREFIX,
+  withoutSpendConfirmation,
+} from './spend-confirmation.js';
 import { createAccountContextTool } from './tools/account-context.js';
 import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
+import { createFeedbackTools, FEEDBACK_INSTRUCTIONS, feedbackOperation } from './tools/feedback.js';
+import { adaptGeneratedTool } from './tools/generated-adapters.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
 import { createGenerationCostsTools, generationCostsOperation } from './tools/generation-costs.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
+import { progressSender } from './tools/job-wait.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { withProjectIntent } from './tools/project-intent.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
-import { createTimelineLipsyncTool } from './tools/timeline-lipsync.js';
+import { createTimelineLipsyncTool, timelineClipLimit } from './tools/timeline-lipsync.js';
 import {
   createTranslationPreviewTools,
   translationPreviewOperations,
@@ -127,8 +137,21 @@ const MODEL_ONLY_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.appOnly
   .map((part) => part.text)
   .join('');
 
-export function serverInstructions(profile: ClientProfile): string {
-  return profile.supportsAppUi ? SERVER_INSTRUCTIONS : MODEL_ONLY_INSTRUCTIONS;
+export function serverInstructions(
+  profile: ClientProfile,
+  spendConfirmation = true,
+  feedback = false,
+): string {
+  const instructions =
+    (profile.supportsAppUi ? SERVER_INSTRUCTIONS : MODEL_ONLY_INSTRUCTIONS) +
+    (feedback && profile.name !== 'chatgpt' ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '');
+  return spendConfirmation
+    ? instructions
+    : UNATTENDED_INSTRUCTIONS_PREFIX + applyEdits(instructions, INSTRUCTION_EDITS);
+}
+
+export function serverDescription(spendConfirmation = true): string {
+  return spendConfirmation ? SERVER_DESCRIPTION : applyEdits(SERVER_DESCRIPTION, DESCRIPTION_EDITS);
 }
 
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
@@ -178,6 +201,7 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'create-lipsync',
   'create-lipsync-from-assets',
   'create-timeline-lipsync',
+  'send-feedback',
   'create-translate-and-dub',
   'get-translation-options',
   'estimate-translation-preview',
@@ -347,7 +371,13 @@ export function registerTools(
       },
       async (args, ctx): Promise<CallToolResult> => {
         // Tools take the request's signal and _meta, not the SDK handler context.
-        const context = { signal: ctx.mcpReq.signal, _meta: ctx.mcpReq._meta };
+        const context = {
+          signal: ctx.mcpReq.signal,
+          _meta: ctx.mcpReq._meta,
+          progress: progressSender(ctx.mcpReq._meta?.progressToken, (notification) =>
+            ctx.mcpReq.notify(notification),
+          ),
+        };
         try {
           if (tool.resultFormat === 'mcp') {
             return await tool.handler((args ?? {}) as Record<string, unknown>, context);
@@ -532,6 +562,8 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   if (tool.name === 'create-lipsync-from-assets') return profile.supportsAppUi;
   // Kept out of the reviewed ChatGPT app listing; its embedded Studio has no timeline.
   if (tool.name === 'create-timeline-lipsync') return profile.name !== 'chatgpt';
+  // Agents report friction; the reviewed ChatGPT app listing keeps its tool set.
+  if (tool.name === 'send-feedback') return profile.name !== 'chatgpt';
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
   return true;
 }
@@ -616,19 +648,21 @@ function createTools(
   const generatedOperations = operations.filter(
     (operation) =>
       operation.operationId !== 'analytics_captureChatgptEvent' &&
+      !feedbackOperation(operation) &&
       translationPreviewOperations([operation]).length === 0 &&
       !operation.path.startsWith('/v2/audio-trims') &&
       operation.studioDraftVersion !== 1 &&
       operation.studioViewVersion !== 1 &&
       !generationCostsOperation(operation),
   );
-  const generatedTools = generateTools(
+  const exposedOperations =
     config.transport === 'http'
       ? generatedOperations.filter((operation) =>
           HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)),
         )
-      : generatedOperations,
-    httpClient,
+      : generatedOperations;
+  const generatedTools = generateTools(exposedOperations, httpClient).map((tool, index) =>
+    adaptGeneratedTool(tool, exposedOperations[index], httpClient),
   );
   const analyticsAvailable = operations.some(
     (operation) => operation.operationId === 'analytics_captureChatgptEvent',
@@ -659,20 +693,24 @@ function createTools(
     createPlaybackMetadataTool(httpClient),
     createGenerationContinuationTool(httpClient),
     ...createAppTools(httpClient, undefined, getProfile),
-    createTimelineLipsyncTool(httpClient, getProfile),
+    createTimelineLipsyncTool(httpClient, getProfile, timelineClipLimit(operations)),
     ...createProjectHistoryTools(operations, httpClient),
     ...createTranslationTools(operations, httpClient),
     ...createTranslationPreviewTools(operations, httpClient),
     ...createAudioTrimTools(operations, httpClient),
     ...createDialogueTools(operations, httpClient),
     ...createSpeechTools(operations, httpClient),
+    ...createFeedbackTools(operations, httpClient, PACKAGE_VERSION),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
         : tool,
     ),
   ];
-  const tools = allTools.map(withProjectIntent).map(withGenerationStatusCard);
+  const tools = allTools
+    .map(withProjectIntent)
+    .map(withGenerationStatusCard)
+    .map((tool) => (config.spendConfirmation === false ? withoutSpendConfirmation(tool) : tool));
   return config.transport === 'http'
     ? tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
     : tools;
@@ -705,9 +743,17 @@ function createProfiledServer(
     sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
   const analytics = toolAnalyticsSupport(operations);
   const server = new McpServer(
-    { name: 'sync', version: PACKAGE_VERSION, description: SERVER_DESCRIPTION },
     {
-      instructions: serverInstructions(resolveClientProfile(httpClientName ?? handshakeClientName)),
+      name: 'sync',
+      version: PACKAGE_VERSION,
+      description: serverDescription(config.spendConfirmation),
+    },
+    {
+      instructions: serverInstructions(
+        resolveClientProfile(httpClientName ?? handshakeClientName),
+        config.spendConfirmation,
+        operations.some(feedbackOperation),
+      ),
     },
   );
   // Keep the SDK's input/output validation and execution. Hidden upload tools remain
@@ -740,7 +786,11 @@ function createProfiledServer(
               profile.name,
               httpClient,
               (businessArgs) =>
-                tool.handler(businessArgs, { ...parameters[1], clientProfile: profile }),
+                tool.handler(businessArgs, {
+                  ...parameters[1],
+                  clientProfile: profile,
+                  clientName,
+                }),
               analytics,
             );
           },
@@ -888,6 +938,9 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
       operation.operationId === 'analytics_captureChatgptEvent' ||
+      feedbackOperation(operation) ||
+      // Read for its published segment limit; raw generation stays unhosted.
+      (operation.method === 'post' && operation.path === '/v2/generate') ||
       HOSTED_HTTP_TOOL_ALLOWLIST.has(operationIdToToolName(operation.operationId)) ||
       generationCostsOperation(operation) ||
       translationOperation([operation]) !== undefined ||

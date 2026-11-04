@@ -71,7 +71,7 @@ describe('create-timeline-lipsync', () => {
         { audioAssetId: A, startTime: 0, endTime: 3 },
         { audioAssetId: B, startTime: 2, endTime: 5 },
       ],
-      'Clips overlap',
+      'clips[0] (seconds 0-3) and clips[1] (seconds 2-5) overlap',
     ],
     [
       'a clip that ends before it starts',
@@ -99,7 +99,7 @@ describe('create-timeline-lipsync', () => {
         { audioAssetId: A, startFrame: 0, endFrame: 48 },
         { audioAssetId: B, startFrame: 48, endFrame: 96 },
       ],
-      'Clips overlap',
+      'clips[0] (frames 0-48) and clips[1] (frames 48-96) overlap',
     ],
     [
       'a picked frame outside its clip',
@@ -111,7 +111,24 @@ describe('create-timeline-lipsync', () => {
           speaker: { frameNumber: 49, x: 1, y: 1 },
         },
       ],
-      'frameNumber',
+      'clips[0]: speaker.frameNumber 49 is not one of its 49 frames',
+    ],
+    [
+      'a clip naming no audio',
+      [{ startTime: 0, endTime: 2 }],
+      'clips[0]: give audioAssetId or audioUrl',
+    ],
+    [
+      'a clip naming both an asset and a URL',
+      [
+        {
+          audioAssetId: A,
+          audioUrl: 'https://cdn.example.test/dub.flac',
+          startTime: 0,
+          endTime: 2,
+        },
+      ],
+      'exactly one',
     ],
     [
       'an empty audio range',
@@ -123,6 +140,46 @@ describe('create-timeline-lipsync', () => {
 
     await expect(tool.handler({ videoAssetId: VIDEO, projectId: PROJECT, clips })).rejects.toThrow(
       message,
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('sends an audio URL as its own input, shared by the clips that play it', async () => {
+    const { request, tool } = setup();
+    const dub = 'https://cdn.example.test/dubbing-1.flac';
+
+    await tool.handler({
+      videoAssetId: VIDEO,
+      projectId: PROJECT,
+      clips: [
+        { audioUrl: dub, startTime: 0, endTime: 2, audioStartTime: 0, audioEndTime: 2 },
+        { audioAssetId: A, startTime: 3, endTime: 4 },
+        { audioUrl: dub, startTime: 5, endTime: 6, audioStartTime: 5, audioEndTime: 6 },
+      ],
+    });
+
+    expect(request).toHaveBeenCalledWith(
+      'post',
+      '/v2/generate',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          input: [
+            { type: 'video', assetId: VIDEO },
+            { type: 'audio', url: dub, refId: 'audio-1' },
+            { type: 'audio', assetId: A, refId: 'audio-2' },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('refuses more clips than the API takes, before calling it', async () => {
+    const request = vi.fn();
+    const tool = createTimelineLipsyncTool({ request } as unknown as HttpClient, undefined, 2);
+    const clips = [0, 1, 2].map((i) => ({ audioAssetId: A, startTime: i, endTime: i + 0.5 }));
+
+    await expect(tool.handler({ videoAssetId: VIDEO, projectId: PROJECT, clips })).rejects.toThrow(
+      'at most 2 clips; this request has 3',
     );
     expect(request).not.toHaveBeenCalled();
   });
