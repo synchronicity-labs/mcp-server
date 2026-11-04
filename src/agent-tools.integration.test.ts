@@ -53,6 +53,11 @@ function spec(feedback: boolean) {
           ),
         }),
       },
+      '/v2/transcriptions/{id}/speaker-analysis': {
+        get: op('TranscriptionsController_getSpeakerAnalysis', 'Transcriptions', {
+          parameters: [path('id')],
+        }),
+      },
       '/v2/transcriptions/{id}': {
         get: op('TranscriptionsController_getTranscriptionJob', 'Transcriptions', {
           parameters: [path('id')],
@@ -81,6 +86,7 @@ afterEach(async () => {
 async function setup({ feedback = true, spendConfirmation = true } = {}) {
   const calls: Call[] = [];
   let transcriptReads = 0;
+  let analysisReads = 0;
   let importAttempts = 0;
   const upstream: Server = createServer(
     asyncRequestListener(async (req, res) => {
@@ -99,6 +105,15 @@ async function setup({ feedback = true, spendConfirmation = true } = {}) {
         );
       if (req.url === '/v2/transcriptions')
         return void res.end(JSON.stringify({ id: 't-1', status: 'PENDING' }));
+      if (req.url === '/v2/transcriptions/t-1/speaker-analysis') {
+        analysisReads += 1;
+        return void res.end(
+          JSON.stringify({
+            status: analysisReads > 1 ? 'completed' : 'processing',
+            speakers: [],
+          }),
+        );
+      }
       if (req.url === '/v2/transcriptions/t-1') {
         transcriptReads += 1;
         return void res.end(
@@ -191,6 +206,21 @@ describe('agent tool adapters', () => {
       status: 'COMPLETED',
     });
     expect(calls.filter((c) => c.path === '/v2/transcriptions/t-1')).toHaveLength(2);
+  });
+
+  it('waits for the speaker analysis and guides agents from speakers to clip face tracks', async () => {
+    const { client, call, calls } = await setup();
+    const read = (await client.listTools()).tools.find(
+      (t) => t.name === 'transcriptions_get-speaker-analysis',
+    );
+    expect(read?.description).toContain('transcriptions_slice-speaker-face-track');
+    expect(read?.inputSchema.properties).toHaveProperty('wait');
+
+    const done = await call('transcriptions_get-speaker-analysis', { id: 't-1', wait: true });
+    expect(JSON.stringify(done.content)).toContain('completed');
+    expect(calls.filter((c) => c.path === '/v2/transcriptions/t-1/speaker-analysis')).toHaveLength(
+      2,
+    );
   });
 
   it('keeps importing a social link while it is in progress when asked to wait', async () => {

@@ -102,7 +102,9 @@ function withJobWait(tool: JsonTool, label: string): JsonTool {
       return pollUntil(
         read,
         (job) =>
-          ['COMPLETED', 'FAILED', 'CANCELED', 'CANCELLED'].includes(status(job) ?? 'COMPLETED'),
+          ['COMPLETED', 'FAILED', 'CANCELED', 'CANCELLED', 'UNAVAILABLE'].includes(
+            status(job) ?? 'COMPLETED',
+          ),
         context,
         {
           describe: (job) => `${label} ${(status(job) ?? 'pending').toLowerCase()}`,
@@ -164,6 +166,8 @@ export function adaptGeneratedTool(
     return withTranscriptionAsset(tool, http);
   if (operation.method === 'get' && operation.path === '/v2/transcriptions/{id}')
     return withJobWait(tool, 'transcription');
+  if (operation.method === 'get' && operation.path === '/v2/transcriptions/{id}/speaker-analysis')
+    return withJobWait(tool, 'speaker analysis');
   if (operation.method === 'post' && operation.path === '/v2/assets') return withImportWait(tool);
   return tool;
 }
