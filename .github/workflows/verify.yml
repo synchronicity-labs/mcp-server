@@ -39,6 +39,9 @@ jobs:
       - run: pnpm run test:memory --burst
       - run: pnpm run package:chatgpt
       - run: pnpm run verify:chatgpt-package
+      - name: Package the plugin from the pinned skills commit
+        run: pnpm run package:plugin
+      - run: pnpm run verify:plugin
       - run: pnpm run test:memory:http
       - run: pnpm test --no-file-parallelism
       - run: pnpm test

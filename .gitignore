@@ -1,5 +1,6 @@
 node_modules/
 chatgpt-dist/
+chatgpt-plugin-dist/
 dist/
 .cache/
 temp/

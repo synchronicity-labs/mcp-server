@@ -130,6 +130,15 @@ Links can be public media URLs or YouTube, TikTok, Instagram and Facebook videos
 Translation, dubbing, speech previews and voice clones are quoted and confirmed
 with you before they start.
 
+### Agent skills
+
+Step-by-step workflows for these tools (lipsync, talking photos, dubbing, Edit Dialogue,
+campaigns, batches, troubleshooting and the API) are agent skills in
+[synchronicity-labs/skills](https://github.com/synchronicity-labs/skills). Install them
+in any agent with `npx skills add synchronicity-labs/skills`. The ChatGPT and Codex
+plugin ships them from a pinned commit of that repository; see
+[docs/chatgpt-plugin.md](docs/chatgpt-plugin.md).
+
 ## Tools
 
 The hosted server exposes a curated set of tools to every client:
