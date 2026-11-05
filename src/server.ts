@@ -59,10 +59,11 @@ import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { progressSender } from './tools/job-wait.js';
 import { createJobTools } from './tools/jobs.js';
+import { withOrganizationChoice } from './tools/organization-choice.js';
 import {
   type CredentialKind,
   createOrganizationTools,
-  withOrganizationChoice,
+  organizationNextStep,
 } from './tools/organizations.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
@@ -107,7 +108,7 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
     text: 'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new create-lipsync or create-translate-and-dub calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ',
   },
   {
-    text: 'Every call runs in one Sync organization, and paid work is created and billed there. get-account-context names it and says how it was chosen. When organizations_list is available and the user names an organization or team, list the organizations and use the matching id; ask if several match. To work in another organization for the rest of the conversation, call organizations_select. To run one paid create in another organization without switching, pass organizationId on that create and on its estimate; reads of the ids it returns stay in that organization. Name the organization when confirming paid work if the user belongs to more than one. API keys are bound to one organization and cannot switch. ',
+    text: 'Every call runs in one Sync organization, and paid work is created and billed there. get-account-context names it and says how it was chosen. When organizations_list is available and the user names an organization or team, list the organizations and use the matching id; ask if several match. To work in another organization for the rest of the conversation, call organizations_select. To run one paid create in another organization without switching, pass organizationId on that create and on its estimate; reads of the ids it returns stay in that organization. Name the organization when confirming paid work if the user belongs to more than one. A Sync app connection acts only in the organizations ticked when it was connected; when a switch is refused for that, tell the user to reconnect Sync and tick that organization. API keys are bound to one organization and cannot switch. ',
   },
   {
     text: 'For what a past generation actually cost, use get-generation-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lip sync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generate_estimate-cost or start a paid generation to answer a past-cost question. ',
@@ -441,6 +442,8 @@ const NEXT_STEP_BY_CODE: Record<string, string> = {
 };
 
 function nextStep(error: ApiRequestError): string | undefined {
+  const organization = organizationNextStep(error);
+  if (organization) return organization;
   if (error.code && NEXT_STEP_BY_CODE[error.code]) return NEXT_STEP_BY_CODE[error.code];
   return [400, 402, 403, 422].includes(error.status) ? RESUBMIT_FAILS : undefined;
 }

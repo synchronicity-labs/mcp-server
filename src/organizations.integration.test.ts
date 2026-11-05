@@ -15,6 +15,7 @@ import {
   hosted,
   lipsync,
   onCleanUp,
+  UNGRANTED,
 } from './test-fixtures/organizations.js';
 
 afterEach(cleanUp);
@@ -91,7 +92,7 @@ describe('organizations on the hosted server', () => {
       changed: true,
       plan: { id: 'scale', name: 'Scale' },
       generationLimits: { concurrency: 15, maxOutputDurationSeconds: 1800 },
-      features: ['scene-detection', 'stem-separation'],
+      features: ['scene_detection', 'stem_separation'],
     });
 
     calls.length = 0;
@@ -99,7 +100,7 @@ describe('organizations on the hosted server', () => {
     expect(context.structuredContent).toMatchObject({
       organization: { id: ACME.id, name: 'Acme', role: 'member' },
       plan: { id: 'scale' },
-      features: ['scene-detection', 'stem-separation'],
+      features: ['scene_detection', 'stem_separation'],
       organizationChoice: { selectedBy: 'session' },
     });
     expect(calls.map((call) => call.organization)).toEqual([ACME.id, ACME.id, ACME.id]);
@@ -299,19 +300,61 @@ describe('organizations on the hosted server', () => {
       error: {
         status: 403,
         code: 'organization_access_denied',
-        message: expect.stringContaining('You are not a member of this organization'),
+        message: expect.stringContaining('You are not a member of the organization'),
         nextStep: expect.stringContaining('organizations_list'),
       },
     });
 
     const create = await call('create-lipsync', { ...lipsync, organizationId: FOREIGN });
     expect(create.isError).toBe(true);
-    expect(JSON.stringify(create.content)).toContain('You are not a member of this organization');
+    expect(JSON.stringify(create.content)).toContain('You are not a member of the organization');
     expect(calls.some((item) => item.url === '/v2/generate')).toBe(false);
 
     calls.length = 0;
     await call('get-account-context');
     expect(calls.every((item) => item.organization === undefined)).toBe(true);
+  });
+
+  it('passes on the API’s reconnect guidance for an organization the connection was not granted', async () => {
+    let revoked = false;
+    const { baseUrl, calls } = await api({
+      // Acme's grant is disconnected after the switch.
+      intercept: (call) =>
+        revoked && call.organization === ACME.id
+          ? [
+              403,
+              {
+                message: 'This app connection has not been granted access to the organization',
+                errorCode: 'oauth_organization_not_granted',
+                suggestion: 'To add it, reconnect the app and tick that organization.',
+              },
+            ]
+          : undefined,
+    });
+    const { call } = await hosted(baseUrl);
+    const guidance = {
+      status: 403,
+      code: 'oauth_organization_not_granted',
+      nextStep: expect.stringContaining('reconnect the app and tick that organization'),
+    };
+
+    const refused = await call('organizations_select', { organizationId: UNGRANTED });
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent).toMatchObject({ error: guidance });
+    const create = await call('create-lipsync', { ...lipsync, organizationId: UNGRANTED });
+    expect(create.structuredContent).toMatchObject({ error: guidance });
+    expect(calls.some((item) => item.url === '/v2/generate')).toBe(false);
+    const context = await call('get-account-context');
+    expect(context.structuredContent).toMatchObject({
+      organization: { id: HOME.id },
+      organizationChoice: { selectedBy: 'credential' },
+    });
+
+    // A selection whose grant goes away mid-session: every call says what to do.
+    await call('organizations_select', { organizationId: ACME.id });
+    revoked = true;
+    const later = await call('create-lipsync', lipsync);
+    expect(later.structuredContent).toMatchObject({ error: guidance });
   });
 
   it('refuses to record a switch the API did not apply', async () => {

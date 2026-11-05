@@ -79,7 +79,7 @@ describe('organizations on stdio', () => {
     });
 
     const home = await client.callTool({ name: 'get-account-context', arguments: {} });
-    expect(home.structuredContent).toMatchObject({ features: ['stem-separation'] });
+    expect(home.structuredContent).toMatchObject({ features: ['stem_separation'] });
 
     const selected = await client.callTool({
       name: 'organizations_select',
@@ -87,7 +87,7 @@ describe('organizations on stdio', () => {
     });
     expect(selected.structuredContent).toMatchObject({
       previousOrganization: HOME,
-      features: ['scene-detection', 'stem-separation'],
+      features: ['scene_detection', 'stem_separation'],
     });
     await vi.waitFor(() => expect(changes).toBe(1));
 

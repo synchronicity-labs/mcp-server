@@ -64,6 +64,8 @@ export type ApiErrorDetails = z.infer<typeof errorDetailsSchema>;
 export class ApiRequestError extends Error {
   /** Set by a tool that knows a better next step than the generic one for this code. */
   nextStep?: string;
+  /** The API's own advice for this error code, when the response carries one. */
+  suggestion?: string;
 
   constructor(
     message: string,
@@ -77,6 +79,11 @@ export class ApiRequestError extends Error {
     super(message);
     this.name = 'ApiRequestError';
   }
+}
+
+// The API's advice for a coded error, such as reconnecting to grant an organization.
+function apiSuggestion(parsed: unknown): string | undefined {
+  return z.object({ suggestion: z.string() }).safeParse(parsed).data?.suggestion;
 }
 
 function errorDetails(parsed: unknown): ApiErrorDetails | undefined {
@@ -213,6 +220,7 @@ export function createHttpClient(
             importDetails?.success ? importDetails.data : undefined,
             errorDetails(parsed),
           );
+          error.suggestion = apiSuggestion(parsed);
           apiResponseErrors.add(error);
           throw error;
         }

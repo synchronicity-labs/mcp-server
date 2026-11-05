@@ -1,15 +1,12 @@
-import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
 import {
-  chosenOrganization,
   currentOrganizationSession,
   ORGANIZATION_HEADER,
   OrganizationSession,
   type OrganizationSummary,
-  runInOrganization,
 } from '../organization-selection.js';
-import type { McpToolDefinition, ToolRequestContext } from './generator.js';
+import type { McpToolDefinition } from './generator.js';
 
 /** GET route listing the caller's organizations (sync-api-v2, CRAFT-7789). */
 export const ORGANIZATIONS_PATH = '/v2/account/organizations';
@@ -18,11 +15,36 @@ export const ORGANIZATIONS_PATH = '/v2/account/organizations';
 export type CredentialKind = 'api_key' | 'user';
 
 const SWITCH_HINT =
-  'Call organizations_list to see the organizations this account belongs to, then organizations_select with an id to switch this session, or pass organizationId on a single paid create (and its estimate) to run only that call there.';
+  'Call organizations_list to see the organizations this connection can act in, then organizations_select with an id to switch this session, or pass organizationId on a single paid create (and its estimate) to run only that call there. A Sync app connection (OAuth) acts only in the organizations ticked when it was connected; to add one, the user reconnects Sync and ticks it.';
 const API_KEY_HINT =
   'This connection uses an API key, and API keys are bound to the organization that created them. To work in another organization, use an API key created in it, or sign in to Sync instead of using SYNC_API_KEY.';
 const REFUSED_STEP =
   'The session keeps its current organization. Pick an id returned by organizations_list and explain the message to the user; do not retry the same id.';
+
+// Refusals of x-sync-organization-id (sync-api-v2 #7863). The request never fell back to
+// another organization, so nothing ran.
+const ORGANIZATION_REFUSALS: Record<string, string> = {
+  organization_access_denied:
+    'Use an organization id from organizations_list, or omit organizationId to use the current one.',
+  oauth_organization_not_granted:
+    'To add it, reconnect the app and tick that organization on the consent screen, keeping the others you still want. Until then, use an organization from organizations_list.',
+  api_key_organization_bound:
+    "Omit organizationId, or use an API key created in the other organization's Studio settings.",
+  invalid_organization_id: 'Send one organization id from organizations_list.',
+};
+
+/**
+ * Next step for a refused organization: the API's own suggestion (for a connection without
+ * a grant, reconnecting and ticking that organization), then what not to do.
+ */
+export function organizationNextStep(error: ApiRequestError): string | undefined {
+  const fallback = error.code ? ORGANIZATION_REFUSALS[error.code] : undefined;
+  if (!fallback) return undefined;
+  const suggestion = error.suggestion
+    ? `${error.suggestion} Here, organizations_list lists the organizations this connection can use.`
+    : fallback;
+  return `${suggestion} Tell the user; retrying the same organization fails the same way.`;
+}
 
 export function switchHint(credential: CredentialKind): string {
   return credential === 'api_key' ? API_KEY_HINT : SWITCH_HINT;
@@ -53,16 +75,10 @@ export type AccountOverview = {
   features?: string[];
 };
 
-/** Flags as a list, or as an object of booleans; either becomes the sorted enabled names. */
+/** GET /v2/account `features`: the flag names enabled for this credential, sorted. */
 function enabledFeatures(value: unknown): string[] | undefined {
-  if (Array.isArray(value))
-    return value.filter((item): item is string => typeof item === 'string').sort();
-  if (value && typeof value === 'object')
-    return Object.entries(value)
-      .filter(([, enabled]) => enabled === true)
-      .map(([name]) => name)
-      .sort();
-  return undefined;
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((item): item is string => typeof item === 'string').sort();
 }
 
 /** GET /v2/account, read field by field so one unexpected field never hides the rest. */
@@ -94,11 +110,11 @@ async function readAccount(
   );
 }
 
-function sessionOf(): OrganizationSession {
+export function sessionOf(): OrganizationSession {
   return currentOrganizationSession() ?? new OrganizationSession();
 }
 
-function summary(organization: { id: string; name: string | null }): OrganizationSummary {
+export function summary(organization: { id: string; name: string | null }): OrganizationSummary {
   return { id: organization.id, name: organization.name };
 }
 
@@ -108,7 +124,7 @@ function describe(organization: OrganizationSummary | undefined): string {
 }
 
 /** The credential's own organization, read once a minute at most. */
-async function defaultOrganization(
+export async function defaultOrganization(
   http: HttpClient,
   session: OrganizationSession,
   signal: AbortSignal | undefined,
@@ -122,14 +138,14 @@ async function defaultOrganization(
   return organization;
 }
 
-function apiKeyBound(organization: OrganizationSummary | undefined): Error {
+export function apiKeyBound(organization: OrganizationSummary | undefined): Error {
   return new Error(
     `API keys are bound to one organization, and this key belongs to ${describe(organization)}. ${API_KEY_HINT}`,
   );
 }
 
 /** Reads the account as `organizationId`; refuses unless the API answered for that organization. */
-async function readAccountAs(
+export async function readAccountAs(
   http: HttpClient,
   organizationId: string,
   signal: AbortSignal | undefined,
@@ -138,7 +154,8 @@ async function readAccountAs(
   try {
     account = await readAccount(http, signal, organizationId);
   } catch (error) {
-    if (error instanceof ApiRequestError && error.status !== 401) error.nextStep = REFUSED_STEP;
+    if (error instanceof ApiRequestError && error.status !== 401)
+      error.nextStep = organizationNextStep(error) ?? REFUSED_STEP;
     throw error;
   }
   if (account.organization?.id !== organizationId)
@@ -152,20 +169,14 @@ const organizationListItem = z.object({
   id: z.uuid(),
   name: z.string().nullable(),
   role: z.string(),
-  plan: z.union([z.string(), planSchema]).nullable().optional(),
+  plan: planSchema.optional(),
   isCurrent: z.boolean(),
 });
 
-function listedOrganizations(value: unknown): z.infer<typeof organizationListItem>[] {
-  const items = Array.isArray(value)
-    ? value
-    : z.object({ organizations: z.array(z.unknown()) }).parse(value).organizations;
-  return z
-    .array(organizationListItem.extend({ isCurrent: z.boolean().optional().default(false) }))
-    .parse(items);
-}
+// GET /v2/account/organizations: what the credential can act in, current one first.
+const organizationsResponse = z.object({ organizations: z.array(organizationListItem) });
 
-const organizationSummarySchema = z.object({ id: z.uuid(), name: z.string().nullable() });
+export const organizationSummarySchema = z.object({ id: z.uuid(), name: z.string().nullable() });
 
 const listOutput = {
   organizations: z.array(organizationListItem),
@@ -240,7 +251,7 @@ export function createOrganizationTools(
       name: 'organizations_list',
       title: 'List your Sync organizations',
       description:
-        'List the Sync organizations this account belongs to, with role and plan, marking the one this session runs in (isCurrent). Use it when the user names an organization or team, or asks where work is created, then switch with organizations_select or pass organizationId on one paid create. With an API key, lists only the key’s organization.',
+        'List the Sync organizations this connection can act in, with role and plan, marking the one this session runs in (isCurrent). Use it when the user names an organization or team, or asks where work is created, then switch with organizations_select or pass organizationId on one paid create. A Sync app connection lists the organizations ticked when it was connected; to add another, the user reconnects Sync and ticks it. With an API key, lists only the key’s organization.',
       inputSchema: {},
       outputSchema: listOutput,
       annotations: {
@@ -251,40 +262,21 @@ export function createOrganizationTools(
       },
       handler: async (_args, context) => {
         const session = sessionOf();
-        if (credential === 'api_key') {
-          const account = await readAccount(http, context?.signal);
-          if (!account.organization)
-            throw new Error('Sync did not report the active organization.');
-          session.rememberDefault(summary(account.organization));
-          return {
-            organizations: [
-              {
-                id: account.organization.id,
-                name: account.organization.name,
-                role: account.organization.role ?? 'api_key',
-                plan: account.plan ?? null,
-                isCurrent: true,
-              },
-            ],
-            current: summary(account.organization),
-            selectedBy: 'credential',
-            howToSwitch: API_KEY_HINT,
-          };
-        }
+        // An API key lists only its own organization; it never sends the header.
         const selected = session.selected;
-        const organizations = listedOrganizations(
-          await http.request('get', ORGANIZATIONS_PATH, { signal: context?.signal }),
-        ).map((organization) => ({
-          ...organization,
-          isCurrent: selected ? organization.id === selected.id : organization.isCurrent,
-        }));
+        const organizations = organizationsResponse
+          .parse(await http.request('get', ORGANIZATIONS_PATH, { signal: context?.signal }))
+          .organizations.map((organization) => ({
+            ...organization,
+            isCurrent: selected ? organization.id === selected.id : organization.isCurrent,
+          }));
         const current = organizations.find((organization) => organization.isCurrent);
         if (current && !selected) session.rememberDefault(summary(current));
         return {
           organizations,
           current: current ? summary(current) : null,
           selectedBy: selected ? 'session' : 'credential',
-          howToSwitch: SWITCH_HINT,
+          howToSwitch: switchHint(credential),
         };
       },
     },
@@ -292,7 +284,7 @@ export function createOrganizationTools(
       name: 'organizations_select',
       title: 'Switch the Sync organization',
       description:
-        'Switch this session to another Sync organization the user belongs to; every later call runs there, including paid generations, until the session ends or another switch. Use an id from organizations_list, and only when the user asks to work in that organization. Returns the new organization’s plan, generation limits and feature flags. The API checks membership; API keys are bound to one organization and cannot switch. To run a single generation elsewhere, pass organizationId on that create instead.',
+        'Switch this session to another Sync organization the user belongs to; every later call runs there, including paid generations, until the session ends or another switch. Use an id from organizations_list, and only when the user asks to work in that organization. Returns the new organization’s plan, generation limits and feature flags. The API checks access: a Sync app connection can switch only to organizations ticked when it was connected, and otherwise says to reconnect and tick it; API keys are bound to one organization and cannot switch. To run a single generation elsewhere, pass organizationId on that create instead.',
       inputSchema: {
         organizationId: z.uuid().describe('Organization id returned by organizations_list.'),
       },
@@ -320,169 +312,4 @@ export function createOrganizationTools(
       },
     },
   ];
-}
-
-/** Paid creates, and the estimates that quote them, that take a one-call organizationId. */
-const PER_CALL_ORGANIZATION_TOOLS = new Set([
-  'create-lipsync',
-  'create-lipsync-from-assets',
-  'create-timeline-lipsync',
-  'create-translate-and-dub',
-  'create-translation-preview',
-  'estimate-translation-preview',
-  'create-dialogue-preview',
-  'create-dialogue-video',
-  'estimate-dialogue-video',
-  'generate_create-generation',
-  'generate_estimate-cost',
-  // From the batch tools (CRAFT-7781); applies once they are registered.
-  'batches_create',
-]);
-
-const organizationOutput = organizationSummarySchema
-  .optional()
-  .describe('The Sync organization this call ran in.');
-
-const organizationIdInput = z
-  .uuid()
-  .optional()
-  .describe(
-    'Run only this call in another of the user’s Sync organizations, by id from organizations_list, when the user asks for it (for example “generate this in the Acme org”). The session keeps its organization; reads of the ids this call returns stay in this organization. Omit to use the session’s organization.',
-  );
-
-// Ids a create returns: its job, generation, project or output asset.
-function returnedIds(result: unknown): string[] {
-  if (!result || typeof result !== 'object' || Array.isArray(result)) return [];
-  return Object.entries(result).flatMap(([key, value]) =>
-    (key === 'id' || key.endsWith('Id')) && z.uuid().safeParse(value).success
-      ? [value as string]
-      : [],
-  );
-}
-
-async function organizationForCall(
-  http: HttpClient,
-  credential: CredentialKind,
-  session: OrganizationSession,
-  organizationId: string,
-  signal: AbortSignal | undefined,
-): Promise<{ organization: OrganizationSummary; scoped: boolean }> {
-  const active = chosenOrganization();
-  if (active?.id === organizationId) return { organization: active, scoped: true };
-  // Running in the credential's own organization needs no header.
-  if (credential === 'api_key' || !active) {
-    const own =
-      credential === 'api_key'
-        ? await defaultOrganization(http, session, signal)
-        : await defaultOrganization(http, session, signal).catch(() => undefined);
-    if (own?.id === organizationId) return { organization: own, scoped: false };
-    if (credential === 'api_key') throw apiKeyBound(own);
-  }
-  const account = await readAccountAs(http, organizationId, signal);
-  return { organization: summary(account.organization), scoped: true };
-}
-
-function withOrganization(result: unknown, organization: OrganizationSummary | undefined): unknown {
-  if (!organization || !result || typeof result !== 'object' || Array.isArray(result))
-    return result;
-  return { ...result, organization };
-}
-
-/**
- * Adds an optional organizationId that runs one paid create in another organization,
- * and reports the organization each call ran in.
- */
-export function withOrganizationChoice(
-  tool: McpToolDefinition,
-  http: HttpClient,
-  credential: CredentialKind,
-): McpToolDefinition {
-  if (!PER_CALL_ORGANIZATION_TOOLS.has(tool.name)) return tool;
-  const run = async <T>(
-    args: Record<string, unknown>,
-    context: ToolRequestContext | undefined,
-    handler: (fields: Record<string, unknown>) => Promise<T>,
-  ): Promise<{ result: T; organization?: OrganizationSummary }> => {
-    const { organizationId, ...fields } = args;
-    const session = sessionOf();
-    // Ids a create returns are read in the organization it ran in, even after a switch.
-    // API keys have one organization and never send the header, so they remember nothing.
-    const remember = (ids: string[], organization: OrganizationSummary | undefined) => {
-      if (credential === 'user' && organization) session.rememberIds(ids, organization);
-    };
-    const execute = async (organization: Promise<OrganizationSummary | undefined>) => {
-      try {
-        return await handler(fields);
-      } catch (error) {
-        // An uncertain admission names its generation; recovery must read the same organization.
-        if (error instanceof ApiRequestError && error.generationId)
-          remember([error.generationId], await organization);
-        throw error;
-      }
-    };
-    const finish = async (result: T, organization: OrganizationSummary | undefined) => {
-      remember(
-        returnedIds(
-          tool.resultFormat === 'mcp' ? (result as CallToolResult).structuredContent : result,
-        ),
-        organization,
-      );
-      return { result, organization };
-    };
-    if (typeof organizationId !== 'string') {
-      const active = chosenOrganization();
-      // Read alongside the call, so reporting the organization adds no latency.
-      const lookup = active
-        ? Promise.resolve(active)
-        : defaultOrganization(http, session, context?.signal).catch(() => undefined);
-      const result = await execute(lookup);
-      return finish(result, await lookup);
-    }
-    const { organization, scoped } = await organizationForCall(
-      http,
-      credential,
-      session,
-      organizationId,
-      context?.signal,
-    );
-    const known = Promise.resolve(organization);
-    const result = scoped
-      ? await runInOrganization(organization, () => execute(known))
-      : await runInOrganization(undefined, () => execute(known));
-    return finish(result, organization);
-  };
-  const definition = {
-    ...tool,
-    inputSchema: { ...tool.inputSchema, organizationId: organizationIdInput },
-    ...(tool.outputSchema
-      ? { outputSchema: { ...tool.outputSchema, organization: organizationOutput } }
-      : {}),
-  };
-  if (tool.resultFormat === 'mcp')
-    return {
-      ...definition,
-      resultFormat: 'mcp',
-      handler: async (args, context) => {
-        const { result, organization } = await run(args, context, (fields) =>
-          tool.handler(fields, context),
-        );
-        if (result.isError || !organization) return result;
-        return {
-          ...result,
-          structuredContent: withOrganization(result.structuredContent, organization) as
-            | Record<string, unknown>
-            | undefined,
-        };
-      },
-    };
-  return {
-    ...definition,
-    resultFormat: 'json',
-    handler: async (args, context) => {
-      const { result, organization } = await run(args, context, (fields) =>
-        tool.handler(fields, context),
-      );
-      return withOrganization(result, organization);
-    },
-  };
 }

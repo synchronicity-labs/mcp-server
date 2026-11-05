@@ -11,6 +11,8 @@ import { asyncRequestListener } from './request-listener.js';
 export const HOME = { id: '00000000-0000-4000-8000-0000000000a1', name: 'Home' };
 export const ACME = { id: '00000000-0000-4000-8000-0000000000a2', name: 'Acme' };
 export const FOREIGN = '00000000-0000-4000-8000-0000000000a3';
+/** The user belongs to it, but the app connection wasn't granted it at consent. */
+export const UNGRANTED = '00000000-0000-4000-8000-0000000000a4';
 export const PROJECT = '00000000-0000-4000-8000-0000000000b1';
 export const GENERATION = '00000000-0000-4000-8000-0000000000c1';
 const USER = { id: '00000000-0000-4000-8000-0000000000d1', email: 'u@example.test', name: 'U' };
@@ -21,14 +23,14 @@ const ORGS = {
     role: 'owner',
     plan: { id: 'free', name: 'Free' },
     limits: { concurrency: 1, maxOutputDurationSeconds: 60 },
-    features: { 'stem-separation': true, 'scene-detection': false },
+    features: ['stem_separation'],
   },
   [ACME.id]: {
     ...ACME,
     role: 'member',
     plan: { id: 'scale', name: 'Scale' },
     limits: { concurrency: 15, maxOutputDurationSeconds: 1800 },
-    features: { 'stem-separation': true, 'scene-detection': true },
+    features: ['stem_separation', 'scene_detection'],
   },
 } as const;
 
@@ -66,11 +68,29 @@ export async function cleanUp(): Promise<void> {
 type Org = (typeof ORGS)[keyof typeof ORGS];
 type Reply = [status: number, body: unknown];
 
-const refusal = (message: string, errorCode: string): Reply => [403, { message, errorCode }];
+// sync-api-v2 #7863 refusals: coded, with the API's suggestion.
+const REFUSALS = {
+  api_key_organization_bound: [
+    'API keys are bound to their organization and cannot act in another one.',
+    "Omit x-sync-organization-id, or use an API key created in the other organization's Studio settings.",
+  ],
+  organization_access_denied: [
+    'You are not a member of the organization named in x-sync-organization-id.',
+    'Use an organization id from GET /v2/account/organizations, or omit the header to use your default organization.',
+  ],
+  oauth_organization_not_granted: [
+    'This app connection has not been granted access to the organization named in x-sync-organization-id.',
+    'To add it, reconnect the app and tick that organization on the consent screen, keeping the others you still want. Until then, use an organization from GET /v2/account/organizations or omit the header.',
+  ],
+} as const;
+const refusal = (errorCode: keyof typeof REFUSALS): Reply => [
+  403,
+  { message: REFUSALS[errorCode][0], errorCode, suggestion: REFUSALS[errorCode][1] },
+];
 
 /** Account reads as the API answers them for `org`. */
 function accountReply(url: string, org: Org, apiKey: boolean): Reply | undefined {
-  const organization = { id: org.id, name: org.name, role: apiKey ? 'owner' : org.role };
+  const organization = { id: org.id, name: org.name, role: apiKey ? 'member' : org.role };
   const account = apiKey ? null : USER;
   const replies: Record<string, unknown> = {
     '/v2/account': {
@@ -84,13 +104,16 @@ function accountReply(url: string, org: Org, apiKey: boolean): Reply | undefined
     '/v2/oauth/account': { account, organization },
     '/v2/plans/limits': { seats: 3, voiceClone: 5 },
     '/v2/account/organizations': {
-      organizations: Object.values(ORGS).map((item) => ({
-        id: item.id,
-        name: item.name,
-        role: item.role,
-        plan: item.plan,
-        isCurrent: item.id === org.id,
-      })),
+      // An API key lists only its own organization.
+      organizations: Object.values(ORGS)
+        .filter((item) => !apiKey || item.id === org.id)
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          role: apiKey ? 'member' : item.role,
+          plan: item.plan,
+          isCurrent: item.id === org.id,
+        })),
     },
   };
   return url in replies ? [200, replies[url]] : undefined;
@@ -121,13 +144,9 @@ export async function api(
   const reply = (call: Call, body: Record<string, unknown>): Reply => {
     const apiKey = call.headers['x-api-key'] !== undefined;
     const requested = call.organization;
-    if (requested && apiKey)
-      return refusal(
-        'API keys are bound to their organization',
-        'organization_selection_not_allowed',
-      );
-    if (requested && !(requested in ORGS))
-      return refusal('You are not a member of this organization', 'organization_access_denied');
+    if (requested && apiKey && requested !== HOME.id) return refusal('api_key_organization_bound');
+    if (requested === UNGRANTED) return refusal('oauth_organization_not_granted');
+    if (requested && !(requested in ORGS)) return refusal('organization_access_denied');
     const org = ORGS[requested && !options.ignoresHeader ? requested : HOME.id]!;
     return accountReply(call.url, org, apiKey) ?? generationReply(call.method, call.url, body);
   };

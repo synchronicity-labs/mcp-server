@@ -204,12 +204,20 @@ personal asset scope or permissions from a client name or an API key's owner.
 Every call runs in one Sync organization, and paid work is created and billed there.
 Ask: “Generate this in the Acme org.”
 
-1. `organizations_list` lists the organizations the user belongs to, with role and
-   plan, and marks the one this session runs in (`isCurrent`).
+1. `organizations_list` reads `GET /v2/account/organizations`: the organizations this
+   credential can act in, with role and plan, marking the one this session runs in
+   (`isCurrent`). A device-auth sign-in lists every organization the user belongs to.
+   A Sync app connection (OAuth) lists the organizations ticked on the consent screen;
+   each one gets its own grant, shown and revocable in that organization's settings.
 2. `organizations_select {organizationId}` switches the MCP session: the stdio
    process, or one hosted session. Every later API call sends
    `x-sync-organization-id`, and the API checks membership on each one. It returns
-   the new organization's plan, generation limits and feature flags. After a switch,
+   the new organization's plan, generation limits and feature flags. A refusal comes
+   back with its API code and the API's `suggestion` as `nextStep`:
+   `oauth_organization_not_granted` (reconnect Sync and tick that organization),
+   `organization_access_denied` or `invalid_organization_id`. The same `nextStep`
+   follows any call whose organization was refused, for example after a grant is
+   disconnected mid-session. After a switch,
    stdio sends `notifications/tools/list_changed` so the client lists tools again.
 3. To run one paid create elsewhere without switching, pass `organizationId` on the
    create and on its estimate (`create-lipsync`, `create-lipsync-from-assets`,
@@ -225,7 +233,8 @@ Create results include `organization` (`id`, `name`): the organization they ran 
 
 API keys are bound to one organization. With `SYNC_API_KEY`, `organizations_list`
 returns the key's organization, and selecting or passing another one is refused
-without calling the API with the header. Sign in with device auth to switch.
+without sending the header (the API would answer `api_key_organization_bound`). Sign
+in with device auth to switch.
 
 ## Reusable voice cloning in ChatGPT
 
