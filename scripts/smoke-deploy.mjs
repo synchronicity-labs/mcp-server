@@ -161,16 +161,33 @@ function httpError(res) {
   });
 }
 
-async function getJson(fetchImpl, url) {
+/** Best effort: a body stream that already failed must not hide the status behind its own error. */
+async function discardBody(res) {
+  await res.body?.cancel().catch(() => undefined);
+}
+
+/**
+ * GETs a JSON document. An interrupted body read is retried; a body that is not JSON is
+ * retried only with `retryInvalidJson` (a /health mid-rollout), otherwise it fails at once.
+ */
+async function getJson(fetchImpl, url, { retryInvalidJson = false } = {}) {
   const res = await request(fetchImpl, url);
   if (!res.ok) {
-    await res.body?.cancel();
+    await discardBody(res);
     throw httpError(res);
   }
+  let text;
   try {
-    return await res.json();
+    text = await res.text();
   } catch (error) {
     throw new AttemptError(`unreadable body: ${describeFetchError(error)}`, { responded: true });
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const message = `invalid JSON (content-type ${JSON.stringify(res.headers.get('content-type'))}): ${error instanceof Error ? error.message : error}`;
+    if (retryInvalidJson) throw new AttemptError(message, { responded: true });
+    throw new Error(`GET ${url.pathname} returned ${message}`, { cause: error });
   }
 }
 
@@ -211,7 +228,7 @@ export async function waitForNewProcess({
   return retryStep(
     '/health',
     async () => {
-      const health = await getJson(fetchImpl, url);
+      const health = await getJson(fetchImpl, url, { retryInvalidJson: true });
       const problem = healthProblem(health, { deployStartedAt, expectedRevision });
       if (problem) throw new AttemptError(problem, { responded: true });
       return health;
@@ -231,7 +248,8 @@ export async function waitForNewProcess({
 
 /**
  * Checks discovery and the /mcp challenge. Network errors and HTTP errors are retried
- * until `deadline` (each step gets at least three tries); a wrong answer fails at once.
+ * until `deadline` (each step gets at least three tries); a wrong or non-JSON answer
+ * fails at once.
  */
 export async function checkPublicSurface({
   baseUrl,
@@ -291,7 +309,7 @@ async function challenge(fetchImpl, origin) {
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
   });
-  await res.body?.cancel();
+  await discardBody(res);
   if (res.status >= 500 || res.status === 429) throw httpError(res);
   return { status: res.status, challenge: res.headers.get('www-authenticate') ?? '' };
 }

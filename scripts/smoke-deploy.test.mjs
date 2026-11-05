@@ -443,3 +443,93 @@ void test('the connectivity diagnostic prints what the host resolves to, or why 
     'DNS lookup mcp.sync.so failed: no answer within 0.005s',
   );
 });
+
+/** A response whose body stream has already failed, as after a reset mid-body. */
+function brokenBody(status, statusText) {
+  const body = new ReadableStream({
+    pull(controller) {
+      controller.error(
+        new TypeError('terminated', {
+          cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }),
+        }),
+      );
+    },
+  });
+  const res = new Response(body, { status, statusText });
+  // cancel() on an errored stream rejects; make sure the check does not depend on that.
+  body.cancel = () => Promise.reject(new TypeError('Invalid state: ReadableStream is errored'));
+  return res;
+}
+
+void test('keeps retrying when discarding a non-2xx body fails', async () => {
+  const good = publicSurface();
+  const blips = new Map([
+    ['/.well-known/oauth-authorization-server', [() => brokenBody(502, 'Bad Gateway')]],
+    ['/mcp', [() => brokenBody(503, 'Service Unavailable')]],
+  ]);
+  const notices = [];
+  await checkPublicSurface({
+    baseUrl,
+    fetchImpl: async (url, init) => {
+      const blip = blips.get(new URL(url).pathname)?.shift();
+      return blip ? blip() : good(url, init);
+    },
+    deadline: deployStartedAt + 60_000,
+    notice: (message) => notices.push(message),
+    ...fakeClock(),
+  });
+  assert.match(notices[0], /HTTP 502 Bad Gateway ×1/);
+  assert.match(notices[1], /HTTP 503 Service Unavailable ×1/);
+});
+
+void test('retries a body that breaks off mid-read', async () => {
+  const good = publicSurface();
+  let broke = false;
+  await checkPublicSurface({
+    baseUrl,
+    fetchImpl: async (url, init) => {
+      if (!broke) {
+        broke = true;
+        return brokenBody(200);
+      }
+      return good(url, init);
+    },
+    deadline: deployStartedAt + 60_000,
+    ...fakeClock(),
+  });
+  assert.equal(broke, true);
+});
+
+void test('fails a discovery document that is not JSON at once, but waits out one on /health', async () => {
+  let calls = 0;
+  const html = () =>
+    new Response('<html>default backend</html>', { headers: { 'content-type': 'text/html' } });
+  await assert.rejects(
+    checkPublicSurface({
+      baseUrl,
+      fetchImpl: async () => {
+        calls++;
+        return html();
+      },
+      deadline: deployStartedAt + 60_000,
+      ...fakeClock(),
+    }),
+    /^Error: GET \/\.well-known\/oauth-protected-resource\/mcp returned invalid JSON \(content-type "text\/html"\): /,
+  );
+  assert.equal(calls, 1);
+  const answers = [
+    html,
+    () => Response.json({ status: 'ok', revision: 'new', startedAt: '2026-10-30T20:00:31.000Z' }),
+  ];
+  let call = 0;
+  const health = await waitForNewProcess({
+    baseUrl,
+    deployStartedAt,
+    expectedRevision: 'new',
+    timeoutMs: 60_000,
+    intervalMs: 10_000,
+    fetchImpl: async () => answers[call++](),
+    ...fakeClock(),
+  });
+  assert.equal(health.revision, 'new');
+});
