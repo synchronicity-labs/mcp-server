@@ -5,6 +5,7 @@ import {
   chosenOrganization,
   type OrganizationSession,
   type OrganizationSummary,
+  type RanIn,
   runInOrganization,
 } from '../organization-selection.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
@@ -106,25 +107,26 @@ export function withOrganizationChoice(
     const session = sessionOf();
     // Ids a create returns are read in the organization it ran in, even after a switch.
     // API keys have one organization and never send the header, so they remember nothing.
-    const remember = (ids: string[], organization: OrganizationSummary | undefined) => {
-      if (credential === 'user' && organization) session.rememberIds(ids, organization);
+    // `ranIn` is fixed before the call starts, so it never depends on naming the organization.
+    const remember = (ids: string[], ranIn: RanIn) => {
+      if (credential === 'user') session.rememberIds(ids, ranIn);
     };
-    const execute = async (organization: Promise<OrganizationSummary | undefined>) => {
+    const execute = async (ranIn: RanIn) => {
       try {
         return await handler(fields);
       } catch (error) {
         // An uncertain admission names its generation; recovery must read the same organization.
         if (error instanceof ApiRequestError && error.generationId)
-          remember([error.generationId], await organization);
+          remember([error.generationId], ranIn);
         throw error;
       }
     };
-    const finish = async (result: T, organization: OrganizationSummary | undefined) => {
+    const finish = (result: T, ranIn: RanIn, organization: OrganizationSummary | undefined) => {
       remember(
         returnedIds(
           tool.resultFormat === 'mcp' ? (result as CallToolResult).structuredContent : result,
         ),
-        organization,
+        ranIn,
       );
       return { result, organization };
     };
@@ -139,8 +141,8 @@ export function withOrganizationChoice(
             session,
             context?.signal ? AbortSignal.any([context.signal, deadline]) : deadline,
           ).catch(() => undefined);
-      const result = await execute(lookup);
-      return finish(result, await lookup);
+      const result = await execute(active ?? null);
+      return finish(result, active ?? null, await lookup);
     }
     const { organization, scoped } = await organizationForCall(
       http,
@@ -149,11 +151,9 @@ export function withOrganizationChoice(
       organizationId,
       context?.signal,
     );
-    const known = Promise.resolve(organization);
-    const result = scoped
-      ? await runInOrganization(organization, () => execute(known))
-      : await runInOrganization(undefined, () => execute(known));
-    return finish(result, organization);
+    const ranIn = scoped ? organization : null;
+    const result = await runInOrganization(ranIn ?? undefined, () => execute(ranIn));
+    return finish(result, ranIn, organization);
   };
   const definition = {
     ...tool,

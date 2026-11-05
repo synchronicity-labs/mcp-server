@@ -33,6 +33,7 @@ import {
   currentOrganizationSession,
   OrganizationSession,
   type OrganizationSummary,
+  type RanIn,
   runInOrganization,
   runInOrganizationSession,
 } from './organization-selection.js';
@@ -1000,6 +1001,16 @@ function createProfiledServer(
   return server;
 }
 
+function rememberedElsewhere(remembered: RanIn, session: OrganizationSession): Error {
+  const id = remembered?.id ?? session.defaultId();
+  const where = remembered
+    ? `organization ${remembered.name ?? remembered.id}`
+    : 'the default organization of this connection';
+  return new Error(
+    `This request uses an id created in ${where}, but this session now runs in ${session.selected?.name ?? 'another organization'}. ${id ? `Pass organizationId "${id}" to work in that organization` : 'Switch back with organizations_select'}, or use media and projects from the current one.`,
+  );
+}
+
 // Reads that follow ids a one-call organizationId created; jobs_* only read jobs too.
 function followsRememberedIds(tool: McpToolDefinition): boolean {
   return tool.annotations?.readOnlyHint === true || ['jobs_get', 'jobs_wait'].includes(tool.name);
@@ -1016,12 +1027,10 @@ function organizationForCall(
   session: OrganizationSession,
 ): OrganizationSummary | undefined {
   const remembered = session.organizationFor(args);
-  if (!remembered || session.isCurrent(remembered.id)) return session.selected;
-  if (followsRememberedIds(tool)) return remembered;
-  if (args.organizationId === undefined)
-    throw new Error(
-      `This request uses an id from organization ${remembered.name ?? remembered.id}, created there with organizationId, but this session runs in ${session.selected?.name ?? 'its default organization'}. Pass organizationId "${remembered.id}" to work in that organization, or use media and projects from the current one.`,
-    );
+  if (remembered === undefined || session.isCurrent(remembered)) return session.selected;
+  // null: the credential's own organization, which a call reaches by sending no header.
+  if (followsRememberedIds(tool)) return remembered ?? undefined;
+  if (args.organizationId === undefined) throw rememberedElsewhere(remembered, session);
   return session.selected;
 }
 

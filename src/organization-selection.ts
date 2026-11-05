@@ -8,6 +8,9 @@ export const ORGANIZATION_HEADER = 'x-sync-organization-id';
 
 export type OrganizationSummary = { id: string; name: string | null };
 
+/** Where a call ran: a named organization, or null for the credential's own, sent without a header. */
+export type RanIn = OrganizationSummary | null;
+
 // Ids a call in another organization returned, so its follow-up reads stay there.
 const REMEMBERED_IDS_LIMIT = 500;
 const DEFAULT_ORGANIZATION_TTL_MS = 60_000;
@@ -24,7 +27,7 @@ export class OrganizationSession {
   #default?: { organization: OrganizationSummary; expiresAt: number };
   // Kept after the cache expires: tells the credential's own organization from others.
   #defaultId?: string;
-  readonly #organizationById = new Map<string, OrganizationSummary>();
+  readonly #organizationById = new Map<string, RanIn>();
 
   /** The credential's own organization, as last read without a selection. */
   defaultOrganization(): OrganizationSummary | undefined {
@@ -38,13 +41,21 @@ export class OrganizationSession {
     this.#defaultId = organization.id;
   }
 
-  /** Whether calls without a selection run in `id`, as last read. */
-  isCurrent(id: string): boolean {
-    return this.selected ? this.selected.id === id : this.#defaultId === id;
+  /** Whether calls in this session now run where `organization` is. */
+  isCurrent(organization: RanIn): boolean {
+    if (organization === null) return this.selected === undefined;
+    return this.selected
+      ? this.selected.id === organization.id
+      : this.#defaultId === organization.id;
+  }
+
+  /** The credential's own organization id, if it was ever read. */
+  defaultId(): string | undefined {
+    return this.#defaultId;
   }
 
   /** Records ids returned by a call that ran in `organization`. */
-  rememberIds(ids: string[], organization: OrganizationSummary): void {
+  rememberIds(ids: string[], organization: RanIn): void {
     for (const id of ids) {
       this.#organizationById.delete(id);
       this.#organizationById.set(id, organization);
@@ -56,13 +67,12 @@ export class OrganizationSession {
     }
   }
 
-  /** The organization a remembered id in these arguments belongs to, if any. */
-  organizationFor(args: Record<string, unknown>): OrganizationSummary | undefined {
+  /** Where a remembered id in these arguments was created; undefined when none is. */
+  organizationFor(args: Record<string, unknown>): RanIn | undefined {
     if (this.#organizationById.size === 0) return undefined;
     for (const value of Object.values(args)) {
-      if (typeof value !== 'string') continue;
-      const organization = this.#organizationById.get(value);
-      if (organization) return organization;
+      if (typeof value === 'string' && this.#organizationById.has(value))
+        return this.#organizationById.get(value);
     }
     return undefined;
   }

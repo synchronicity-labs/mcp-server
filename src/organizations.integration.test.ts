@@ -290,15 +290,16 @@ describe('organizations on the hosted server', () => {
     expect(calls.map((item) => item.organization)).toEqual([ACME.id]);
   });
 
-  it('returns a create without its organization when the account read is slow', async () => {
+  it('returns a create without its organization when the account read is slow, and still reads it there', async () => {
     let stall!: () => void;
     const stalled = new Promise<void>((resolve) => {
       stall = resolve;
     });
     onCleanUp(() => stall());
-    const { baseUrl } = await api({
+    const { baseUrl, calls } = await api({
       intercept: async (call) => {
-        if (call.url === '/v2/account') await stalled;
+        // Only the default organization's account read stalls.
+        if (call.url === '/v2/account' && !call.organization) await stalled;
         return undefined;
       },
     });
@@ -309,6 +310,12 @@ describe('organizations on the hosted server', () => {
     expect(created.structuredContent).toMatchObject({ id: GENERATION });
     expect(created.structuredContent).not.toHaveProperty('organization');
     expect(Date.now() - started).toBeLessThan(4_000);
+
+    // It ran in the credential's default: after a switch, its generation is read there.
+    await call('organizations_select', { organizationId: ACME.id });
+    calls.length = 0;
+    await call('generate_get-generation', { id: GENERATION });
+    expect(calls.map((item) => item.organization)).toEqual([undefined]);
   });
 
   it('surfaces the API refusal for a non-member organization and keeps the session unchanged', async () => {
