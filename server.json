@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.synchronicity-labs/mcp-server",
+  "title": "sync. labs",
+  "description": "Lipsync videos, dub them into other languages, make talking videos and open sync. Studio.",
+  "version": "0.1.4",
+  "websiteUrl": "https://sync.so",
+  "repository": {
+    "url": "https://github.com/synchronicity-labs/mcp-server",
+    "source": "github",
+    "id": "1181459491"
+  },
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/synchronicity-labs/mcp-server/f53a9ddf864f58a24c3b206d2d2fa79e61c0567b/chatgpt-plugin/assets/logo.png",
+      "mimeType": "image/png",
+      "sizes": ["256x256"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.sync.so/mcp"
+    }
+  ]
+}
