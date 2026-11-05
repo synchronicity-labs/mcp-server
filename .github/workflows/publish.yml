@@ -1,0 +1,161 @@
+name: Publish to npm
+
+# Publishes @sync.so/mcp-server when a merge to main carries a package.json
+# version that npm does not have yet. Merges that keep the version do nothing,
+# so bump the version in the PR that should ship to npm. Before 1.0, a minor
+# bump marks breaking changes or notable features and a patch bump marks fixes.
+#
+# Authenticates with npm Trusted Publishing (GitHub OIDC), so there is no npm
+# token secret. The package's trusted publisher on npmjs.com must name
+# synchronicity-labs/mcp-server and this file, publish.yml. Renaming this file
+# breaks publishing until that setting is updated.
+"on":
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Reads the version first so the publish job can lock on it. A workflow-wide
+  # concurrency group would keep only one pending run, and a later merge would
+  # cancel a queued run for an earlier version that was never published.
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - id: read
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Runs for different versions never wait on or cancel each other. Runs for
+    # the same version take turns, and the registry check below makes every
+    # run after the one that published a no-op.
+    concurrency:
+      group: publish-npm-${{ needs.version.outputs.version }}
+      cancel-in-progress: false
+    permissions:
+      # write: create the release tag. id-token: npm Trusted Publishing.
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Check whether this version is already on npm
+        id: version
+        run: |
+          name=$(jq -r .name package.json)
+          version=$(jq -r .version package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "packument=https://registry.npmjs.org/${name/\//%2f}" >> "$GITHUB_OUTPUT"
+          # 404 means npm has never seen this version; anything else non-200
+          # (registry down, rate limit) fails the job instead of guessing.
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-all-errors \
+            "https://registry.npmjs.org/${name/\//%2f}/$version")
+          case "$status" in
+            200)
+              echo "::notice::$name@$version is already on npm. Nothing to publish."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::npm registry returned HTTP $status for $name@$version."
+              exit 1
+              ;;
+          esac
+
+      - name: Install pnpm
+        if: steps.version.outputs.publish == 'true'
+        uses: ./.github/actions/install-pnpm
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.version.outputs.publish == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Trusted Publishing needs npm 11.5.1 or later. Pin it rather than rely on
+      # whichever npm the .nvmrc Node release bundles.
+      - name: Install npm with Trusted Publishing support
+        if: steps.version.outputs.publish == 'true'
+        run: npm install -g npm@11.21.1
+
+      - name: Build
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm run clean
+          pnpm run build
+
+      # Different versions publish in parallel, so the tag comes from what npm
+      # has right now rather than from the version alone: `latest` only above
+      # every published stable version, `previous` below, `next` for prereleases.
+      - name: Choose the npm dist-tag
+        id: tag
+        if: steps.version.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PACKUMENT: ${{ steps.version.outputs.packument }}
+        run: |
+          curl -fsS --retry 3 --retry-all-errors "$PACKUMENT" -o "$RUNNER_TEMP/packument.json"
+          tag=$(node scripts/npm-dist-tag.mjs choose "$VERSION" "$RUNNER_TEMP/packument.json")
+          echo "::notice::Publishing $VERSION under the $tag dist-tag."
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # --ignore-scripts: the build above replaces prepublishOnly, and prepare
+      # (husky) has nothing to do in CI.
+      - name: Publish
+        if: steps.version.outputs.publish == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: npm publish --access public --provenance --ignore-scripts --tag "$TAG"
+
+      # Tags the published commit and lists the PRs merged since the previous
+      # release. A rerun after a failure here skips (npm already has the
+      # version), so create a missing release by hand with the same command.
+      - name: Create GitHub release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          flags=(--latest=false)
+          case "$TAG" in
+            latest) flags=(--latest) ;;
+            next) flags=(--latest=false --prerelease) ;;
+          esac
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "v$VERSION" --generate-notes "${flags[@]}"
+
+      # Two runs that both chose `latest` before either published can finish in
+      # the wrong order. Catch that instead of leaving default installs on the
+      # older release. The registry document can lag a publish, so retry first.
+      - name: Check that latest is the highest stable version
+        if: steps.version.outputs.publish == 'true'
+        env:
+          PACKUMENT: ${{ steps.version.outputs.packument }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            curl -fsS --retry 3 --retry-all-errors -H 'Cache-Control: no-cache' "$PACKUMENT" \
+              -o "$RUNNER_TEMP/packument.json"
+            if problem=$(node scripts/npm-dist-tag.mjs check "$RUNNER_TEMP/packument.json"); then
+              exit 0
+            fi
+            [ "$attempt" = 6 ] || sleep 20
+          done
+          echo "::error::$problem"
+          exit 1
