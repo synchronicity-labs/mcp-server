@@ -31,6 +31,7 @@ published version, so bump both versions in any PR that edits `server.json`.
 | `src/chatgpt-app.ts`, `deploy/chatgpt/` | Immutable ChatGPT UI releases built from sync-api-v2 `apps/chatgpt`; see `docs/chatgpt-release.md` |
 | `chatgpt-plugin/` | ChatGPT and Codex plugin package: manifest, listing copy, and `skills.source.json`, the pinned commit of [synchronicity-labs/skills](https://github.com/synchronicity-labs/skills) it packages skills from; see `docs/chatgpt-plugin.md` |
 | `server.json` | MCP Registry listing: name, description, remote URL; `scripts/check-server-json.mjs` keeps it publishable |
+| `glama.json` | GitHub users who can claim and edit the [Glama](https://glama.ai/mcp/servers/synchronicity-labs/mcp-server) listing |
 | `scripts/` | Memory and session suites, UI packaging, monitor, post-deploy smoke check, pre-commit size check |
 | `docs/` | Maintainer notes (`docs/maintainers.md`), release, availability and auth details |
 
