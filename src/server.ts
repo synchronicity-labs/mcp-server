@@ -47,6 +47,7 @@ import {
 import { createAccountContextTool } from './tools/account-context.js';
 import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
+import { createAssetAnalysisTools } from './tools/asset-analysis.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { BATCH_TOOLS, createBatchTools, isBatchOperation } from './tools/batches.js';
@@ -440,6 +441,10 @@ const NEXT_STEP_BY_CODE: Record<string, string> = {
     'A generation is still running for this account. Poll generate_get-generation with its id, or list running ones with generate_get-generations and status PROCESSING, until it finishes, then submit once. Submitting again before then fails the same way.',
   generation_plan_duration_exceeded:
     'This plan limits how long the output can be. Shorten the script or audio (trim-audio keeps the first part of saved audio), quote again, then create once.',
+  feature_not_enabled:
+    'This Sync account does not have the feature yet. Tell the user it needs to be enabled for their account; calling again fails the same way.',
+  stem_separation_source_not_hosted:
+    'Stem separation reads only files in Sync storage. Upload the file (assets_create-upload-url, PUT the bytes, then assets_create with the returned URL) and separate the new asset.',
 };
 
 function nextStep(error: ApiRequestError): string | undefined {
@@ -755,6 +760,8 @@ function createTools(
     ...createDialogueTools(operations, httpClient),
     ...createSpeechTools(operations, httpClient),
     ...createFeedbackTools(operations, httpClient, PACKAGE_VERSION),
+    // Flag-gated internal routes: stdio only until they are public (not on the hosted allowlist).
+    ...createAssetAnalysisTools(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)

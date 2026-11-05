@@ -37,6 +37,27 @@ Studio's "Do this with your agent" prompt for a timeline lists exactly these
 clips. The ChatGPT app doesn't get the tool, since its embedded Studio has no
 timeline.
 
+## Scenes and stems (local server only)
+
+`scenes_detect` and `stems_separate` call internal API routes that sit behind
+server-side feature flags (`studio-scene-detection` and `stem-separation`), so
+only the stdio server offers them, and only accounts with the flag can use
+them. A disabled flag answers a bare 404, and the tools report it as
+`feature_not_enabled`. A coded 404 such as a missing asset is passed through
+unchanged.
+
+`scenes_detect` reads `GET /v2/asset-metadata/scenes` first and calls
+`POST /v2/asset-metadata/scene-detection` only when the status is
+`not_requested` or `failed`, because a new request clears the stored scenes.
+Scene frames are inclusive, like a timeline clip's `startFrame`/`endFrame`, so
+a scene maps onto a clip as is. `endSeconds` is `(endFrame + 1) / fps`.
+
+`stems_separate` reads `GET /v2/assets/{id}/separate-stems` first and starts a
+job with `POST` only when there is none or the last one failed. It waits by
+reading, since the start route allows 60 calls an hour. The source must be in
+Sync storage (`stem_separation_source_not_hosted` otherwise). The tools don't
+mix audio, so the agent lays a dub over `backgroundUrl` itself.
+
 ## Quote replacement speech
 
 For “make this video say this script”, pass the replacement `script` to
