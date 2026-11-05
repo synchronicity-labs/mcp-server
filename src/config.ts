@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { resolveChatgptRelease } from './chatgpt-release.js';
 import { parseSpendConfirmation } from './spend-confirmation.js';
+import { parseToolsets, type Toolset } from './toolsets.js';
 import { parseUpdateCheck } from './update-check.js';
 
 export type SyncMcpConfig = {
@@ -13,6 +14,8 @@ export type SyncMcpConfig = {
   spendConfirmation?: boolean;
   /** stdio only: false skips the daily npm check for a newer version; see update-check.ts. */
   updateCheck?: boolean;
+  /** stdio only: which tools to list; undefined lists the default set. See toolsets.ts. */
+  toolsets?: Toolset[];
   chatgptApp?: {
     directory: string;
     previousDirectories?: string[];
@@ -78,6 +81,7 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
       true,
     updateCheck:
       overrides.updateCheck ?? parseUpdateCheck(process.env.SYNC_MCP_UPDATE_CHECK) ?? true,
+    toolsets: overrides.toolsets ?? parseToolsets(process.env.SYNC_MCP_TOOLSETS),
     chatgptApp:
       overrides.chatgptApp ??
       (release

@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { ApiRequestError, type HttpClient } from '../http-client.js';
+import type { ApiRequestError, HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
-import type { McpToolDefinition } from './generator.js';
-import { boundedBy, pollUntil, sleep, TIMED_OUT, WAIT_BUDGET_MS, waitInput } from './job-wait.js';
+import type { McpToolDefinition, ToolRequestContext } from './generator.js';
+import { isImportInProgress, jobSettled, rawStatus } from './job-status.js';
+import { pollUntil, waitInput } from './job-wait.js';
 
 /**
  * Agent-facing fixes for tools generated straight from the public OpenAPI spec. Each one
@@ -90,8 +91,6 @@ function withTranscriptionAsset(tool: JsonTool, http: HttpClient): JsonTool {
 
 function withJobWait(tool: JsonTool, label: string): JsonTool {
   const handler = tool.handler;
-  const status = (job: unknown) =>
-    z.object({ status: z.string() }).safeParse(job).data?.status.toUpperCase();
   return {
     ...tool,
     description: `${tool.description} Pass wait: true to wait for the job on the server.`,
@@ -99,20 +98,38 @@ function withJobWait(tool: JsonTool, label: string): JsonTool {
     handler: async ({ wait, ...args }, context) => {
       const read = (signal = context?.signal) => handler(args, { ...context, signal });
       if (wait !== true) return read();
-      return pollUntil(
-        read,
-        (job) =>
-          ['COMPLETED', 'FAILED', 'CANCELED', 'CANCELLED', 'UNAVAILABLE'].includes(
-            status(job) ?? 'COMPLETED',
-          ),
-        context,
-        {
-          describe: (job) => `${label} ${(status(job) ?? 'pending').toLowerCase()}`,
-        },
-      );
+      return pollUntil(read, jobSettled, context, {
+        describe: (job) => `${label} ${String(rawStatus(job) ?? 'pending').toLowerCase()}`,
+      });
     },
   };
 }
+
+/** One import attempt: the saved asset, or the 409 that says it is still downloading. */
+type ImportAttempt = { asset: unknown } | { pending: ApiRequestError };
+
+export async function attemptImport(
+  handler: JsonTool['handler'],
+  args: Record<string, unknown>,
+  context: ToolRequestContext | undefined,
+  signal = context?.signal,
+): Promise<ImportAttempt> {
+  try {
+    return { asset: await handler(args, { ...context, signal }) };
+  } catch (error) {
+    if (isImportInProgress(error)) return { pending: error };
+    throw error;
+  }
+}
+
+export const importWaitOptions = {
+  describe: (attempt: ImportAttempt) => {
+    const progress = 'pending' in attempt ? attempt.pending.importDetails?.progress : undefined;
+    return `importing${progress === undefined ? '' : ` ${progress}%`}`;
+  },
+  delayMs: (attempt: ImportAttempt) =>
+    'pending' in attempt ? (attempt.pending.retryAfterMs ?? IMPORT_RETRY_MS) : undefined,
+};
 
 /** A social import answers 409 import_in_progress until the asset is saved. */
 function withImportWait(tool: JsonTool): JsonTool {
@@ -122,35 +139,15 @@ function withImportWait(tool: JsonTool): JsonTool {
     description: `${tool.description} For a social link, pass wait: true to wait for the import on the server; a 409 import_in_progress then only means it is still downloading after about 50 seconds, so call again with the same input.`,
     inputSchema: { ...tool.inputSchema, wait: waitInput },
     handler: async ({ wait, ...args }, context) => {
-      const deadline = Date.now() + WAIT_BUDGET_MS;
-      let lastError: unknown;
-      for (let attempt = 1; ; attempt++) {
-        try {
-          if (attempt === 1) return await handler(args, context);
-          // Retries share the budget; one still in flight at the deadline returns the last 409.
-          const result = await boundedBy(deadline - Date.now(), context?.signal, (signal) =>
-            handler(args, { ...context, signal }),
-          );
-          if (result === TIMED_OUT) throw lastError;
-          return result;
-        } catch (error) {
-          if (error === lastError) throw error;
-          lastError = error;
-          const importing =
-            error instanceof ApiRequestError &&
-            error.status === 409 &&
-            error.code === 'import_in_progress';
-          const pause =
-            error instanceof ApiRequestError ? (error.retryAfterMs ?? IMPORT_RETRY_MS) : 0;
-          if (wait !== true || !importing || Date.now() + pause > deadline) throw error;
-          const progress = error.importDetails?.progress;
-          await context?.progress?.(
-            attempt,
-            `importing${progress === undefined ? '' : ` ${progress}%`}`,
-          );
-          await sleep(pause, context?.signal);
-        }
-      }
+      if (wait !== true) return handler(args, context);
+      const last = await pollUntil(
+        (signal) => attemptImport(handler, args, context, signal),
+        (attempt) => 'asset' in attempt,
+        context,
+        importWaitOptions,
+      );
+      if ('pending' in last) throw last.pending;
+      return last.asset;
     },
   };
 }

@@ -3,6 +3,7 @@ import type { HttpClient } from '../http-client.js';
 import { schemaProperty } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
+import { jobSettled } from './job-status.js';
 import { pollUntil, waitInput } from './job-wait.js';
 
 const PREVIEW_OPERATIONS = [
@@ -170,12 +171,9 @@ export function createTranslationPreviewTools(
             }),
           );
         if (!wait) return get();
-        return pollUntil(
-          get,
-          (job) => job.status === 'COMPLETED' || job.status === 'FAILED' || job.recoveryRequired,
-          context,
-          { describe: (job) => `translation ${job.status.toLowerCase()}` },
-        );
+        return pollUntil(get, jobSettled, context, {
+          describe: (job) => `translation ${job.status.toLowerCase()}`,
+        });
       },
     },
   ];
