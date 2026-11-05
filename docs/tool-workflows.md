@@ -48,9 +48,12 @@ server and over stdio, and never in the ChatGPT app listing.
 `OrganizationSession` (the stdio process, or one hosted session). That's the
 same field `organizations_select` and `get-account-context` write when they
 read the account, so switching organizations changes what is listed, and
-stdio clients get `tools/list_changed`. When the session has no features yet,
-`tools/list` reads `/v2/account` as the selected organization and keeps the
-answer, unless a switch landed while it ran. An API without the field lists
+stdio clients get `tools/list_changed`. The session stamps kept features with the
+organization and selection they were read for: a read that began before a
+switch, or that answered for another organization, is not kept, and features
+kept for another organization are read again. When the session has none for
+the active organization, `tools/list` reads `/v2/account` as the selected
+organization and keeps the answer under the same rule. An API without the field lists
 neither. A failed read lists neither and keeps nothing, so the next list reads
 again. A call is not refused when the tool is hidden: the API decides. It
 answers a disabled flag with a bare 404, which the tools report as

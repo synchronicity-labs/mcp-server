@@ -60,6 +60,40 @@ describe('feature-gated tools across organizations', () => {
     ).toEqual([ACME.id, HOME.id]);
   });
 
+  it('keeps Acme’s tools when a get-account-context read in Home lands after the switch', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding = true;
+    const { baseUrl } = await api({
+      intercept: async (call) => {
+        // Hold get-account-context's header-less read of Home's account.
+        if (holding && call.url === '/v2/account' && !call.organization) {
+          holding = false;
+          await held;
+        }
+        return undefined;
+      },
+    });
+    const client = await connect(
+      await createSyncMcpServer({ baseUrl, transport: 'stdio', port: 0 }),
+    );
+    const context = client.callTool({ name: 'get-account-context', arguments: {} });
+    await vi.waitFor(() => expect(holding).toBe(false));
+    await client.callTool({ name: 'organizations_select', arguments: { organizationId: ACME.id } });
+    expect(await gated(() => client.listTools())).toEqual(GATED);
+    release();
+    // The call itself reports Home, where it started.
+    expect((await context).structuredContent).toMatchObject({
+      organization: { id: HOME.id },
+      features: ['stem_separation'],
+    });
+    // Home's late answer must not replace Acme's features in the session.
+    expect(await gated(() => client.listTools())).toEqual(GATED);
+    expect(await gated(() => client.listTools())).toEqual(GATED);
+  });
+
   it('keeps the new organization’s features when a list read finishes after a switch', async () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {

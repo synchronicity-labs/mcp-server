@@ -32,16 +32,19 @@ async function sessionFeatures(
   session: OrganizationSession,
   http: HttpClient,
 ): Promise<ReadonlySet<string>> {
-  if (session.features) return new Set(session.features);
-  const selected = session.selected?.id;
+  const kept = session.activeFeatures();
+  if (kept) return new Set(kept);
+  const stamp = session.featureStamp();
   try {
     // In the session, so the read names its selected organization like any other call.
-    const overview = await runInOrganizationSession(session, () =>
-      http.request('get', '/v2/account', { signal: AbortSignal.timeout(FEATURES_TIMEOUT_MS) }),
+    const overview = parseAccountOverview(
+      await runInOrganizationSession(session, () =>
+        http.request('get', '/v2/account', { signal: AbortSignal.timeout(FEATURES_TIMEOUT_MS) }),
+      ),
     );
-    const features = parseAccountOverview(overview).features ?? [];
-    // A switch while this read ran wrote the new organization's features; keep those.
-    if (session.selected?.id === selected && !session.features) session.features = features;
+    const features = overview.features ?? [];
+    // Not kept if the session switched meanwhile or the answer is for another organization.
+    session.recordFeatures(features, stamp, overview.organization?.id);
     return new Set(features);
   } catch {
     return new Set();
