@@ -642,7 +642,8 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   if ((BATCH_TOOLS as readonly string[]).includes(tool.name)) return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet; other profiles list them per account.
   if (isFeatureGatedTool(tool.name)) return profile.name !== 'chatgpt';
-  if (['assets_upload', 'assets_open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
+  if (['assets_upload', 'assets_open-upload-widget'].includes(tool.name))
+    return profile.supportsUploads;
   return true;
 }
 

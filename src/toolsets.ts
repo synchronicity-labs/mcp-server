@@ -82,7 +82,7 @@ const CATEGORY_BY_TOOL: Record<string, Category> = {
   'speech-previews_create': 'voices',
   'speech-previews_get': 'voices',
   // Creates a persistent voice from someone's recording; not idempotent.
-  'voices_clone': 'admin',
+  voices_clone: 'admin',
   // Batches of /v2/generate bodies; dubbing lists them too, for localizing many videos.
   batches_create: 'lipsync',
   batches_get: 'lipsync',
