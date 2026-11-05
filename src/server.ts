@@ -46,8 +46,9 @@ import {
   withoutSpendConfirmation,
 } from './spend-confirmation.js';
 import {
-  legacyToolName,
   nameTakenByRenamedTool,
+  oldNameAlias,
+  previousToolName,
   renamedToolNotice,
   withLegacyAppDescriptors,
 } from './tool-names.js';
@@ -444,7 +445,7 @@ export function registerTools(
     server.registerTool(tool.name, config, run);
     // The previous name stays callable, unlisted, and says what the tool is called now.
     // An old name that is now another tool's name (generations_estimate-cost) is that tool.
-    const legacy = legacyToolName(tool.name);
+    const legacy = oldNameAlias(tool.name);
     if (legacy && !names.has(legacy))
       server.registerTool(legacy, config, async (args, ctx) => {
         const result = await run(args, ctx);
@@ -885,7 +886,7 @@ function createProfiledServer(
             const execute = () =>
               trackToolExecution(
                 // The analytics collector still names tools as they were before the rename.
-                legacyToolName(tool.name) ?? tool.name,
+                previousToolName(tool.name) ?? tool.name,
                 args,
                 parameters[1]?._meta,
                 activeProfile.name,

@@ -30,9 +30,19 @@ are not listed, such as `assets_create`, `projects_get` and `jobs_wait`, kept th
 
 ## Removing the old names
 
+`src/tool-names.ts` keeps two things apart:
+
+- `RENAMED_TOOLS` is the permanent record of every rename. Generated tools get their names
+  through it (`AssetsController_getAll` derives `assets_get-all`, named `assets_list`),
+  it reserves the new names from raw operations, and analytics read the old names from
+  it. Never delete its entries: the generated tools would go back to their old names
+  and fall out of the hosted allowlist.
+- `OLD_NAME_ALIASES` is the temporary part: the old names still callable, announced
+  and, on app profiles, listed as app-only tools.
+
 After the Studio bundle built against the new names has been current for longer than
-ChatGPT keeps an old widget, and after a Rescan, delete the entries from `RENAMED_TOOLS`
-in `src/tool-names.ts`. That removes the aliases, the app-only listings and the notices together.
+ChatGPT keeps an old widget, and after a Rescan, remove names from `OLD_NAME_ALIASES`
+(eventually all of them). That ends their aliases, app-only listings and notices together.
 
 ## Old → new
 

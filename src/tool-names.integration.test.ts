@@ -14,11 +14,13 @@ import { asyncRequestListener } from './test-fixtures/request-listener.js';
 import { currentTools } from './test-fixtures/tool-names.js';
 import {
   currentToolName,
-  legacyToolName,
   nameTakenByRenamedTool,
+  oldNameAlias,
+  previousToolName,
   RENAMED_TOOLS,
   renamedToolNotice,
 } from './tool-names.js';
+import { operationIdToToolName } from './tools/generator.js';
 
 // Old tool names after the <noun>_<verb> rename: callable, unlisted, and announced.
 const spec = {
@@ -189,12 +191,23 @@ describe('the rename table', () => {
   it('maps both ways and reserves new names from raw generated operations', () => {
     expect(currentToolName('create-lipsync')).toBe('lipsync_create');
     expect(currentToolName('jobs_wait')).toBe('jobs_wait');
-    expect(legacyToolName('dubbing_create')).toBe('create-translate-and-dub');
-    expect(legacyToolName('jobs_wait')).toBeUndefined();
+    expect(previousToolName('dubbing_create')).toBe('create-translate-and-dub');
+    expect(previousToolName('jobs_wait')).toBeUndefined();
+    expect(oldNameAlias('dubbing_create')).toBe('create-translate-and-dub');
     expect(nameTakenByRenamedTool('studio-views_get')).toBe(true);
     expect(nameTakenByRenamedTool('audio-trims_create')).toBe(true);
     // A derived name that is itself renamed is the tool, not a collision.
     expect(nameTakenByRenamedTool('assets_get-all')).toBe(false);
     expect(nameTakenByRenamedTool('assets_get')).toBe(false);
+  });
+
+  it('ends the aliases without undoing the new names', () => {
+    const none = new Set<string>();
+    expect(oldNameAlias('assets_list', none)).toBeUndefined();
+    expect(oldNameAlias('lipsync_create', none)).toBeUndefined();
+    // Generated names, reservations and analytics read the permanent table, not the aliases.
+    expect(operationIdToToolName('AssetsController_getAll')).toBe('assets_list');
+    expect(nameTakenByRenamedTool('studio-views_get')).toBe(true);
+    expect(previousToolName('lipsync_create')).toBe('create-lipsync');
   });
 });

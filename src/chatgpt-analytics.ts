@@ -28,7 +28,7 @@ const attributionSchema = uiAnalyticsSchema.extend({
     .optional(),
 });
 // The API's names for these tools: the collector predates the tool rename, so events
-// keep the legacy names (see legacyToolName in tool-names.ts).
+// keep the legacy names (see previousToolName in tool-names.ts).
 const toolNames = [
   'open-sync-app',
   'create-lipsync',

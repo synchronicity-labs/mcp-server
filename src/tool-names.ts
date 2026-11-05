@@ -1,14 +1,10 @@
 import type { Tool } from '@modelcontextprotocol/server';
 
 /**
- * Tool names follow one `<noun>_<verb>` scheme (CRAFT-7786). The names below are the
- * previous ones. Each stays callable as an alias that tools/list does not show, and a
- * call through one gets a notice naming the new tool. Apps that support the ChatGPT UI
- * also list the aliases their widgets call as app-only tools, because retained Studio
- * bundles and widget templates keep calling the old names; see docs/tool-names.md.
- *
- * Generated tools are renamed here too: operationIdToToolName derives the old name from
- * the API operationId, then maps it. Remove entries only after the deprecation period.
+ * Tool names follow one `<noun>_<verb>` scheme (CRAFT-7786). This is the permanent record
+ * of every rename, old → new: operationIdToToolName names generated tools through it,
+ * nameTakenByRenamedTool reserves its new names, and analytics report the old names.
+ * Never delete entries; ending the old names' deprecation is OLD_NAME_ALIASES below.
  */
 export const RENAMED_TOOLS: Readonly<Record<string, string>> = {
   'create-lipsync': 'lipsync_create',
@@ -99,9 +95,26 @@ export function nameTakenByRenamedTool(derived: string): boolean {
   return !(derived in RENAMED_TOOLS) && CURRENT_NAMES.has(derived);
 }
 
-/** The name a tool had before the rename, if it changed. */
-export function legacyToolName(name: string): string | undefined {
+/** The name a tool had before the rename, if it changed. Permanent; see oldNameAlias. */
+export function previousToolName(name: string): string | undefined {
   return LEGACY_BY_NAME.get(name);
+}
+
+/**
+ * Temporary: the old names that stay callable, as unlisted aliases that add a notice
+ * naming the new tool, and that app profiles list as app-only tools because retained
+ * Studio bundles and widget templates call them. Remove names here (eventually all of
+ * them) to end the deprecation; RENAMED_TOOLS and generated tool names stay as they are.
+ */
+export const OLD_NAME_ALIASES: ReadonlySet<string> = new Set(Object.keys(RENAMED_TOOLS));
+
+/** The old name still callable for this tool during the deprecation, if any. */
+export function oldNameAlias(
+  name: string,
+  aliases: ReadonlySet<string> = OLD_NAME_ALIASES,
+): string | undefined {
+  const previous = previousToolName(name);
+  return previous !== undefined && aliases.has(previous) ? previous : undefined;
 }
 
 export function renamedToolNotice(legacy: string, name: string): string {
@@ -116,7 +129,7 @@ export function renamedToolNotice(legacy: string, name: string): string {
 export function withLegacyAppDescriptors(descriptors: Tool[]): Tool[] {
   const current = new Set(descriptors.map((descriptor) => descriptor.name));
   const legacy = descriptors.flatMap((descriptor) => {
-    const name = legacyToolName(descriptor.name);
+    const name = oldNameAlias(descriptor.name);
     const meta = descriptor._meta ?? {};
     const ui = (meta.ui ?? {}) as { visibility?: unknown };
     const forApp =
