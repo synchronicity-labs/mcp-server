@@ -6,7 +6,8 @@ import { pollUntil, waitInput } from './job-wait.js';
 /**
  * Scene detection and stem separation. Their API routes are internal and behind
  * server-side feature flags, so they are not in the public spec and are written by hand.
- * They are left off the hosted allowlist, so only the stdio server offers them.
+ * They are listed only to accounts whose features include them (account-features.ts);
+ * a call from any other account still gets the API's 404, reported as not enabled.
  */
 
 const assetId = z.uuid();

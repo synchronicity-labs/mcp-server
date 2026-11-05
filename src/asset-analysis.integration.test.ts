@@ -3,10 +3,12 @@ import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createMcpServerFactory, createSyncMcpServer } from './server.js';
+import { createSyncMcpServer } from './server.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
-// scenes_detect and stems_separate over stdio with an API key, against a stub API.
+// scenes_detect and stems_separate calls over stdio with an API key, against a stub API.
+// Calls are not gated on account features (the API decides); listing is, in
+// account-features.integration.test.ts.
 const VIDEO = '51ef4ef2-84af-4622-b0d0-c47ac04785da';
 const STEMS_JOB = '7d4b8f0e-2c1a-4e3b-9f6d-5a8c7b9e0d1f';
 const VOCALS = '0b6f7c1e-3d2a-4f5b-8e9c-1a2b3c4d5e6f';
@@ -101,32 +103,6 @@ const completedStems = stemsJob('completed', {
 });
 
 describe('asset analysis tools', () => {
-  it('are offered over stdio but not to hosted clients', async () => {
-    const { client } = await setup(() => undefined);
-    const tools = (await client.listTools()).tools;
-    for (const name of ['scenes_detect', 'stems_separate']) {
-      const tool = tools.find((candidate) => candidate.name === name);
-      expect(tool?.inputSchema.required).toEqual(['assetId']);
-      expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual(['assetId', 'wait']);
-      expect(tool?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
-    }
-
-    const { baseUrl } = await stubApi(() => undefined);
-    const factory = await createMcpServerFactory({ baseUrl, transport: 'http', port: 0 });
-    for (const clientName of ['openai-mcp', 'claude-ai', 'claude-code']) {
-      const server = factory.createServer();
-      const hosted = new Client({ name: clientName, version: '1.0.0' });
-      const [ct, st] = InMemoryTransport.createLinkedPair();
-      await server.connect(st);
-      await hosted.connect(ct);
-      const names = (await hosted.listTools()).tools.map((tool) => tool.name);
-      await hosted.close();
-      await server.close();
-      expect(names).not.toContain('scenes_detect');
-      expect(names).not.toContain('stems_separate');
-    }
-  });
-
   it('starts scene detection and waits until the scenes are stored', async () => {
     let started = false;
     let polls = 0;

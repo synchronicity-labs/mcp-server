@@ -37,14 +37,20 @@ Studio's "Do this with your agent" prompt for a timeline lists exactly these
 clips. The ChatGPT app doesn't get the tool, since its embedded Studio has no
 timeline.
 
-## Scenes and stems (local server only)
+## Scenes and stems (accounts with the feature)
 
-`scenes_detect` and `stems_separate` call internal API routes that sit behind
-server-side feature flags (`studio-scene-detection` and `stem-separation`), so
-only the stdio server offers them, and only accounts with the flag can use
-them. A disabled flag answers a bare 404, and the tools report it as
-`feature_not_enabled`. A coded 404 such as a missing asset is passed through
-unchanged.
+`scenes_detect` and `stems_separate` call internal API routes behind
+server-side feature flags (`studio-scene-detection` and `stem-separation`).
+They are listed only to accounts whose `GET /v2/account` `features` includes
+`scene_detection` or `stem_separation`, on the hosted server and over stdio,
+and never in the ChatGPT app listing. `src/account-features.ts` reads the
+features when a session first lists tools that include them, once per session
+(a hosted session belongs to one user, OAuth client and organization). An API
+without the field lists neither. A failed read lists neither and is not kept,
+so the next list reads again. A call is not refused when the tool is hidden:
+the API decides. It answers a disabled flag with a bare 404, which the tools
+report as `feature_not_enabled`. A coded 404, such as a missing asset, is
+passed through unchanged.
 
 `scenes_detect` reads `GET /v2/asset-metadata/scenes` first and calls
 `POST /v2/asset-metadata/scene-detection` only when the status is
