@@ -21,7 +21,7 @@ is historical evidence, not approval of subsequent release fixes.
 
 ## Reproducible checks
 
-Use Node 22, matching the runtime container, with the committed lockfile:
+Use Node 26, matching the runtime container, with the committed lockfile:
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts
