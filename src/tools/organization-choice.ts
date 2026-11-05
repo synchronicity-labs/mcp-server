@@ -18,6 +18,9 @@ import {
   organizationSummarySchema,
 } from './organizations.js';
 
+// Longest a result waits to name its default organization; past it, `organization` is omitted.
+const ORGANIZATION_LOOKUP_MS = 2_000;
+
 /** Paid creates, and the estimates that quote them, that take a one-call organizationId. */
 const PER_CALL_ORGANIZATION_TOOLS = new Set([
   'create-lipsync',
@@ -127,10 +130,15 @@ export function withOrganizationChoice(
     };
     if (typeof organizationId !== 'string') {
       const active = chosenOrganization();
-      // Read alongside the call, so reporting the organization adds no latency.
+      // Read alongside the call, bounded, so naming the organization never delays a result.
+      const deadline = AbortSignal.timeout(ORGANIZATION_LOOKUP_MS);
       const lookup = active
         ? Promise.resolve(active)
-        : defaultOrganization(http, session, context?.signal).catch(() => undefined);
+        : defaultOrganization(
+            http,
+            session,
+            context?.signal ? AbortSignal.any([context.signal, deadline]) : deadline,
+          ).catch(() => undefined);
       const result = await execute(lookup);
       return finish(result, await lookup);
     }

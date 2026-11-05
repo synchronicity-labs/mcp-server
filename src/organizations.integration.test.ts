@@ -290,6 +290,27 @@ describe('organizations on the hosted server', () => {
     expect(calls.map((item) => item.organization)).toEqual([ACME.id]);
   });
 
+  it('returns a create without its organization when the account read is slow', async () => {
+    let stall!: () => void;
+    const stalled = new Promise<void>((resolve) => {
+      stall = resolve;
+    });
+    onCleanUp(() => stall());
+    const { baseUrl } = await api({
+      intercept: async (call) => {
+        if (call.url === '/v2/account') await stalled;
+        return undefined;
+      },
+    });
+    const { call } = await hosted(baseUrl);
+    const started = Date.now();
+    const created = await call('create-lipsync', lipsync);
+    expect(created.isError).not.toBe(true);
+    expect(created.structuredContent).toMatchObject({ id: GENERATION });
+    expect(created.structuredContent).not.toHaveProperty('organization');
+    expect(Date.now() - started).toBeLessThan(4_000);
+  });
+
   it('surfaces the API refusal for a non-member organization and keeps the session unchanged', async () => {
     const { baseUrl, calls } = await api();
     const { call } = await hosted(baseUrl);
