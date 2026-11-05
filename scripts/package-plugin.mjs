@@ -207,7 +207,16 @@ export function packagePlugin({ root = ROOT, checkout, out = resolve(root, DEFAU
 // `<verb>-<noun>` for hand-written ones (`create-lipsync`, `get-account-context`). The areas and
 // verbs are fixed here, not read from the allowlist, so a name stays recognizable after its last
 // tool is removed; verify-plugin-package.mjs fails when a hosted tool fits neither.
-const TOOL_AREAS = ['assets', 'batches', 'generate', 'jobs', 'models', 'projects', 'voices'];
+const TOOL_AREAS = [
+  'assets',
+  'batches',
+  'generate',
+  'jobs',
+  'models',
+  'organizations',
+  'projects',
+  'voices',
+];
 const TOOL_VERBS = [
   'ack',
   'cancel',

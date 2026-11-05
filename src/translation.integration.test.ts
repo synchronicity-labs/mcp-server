@@ -9,7 +9,7 @@ import { runWithAuth } from './auth/async-context.js';
 import { createHttpClient } from './http-client.js';
 import { parseSpec } from './openapi/parser.js';
 import { createMcpServerFactory } from './server.js';
-import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import { asyncRequestListener, skipAccountReads } from './test-fixtures/request-listener.js';
 import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
 import { createTranslationTools } from './tools/translation.js';
 
@@ -80,6 +80,7 @@ async function fixture() {
       }
     }),
   );
+  skipAccountReads(upstream);
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');

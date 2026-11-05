@@ -5,7 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
-import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import { asyncRequestListener, skipAccountReads } from './test-fixtures/request-listener.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const audioAssetId = '00000000-0000-4000-8000-000000000002';
@@ -187,6 +187,7 @@ async function fixture({
         );
     }),
   );
+  skipAccountReads(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
   cleanups.push(async () => {

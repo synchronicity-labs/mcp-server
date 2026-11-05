@@ -156,7 +156,7 @@ The hosted server exposes a curated set of tools to every client:
 | Assets | `assets_create`, `assets_create-upload-url`, `assets_get`, `assets_get-all`, `assets_count`, `assets_get-download-url`, `assets_update`, `assets_delete`, `get-playback-metadata`, `get-audio-trim`, `trim-audio` |
 | Projects | `projects_create`, `projects_get`, `projects_get-all`, `projects_get-generations`, `rename-project` |
 | Batches | `batches_create`², `batches_get`², `batches_list`² |
-| Account | `get-account-context`, `get-account-usage` |
+| Account | `get-account-context`, `get-account-usage`, `organizations_list`, `organizations_select` |
 
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
@@ -194,7 +194,8 @@ To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separate
 | `all` | Every tool, as before this option existed |
 
 Job, account and generation reads (`jobs_get`, `jobs_wait`, `generate_get-generation`,
-`get-account-context` and similar) come with every selection. Naming toolsets replaces
+`get-account-context`, `organizations_list`, `organizations_select` and similar) come with
+every selection. Naming toolsets replaces
 the default rather than adding to it. To get every tool back:
 
 ```bash

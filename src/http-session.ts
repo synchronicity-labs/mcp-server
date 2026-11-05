@@ -8,6 +8,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
 import type { Request, Response } from 'express';
+import { OrganizationSession, runInOrganizationSession } from './organization-selection.js';
 
 export function isSessionControlRequest(body: unknown): boolean {
   const messages: unknown[] = Array.isArray(body) ? body : [body];
@@ -31,6 +32,8 @@ export class HttpSession {
   readonly #running = new Map<McpServer, Response>();
   #initialized = false;
   #closed = false;
+  /** The organization chosen in this MCP session; per-request servers read it from context. */
+  readonly organization = new OrganizationSession();
   constructor(
     readonly clientName: string,
     private readonly createServer: (clientName?: string, handshakeClientName?: string) => McpServer,
@@ -170,7 +173,12 @@ export class HttpSession {
       if (req.aborted || res.destroyed) return;
       // A disconnected client must release the SDK graph and abort its handlers,
       // even when no JSON response can finish.
-      await Promise.race([transport.handleRequest(req, res, req.body), closedResponse]);
+      await Promise.race([
+        runInOrganizationSession(this.organization, () =>
+          transport.handleRequest(req, res, req.body),
+        ),
+        closedResponse,
+      ]);
     } finally {
       res.off('close', onClose);
       if (!initialize) for (const id of ids) this.#active.delete(id);

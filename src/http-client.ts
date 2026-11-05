@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
+import { chosenOrganization, ORGANIZATION_HEADER } from './organization-selection.js';
 import { getToolAnalytics } from './tool-analytics-context.js';
 import { PACKAGE_VERSION } from './version.js';
 
@@ -63,6 +64,8 @@ export type ApiErrorDetails = z.infer<typeof errorDetailsSchema>;
 export class ApiRequestError extends Error {
   /** Set by a tool that knows a better next step than the generic one for this code. */
   nextStep?: string;
+  /** The API's own advice for this error code, when the response carries one. */
+  suggestion?: string;
 
   constructor(
     message: string,
@@ -76,6 +79,11 @@ export class ApiRequestError extends Error {
     super(message);
     this.name = 'ApiRequestError';
   }
+}
+
+// The API's advice for a coded error, such as reconnecting to grant an organization.
+function apiSuggestion(parsed: unknown): string | undefined {
+  return z.object({ suggestion: z.string() }).safeParse(parsed).data?.suggestion;
 }
 
 function errorDetails(parsed: unknown): ApiErrorDetails | undefined {
@@ -144,9 +152,11 @@ export function createHttpClient(
           ? { Authorization: `Bearer ${perRequestToken}` }
           : { ...staticAuthHeaders };
 
+        const organization = chosenOrganization();
         const headers: Record<string, string> = {
           ...authHeaders,
           ...clientHeaders(authHeaders, getClientName() ?? stdioClientName?.()),
+          ...(organization ? { [ORGANIZATION_HEADER]: organization.id } : {}),
           ...options.headers,
           ...(getToolAnalytics() && { 'x-sync-analytics': JSON.stringify(getToolAnalytics()) }),
         };
@@ -210,6 +220,7 @@ export function createHttpClient(
             importDetails?.success ? importDetails.data : undefined,
             errorDetails(parsed),
           );
+          error.suggestion = apiSuggestion(parsed);
           apiResponseErrors.add(error);
           throw error;
         }

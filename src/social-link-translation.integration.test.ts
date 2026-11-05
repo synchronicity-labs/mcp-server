@@ -8,7 +8,7 @@ import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
-import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import { asyncRequestListener, skipAccountReads } from './test-fixtures/request-listener.js';
 import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
 
 const importJobId = '00000000-0000-4000-8000-000000000004';
@@ -89,6 +89,7 @@ async function fixture(importReplies: Reply[]) {
       }
     }),
   );
+  skipAccountReads(upstream);
   upstreams.push(upstream);
   upstream.listen(0, '127.0.0.1');
   await once(upstream, 'listening');
