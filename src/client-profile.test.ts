@@ -222,7 +222,9 @@ describe('immutable client profiles', () => {
         expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 1));
         expect(tools.some((tool) => tool.name === 'lipsync_create-timeline')).toBe(!chatgpt);
         expect(tools.some((tool) => tool.name === 'assets_upload')).toBe(supportsUploads);
-        expect(tools.some((tool) => tool.name === 'assets_open-upload-widget')).toBe(supportsUploads);
+        expect(tools.some((tool) => tool.name === 'assets_open-upload-widget')).toBe(
+          supportsUploads,
+        );
         // The initialize response carries the announced client's instructions.
         expect(client.getInstructions()?.includes('When Studio publishes')).toBe(supportsUploads);
         expect(client.getInstructions()).toContain('exactly one visual input');
