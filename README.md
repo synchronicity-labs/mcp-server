@@ -165,7 +165,7 @@ The hosted server exposes a curated set of tools to every client:
 Where the account's plan doesn't include batch, the API answers 402 with `requiredPlan`
 and `billingUrl`, which the tools pass on.
 
-Accounts with the matching feature also get `scenes_detect` (camera cuts in a
+Organizations with the matching feature also get `scenes_detect` (camera cuts in a
 video) and `stems_separate` (vocals and background audio), outside the ChatGPT
 app. They are in the `lipsync` and `assets` toolsets locally.
 
