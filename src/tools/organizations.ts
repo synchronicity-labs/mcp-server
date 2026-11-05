@@ -421,8 +421,17 @@ export function withOrganizationChoice(
       context?.signal,
     );
     if (!scoped) return { result: await handler(fields), organization };
-    const result = await runInOrganization(organization, () => handler(fields));
-    if (session.selected?.id !== organization.id)
+    const remember = session.selected?.id !== organization.id;
+    let result: T;
+    try {
+      result = await runInOrganization(organization, () => handler(fields));
+    } catch (error) {
+      // An uncertain admission names its generation; recovering it must read the same organization.
+      if (remember && error instanceof ApiRequestError && error.generationId)
+        session.rememberIds([error.generationId], organization);
+      throw error;
+    }
+    if (remember)
       session.rememberIds(
         returnedIds(
           tool.resultFormat === 'mcp' ? (result as CallToolResult).structuredContent : result,

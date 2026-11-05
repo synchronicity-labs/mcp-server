@@ -32,6 +32,7 @@ import { parseSpec } from './openapi/parser.js';
 import {
   currentOrganizationSession,
   OrganizationSession,
+  type OrganizationSummary,
   runInOrganization,
   runInOrganizationSession,
 } from './organization-selection.js';
@@ -864,10 +865,10 @@ function createProfiledServer(
                   }),
                 analytics,
               );
-            // Reads of ids that a one-call organizationId created run in that organization.
-            const remembered = organizationSession.organizationFor(args);
+            // Each call keeps the organization it started in, even if the session switches.
+            const organization = organizationForCall(tool, args, organizationSession);
             return runInOrganizationSession(organizationSession, () =>
-              remembered ? runInOrganization(remembered, execute) : execute(),
+              runInOrganization(organization, execute),
             );
           },
         }) as McpToolDefinition,
@@ -994,6 +995,31 @@ function createProfiledServer(
   };
   if (httpClientName !== undefined) server.server.oninitialized();
   return server;
+}
+
+// Reads that follow ids a one-call organizationId created; jobs_* only read jobs too.
+function followsRememberedIds(tool: McpToolDefinition): boolean {
+  return tool.annotations?.readOnlyHint === true || ['jobs_get', 'jobs_wait'].includes(tool.name);
+}
+
+/**
+ * The organization a call runs in: the session's selection, or, for a read of an id that a
+ * one-call organizationId created, that organization. A write naming such an id in another
+ * organization than the session's is refused unless it names the organization itself.
+ */
+function organizationForCall(
+  tool: McpToolDefinition,
+  args: Record<string, unknown>,
+  session: OrganizationSession,
+): OrganizationSummary | undefined {
+  const remembered = session.organizationFor(args);
+  if (!remembered || remembered.id === session.selected?.id) return session.selected;
+  if (followsRememberedIds(tool)) return remembered;
+  if (args.organizationId === undefined)
+    throw new Error(
+      `This request uses an id from organization ${remembered.name ?? remembered.id}, created there with organizationId, but this session runs in ${session.selected?.name ?? 'its default organization'}. Pass organizationId "${remembered.id}" to work in that organization, or use media and projects from the current one.`,
+    );
+  return session.selected;
 }
 
 /**

@@ -61,7 +61,8 @@ export class OrganizationSession {
 }
 
 const sessionStore = new AsyncLocalStorage<OrganizationSession>();
-const callStore = new AsyncLocalStorage<OrganizationSummary>();
+// A call's organization, fixed when it starts; undefined pins the credential's default.
+const callStore = new AsyncLocalStorage<{ organization?: OrganizationSummary }>();
 
 export function runInOrganizationSession<T>(session: OrganizationSession, fn: () => T): T {
   return sessionStore.run(session, fn);
@@ -71,12 +72,19 @@ export function currentOrganizationSession(): OrganizationSession | undefined {
   return sessionStore.getStore();
 }
 
-/** Runs one call in `organization` without changing the session's selection. */
-export function runInOrganization<T>(organization: OrganizationSummary, fn: () => T): T {
-  return callStore.run(organization, fn);
+/**
+ * Runs `fn` in `organization`, or in the credential's default when undefined, whatever the
+ * session selects meanwhile. The session's selection is not changed.
+ */
+export function runInOrganization<T>(
+  organization: OrganizationSummary | undefined,
+  fn: () => T,
+): T {
+  return callStore.run({ organization }, fn);
 }
 
-/** The organization this call runs in when one was chosen: per call first, then the session. */
+/** The organization this call runs in when one was chosen: the call's pin, else the session. */
 export function chosenOrganization(): OrganizationSummary | undefined {
-  return callStore.getStore() ?? sessionStore.getStore()?.selected;
+  const pinned = callStore.getStore();
+  return pinned ? pinned.organization : sessionStore.getStore()?.selected;
 }
