@@ -187,3 +187,17 @@ void test('flags tool-shaped names the server does not list, not field names', (
     'generate_get-generations',
   ]);
 });
+
+void test('still flags a tool whose whole namespace left the server', () => {
+  // No `models_`, `voices_` or `trim-` tool is listed any more.
+  const tools = new Set(['create-lipsync', 'assets_get']);
+  const text =
+    'Pick a model with `models_get`, then `voices_clone-voice` and `trim-audio`. ' +
+    'Workflows `translate-and-dub` and `edit-dialogue` use `lipsync-2` with `x-api-key`, ' +
+    '`voice_id`, `upload_url`, `success_count` and `sync_mode`; see the `get-started` skill.';
+  assert.deepEqual(unlistedTools(text, tools, ['get-started']), [
+    'models_get',
+    'trim-audio',
+    'voices_clone-voice',
+  ]);
+});

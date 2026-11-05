@@ -41,8 +41,11 @@ always produces the same bytes; the script prints the file count and a digest.
 
 After `pnpm run build`, `pnpm run verify:plugin` fails when a packaged skill
 names a tool that isn't in `HOSTED_HTTP_TOOL_ALLOWLIST`, so rename a tool in the
-skills repository before or with the server change. CI runs both steps on every
-pull request.
+skills repository before or with the server change. It recognizes tool names by
+the server's naming schemes (`TOOL_AREAS` and `TOOL_VERBS` in
+`scripts/package-plugin.mjs`), not by the current allowlist, and fails when a
+hosted tool fits neither, so add a new area or verb there. CI runs both steps on
+every pull request.
 
 Skill names are the skills repository's. A plugin version that renames a skill
 (2.1.0 packages `lipsync`, where 2.0.4 had `lipsync-video`) changes what users

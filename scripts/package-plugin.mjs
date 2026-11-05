@@ -203,19 +203,49 @@ export function packagePlugin({ root = ROOT, checkout, out = resolve(root, DEFAU
   };
 }
 
+// The server's tool names are `<area>_<method>` for generated tools (`assets_get-all`) and
+// `<verb>-<noun>` for hand-written ones (`create-lipsync`, `get-account-context`). The areas and
+// verbs are fixed here, not read from the allowlist, so a name stays recognizable after its last
+// tool is removed; verify-plugin-package.mjs fails when a hosted tool fits neither.
+const TOOL_AREAS = ['assets', 'batches', 'generate', 'jobs', 'models', 'projects', 'voices'];
+const TOOL_VERBS = [
+  'ack',
+  'cancel',
+  'clone',
+  'continue',
+  'create',
+  'delete',
+  'estimate',
+  'get',
+  'list',
+  'open',
+  'refresh',
+  'register',
+  'rename',
+  'save',
+  'send',
+  'show',
+  'track',
+  'trim',
+  'update',
+  'upload',
+  'wait',
+];
+const TOOL_NAME = new RegExp(
+  `^(?:(?:${TOOL_AREAS.join('|')})_|(?:${TOOL_VERBS.join('|')})-)[a-z0-9]+(?:-[a-z0-9]+)*$`,
+);
+
+/** Whether `name` follows one of the server's tool naming schemes. */
+export const isToolName = (name) => TOOL_NAME.test(name);
+
 /**
  * Backticked names in `text` that look like a server tool but that `tools` doesn't list.
- * A name looks like a tool when it shares a namespace with a listed one: `<prefix>_...` for
- * a listed `<prefix>_` tool, or `<verb>-...` for a listed `<verb>-` tool. Field names such as
- * `cut_off` or `sync_mode` share neither, so they don't count.
+ * Field names such as `sync_mode` or `success_count`, values such as `lipsync-2` and the names
+ * in `skills` don't look like tools, so they never count.
  */
-export function unlistedTools(text, tools) {
-  const prefixes = new Set([...tools].filter((t) => t.includes('_')).map((t) => t.split('_')[0]));
-  const verbs = new Set([...tools].filter((t) => !t.includes('_')).map((t) => t.split('-')[0]));
-  const named = [...text.matchAll(/`([a-z][a-z0-9]*(?:[-_][a-z0-9]+)+)`/g)].map((m) => m[1]);
-  const toolLike = named.filter((name) =>
-    name.includes('_') ? prefixes.has(name.split('_')[0]) : verbs.has(name.split('-')[0]),
-  );
+export function unlistedTools(text, tools, skills = []) {
+  const named = [...text.matchAll(/`([a-z][a-z0-9_-]*)`/g)].map((m) => m[1]);
+  const toolLike = named.filter((name) => isToolName(name) && !skills.includes(name));
   return [...new Set(toolLike)].filter((name) => !tools.has(name)).sort(byCodeUnit);
 }
 
