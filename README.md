@@ -69,6 +69,10 @@ Any client that supports remote MCP servers over Streamable HTTP with OAuth can
 use `https://mcp.sync.so/mcp`. The client registers itself, and you sign in to
 sync. in the browser.
 
+The server is listed in the [official MCP Registry](https://registry.modelcontextprotocol.io)
+as `io.github.synchronicity-labs/mcp-server`, so clients and directories that read
+the registry can find and add it. `server.json` is that listing.
+
 ### Local server with an API key
 
 For clients without remote MCP support, and for scripts and CI, run the server

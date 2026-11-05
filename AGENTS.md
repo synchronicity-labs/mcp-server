@@ -12,6 +12,10 @@ sync.'s MCP server. It runs two ways from the same code:
 Every merge to `main` deploys production. Treat each merge as a release.
 A merge that changes `version` in `package.json` also publishes that version to npm
 (`.github/workflows/publish.yml`); merges that keep the version only deploy.
+`server.json` is the [MCP Registry](https://registry.modelcontextprotocol.io) listing.
+Its `version` must equal `package.json`'s, and a merge that changes it publishes the
+listing (`.github/workflows/publish-mcp-registry.yml`). The registry never replaces a
+published version, so bump both versions in any PR that edits `server.json`.
 
 ## Where things live
 
@@ -26,6 +30,7 @@ A merge that changes `version` in `package.json` also publishes that version to 
 | `src/auth/` | OAuth proxy provider (SDK `server-legacy`), bearer verification, device auth for stdio |
 | `src/chatgpt-app.ts`, `deploy/chatgpt/` | Immutable ChatGPT UI releases built from sync-api-v2 `apps/chatgpt`; see `docs/chatgpt-release.md` |
 | `chatgpt-plugin/` | ChatGPT and Codex plugin package: manifest, listing copy, and `skills.source.json`, the pinned commit of [synchronicity-labs/skills](https://github.com/synchronicity-labs/skills) it packages skills from; see `docs/chatgpt-plugin.md` |
+| `server.json` | MCP Registry listing: name, description, remote URL; `scripts/check-server-json.mjs` keeps it publishable |
 | `scripts/` | Memory and session suites, UI packaging, monitor, post-deploy smoke check, pre-commit size check |
 | `docs/` | Maintainer notes (`docs/maintainers.md`), release, availability and auth details |
 

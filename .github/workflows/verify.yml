@@ -33,6 +33,17 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run knip
       - run: pnpm run test:scripts
+      - name: Check the MCP Registry listing against the base branch
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if git cat-file -e "$BASE_SHA:server.json" 2>/dev/null; then
+            git show "$BASE_SHA:server.json" > "$RUNNER_TEMP/base-server.json"
+            node scripts/check-server-json.mjs "$RUNNER_TEMP/base-server.json"
+          else
+            node scripts/check-server-json.mjs
+          fi
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: pnpm run test:memory

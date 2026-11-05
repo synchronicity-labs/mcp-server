@@ -1,0 +1,94 @@
+name: Publish to the MCP Registry
+
+# Lists the hosted server in the official MCP Registry
+# (registry.modelcontextprotocol.io), which MCP clients and directories read.
+# server.json is the listing. The registry never replaces a published version,
+# so server.json's version moves with package.json's, and the verify workflow
+# rejects a listing change that keeps the old version
+# (scripts/check-server-json.mjs). A run for a version the registry already has
+# does nothing.
+#
+# The listing is remote only: it points at https://mcp.sync.so/mcp, which is
+# live before this runs and stays at the same URL across deploys, so it does not
+# wait for the deploy. A future `packages` entry for npm must publish after
+# publish.yml, because the registry checks that the npm version exists.
+#
+# Authenticates with GitHub OIDC, so there is no secret: the registry grants
+# workflows in synchronicity-labs repositories the io.github.synchronicity-labs/*
+# namespace.
+"on":
+  push:
+    branches: [main]
+    paths: [server.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One publish at a time. A newer pending run replaces an older pending one,
+# which only skips listing an intermediate version.
+concurrency:
+  group: publish-mcp-registry
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Exchanged for a registry token by `mcp-publisher login github-oidc`.
+      id-token: write
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.7
+      # sha256 of mcp-publisher_linux_amd64.tar.gz from that release's
+      # registry_<version>_checksums.txt. Update both together.
+      MCP_PUBLISHER_SHA256: 00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Check whether the registry has this version
+        id: version
+        run: |
+          name=$(jq -r .name server.json)
+          version=$(jq -r .version server.json)
+          url="https://registry.modelcontextprotocol.io/v0.1/servers/$(jq -rn --arg v "$name" '$v|@uri')/versions/$(jq -rn --arg v "$version" '$v|@uri')?include_deleted=true"
+          # 404 means the registry has never seen this version; anything else
+          # non-200 (registry down, rate limit) fails the job instead of guessing.
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-all-errors "$url")
+          case "$status" in
+            200)
+              echo "::notice::$name $version is already in the MCP Registry. Nothing to publish."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::MCP Registry returned HTTP $status for $name $version."
+              exit 1
+              ;;
+          esac
+
+      - name: Download mcp-publisher
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/$MCP_PUBLISHER_VERSION/$archive"
+          echo "$MCP_PUBLISHER_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" mcp-publisher
+
+      - name: Validate server.json
+        if: steps.version.outputs.publish == 'true'
+        run: '"$RUNNER_TEMP/mcp-publisher" validate'
+
+      - name: Log in with GitHub OIDC
+        if: steps.version.outputs.publish == 'true'
+        run: '"$RUNNER_TEMP/mcp-publisher" login github-oidc'
+
+      - name: Publish
+        if: steps.version.outputs.publish == 'true'
+        run: '"$RUNNER_TEMP/mcp-publisher" publish'
