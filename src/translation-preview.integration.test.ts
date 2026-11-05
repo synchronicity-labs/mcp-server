@@ -227,6 +227,7 @@ it.each(['http', 'stdio'] as const)(
     expect(catalog.filter((tool) => tool.name.startsWith('dubbing_'))).toEqual([]);
     const tool = catalog.find((t) => t.name === 'create-translation-preview');
     expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
+    expect(tool?.annotations?.idempotentHint).toBe(false);
     const quote = await call('estimate-translation-preview', { projectId, audioAssetId });
     expect(quote.structuredContent).toMatchObject({
       billing: 'external',

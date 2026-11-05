@@ -131,7 +131,8 @@ export function createTranslationPreviewTools(
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
-        idempotentHint: true,
+        // Paid, and only the model-chosen idempotencyKey deduplicates it: a retry with a new key bills again.
+        idempotentHint: false,
         openWorldHint: true,
       },
       handler: async (args, context) => {

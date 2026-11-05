@@ -149,7 +149,7 @@ it('admits a durable speech preview with caller identity, then polls that job wi
     (t) => t.name === 'create-speech-preview',
   );
   expect(descriptor?._meta?.['openai/widgetAccessible']).toBe(true);
-  expect(descriptor?.annotations?.idempotentHint).toBe(true);
+  expect(descriptor?.annotations?.idempotentHint).toBe(false);
   const options = await call('get-speech-options', { projectId });
   expect(options.structuredContent).toMatchObject({
     available: true,
