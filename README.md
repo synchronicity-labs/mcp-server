@@ -142,9 +142,15 @@ The hosted server exposes a curated set of tools to every client:
 | Edit Dialogue | `get-dialogue-options`, `upload-dialogue-source`, `create-dialogue-transcription`, `get-dialogue-transcription`, `create-dialogue-preview`, `get-dialogue-preview`, `estimate-dialogue-video`, `create-dialogue-video` |
 | Assets | `assets_create`, `assets_create-upload-url`, `assets_get`, `assets_get-all`, `assets_count`, `assets_get-download-url`, `assets_update`, `assets_delete`, `get-playback-metadata`, `get-audio-trim`, `trim-audio` |
 | Projects | `projects_create`, `projects_get`, `projects_get-all`, `projects_get-generations`, `rename-project` |
+| Batches | `batches_create`², `batches_get`², `batches_list`² |
 | Account | `get-account-context`, `get-account-usage` |
 
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
+
+² Not in the ChatGPT app listing yet. A batch runs 20 or more independent generations
+(500 per batch by default), such as one campaign video localized into many languages.
+Where the account's plan doesn't include batch, the API answers 402 with `requiredPlan`
+and `billingUrl`, which the tools pass on.
 
 Clients with app support also get the tools behind the embedded Studio app:
 Studio views and drafts, the upload widget and app helpers. Those are clients
@@ -165,8 +171,8 @@ To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separate
 | Toolset | Adds |
 | --- | --- |
 | `default` | The default above, so `default,admin` adds the admin tools to it |
-| `lipsync` | Lip sync, timeline, Edit Dialogue and audio trim tools, plus raw `generate_*`, `generations_*` and `dialogue-edits_*` |
-| `dubbing` | Translation and dubbing tools |
+| `lipsync` | Lip sync, timeline, Edit Dialogue, audio trim and batch tools, plus raw `generate_*`, `generations_*` and `dialogue-edits_*` |
+| `dubbing` | Translation and dubbing tools, and the batch tools |
 | `assets` | `assets_*` (except deletes) and the upload tools |
 | `projects` | `projects_*` (except deletes) and `rename-project` |
 | `transcription` | `transcriptions_*` |

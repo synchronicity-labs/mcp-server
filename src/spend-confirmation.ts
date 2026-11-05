@@ -57,6 +57,12 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
     ],
   ],
   'create-timeline-lipsync': [['Estimate and confirm before creating; this starts', 'This starts']],
+  batches_create: [
+    [
+      'This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generate_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. ',
+      'Every item is billed as its own generation. ',
+    ],
+  ],
   'create-translate-and-dub': [
     [' before estimating or calling this tool', ' before calling this tool'],
     [

@@ -41,6 +41,7 @@ import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
+import { BATCH_TOOLS, createBatchTools, isBatchOperation } from './tools/batches.js';
 import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
 import { createFeedbackTools, FEEDBACK_INSTRUCTIONS, feedbackOperation } from './tools/feedback.js';
 import { adaptGeneratedTool } from './tools/generated-adapters.js';
@@ -239,6 +240,10 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generate_get-generations',
   'projects_get-generations',
   'generate_estimate-cost',
+  // Hidden from the ChatGPT app listing in isToolVisible.
+  'batches_create',
+  'batches_get',
+  'batches_list',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'track-chatgpt-event',
@@ -444,7 +449,7 @@ export function logToolError(profile: () => string): (tool: string, error: unkno
 export function createToolErrorResult(error: unknown, authMetadataUrl?: string): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ApiRequestError) {
-    const next = nextStep(error);
+    const next = error.nextStep ?? nextStep(error);
     const structuredContent = {
       error: {
         message,
@@ -454,6 +459,7 @@ export function createToolErrorResult(error: unknown, authMetadataUrl?: string):
         ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
         ...(error.generationId ? { generationId: error.generationId } : {}),
         ...error.importDetails,
+        ...error.details,
       },
     };
     return {
@@ -579,6 +585,8 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   if (tool.name === 'create-timeline-lipsync') return profile.name !== 'chatgpt';
   // Agents report friction; the reviewed ChatGPT app listing keeps its tool set.
   if (tool.name === 'send-feedback') return profile.name !== 'chatgpt';
+  // Not in the reviewed ChatGPT app listing yet.
+  if ((BATCH_TOOLS as readonly string[]).includes(tool.name)) return profile.name !== 'chatgpt';
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
   return true;
 }
@@ -666,6 +674,7 @@ function createTools(
       !feedbackOperation(operation) &&
       translationPreviewOperations([operation]).length === 0 &&
       !operation.path.startsWith('/v2/audio-trims') &&
+      !isBatchOperation(operation) &&
       operation.studioDraftVersion !== 1 &&
       operation.studioViewVersion !== 1 &&
       !generationCostsOperation(operation),
@@ -716,6 +725,7 @@ function createTools(
     ...createTranslationTools(operations, httpClient),
     ...createTranslationPreviewTools(operations, httpClient),
     ...createAudioTrimTools(operations, httpClient),
+    ...createBatchTools(operations, httpClient, config.baseUrl),
     ...createDialogueTools(operations, httpClient),
     ...createSpeechTools(operations, httpClient),
     ...createFeedbackTools(operations, httpClient, PACKAGE_VERSION),
@@ -1006,6 +1016,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
       translationPreviewOperations([operation]).length > 0 ||
       operation.path === '/v2/audio-trims' ||
       operation.path === '/v2/audio-trims/{id}' ||
+      isBatchOperation(operation) ||
       dialogueOperations([operation]).length > 0 ||
       speechOperations([operation]).length > 0 ||
       operation.studioDraftVersion === 1 ||

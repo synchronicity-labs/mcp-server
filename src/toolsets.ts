@@ -78,6 +78,17 @@ const CATEGORY_BY_TOOL: Record<string, Category> = {
   'get-speech-preview': 'voices',
   // Creates a persistent voice from someone's recording; not idempotent.
   'voices_clone-voice': 'admin',
+  // Batches of /v2/generate bodies; dubbing lists them too, for localizing many videos.
+  batches_create: 'lipsync',
+  batches_get: 'lipsync',
+  batches_list: 'lipsync',
+};
+
+// Tools a second toolset lists as well.
+const ALSO_IN: Record<string, Category> = {
+  batches_create: 'dubbing',
+  batches_get: 'dubbing',
+  batches_list: 'dubbing',
 };
 
 const CATEGORY_BY_CONTROLLER: Record<string, Category> = {
@@ -123,8 +134,8 @@ export function toolsetIncludes(
   if (chosen.includes('all')) return true;
   if (chosen.includes('default') && inDefaultToolset(name, hostedTools)) return true;
   if (CORE.has(name)) return true;
-  const category = toolCategory(name);
-  return category !== undefined && chosen.includes(category);
+  const categories = [toolCategory(name), ALSO_IN[name]];
+  return categories.some((category) => category !== undefined && chosen.includes(category));
 }
 
 /** Comma- or space-separated toolset names; empty means the default. */

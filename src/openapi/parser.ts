@@ -16,6 +16,8 @@ const ALLOWED_TAGS = new Set([
   'dialogue edits',
   'dubbing',
   'audio trims',
+  // Read by the curated batches_* tools; createTools generates none from it.
+  'batch',
 ]);
 
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {

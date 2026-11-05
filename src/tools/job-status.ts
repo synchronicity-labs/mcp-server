@@ -21,6 +21,7 @@ export const JOB_KINDS = [
   'speaker_analysis',
   'translation_preview',
   'import',
+  'batch',
 ] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
@@ -36,6 +37,9 @@ const ALIASES: Record<string, JobStatus> = {
   DOWNLOADING: 'PROCESSING',
   // Translation previews attach their output after the provider finishes.
   COMPLETING: 'PROCESSING',
+  // A batch has created its generations, or is writing its result file.
+  JOBS_CREATED: 'PROCESSING',
+  FINISHING: 'PROCESSING',
   CANCELLED: 'CANCELED',
   // Speaker analysis that cannot run for this source (no faces, too long, audio only).
   UNAVAILABLE: 'FAILED',

@@ -19,6 +19,7 @@ server can read, because each kind reads through its own tool:
 | `speaker_analysis` | the transcription id | `transcriptions_get-speaker-analysis` (once the API publishes it) |
 | `translation_preview` | the `create-translation-preview` id; `projectId` is required | `get-translation-preview` |
 | `import` | the social video link passed to `assets_create`, with the same `projectId` (and `projectIntent` if that call needed it) | `assets_create`, repeated with the same input; the API reuses the running import |
+| `batch` | the batch id `batches_create` returned | `batches_get`; a finished batch's `result.results` lists each item's generation |
 
 The kind's own read tools keep working as before, including their `wait: true`.
 
@@ -38,7 +39,8 @@ The kind's own read tools keep working as before, including their `wait: true`.
 
 - `status` is the unified status below. `result` keeps the API's own status.
 - `progress` is the percent complete (0 to 100) while the job runs, when the API reports
-  it: a generation's worker progress, or an import's download progress.
+  it: a generation's worker progress, an import's download progress, or the share of a
+  batch's generations that have finished.
 - `estimatedFinishAt` is the API's completion estimate for a running generation
   (`generationEstimate.estimatedFinishAt`), when it has one.
 - `retryAfterMs` is the pause the API asked for before reading again (imports only).
@@ -51,14 +53,14 @@ The kind's own read tools keep working as before, including their `wait: true`.
 
 `PENDING` and `PROCESSING` mean the job is still running. The other four are final.
 
-| Unified | generation | transcription | speaker_analysis | translation_preview | import |
-| --- | --- | --- | --- | --- | --- |
-| `PENDING` | `PENDING` | `PENDING` | | `PENDING` | 409 `import_in_progress` with `importStatus: queued` |
-| `PROCESSING` | `PROCESSING` | `PROCESSING` | `processing` | `PROCESSING`, `COMPLETING` | 409 `import_in_progress` (downloading, processing) |
-| `COMPLETED` | `COMPLETED` | `COMPLETED` | `completed` | `COMPLETED` | the asset is returned |
-| `FAILED` | `FAILED` | `FAILED` | `unavailable` | `FAILED` | `import_failed`, `import_download_failed`, `import_upload_failed`, `import_processing_failed` |
-| `REJECTED` | `REJECTED` | | | | `import_not_enabled`, `import_unavailable`, `import_daily_limit_reached`, `import_invalid_url`, `import_unsupported_platform`, any other `import_*` code |
-| `CANCELED` | `CANCELED`, `CANCELLED` | | | | `import_cancelled_by_user` |
+| Unified | generation | transcription | speaker_analysis | translation_preview | import | batch |
+| --- | --- | --- | --- | --- | --- | --- |
+| `PENDING` | `PENDING` | `PENDING` | | `PENDING` | 409 `import_in_progress` with `importStatus: queued` | `PENDING` |
+| `PROCESSING` | `PROCESSING` | `PROCESSING` | `processing` | `PROCESSING`, `COMPLETING` | 409 `import_in_progress` (downloading, processing) | `JOBS_CREATED`, `PROCESSING`, `FINISHING` |
+| `COMPLETED` | `COMPLETED` | `COMPLETED` | `completed` | `COMPLETED` | the asset is returned | `COMPLETED` |
+| `FAILED` | `FAILED` | `FAILED` | `unavailable` | `FAILED` | `import_failed`, `import_download_failed`, `import_upload_failed`, `import_processing_failed` | `FAILED` |
+| `REJECTED` | `REJECTED` | | | | `import_not_enabled`, `import_unavailable`, `import_daily_limit_reached`, `import_invalid_url`, `import_unsupported_platform`, any other `import_*` code | |
+| `CANCELED` | `CANCELED`, `CANCELLED` | | | | `import_cancelled_by_user` | |
 
 Statuses are matched without regard to case. An unknown status counts as `PROCESSING`,
 so a wait keeps going rather than reporting a result that may not exist. A payload with
