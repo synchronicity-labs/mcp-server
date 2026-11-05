@@ -1,4 +1,0 @@
-interface:
-  display_name: "Translate and dub a video"
-  short_description: "Dub a video or social link into another language with matching lips"
-  default_prompt: "Use $translate-and-dub to dub this video into Spanish."

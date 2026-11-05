@@ -1,4 +1,0 @@
-interface:
-  display_name: "Fix spoken words"
-  short_description: "Change or remove a few words in the speaker's own voice"
-  default_prompt: "Use $edit-dialogue to change a word I said in this video."

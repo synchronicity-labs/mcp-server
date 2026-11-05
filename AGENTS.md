@@ -25,7 +25,7 @@ A merge that changes `version` in `package.json` also publishes that version to 
 | `src/rate-limits.ts` | Request limits per verified user and OAuth client, plus per-address limits on rejected credentials |
 | `src/auth/` | OAuth proxy provider (SDK `server-legacy`), bearer verification, device auth for stdio |
 | `src/chatgpt-app.ts`, `deploy/chatgpt/` | Immutable ChatGPT UI releases built from sync-api-v2 `apps/chatgpt`; see `docs/chatgpt-release.md` |
-| `chatgpt-plugin/` | ChatGPT plugin listing package: manifest, listing copy and skills; see `docs/chatgpt-plugin.md` |
+| `chatgpt-plugin/` | ChatGPT and Codex plugin package: manifest, listing copy, and `skills.source.json`, the pinned commit of [synchronicity-labs/skills](https://github.com/synchronicity-labs/skills) it packages skills from; see `docs/chatgpt-plugin.md` |
 | `scripts/` | Memory and session suites, UI packaging, monitor, post-deploy smoke check, pre-commit size check |
 | `docs/` | Maintainer notes (`docs/maintainers.md`), release, availability and auth details |
 
@@ -42,6 +42,8 @@ pnpm run test:scripts     # node:test suites under scripts/
 pnpm run test:memory      # session memory; add --burst for the burst scenario
 pnpm run test:memory:http
 pnpm run package:chatgpt && pnpm run verify:chatgpt-package
+pnpm run package:plugin && pnpm run verify:plugin   # plugin from the pinned skills commit
+pnpm run skills:update    # pin the skills repository's current main
 ```
 
 On a loaded or slow machine, parallel fork workers can miss vitest's start
@@ -68,6 +70,7 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 - **App-only tools stay out of model-only clients.** Studio bridge tools and widget-only tools (`ui.visibility` without `model`) are hidden, and refuse direct calls, outside the ChatGPT app.
 - **Limit requests by verified user or OAuth client, never by address alone.** ChatGPT and Claude.ai reach the server from a few shared egress addresses, so an address limit throttles all of their users together. Address limits count only rejected credentials.
 - **Sessions, upload tickets and token caches live in one process.** Do not add replicas without cross-pod routing.
+- **Skills live in synchronicity-labs/skills, not here.** Change a skill there, then bump the pin with `pnpm run skills:update`. Never add `SKILL.md` content to this repository.
 - **Keep `undici` on the same major as Node's bundled undici.** The upload path hands an undici dispatcher to Node's built-in `fetch`.
 - **Fix lint findings rather than disabling them.** Unused disable directives fail lint. Files with their own complexity cap in `.oxlintrc.json` must not grow; split them instead, and remove a cap once the file meets the default of 20.
 

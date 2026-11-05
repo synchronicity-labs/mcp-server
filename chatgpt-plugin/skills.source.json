@@ -1,0 +1,17 @@
+{
+  "repository": "https://github.com/synchronicity-labs/skills",
+  "commit": "10a5dc1e03326936ed1538a75b677d0184023cff",
+  "skills": [
+    { "name": "setup", "policy": { "allow_implicit_invocation": false } },
+    { "name": "lipsync" },
+    { "name": "talking-photo" },
+    { "name": "ai-video-to-talking" },
+    { "name": "translate-and-dub" },
+    { "name": "edit-dialogue" },
+    { "name": "localize-campaign" },
+    { "name": "batch-lipsync" },
+    { "name": "troubleshoot" },
+    { "name": "sync-api" }
+  ],
+  "excluded": {}
+}

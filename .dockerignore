@@ -6,3 +6,4 @@ dist
 .cache
 chatgpt-dist
 *.tsbuildinfo
+chatgpt-plugin-dist
