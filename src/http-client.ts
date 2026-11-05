@@ -49,7 +49,21 @@ const importErrorDetailsSchema = z.object({
   progress: z.number().min(0).max(100).optional(),
 });
 
+// Error fields worth showing the agent as they are: what a refusal needs (a 402's plan and
+// billing page), a batch limit's counts, and the line a batch refusal points at.
+const errorDetailsSchema = z.object({
+  requiredPlan: z.string().optional().catch(undefined),
+  billingUrl: z.string().optional().catch(undefined),
+  activeBatches: z.number().optional().catch(undefined),
+  concurrencyLimit: z.number().optional().catch(undefined),
+  lineNumber: z.number().int().positive().optional().catch(undefined),
+});
+export type ApiErrorDetails = z.infer<typeof errorDetailsSchema>;
+
 export class ApiRequestError extends Error {
+  /** Set by a tool that knows a better next step than the generic one for this code. */
+  nextStep?: string;
+
   constructor(
     message: string,
     readonly status: number,
@@ -57,10 +71,20 @@ export class ApiRequestError extends Error {
     readonly retryAfterMs?: number,
     readonly generationId?: string,
     readonly importDetails?: z.infer<typeof importErrorDetailsSchema>,
+    readonly details?: ApiErrorDetails,
   ) {
     super(message);
     this.name = 'ApiRequestError';
   }
+}
+
+function errorDetails(parsed: unknown): ApiErrorDetails | undefined {
+  if (!parsed || typeof parsed !== 'object') return undefined;
+  const details = errorDetailsSchema.parse(parsed);
+  const present = Object.fromEntries(
+    Object.entries(details).filter(([, value]) => value !== undefined),
+  );
+  return Object.keys(present).length > 0 ? present : undefined;
 }
 
 // Errors built from an API response, as opposed to this server's own checks.
@@ -184,6 +208,7 @@ export function createHttpClient(
             retryAfterMs,
             knownId.success ? knownId.data : undefined,
             importDetails?.success ? importDetails.data : undefined,
+            errorDetails(parsed),
           );
           apiResponseErrors.add(error);
           throw error;

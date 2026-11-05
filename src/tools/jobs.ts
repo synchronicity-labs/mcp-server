@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ApiRequestError } from '../http-client.js';
+import { batchProgress } from './batches.js';
 import { attemptImport, importWaitOptions } from './generated-adapters.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import {
@@ -155,10 +156,25 @@ const KINDS: Record<JobKind, KindSpec> = {
       }
     },
   },
+  batch: {
+    tool: 'batches_get',
+    label: 'batch',
+    id: 'the batch id batches_create returned',
+    read: async (tool, input, context, signal) => {
+      const payload = await tool.handler({ id: input.id }, { ...context, signal });
+      const status = jobStatus(payload);
+      const progress = isRecord(payload) ? batchProgress(payload) : undefined;
+      return {
+        status,
+        ...(progress === undefined || isTerminal(status) ? {} : { progress }),
+        result: project(tool, payload),
+      };
+    },
+  },
 };
 
 const STATUS_HELP =
-  'status is one of PENDING, PROCESSING (still running: call jobs_wait again with the same input; never create the job again), COMPLETED, FAILED, REJECTED (the API refused it, such as an import limit or a moderation rejection) or CANCELED. result is what the kind’s own read tool returns, with its original status; a COMPLETED import’s result is the saved asset, whose id is the asset id. A translation_preview whose result.recoveryRequired is true has uncertain provider acceptance: do not create another job.';
+  'status is one of PENDING, PROCESSING (still running: call jobs_wait again with the same input; never create the job again), COMPLETED, FAILED, REJECTED (the API refused it, such as an import limit or a moderation rejection) or CANCELED. result is what the kind’s own read tool returns, with its original status; a COMPLETED import’s result is the saved asset, whose id is the asset id. A finished batch’s result.results lists each item’s generation status and output. A translation_preview whose result.recoveryRequired is true has uncertain provider acceptance: do not create another job.';
 
 export function createJobTools(tools: McpToolDefinition[]): McpToolDefinition[] {
   const available = JOB_KINDS.flatMap((kind) => {
