@@ -199,6 +199,34 @@ releases omit `get-account-context.capabilities.projectRenaming`.
 organization. API keys retain a null signed-in account. The UI must not infer a
 personal asset scope or permissions from a client name or an API key's owner.
 
+## Choose the organization
+
+Every call runs in one Sync organization, and paid work is created and billed there.
+Ask: “Generate this in the Acme org.”
+
+1. `organizations_list` lists the organizations the user belongs to, with role and
+   plan, and marks the one this session runs in (`isCurrent`).
+2. `organizations_select {organizationId}` switches the MCP session: the stdio
+   process, or one hosted session. Every later API call sends
+   `x-sync-organization-id`, and the API checks membership on each one. It returns
+   the new organization's plan, generation limits and feature flags. After a switch,
+   stdio sends `notifications/tools/list_changed` so the client lists tools again.
+3. To run one paid create elsewhere without switching, pass `organizationId` on the
+   create and on its estimate (`create-lipsync`, `create-lipsync-from-assets`,
+   `create-timeline-lipsync`, `create-translate-and-dub`, the translation preview and
+   Edit Dialogue creates and estimates, `generate_estimate-cost`). The server reads
+   `/v2/account` as that organization first and refuses before any paid work if the
+   API doesn't answer for it. Reads of the ids that call returns stay in that
+   organization for the rest of the session.
+
+Create results include `organization` (`id`, `name`): the organization they ran in.
+`get-account-context` names the active organization and its `features`, and
+`organizationChoice` says whether the session chose it and how to switch.
+
+API keys are bound to one organization. With `SYNC_API_KEY`, `organizations_list`
+returns the key's organization, and selecting or passing another one is refused
+without calling the API with the header. Sign in with device auth to switch.
+
 ## Reusable voice cloning in ChatGPT
 
 When the connected API exposes voice cloning, hosted clients can call

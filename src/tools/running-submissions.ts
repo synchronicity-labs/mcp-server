@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { getAuthOwner, getAuthToken } from '../auth/async-context.js';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
+import { chosenOrganization } from '../organization-selection.js';
 
 // Agents resubmit a request every few seconds while its generation is still rendering,
 // uploading the same files again each time. A free plan runs one generation at a time,
@@ -41,8 +42,9 @@ export function createRunningSubmissions(http: HttpClient): RunningSubmissions {
       createHash('sha256')
         .update(getAuthToken() ?? '')
         .digest('hex');
+    // The same request in another organization is another generation.
     return createHash('sha256')
-      .update(JSON.stringify([owner, request]))
+      .update(JSON.stringify([owner, chosenOrganization()?.id ?? null, request]))
       .digest('hex');
   };
 

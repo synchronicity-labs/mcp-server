@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
+import { currentOrganizationSession } from '../organization-selection.js';
 import type { McpToolDefinition } from './generator.js';
+import {
+  type AccountOverview,
+  type CredentialKind,
+  featuresSchema,
+  parseAccountOverview,
+  switchHint,
+} from './organizations.js';
 
 const accountContext = z.object({
   account: z
@@ -38,18 +46,42 @@ const accountContext = z.object({
     studioViewSync: z.literal(true).optional(),
     audioTrimming: z.literal(true).optional(),
   }),
+  features: featuresSchema.optional(),
+  organizationChoice: z
+    .object({
+      selectedBy: z
+        .enum(['session', 'credential'])
+        .describe(
+          'session: chosen with organizations_select. credential: the default of this sign-in or API key.',
+        ),
+      howToSwitch: z.string(),
+    })
+    .describe('How the active organization was chosen, and how to work in another one.'),
 });
 
-// GET /v2/account: the plan and the limits a job has to fit, including organization overrides.
-const accountOverview = z.object({
-  plan: accountContext.shape.plan,
-  limits: z
-    .object({
-      concurrency: z.number().finite().nonnegative(),
-      maxOutputDurationSeconds: z.number().finite().nonnegative(),
-    })
-    .optional(),
-});
+type Caller = Pick<z.infer<typeof accountContext>, 'account' | 'organization'>;
+
+/**
+ * GET /v2/account reflects the organization chosen for this request, so it wins over the
+ * caller identity. Remembers what was read for this MCP session.
+ */
+function activeOrganization(
+  caller: Caller,
+  overview: AccountOverview | undefined,
+): Caller['organization'] {
+  const organization = overview?.organization
+    ? {
+        id: overview.organization.id,
+        name: overview.organization.name,
+        role: overview.organization.role ?? caller.organization.role,
+      }
+    : caller.organization;
+  const session = currentOrganizationSession();
+  if (session && !session.selected)
+    session.rememberDefault({ id: organization.id, name: organization.name });
+  if (session && overview) session.features = overview.features;
+  return organization;
+}
 
 export function createAccountContextTool(
   http: HttpClient,
@@ -57,12 +89,13 @@ export function createAccountContextTool(
   studioViewSync = false,
   audioTrimming = false,
   chatgptAnalytics = false,
+  credential: CredentialKind = 'user',
 ): McpToolDefinition {
   return {
     name: 'get-account-context',
     title: 'Read connected Sync account',
     description:
-      'Read the authenticated account and selected organization for account display and personal asset scope, its plan, generation limits (concurrency and longest output), team seats and voice-clone limits. API keys have no signed-in account. This does not grant permissions or change the connected organization.',
+      'Read the authenticated account and the organization this session runs in (all generations are created there), for account display and personal asset scope, its plan, generation limits (concurrency and longest output), feature flags, team seats and voice-clone limits. organizationChoice says how that organization was chosen and how to switch. API keys have no signed-in account. This does not grant permissions or change the organization.',
     inputSchema: {},
     outputSchema: accountContext.shape,
     annotations: {
@@ -87,14 +120,16 @@ export function createAccountContextTool(
       };
       const limits = await optional('/v2/plans/limits');
       const overview = await optional('/v2/account');
-      const plan = accountOverview.safeParse(overview).data;
+      const plan = overview === undefined ? undefined : parseAccountOverview(overview);
+      const caller = z
+        .object({
+          account: accountContext.shape.account,
+          organization: accountContext.shape.organization,
+        })
+        .parse(identity);
       return accountContext.parse({
-        ...z
-          .object({
-            account: accountContext.shape.account,
-            organization: accountContext.shape.organization,
-          })
-          .parse(identity),
+        account: caller.account,
+        organization: activeOrganization(caller, plan),
         ...(limits === undefined ? {} : { limits }),
         ...(plan?.plan ? { plan: plan.plan } : {}),
         ...(plan?.limits ? { generationLimits: plan.limits } : {}),
@@ -106,6 +141,11 @@ export function createAccountContextTool(
           ...(studioDraftSync ? { studioDraftSync: true } : {}),
           ...(studioViewSync ? { studioViewSync: true } : {}),
           ...(audioTrimming ? { audioTrimming: true } : {}),
+        },
+        ...(plan?.features ? { features: plan.features } : {}),
+        organizationChoice: {
+          selectedBy: currentOrganizationSession()?.selected ? 'session' : 'credential',
+          howToSwitch: switchHint(credential),
         },
       });
     },

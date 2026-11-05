@@ -126,6 +126,10 @@ it('projects the authenticated account and keeps API-key identity null across th
         plan: { id: 'scale', name: 'Scale' },
         generationLimits: { concurrency: 15, maxOutputDurationSeconds: 1800 },
         capabilities: { projectRenaming: true },
+        organizationChoice: {
+          selectedBy: 'credential',
+          howToSwitch: expect.stringContaining('organizations_select'),
+        },
       });
       expect(JSON.stringify(result)).not.toContain('must-not-leak');
       const members = await runWithAuth(token, 'openai-mcp', () =>

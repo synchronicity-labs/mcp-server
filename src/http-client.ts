@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { combineSignals } from './abort-signals.js';
 import { getAuthToken, getClientName } from './auth/async-context.js';
+import { chosenOrganization, ORGANIZATION_HEADER } from './organization-selection.js';
 import { getToolAnalytics } from './tool-analytics-context.js';
 import { PACKAGE_VERSION } from './version.js';
 
@@ -144,9 +145,11 @@ export function createHttpClient(
           ? { Authorization: `Bearer ${perRequestToken}` }
           : { ...staticAuthHeaders };
 
+        const organization = chosenOrganization();
         const headers: Record<string, string> = {
           ...authHeaders,
           ...clientHeaders(authHeaders, getClientName() ?? stdioClientName?.()),
+          ...(organization ? { [ORGANIZATION_HEADER]: organization.id } : {}),
           ...options.headers,
           ...(getToolAnalytics() && { 'x-sync-analytics': JSON.stringify(getToolAnalytics()) }),
         };

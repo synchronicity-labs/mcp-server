@@ -23,6 +23,8 @@ const CORE = new Set([
   'jobs_get',
   'jobs_wait',
   'get-account-context',
+  'organizations_list',
+  'organizations_select',
   'get-account-usage',
   'models_get',
   'send-feedback',

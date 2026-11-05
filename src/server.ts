@@ -30,6 +30,12 @@ import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import {
+  currentOrganizationSession,
+  OrganizationSession,
+  runInOrganization,
+  runInOrganizationSession,
+} from './organization-selection.js';
+import {
   applyEdits,
   DESCRIPTION_EDITS,
   INSTRUCTION_EDITS,
@@ -52,6 +58,11 @@ import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { progressSender } from './tools/job-wait.js';
 import { createJobTools } from './tools/jobs.js';
+import {
+  type CredentialKind,
+  createOrganizationTools,
+  withOrganizationChoice,
+} from './tools/organizations.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { withProjectIntent } from './tools/project-intent.js';
@@ -93,6 +104,9 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
   { text: ASSET_THUMBNAIL_INSTRUCTIONS },
   {
     text: 'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new create-lipsync or create-translate-and-dub calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ',
+  },
+  {
+    text: 'Every call runs in one Sync organization, and paid work is created and billed there. get-account-context names it and says how it was chosen. When organizations_list is available and the user names an organization or team, list the organizations and use the matching id; ask if several match. To work in another organization for the rest of the conversation, call organizations_select. To run one paid create in another organization without switching, pass organizationId on that create and on its estimate; reads of the ids it returns stay in that organization. Name the organization when confirming paid work if the user belongs to more than one. API keys are bound to one organization and cannot switch. ',
   },
   {
     text: 'For what a past generation actually cost, use get-generation-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lip sync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generate_estimate-cost or start a paid generation to answer a past-cost question. ',
@@ -194,6 +208,8 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'get-generation-costs',
   'rename-project',
   'get-account-context',
+  'organizations_list',
+  'organizations_select',
   'get-asset-creators',
   'get-playback-metadata',
   'get-generation-continuation',
@@ -667,6 +683,9 @@ function createTools(
   getProfile: () => ClientProfile,
   chatgptApp?: ChatgptApp,
 ): McpToolDefinition[] {
+  // stdio authenticates with SYNC_API_KEY when set; otherwise, like hosted, as a user.
+  const credential: CredentialKind =
+    config.transport === 'stdio' && config.apiKey ? 'api_key' : 'user';
   // These operations require the durable wrapper's admission key and public projection.
   const generatedOperations = operations.filter(
     (operation) =>
@@ -708,7 +727,9 @@ function createTools(
       supportsStudioViews(operations),
       supportsAudioTrimming(operations),
       analyticsAvailable,
+      credential,
     ),
+    ...createOrganizationTools(httpClient, credential),
     ...createStudioViewTools(operations, httpClient),
     ...createStudioDraftTools(operations, httpClient),
     ...createAccountManagementTools(httpClient),
@@ -737,6 +758,7 @@ function createTools(
   ];
   const adapted = allTools
     .map(withProjectIntent)
+    .map((tool) => withOrganizationChoice(tool, httpClient, credential))
     .map(withGenerationStatusCard)
     .map(withGenerationOutputAliases)
     .map((tool) => (config.spendConfirmation === false ? withoutSpendConfirmation(tool) : tool));
@@ -775,6 +797,8 @@ function createProfiledServer(
   );
   const tools =
     sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
+  // Hosted sessions supply theirs per request (HttpSession); stdio keeps one for the process.
+  const ownOrganizationSession = new OrganizationSession();
   const analytics = toolAnalyticsSupport(operations);
   const server = new McpServer(
     {
@@ -816,19 +840,34 @@ function createProfiledServer(
             ) {
               throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
             }
-            return trackToolExecution(
-              tool.name,
-              args,
-              parameters[1]?._meta,
-              profile.name,
-              httpClient,
-              (businessArgs) =>
-                tool.handler(businessArgs, {
-                  ...parameters[1],
-                  clientProfile: profile,
-                  clientName,
-                }),
-              analytics,
+            const activeProfile = profile;
+            const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
+            const execute = () =>
+              trackToolExecution(
+                tool.name,
+                args,
+                parameters[1]?._meta,
+                activeProfile.name,
+                httpClient,
+                (businessArgs) =>
+                  tool.handler(businessArgs, {
+                    ...parameters[1],
+                    clientProfile: activeProfile,
+                    clientName,
+                    // Only stdio holds a connection that can carry an unrelated notification.
+                    ...(config.transport === 'stdio'
+                      ? {
+                          toolListChanged: () =>
+                            void server.server.sendToolListChanged().catch(() => {}),
+                        }
+                      : {}),
+                  }),
+                analytics,
+              );
+            // Reads of ids that a one-call organizationId created run in that organization.
+            const remembered = organizationSession.organizationFor(args);
+            return runInOrganizationSession(organizationSession, () =>
+              remembered ? runInOrganization(remembered, execute) : execute(),
             );
           },
         }) as McpToolDefinition,

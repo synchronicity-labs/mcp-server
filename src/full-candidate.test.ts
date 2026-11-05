@@ -374,7 +374,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = (await client.listTools()).tools;
-      expect(tools).toHaveLength(index === 0 ? 22 : 19);
+      expect(tools).toHaveLength(index === 0 ? 24 : 21);
       expect(tools.some((tool) => tool.name === 'get-asset-creators')).toBe(index === 0);
       const create = tools.find((tool) => tool.name === 'create-lipsync')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);

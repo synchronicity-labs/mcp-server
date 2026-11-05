@@ -27,6 +27,8 @@ export type ToolRequestContext = {
   clientName?: string;
   // Sends notifications/progress when the caller passed a progressToken; a no-op otherwise.
   progress?: (progress: number, message?: string) => Promise<void>;
+  // Sends notifications/tools/list_changed where the session can deliver it; absent otherwise.
+  toolListChanged?: () => void;
 };
 
 type JsonMcpToolDefinition = McpToolBaseDefinition & {

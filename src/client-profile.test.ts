@@ -218,7 +218,7 @@ describe('immutable client profiles', () => {
         // create-timeline-lipsync stays out of the ChatGPT app listing only.
         const chatgpt = index < 2;
         const { tools } = await client.listTools();
-        expect(tools).toHaveLength((supportsUploads ? 12 : 8) + (chatgpt ? 0 : 1));
+        expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 1));
         expect(tools.some((tool) => tool.name === 'create-timeline-lipsync')).toBe(!chatgpt);
         expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
@@ -384,6 +384,8 @@ describe('immutable client profiles', () => {
             ? [
                 'open-upload-widget',
                 'get-account-context',
+                'organizations_list',
+                'organizations_select',
                 'get-account-usage',
                 'rename-project',
                 'get-asset-creators',
@@ -397,6 +399,8 @@ describe('immutable client profiles', () => {
               ]
             : [
                 'get-account-context',
+                'organizations_list',
+                'organizations_select',
                 'get-account-usage',
                 'rename-project',
                 'get-playback-metadata',
@@ -476,7 +480,7 @@ describe('immutable client profiles', () => {
     expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(3);
     // Repeated notifications cannot reconfigure the immutable session profile.
     sessions[0]!.server.server.oninitialized?.();
-    expect((await sessions[0]!.client.listTools()).tools).toHaveLength(12);
+    expect((await sessions[0]!.client.listTools()).tools).toHaveLength(14);
   });
 
   it.each(['chatgpt', 'claude', 'unknown'])(
@@ -601,15 +605,15 @@ it.each([0, 1, 2])(
       vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
     );
     const factory = await createMcpServerFactory(config);
-    expect(factory.toolCount).toBe(11 + count);
+    expect(factory.toolCount).toBe(13 + count);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = (await chatgpt.client.listTools()).tools;
     const claudeTools = (await claude.client.listTools()).tools;
     // create-timeline-lipsync stays out of the ChatGPT app listing.
-    expect(chatTools).toHaveLength(10 + count);
+    expect(chatTools).toHaveLength(12 + count);
     // Widget-only tools such as get-asset-creators (member emails) stay out of model-only catalogs.
-    expect(claudeTools).toHaveLength(7 + count);
+    expect(claudeTools).toHaveLength(9 + count);
     expect(claudeTools.map((tool) => tool.name)).not.toContain('get-asset-creators');
     expect(chatTools.map((tool) => tool.name)).toContain('get-asset-creators');
     expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
