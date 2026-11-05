@@ -369,13 +369,14 @@ async function organizationForCall(
 ): Promise<{ organization: OrganizationSummary; scoped: boolean }> {
   const active = chosenOrganization();
   if (active?.id === organizationId) return { organization: active, scoped: true };
-  if (
-    credential === 'api_key' ||
-    (!active && session.defaultOrganization()?.id === organizationId)
-  ) {
-    const own = await defaultOrganization(http, session, signal);
-    if (own.id === organizationId) return { organization: own, scoped: false };
-    throw apiKeyBound(own);
+  // Running in the credential's own organization needs no header.
+  if (credential === 'api_key' || !active) {
+    const own =
+      credential === 'api_key'
+        ? await defaultOrganization(http, session, signal)
+        : await defaultOrganization(http, session, signal).catch(() => undefined);
+    if (own?.id === organizationId) return { organization: own, scoped: false };
+    if (credential === 'api_key') throw apiKeyBound(own);
   }
   const account = await readAccountAs(http, organizationId, signal);
   return { organization: summary(account.organization), scoped: true };
@@ -404,14 +405,38 @@ export function withOrganizationChoice(
   ): Promise<{ result: T; organization?: OrganizationSummary }> => {
     const { organizationId, ...fields } = args;
     const session = sessionOf();
+    // Ids a create returns are read in the organization it ran in, even after a switch.
+    // API keys have one organization and never send the header, so they remember nothing.
+    const remember = (ids: string[], organization: OrganizationSummary | undefined) => {
+      if (credential === 'user' && organization) session.rememberIds(ids, organization);
+    };
+    const execute = async (organization: Promise<OrganizationSummary | undefined>) => {
+      try {
+        return await handler(fields);
+      } catch (error) {
+        // An uncertain admission names its generation; recovery must read the same organization.
+        if (error instanceof ApiRequestError && error.generationId)
+          remember([error.generationId], await organization);
+        throw error;
+      }
+    };
+    const finish = async (result: T, organization: OrganizationSummary | undefined) => {
+      remember(
+        returnedIds(
+          tool.resultFormat === 'mcp' ? (result as CallToolResult).structuredContent : result,
+        ),
+        organization,
+      );
+      return { result, organization };
+    };
     if (typeof organizationId !== 'string') {
       const active = chosenOrganization();
       // Read alongside the call, so reporting the organization adds no latency.
       const lookup = active
         ? Promise.resolve(active)
         : defaultOrganization(http, session, context?.signal).catch(() => undefined);
-      const result = await handler(fields);
-      return { result, organization: await lookup };
+      const result = await execute(lookup);
+      return finish(result, await lookup);
     }
     const { organization, scoped } = await organizationForCall(
       http,
@@ -420,25 +445,11 @@ export function withOrganizationChoice(
       organizationId,
       context?.signal,
     );
-    if (!scoped) return { result: await handler(fields), organization };
-    const remember = session.selected?.id !== organization.id;
-    let result: T;
-    try {
-      result = await runInOrganization(organization, () => handler(fields));
-    } catch (error) {
-      // An uncertain admission names its generation; recovering it must read the same organization.
-      if (remember && error instanceof ApiRequestError && error.generationId)
-        session.rememberIds([error.generationId], organization);
-      throw error;
-    }
-    if (remember)
-      session.rememberIds(
-        returnedIds(
-          tool.resultFormat === 'mcp' ? (result as CallToolResult).structuredContent : result,
-        ),
-        organization,
-      );
-    return { result, organization };
+    const known = Promise.resolve(organization);
+    const result = scoped
+      ? await runInOrganization(organization, () => execute(known))
+      : await runInOrganization(undefined, () => execute(known));
+    return finish(result, organization);
   };
   const definition = {
     ...tool,

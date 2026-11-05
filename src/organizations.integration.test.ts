@@ -221,6 +221,50 @@ describe('organizations on the hosted server', () => {
     ).toEqual([ACME.id]);
   });
 
+  it('treats the credential’s own organization as current for later writes', async () => {
+    const { baseUrl, calls } = await api();
+    const { call } = await hosted(baseUrl);
+    // Nothing read yet: naming the default organization still runs without the header.
+    const first = await call('create-lipsync', { ...lipsync, organizationId: HOME.id });
+    expect(first.structuredContent).toMatchObject({ organization: HOME });
+    expect(calls.every((item) => item.organization === undefined)).toBe(true);
+    const { projectId } = first.structuredContent as { projectId: string };
+    const { projectCreationKey: _key, ...media } = lipsync;
+    const again = await call('create-lipsync', { ...media, projectId, projectIntent: 'explicit' });
+    expect(again.isError).not.toBe(true);
+    expect(again.structuredContent).toMatchObject({ organization: HOME });
+  });
+
+  it('reads what a create returned in its organization after the session switches away', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached!: () => void;
+    const generating = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const { baseUrl, calls } = await api({
+      intercept: async (call) => {
+        if (call.method !== 'POST' || call.url !== '/v2/generate') return undefined;
+        reached();
+        await held;
+        return undefined;
+      },
+    });
+    const { call } = await hosted(baseUrl);
+    await call('organizations_select', { organizationId: ACME.id });
+    const creating = call('create-lipsync', { ...lipsync, organizationId: ACME.id });
+    await generating;
+    await call('organizations_select', { organizationId: HOME.id });
+    release();
+    expect((await creating).structuredContent).toMatchObject({ organization: ACME });
+
+    calls.length = 0;
+    await call('generate_get-generation', { id: GENERATION });
+    expect(calls.map((item) => item.organization)).toEqual([ACME.id]);
+  });
+
   it('reads the generation of an uncertain admission in the organization that admitted it', async () => {
     const { baseUrl, calls } = await api({
       intercept: (call) =>

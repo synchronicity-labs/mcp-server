@@ -1013,7 +1013,7 @@ function organizationForCall(
   session: OrganizationSession,
 ): OrganizationSummary | undefined {
   const remembered = session.organizationFor(args);
-  if (!remembered || remembered.id === session.selected?.id) return session.selected;
+  if (!remembered || session.isCurrent(remembered.id)) return session.selected;
   if (followsRememberedIds(tool)) return remembered;
   if (args.organizationId === undefined)
     throw new Error(

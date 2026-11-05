@@ -22,6 +22,8 @@ export class OrganizationSession {
   /** Feature flags of the active organization from GET /v2/account, when it reports them. */
   features?: string[];
   #default?: { organization: OrganizationSummary; expiresAt: number };
+  // Kept after the cache expires: tells the credential's own organization from others.
+  #defaultId?: string;
   readonly #organizationById = new Map<string, OrganizationSummary>();
 
   /** The credential's own organization, as last read without a selection. */
@@ -33,6 +35,12 @@ export class OrganizationSession {
 
   rememberDefault(organization: OrganizationSummary): void {
     this.#default = { organization, expiresAt: Date.now() + DEFAULT_ORGANIZATION_TTL_MS };
+    this.#defaultId = organization.id;
+  }
+
+  /** Whether calls without a selection run in `id`, as last read. */
+  isCurrent(id: string): boolean {
+    return this.selected ? this.selected.id === id : this.#defaultId === id;
   }
 
   /** Records ids returned by a call that ran in `organization`. */
