@@ -67,34 +67,34 @@ type Route = (req: IncomingMessage, res: ServerResponse) => Promise<boolean> | b
 /** b-1 runs then completes; b-2 points off the API origin; b-3's result file is oversized. */
 function batchReads(baseUrl: () => string): Route {
   let reads = 0;
-  // A Map, so a request path can only reach these entries, never an Object prototype member.
-  const batches = new Map<string, () => unknown>([
-    [
-      'b-1',
-      () => {
+  // A switch over known ids, so a request path never selects what gets called.
+  const read = (id: string): unknown => {
+    switch (id) {
+      case 'b-1': {
         reads += 1;
         const metrics = { total_generations: 20, success_count: reads === 1 ? 5 : 19 };
         return reads === 1
-          ? { id: 'b-1', status: 'JOBS_CREATED', metrics, outputUrl: '' }
+          ? { id, status: 'JOBS_CREATED', metrics, outputUrl: '' }
           : {
-              id: 'b-1',
+              id,
               status: 'COMPLETED',
               metrics: { ...metrics, failed_count: 1 },
               outputUrl: `${baseUrl()}/v2/batches/b-1/result`,
             };
-      },
-    ],
-    ['b-2', () => ({ id: 'b-2', status: 'FAILED', outputUrl: 'https://elsewhere.test/o' })],
-    [
-      'b-3',
-      () => ({ id: 'b-3', status: 'COMPLETED', outputUrl: `${baseUrl()}/v2/batches/b-3/result` }),
-    ],
-  ]);
+      }
+      case 'b-2':
+        return { id, status: 'FAILED', outputUrl: 'https://elsewhere.test/o' };
+      case 'b-3':
+        return { id, status: 'COMPLETED', outputUrl: `${baseUrl()}/v2/batches/b-3/result` };
+      default:
+        return undefined;
+    }
+  };
   return (req, res) => {
     if (!req.url?.startsWith('/v2/batch/')) return false;
-    const batch = batches.get(req.url.slice('/v2/batch/'.length));
-    if (!batch) return false;
-    res.end(JSON.stringify(batch()));
+    const batch = read(req.url.slice('/v2/batch/'.length));
+    if (batch === undefined) return false;
+    res.end(JSON.stringify(batch));
     return true;
   };
 }
