@@ -61,7 +61,7 @@ function stdioServer(updateCheck?: UpdateCheck) {
 }
 
 async function texts(client: Client) {
-  const result = await client.callTool({ name: 'voices_get-voices', arguments: {} });
+  const result = await client.callTool({ name: 'voices_list', arguments: {} });
   return {
     texts: (result.content as Array<{ type: string; text: string }>).map((block) => block.text),
     structuredContent: result.structuredContent,

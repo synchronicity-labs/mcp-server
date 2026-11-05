@@ -133,7 +133,7 @@ async function fixture() {
 it('starts fresh Spanish translation of an imported YouTube video despite an existing Translate and Dub project', async () => {
   const { call, projects, original, generations, calls } = await fixture();
   const { projectId: _projectId, ...input } = translationInput;
-  const result = await call('create-translate-and-dub', {
+  const result = await call('dubbing_create', {
     ...input,
     projectName: 'Translate and Dub',
     projectCreationKey: newId,
@@ -160,7 +160,7 @@ it('starts fresh Spanish translation of an imported YouTube video despite an exi
 it('creates separate projects for repeated workflow names instead of resolving by name', async () => {
   const { call, projects, original, generations } = await fixture();
   for (const [index, id] of [newId, secondId].entries()) {
-    const result = await call('create-lipsync', {
+    const result = await call('lipsync_create', {
       videoAssetId: translationInput.videoAssetId,
       audioAssetId: secondId,
       projectName: 'Translate and Dub',
@@ -175,12 +175,12 @@ it('creates separate projects for repeated workflow names instead of resolving b
   expect(generations.every((item) => item.projectId !== existingId)).toBe(true);
 });
 
-it.each(['create-lipsync', 'create-translate-and-dub'])(
+it.each(['lipsync_create', 'dubbing_create'])(
   'refuses an inferred existing project before any upstream work: %s',
   async (name) => {
     const { call, calls, projects, original } = await fixture();
     const result = await call(name, {
-      ...(name === 'create-lipsync'
+      ...(name === 'lipsync_create'
         ? { videoAssetId: newId, audioAssetId: secondId }
         : translationInput),
       projectId: existingId,
@@ -194,7 +194,7 @@ it.each(['create-lipsync', 'create-translate-and-dub'])(
 
 it('honors an explicit update to the selected existing project without creating another project', async () => {
   const { call, projects, generations } = await fixture();
-  const result = await call('create-translate-and-dub', {
+  const result = await call('dubbing_create', {
     ...translationInput,
     projectId: existingId,
     projectIntent: 'explicit',
@@ -210,8 +210,8 @@ it('retains project identity after a lost generation response without name reuse
   const { projectId: _projectId, ...input } = translationInput;
   const args = { ...input, projectCreationKey: newId, projectName: 'Translate and Dub' };
   loseNextResponse();
-  expect((await call('create-translate-and-dub', args)).isError).toBe(true);
-  expect((await call('create-translate-and-dub', args)).isError).not.toBe(true);
+  expect((await call('dubbing_create', args)).isError).toBe(true);
+  expect((await call('dubbing_create', args)).isError).not.toBe(true);
   expect(projects.size).toBe(2);
   expect(generations).toHaveLength(1);
   expect(generations[0]?.projectId).not.toBe(existingId);
@@ -223,7 +223,7 @@ it('retains project identity after a lost generation response without name reuse
 it('does not interpret an old project UUID as the destination of a new creation', async () => {
   const { call, projects, original, generations } = await fixture();
   const { projectId: _projectId, ...input } = translationInput;
-  const result = await call('create-translate-and-dub', {
+  const result = await call('dubbing_create', {
     ...input,
     projectCreationKey: existingId,
     projectName: 'Translate and Dub',
@@ -245,8 +245,8 @@ it('accepts a project this connection just created without projectIntent, includ
     idempotencyKey: 'owl-1',
   };
   loseNextResponse();
-  expect((await call('create-lipsync', args)).isError).toBe(true);
-  expect((await call('create-lipsync', args)).isError).not.toBe(true);
+  expect((await call('lipsync_create', args)).isError).toBe(true);
+  expect((await call('lipsync_create', args)).isError).not.toBe(true);
   expect(generations).toEqual([expect.objectContaining({ projectId: secondId })]);
 });
 
@@ -255,7 +255,7 @@ it('refuses a project another connection created', async () => {
   const otherId = '00000000-0000-4000-8000-000000000013';
   await call('projects_create', { id: otherId, name: 'Talking Owl' }, 'other-token');
   const writes = calls.length;
-  const result = await call('create-lipsync', {
+  const result = await call('lipsync_create', {
     videoAssetId: translationInput.videoAssetId,
     audioAssetId: newId,
     projectId: otherId,
@@ -266,7 +266,7 @@ it('refuses a project another connection created', async () => {
 
 it('creates a new project for a keyed request that has no projectCreationKey', async () => {
   const { call, projects, original, generations } = await fixture();
-  const result = await call('create-lipsync', {
+  const result = await call('lipsync_create', {
     videoAssetId: translationInput.videoAssetId,
     audioAssetId: secondId,
     idempotencyKey: 'legacy-keyed-request',
@@ -287,7 +287,7 @@ it('keeps accepting a created project after the access token refreshes', async (
     'owner-1',
   );
   const result = await call(
-    'create-lipsync',
+    'lipsync_create',
     { videoAssetId: translationInput.videoAssetId, audioAssetId: newId, projectId: refreshedId },
     'token-after',
     'owner-1',

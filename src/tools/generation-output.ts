@@ -10,7 +10,7 @@ type Alias = readonly [apiName: string, legacyName: string];
 const RESULT_URL: Alias = ['outputMediaUrl', 'outputUrl'];
 const DURATION: Alias = ['outputMediaLength', 'outputDuration'];
 // Raw generation lists from GET /v2/generations, without an output schema.
-const GENERATION_LIST_TOOLS = new Set(['generate_get-generations', 'projects_get-generations']);
+const GENERATION_LIST_TOOLS = new Set(['generations_list', 'projects_list-generations']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

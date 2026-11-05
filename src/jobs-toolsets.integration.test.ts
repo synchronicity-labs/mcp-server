@@ -26,7 +26,7 @@ const op = (operationId: string, extra: Record<string, unknown> = {}) => ({
 });
 const spec = {
   openapi: '3.0.0',
-  // POST /v2/generate with dubParams, so create-translate-and-dub is offered.
+  // POST /v2/generate with dubParams, so dubbing_create is offered.
   components: translationSpec.components,
   paths: {
     ...translationSpec.paths,
@@ -220,7 +220,7 @@ describe('jobs_wait over stdio', () => {
 });
 
 describe('local toolsets', () => {
-  const ADMIN = ['assets_delete', 'projects_delete', 'voices_clone-voice', 'voices_delete-voice'];
+  const ADMIN = ['assets_delete', 'projects_delete', 'voices_clone', 'voices_delete'];
 
   it('lists the hosted set without admin tools by default, plus jobs and transcription', async () => {
     const { client, names } = await stdio();
@@ -228,21 +228,16 @@ describe('local toolsets', () => {
       expect.arrayContaining([
         'jobs_get',
         'jobs_wait',
-        'create-lipsync',
-        'generate_get-generation',
+        'lipsync_create',
+        'generations_get',
         'assets_create',
         'projects_create',
-        'voices_get-voices',
-        'transcriptions_create-transcription',
-        'transcriptions_get-transcription-job',
+        'voices_list',
+        'transcriptions_create',
+        'transcriptions_get',
       ]),
     );
-    for (const name of [
-      ...ADMIN,
-      'generate_create-generation',
-      'projects_attach-asset',
-      'tts_create',
-    ])
+    for (const name of [...ADMIN, 'generations_create', 'projects_attach-asset', 'tts_create'])
       expect(names, name).not.toContain(name);
     expect(client.getInstructions()).toContain(toolsetInstruction(undefined));
     expect(client.getInstructions()).toContain('SYNC_MCP_TOOLSETS=all');
@@ -251,29 +246,25 @@ describe('local toolsets', () => {
   it('restores every tool with all, and drops the instructions note', async () => {
     const { client, names } = await stdio(['all']);
     expect(names).toEqual(
-      expect.arrayContaining([...ADMIN, 'generate_create-generation', 'tts_create', 'jobs_wait']),
+      expect.arrayContaining([...ADMIN, 'generations_create', 'tts_create', 'jobs_wait']),
     );
     expect(client.getInstructions()).not.toContain('SYNC_MCP_TOOLSETS');
   });
 
   it.each<[Toolset[], string[], string[]]>([
-    [
-      ['lipsync'],
-      ['create-lipsync', 'generate_create-generation'],
-      ['assets_create', 'tts_create'],
-    ],
-    [['dubbing'], ['create-translate-and-dub'], ['create-lipsync', 'assets_create']],
+    [['lipsync'], ['lipsync_create', 'generations_create'], ['assets_create', 'tts_create']],
+    [['dubbing'], ['dubbing_create'], ['lipsync_create', 'assets_create']],
     [['assets'], ['assets_create', 'assets_get'], ['assets_delete', 'projects_create']],
     [['projects'], ['projects_create', 'projects_attach-asset'], ['projects_delete']],
-    [['transcription'], ['transcriptions_create-transcription'], ['create-lipsync']],
-    [['voices'], ['voices_get-voices', 'tts_create'], ['voices_clone-voice']],
-    [['admin'], ADMIN, ['create-lipsync', 'assets_create']],
-    [['default', 'admin'], [...ADMIN, 'create-lipsync', 'assets_create'], ['tts_create']],
+    [['transcription'], ['transcriptions_create'], ['lipsync_create']],
+    [['voices'], ['voices_list', 'tts_create'], ['voices_clone']],
+    [['admin'], ADMIN, ['lipsync_create', 'assets_create']],
+    [['default', 'admin'], [...ADMIN, 'lipsync_create', 'assets_create'], ['tts_create']],
   ])('lists %j', async (toolsets, included, excluded) => {
     const { client, names } = await stdio(toolsets);
     // Job reads and account tools come with every selection.
     expect(names).toEqual(
-      expect.arrayContaining([...included, 'jobs_get', 'jobs_wait', 'generate_get-generation']),
+      expect.arrayContaining([...included, 'jobs_get', 'jobs_wait', 'generations_get']),
     );
     for (const name of excluded) expect(names, name).not.toContain(name);
     expect(client.getInstructions()).toContain(toolsetInstruction(toolsets));

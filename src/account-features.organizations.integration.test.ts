@@ -60,7 +60,7 @@ describe('feature-gated tools across organizations', () => {
     ).toEqual([ACME.id, HOME.id]);
   });
 
-  it('keeps Acme’s tools when a get-account-context read in Home lands after the switch', async () => {
+  it('keeps Acme’s tools when a account_get-context read in Home lands after the switch', async () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -68,7 +68,7 @@ describe('feature-gated tools across organizations', () => {
     let holding = true;
     const { baseUrl } = await api({
       intercept: async (call) => {
-        // Hold get-account-context's header-less read of Home's account.
+        // Hold account_get-context's header-less read of Home's account.
         if (holding && call.url === '/v2/account' && !call.organization) {
           holding = false;
           await held;
@@ -79,7 +79,7 @@ describe('feature-gated tools across organizations', () => {
     const client = await connect(
       await createSyncMcpServer({ baseUrl, transport: 'stdio', port: 0 }),
     );
-    const context = client.callTool({ name: 'get-account-context', arguments: {} });
+    const context = client.callTool({ name: 'account_get-context', arguments: {} });
     await vi.waitFor(() => expect(holding).toBe(false));
     await client.callTool({ name: 'organizations_select', arguments: { organizationId: ACME.id } });
     expect(await gated(() => client.listTools())).toEqual(GATED);

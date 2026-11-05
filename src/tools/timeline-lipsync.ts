@@ -335,10 +335,10 @@ export function createTimelineLipsyncTool(
 ): McpToolDefinition {
   const schema = features.keptClips ? keptInput : input;
   return {
-    name: 'create-timeline-lipsync',
+    name: 'lipsync_create-timeline',
     title: 'Create timeline lipsync',
     description:
-      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset or audio URL, the seconds (or frames) of the video it covers, and optionally the part of the audio file it plays, its sync mode and the face it lipsyncs. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use create-lipsync. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generate_get-generation and wait: true. Clips are checked before anything is created, and errors name the clip index.' +
+      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset or audio URL, the seconds (or frames) of the video it covers, and optionally the part of the audio file it plays, its sync mode and the face it lipsyncs. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use lipsync_create. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generations_get and wait: true. Clips are checked before anything is created, and errors name the clip index.' +
       (features.keptClips
         ? ' To dub a whole video while lipsyncing only some shots, pass the full dubbed track as outputAudio, lipsync the speaking shots with clips that play their part of it, and add clips with lipsync: false for the rest; the result plays the dub continuously with no cuts.'
         : ''),
@@ -365,7 +365,7 @@ export function createTimelineLipsyncTool(
       )
         throw new Error('outputAudio: give audioAssetId or audioUrl, exactly one.');
 
-      // Like create-lipsync: a new project unless the user picked one.
+      // Like lipsync_create: a new project unless the user picked one.
       const projectId =
         args.projectId ??
         (await createProjectId(

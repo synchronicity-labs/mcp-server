@@ -36,7 +36,7 @@ function mediaIdentity(url: unknown, assetId: unknown, file: unknown): unknown {
 }
 
 /**
- * What makes two create-lipsync calls the same request, ignoring keys and new-project
+ * What makes two lipsync_create calls the same request, ignoring keys and new-project
  * names. The client is part of it because each client has its own default project.
  */
 function lipsyncSubmission(
@@ -73,8 +73,8 @@ function assertSingleSource(kind: MediaKind, count: number): void {
 /**
  * Hand-written tools layered on top of the auto-generated ones.
  *
- * `create-lipsync` is a flat convenience wrapper over POST /v2/generate (the
- * auto-generated generate_create-generation takes a nested `input[]` array).
+ * `lipsync_create` is a flat convenience wrapper over POST /v2/generate (the
+ * auto-generated generations_create takes a nested `input[]` array).
  *
  * Each media input can arrive three ways:
  *  - `*Url` string — a hosted/public URL, e.g. the `url` returned by tts_create
@@ -82,7 +82,7 @@ function assertSingleSource(kind: MediaKind, count: number): void {
  *    model can't synthesise a fileParam object), and it's passed straight to
  *    the generation as `url`.
  *  - `*AssetId` string — a durable Sync asset created earlier, typically by
- *    upload-media. This keeps uploaded-file handling separate from generation
+ *    assets_upload. This keeps uploaded-file handling separate from generation
  *    creation when the host supports file params but should not pass the file
  *    directly to the generation tool. For public URLs, use the explicit `*Url`
  *    fields or the generated assets_create tool instead.
@@ -103,7 +103,7 @@ export function createAppTools(
   const submissions = createRunningSubmissions(httpClient);
   const tools: McpToolDefinition[] = [
     {
-      name: 'upload-media',
+      name: 'assets_upload',
       title: 'Upload media',
       description:
         'Stage an image, video, or audio file in Sync asset storage and return a durable assetId. ' +
@@ -148,7 +148,7 @@ export function createAppTools(
         if (typeof file === 'string') {
           throw new Error(
             `Got a string in the file slot ("${file.slice(0, 80)}"). ` +
-              'This tool only accepts uploaded ChatGPT file objects; pass public URLs to assets_create or create-lipsync.',
+              'This tool only accepts uploaded ChatGPT file objects; pass public URLs to assets_create or lipsync_create.',
           );
         }
 
@@ -162,12 +162,12 @@ export function createAppTools(
       },
     },
     {
-      name: 'create-lipsync',
+      name: 'lipsync_create',
       title: 'Create lipsync',
       description:
         'Use this when the user wants to make a photo talk, make an image or video say a script, or match a speaker’s lip movements to supplied audio. ' +
         'Create a lipsync video with exactly one visual input (image or video) and one driver (audio or script). ' +
-        'For translating spoken video into another language, use create-translate-and-dub when available. Do not use for subtitles only, standalone audio, or general video editing. ' +
+        'For translating spoken video into another language, use dubbing_create when available. Do not use for subtitles only, standalone audio, or general video editing. ' +
         'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
         'The model defaults to sync-3. New requests create a new project, even when its name matches another project. projectName names the new project; it never selects existing work. Supply projectId only for an explicit user selection or a project just created for this request. Keyed new-project requests require a fresh projectCreationKey, preserved on retries. ' +
         'Before confirming, estimate using the replacement script or measured audio duration, not the source video length. Script-based quotes are approximate and exclude speech synthesis. ' +
@@ -183,7 +183,7 @@ export function createAppTools(
         videoAssetId: z
           .string()
           .describe(
-            'Sync asset id for a video, returned by upload-media or assets_create. Use exactly one visual input.',
+            'Sync asset id for a video, returned by assets_upload or assets_create. Use exactly one visual input.',
           )
           .optional(),
         imageUrl: z
@@ -195,7 +195,7 @@ export function createAppTools(
         imageAssetId: z
           .string()
           .describe(
-            'Sync asset id for a still image, returned by upload-media or assets_create. Use this for image-to-video lipsync with sync-3.',
+            'Sync asset id for a still image, returned by assets_upload or assets_create. Use this for image-to-video lipsync with sync-3.',
           )
           .optional(),
         audioUrl: z
@@ -204,12 +204,12 @@ export function createAppTools(
           .optional(),
         audioAssetId: z
           .string()
-          .describe('Sync asset id for audio, returned by upload-media or assets_create.')
+          .describe('Sync asset id for audio, returned by assets_upload or assets_create.')
           .optional(),
         script: z.string().describe('Text for the image or video to say.').optional(),
         voiceId: z
           .string()
-          .describe('Voice id from voices_get-voices. Required when script is provided.')
+          .describe('Voice id from voices_list. Required when script is provided.')
           .optional(),
         provider: z
           .string()
@@ -257,7 +257,7 @@ export function createAppTools(
           .trim()
           .min(1)
           .describe(
-            'Existing Sync project ID returned by projects_get-all or projects_get. Use this to select the same project as the web app. Cannot be combined with projectName.',
+            'Existing Sync project ID returned by projects_list or projects_get. Use this to select the same project as the web app. Cannot be combined with projectName.',
           )
           .optional(),
         projectName: z
@@ -351,18 +351,18 @@ export function createAppTools(
 
         if (!hasAudio && !hasScript) {
           throw new Error(
-            'Audio or script is required - pass `audioAssetId`, or pass `script` with a `voiceId` from voices_get-voices. create-lipsync also accepts `audioUrl` or an uploaded audio file.',
+            'Audio or script is required - pass `audioAssetId`, or pass `script` with a `voiceId` from voices_list. lipsync_create also accepts `audioUrl` or an uploaded audio file.',
           );
         }
         if (hasAudio && hasScript) {
           throw new Error('Provide either audio or script, not both.');
         }
         if (hasScript && !voiceId) {
-          throw new Error('voiceId is required when using script — call voices_get-voices first.');
+          throw new Error('voiceId is required when using script — call voices_list first.');
         }
         if (!hasVideo && !hasImage) {
           throw new Error(
-            'Provide a video or an image - pass `videoAssetId` or `imageAssetId`. create-lipsync also accepts `videoUrl`/`imageUrl` or an uploaded file.',
+            'Provide a video or an image - pass `videoAssetId` or `imageAssetId`. lipsync_create also accepts `videoUrl`/`imageUrl` or an uploaded file.',
           );
         }
         if (hasVideo && hasImage) {
@@ -475,7 +475,7 @@ export function createAppTools(
       },
     },
   ];
-  const lipsync = tools.find((tool) => tool.name === 'create-lipsync')!;
+  const lipsync = tools.find((tool) => tool.name === 'lipsync_create')!;
   // Embedded apps cannot invoke tools annotated with fileParams, even with
   // asset-only arguments. Reuse generation admission/execution without exposing
   // the host's attachment transport to this app-only entry point.
@@ -486,9 +486,9 @@ export function createAppTools(
   const { 'openai/fileParams': _fileParams, ...meta } = lipsync.meta ?? {};
   tools.push({
     ...lipsync,
-    name: 'create-lipsync-from-assets',
+    name: 'lipsync_create-from-assets',
     description:
-      'Create one lipsync generation from saved Sync image/video and audio asset IDs, or a saved visual asset plus script and voiceId. Uses the same project access, options, and idempotency rules as create-lipsync. For embedded Sync interfaces only.',
+      'Create one lipsync generation from saved Sync image/video and audio asset IDs, or a saved visual asset plus script and voiceId. Uses the same project access, options, and idempotency rules as lipsync_create. For embedded Sync interfaces only.',
     inputSchema,
     meta: { ...meta, ui: { visibility: ['app'] }, 'openai/widgetAccessible': true },
   });

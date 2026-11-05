@@ -7,16 +7,16 @@ connecting a client.
 
 ## Translate and dub
 
-`create-translate-and-dub` requires a saved video asset, accessible project,
+`dubbing_create` requires a saved video asset, accessible project,
 model, target language and persistent idempotency key. Confirm the paid action
 before calling it, then poll its generation ID through completion. The current
-`generate_estimate-cost` response covers lip-sync only, not additional dubbing
+`generations_estimate-cost` response covers lip-sync only, not additional dubbing
 charges. See the [workflow integration and release plan](chatgpt-workflows.md)
 for the remaining combined-pricing and embedded UI work.
 
 ## Lipsync a timeline
 
-`create-timeline-lipsync` reproduces a Studio timeline: one video and several
+`lipsync_create-timeline` reproduces a Studio timeline: one video and several
 audio clips, each placed on a stretch of the video. A clip names its audio
 asset, its `startTime` and `endTime` in seconds on the video, and optionally
 `audioStartTime`/`audioEndTime` (the part of the audio file it plays) and a
@@ -46,7 +46,7 @@ They are listed only when the active organization's `GET /v2/account`
 server and over stdio, and never in the ChatGPT app listing.
 `src/account-features.ts` reads the features from the session's
 `OrganizationSession` (the stdio process, or one hosted session). That's the
-same field `organizations_select` and `get-account-context` write when they
+same field `organizations_select` and `account_get-context` write when they
 read the account, so switching organizations changes what is listed, and
 stdio clients get `tools/list_changed`. The session stamps kept features with the
 organization and selection they were read for: a read that began before a
@@ -75,7 +75,7 @@ mix audio, so the agent lays a dub over `backgroundUrl` itself.
 ## Quote replacement speech
 
 For “make this video say this script”, pass the replacement `script` to
-`generate_estimate-cost` with the chosen `model` and source `fps` when known.
+`generations_estimate-cost` with the chosen `model` and source `fps` when known.
 The MCP adapter estimates spoken seconds using Sync's speech-duration heuristic
 (160 words/minute with CJK segmentation and a character-duration floor), then
 requests pricing from the existing API. It does not synthesize or reserve credits.
@@ -113,7 +113,7 @@ For “Translate this YouTube link to Spanish”, use the existing asset and tra
    returns the saved asset; no separate download or asset registration is needed.
 3. Use the returned asset `id` as `videoAssetId`. Discover supported languages/models,
    estimate the translation, confirm its cost and configuration, then call
-   `create-translate-and-dub` with `targetLang: "es"` and a persistent idempotency key.
+   `dubbing_create` with `targetLang: "es"` and a persistent idempotency key.
    Poll the returned generation ID through completion.
 
 Never submit translation while the import is pending or use `importJobId` as an
@@ -123,22 +123,22 @@ flags, platform restrictions and daily import limits remain enforced by the API.
 
 ## Edit Dialogue
 
-When the API exposes transcription and dialogue-edit endpoints, `get-dialogue-options`
+When the API exposes transcription and dialogue-edit endpoints, `dialogue_get-options`
 enables the embedded timed-word editor. When transcription refuses a source URL
-because it is not in Sync storage, `upload-dialogue-source` copies the accessible
+because it is not in Sync storage, `dialogue_upload-source` copies the accessible
 saved video through the bounded upload pipeline and returns a new project asset.
 Use that asset's ID for the remaining dialogue calls. The widget performs this
-recovery when `get-dialogue-options` advertises `sourceUpload: true`, and retains
+recovery when `dialogue_get-options` advertises `sourceUpload: true`, and retains
 the uploaded selection through reload, preview, and generation. Other 422 errors
 do not initiate an upload, and a rejected uploaded copy does not trigger another
-automatic upload. `create-dialogue-transcription` and
-`get-dialogue-transcription` obtain the single-speaker transcript. Users edit or
-remove timed words, then explicitly request `create-dialogue-preview` and poll
-`get-dialogue-preview`. The adapter reads the server-owned transcript and keeps
+automatic upload. `dialogue-transcriptions_create` and
+`dialogue-transcriptions_get` obtain the single-speaker transcript. Users edit or
+remove timed words, then explicitly request `dialogue-previews_create` and poll
+`dialogue-previews_get`. The adapter reads the server-owned transcript and keeps
 the original speaker voice. It does not accept a full replacement script or a
 selected TTS voice.
 
-`estimate-dialogue-video` and `create-dialogue-video` use the completed preview's
+`dialogue-videos_estimate` and `dialogue-videos_create` use the completed preview's
 `dialogueEdit.id`, original video asset and project. The final generation retains
 normal API admission, retiming, billing and idempotency. A lost preview creation
 response must not be automatically retried. Reopening an identified preview is
@@ -184,8 +184,8 @@ Preparing the candidate does not deploy it or perform an EKS cutover.
 ## Embedded speech previews
 
 When the API advertises durable `/v2/tts/jobs` creation and status endpoints,
-ChatGPT can check `get-speech-options`, create a confirmed `create-speech-preview`
-and read the same job with `get-speech-preview`. Creation requires a persisted
+ChatGPT can check `speech-previews_get-options`, create a confirmed `speech-previews_create`
+and read the same job with `speech-previews_get`. Creation requires a persisted
 UUID idempotency key and is potentially paid. Reuse the key and identical input
 only to reconcile uncertain admission. Never synthesize again because saving the
 resulting audio asset failed. Project access and organization billing remain API
@@ -203,8 +203,8 @@ production acceptance; older APIs omit the speech tools and the UI fails closed.
 
 With saved-asset support deployed on the existing `/v2/integrations/dubbing` API,
 the server exposes
-`estimate-translation-preview`, `create-translation-preview` and
-`get-translation-preview`. These are separate from combined video dubbing.
+`translation-previews_estimate`, `translation-previews_create` and
+`translation-previews_get`. These are separate from combined video dubbing.
 Creation requires a stable UUID key and an authorized saved audio asset; the API
 binds the key to immutable inputs before provider admission. A lost response
 reuses the same key or known job ID. `recoveryRequired` never permits a fresh
@@ -221,16 +221,16 @@ establish neither production release nor provider output quality.
 
 ## Account, usage and project rename
 
-`get-account-usage` reads the connected organization's billing projection and,
+`account_get-usage` reads the connected organization's billing projection and,
 for metered accounts, complete current-period usage. Available credits exclude
 in-flight holds. Missing usage is unavailable, never a zero total. Billing
 management requires an owner/admin role as well as the API billing flag.
-`rename-project` changes only the name through the existing authenticated project
+`projects_rename` changes only the name through the existing authenticated project
 PATCH route; it cannot change visibility or submit work and never retries writes
 automatically. Embedded clients keep the title read-only when older MCP
 releases omit `get-account-context.capabilities.projectRenaming`.
 
-`get-account-context` reads `/v2/oauth/account` for the connected account and
+`account_get-context` reads `/v2/oauth/account` for the connected account and
 organization. API keys retain a null signed-in account. The UI must not infer a
 personal asset scope or permissions from a client name or an API key's owner.
 
@@ -255,15 +255,15 @@ Ask: “Generate this in the Acme org.”
    disconnected mid-session. After a switch,
    stdio sends `notifications/tools/list_changed` so the client lists tools again.
 3. To run one paid create elsewhere without switching, pass `organizationId` on the
-   create and on its estimate (`create-lipsync`, `create-lipsync-from-assets`,
-   `create-timeline-lipsync`, `create-translate-and-dub`, the translation preview and
-   Edit Dialogue creates and estimates, `generate_estimate-cost`). The server reads
+   create and on its estimate (`lipsync_create`, `lipsync_create-from-assets`,
+   `lipsync_create-timeline`, `dubbing_create`, the translation preview and
+   Edit Dialogue creates and estimates, `generations_estimate-cost`). The server reads
    `/v2/account` as that organization first and refuses before any paid work if the
    API doesn't answer for it. Reads of the ids that call returns stay in that
    organization for the rest of the session.
 
 Create results include `organization` (`id`, `name`): the organization they ran in.
-`get-account-context` names the active organization and its `features`, and
+`account_get-context` names the active organization and its `features`, and
 `organizationChoice` says whether the session chose it and how to switch.
 
 API keys are bound to one organization. With `SYNC_API_KEY`, `organizations_list`
@@ -274,7 +274,7 @@ in with device auth to switch.
 ## Reusable voice cloning in ChatGPT
 
 When the connected API exposes voice cloning, hosted clients can call
-`voices_clone-voice`. Ask: “Save a reusable clone of my voice from this sample,
+`voices_clone`. Ask: “Save a reusable clone of my voice from this sample,
 called My narration.” Confirm permission to clone the speaker, the sample and
 the name before creating it. Plan limits and provider requirements still apply.
 
@@ -282,7 +282,7 @@ the name before creating it. Plan limits and provider requirements still apply.
    tools. Reuse its `assetId`; alternatively provide a Sync-hosted `url`.
 2. List existing voices first to avoid unnecessary duplicates. Clone with
    `name`, `provider: elevenlabs` and exactly one sample source.
-3. Use the returned **`id`** as `voiceId` in `create-lipsync` with `script`.
+3. Use the returned **`id`** as `voiceId` in `lipsync_create` with `script`.
    The separate provider-specific `voiceId` field is not the Sync identifier.
 4. Review the video estimate and confirm generation separately.
 

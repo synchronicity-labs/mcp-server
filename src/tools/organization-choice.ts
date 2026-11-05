@@ -24,17 +24,17 @@ const ORGANIZATION_LOOKUP_MS = 2_000;
 
 /** Paid creates, and the estimates that quote them, that take a one-call organizationId. */
 const PER_CALL_ORGANIZATION_TOOLS = new Set([
-  'create-lipsync',
-  'create-lipsync-from-assets',
-  'create-timeline-lipsync',
-  'create-translate-and-dub',
-  'create-translation-preview',
-  'estimate-translation-preview',
-  'create-dialogue-preview',
-  'create-dialogue-video',
-  'estimate-dialogue-video',
-  'generate_create-generation',
-  'generate_estimate-cost',
+  'lipsync_create',
+  'lipsync_create-from-assets',
+  'lipsync_create-timeline',
+  'dubbing_create',
+  'translation-previews_create',
+  'translation-previews_estimate',
+  'dialogue-previews_create',
+  'dialogue-videos_create',
+  'dialogue-videos_estimate',
+  'generations_create',
+  'generations_estimate-cost',
   // From the batch tools (CRAFT-7781); applies once they are registered.
   'batches_create',
 ]);

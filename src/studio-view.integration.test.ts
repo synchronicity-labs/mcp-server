@@ -92,16 +92,16 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
   try {
     const tools = (await client.listTools()).tools;
     expect(tools.some((tool) => tool.name === 'request-studio-view-action')).toBe(false);
-    expect(tools.find((tool) => tool.name === 'register-studio-view')?._meta?.ui).toMatchObject({
+    expect(tools.find((tool) => tool.name === 'studio-views_register')?._meta?.ui).toMatchObject({
       visibility: ['app'],
     });
     const actions = [
-      ['open-studio-project', { type: 'open-project', projectId, workflow: 'lipsync' }, true],
-      ['refresh-studio-project', { type: 'refresh-project', projectId }, false],
-      ['refresh-studio-assets', { type: 'refresh-assets', projectId }, false],
-      ['show-studio-generation', { type: 'open-generation', projectId, generationId }, true],
+      ['studio-views_open-project', { type: 'open-project', projectId, workflow: 'lipsync' }, true],
+      ['studio-views_refresh-project', { type: 'refresh-project', projectId }, false],
+      ['studio-views_refresh-assets', { type: 'refresh-assets', projectId }, false],
+      ['studio-views_show-generation', { type: 'open-generation', projectId, generationId }, true],
       [
-        'continue-studio-generation',
+        'studio-views_continue-generation',
         {
           type: 'continue-generation',
           projectId,
@@ -151,7 +151,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
     expect(calls).toHaveLength(10);
     const invalid = await runWithAuth('view-user', 'openai-mcp', () =>
       client.callTool({
-        name: 'continue-studio-generation',
+        name: 'studio-views_continue-generation',
         arguments: {
           viewId,
           id,
@@ -172,11 +172,11 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
     await nonUi.connect(nct);
     try {
       const nonUiTools = (await nonUi.listTools()).tools.map((tool) => tool.name);
-      expect(nonUiTools).not.toContain('ack-studio-view');
+      expect(nonUiTools).not.toContain('studio-views_ack');
       for (const [name] of actions) expect(nonUiTools).not.toContain(name);
       const rejected = await runWithAuth('view-user', 'cli', () =>
         nonUi.callTool({
-          name: 'ack-studio-view',
+          name: 'studio-views_ack',
           arguments: { viewId, mountId: id, id, status: 'applied' },
         }),
       );
@@ -184,7 +184,7 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
       // Hidden Studio bridge tools refuse valid calls from clients without the app UI.
       const hidden = await runWithAuth('view-user', 'cli', () =>
         nonUi.callTool({
-          name: 'open-studio-project',
+          name: 'studio-views_open-project',
           arguments: {
             viewId,
             id,

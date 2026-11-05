@@ -17,11 +17,11 @@ listing presence for that account, not proactive recommendations or the current
 approval state of individual tools.
 
 The same public detail page's app tool catalog includes dialogue transcription,
-read and estimate tools, but omits `create-dialogue-preview` and
-`create-dialogue-video`. The connected tool inventory in the audit chat also
+read and estimate tools, but omits `dialogue-previews_create` and
+`dialogue-videos_create`. The connected tool inventory in the audit chat also
 omits these two names. This is an observed publication/availability gap, not a
 diagnosed cause: inspect those definitions in the publisher view before claiming
-full public Dialogue acceptance. `voices_clone-voice` is also absent, as expected
+full public Dialogue acceptance. `voices_clone` is also absent, as expected
 before the separate hosted-cloning change.
 
 The October 8 publisher scan reported held updates for server instructions and
@@ -34,7 +34,7 @@ October 11 follow-up: the directory still returns Sync for `sync`, with version
 `1.0.0` published. The publisher lists `2.0.0` as ready to publish, but its
 contents must be compared before release. The MCP connection is authorized;
 `assets_create` is now live. Server instructions still show “Earlier version
-live”, and `create-dialogue-preview` and `create-dialogue-video` show “Not live”
+live”, and `dialogue-previews_create` and `dialogue-videos_create` show “Not live”
 with the generic server-instructions review finding. This blocks complete
 public Edit Dialogue acceptance. It does not establish why a recommendation
 was absent. The published listing shows Entertainment, no capabilities, and no
@@ -48,7 +48,7 @@ and confirmation of in-chat discovery eligibility/indexing.
 
 ### Dialogue tool review follow-up
 
-The October 28 report names `create-dialogue-preview` and `create-dialogue-video`
+The October 28 report names `dialogue-previews_create` and `dialogue-videos_create`
 with “This new tool definition needs further review before it can be published.”
 This generic finding does not identify a failed runtime call or its review cause.
 
@@ -59,7 +59,7 @@ not make that a tool with open-ended entities. Both remain non-read-only and
 destructive because they queue synthesis/generation work that can incur charges;
 neither promises unconditional idempotency. The preview descriptor discloses
 source-voice cloning, synthesis charges, required approval, asynchronous polling,
-partial failures and conditional keyed recovery. `upload-dialogue-source` keeps
+partial failures and conditional keyed recovery. `dialogue_upload-source` keeps
 `openWorldHint: true` because it can fetch a saved external source URL.
 
 After the reviewed change is merged and deployed:

@@ -1,8 +1,8 @@
 # Project destination safety
 
 A new workflow request creates a new project. A workflow label, matching project
-name, or open editor never selects existing work. `create-lipsync` and
-`create-translate-and-dub` accept `projectName` only as the label of a new project;
+name, or open editor never selects existing work. `lipsync_create` and
+`dubbing_create` accept `projectName` only as the label of a new project;
 there is no name-based lookup or shared default-project reuse.
 
 Keyed generation without `projectId` requires a fresh UUID `projectCreationKey`.
@@ -42,12 +42,12 @@ Merging a PR into this repository's `main` starts a production deployment.
 
 ## Translate & Dub: first integration
 
-`create-translate-and-dub` uses the existing public `POST /v2/generate`
+`dubbing_create` uses the existing public `POST /v2/generate`
 contract. It sends one saved video asset and `dubParams` and returns the parent
 generation ID. The API owns the linked dubbing job, final lip-sync submission,
 billing, and recovery. The widget must not start a second generation when the
-dubbing stage finishes. Poll `generate_get-generation` for the parent ID and use
-`projects_get-generations` for project history.
+dubbing stage finishes. Poll `generations_get` for the parent ID and use
+`projects_list-generations` for project history.
 
 The tool is available only when the loaded public OpenAPI contract declares the
 target/source language enums. It derives those enums from that contract. The
@@ -111,7 +111,7 @@ it does not depend on ChatGPT suggesting a follow-up or choosing another render
 tool. Rejected submissions without a known job cannot offer a status read.
 
 The card pins its originating generation ID and uses only
-`generate_get-generation` for manual checks and ten-second automatic updates.
+`generations_get` for manual checks and ten-second automatic updates.
 Polling stops on terminal states, read errors or hidden documents. Foregrounding
 an active card rechecks it. A known job ID in an uncertain submission error is
 read back without replaying the write. Both MCP Apps and ChatGPT's legacy
@@ -154,7 +154,7 @@ the selected merged source, update the package release, retain older UI bundles,
 and follow the existing release process. New tool discovery requires a
 successful publisher scan; deployed tool success is not visual UI acceptance.
 
-The embedded language form reads `get-translation-options`, an authenticated,
+The embedded language form reads `dubbing_get-options`, an authenticated,
 read-only tool whose lists come from the same public schema as submission. It
 creates no job and makes no billing request. Older servers leave translation
 unavailable; the form additionally requires a combined estimate breakdown.
@@ -163,7 +163,7 @@ unavailable; the form additionally requires a combined estimate breakdown.
 
 When an editable Studio is open, its model context includes the canonical
 `projectId`, `draftId`, revision, editable status and current inputs. Use
-`get-studio-draft` to read the latest document before `update-studio-draft`.
+`studio-drafts_get` to read the latest document before `studio-drafts_update`.
 The update accepts a revision and a partial patch of media IDs, workflow,
 model/options, languages and unsent speech settings. It never starts a job.
 

@@ -57,14 +57,14 @@ it.each(['chatgpt', 'openai-mcp', 'openai-mcp (Codex)'])(
     await client.connect(clientTransport);
     try {
       const tools = (await client.listTools()).tools;
-      const tool = tools.find((entry) => entry.name === 'open-sync-app');
+      const tool = tools.find((entry) => entry.name === 'app_open');
       expect((await client.listResources()).resources.map((resource) => resource.uri)).toContain(
         `ui://sync/app-${digest}.html`,
       );
-      const create = tools.find((entry) => entry.name === 'create-lipsync');
+      const create = tools.find((entry) => entry.name === 'lipsync_create');
       expect(create?._meta).toMatchObject({ ui: { visibility: ['model', 'app'] } });
-      expect(tools.map((entry) => entry.name)).toContain('upload-media');
-      expect(tools.map((entry) => entry.name)).toContain('open-upload-widget');
+      expect(tools.map((entry) => entry.name)).toContain('assets_upload');
+      expect(tools.map((entry) => entry.name)).toContain('assets_open-upload-widget');
       for (const field of ['video', 'image', 'audio']) {
         expect(create?.inputSchema.properties).toHaveProperty(field);
       }
@@ -72,18 +72,18 @@ it.each(['chatgpt', 'openai-mcp', 'openai-mcp (Codex)'])(
         UPLOAD_WIDGET_URI,
       );
       expect(
-        (await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError,
+        (await client.callTool({ name: 'assets_open-upload-widget', arguments: {} })).isError,
       ).not.toBe(true);
       expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
       expect(
-        (await client.callTool({ name: 'create-lipsync', arguments: { video: {} } })).isError,
+        (await client.callTool({ name: 'lipsync_create', arguments: { video: {} } })).isError,
       ).toBe(true);
       expect(tool?._meta).toMatchObject({
         ui: { resourceUri: `ui://sync/app-${digest}.html` },
         'openai/outputTemplate': `ui://sync/app-${digest}.html`,
         'openai/ui': { entrypoints: [{ type: 'global' }, { type: 'thread' }] },
       });
-      expect(await client.callTool({ name: 'open-sync-app', arguments: {} })).toMatchObject({
+      expect(await client.callTool({ name: 'app_open', arguments: {} })).toMatchObject({
         structuredContent: { requested: true, renderStatus: 'awaiting_client' },
       });
       const resource = await client.readResource({ uri: `ui://sync/app-${digest}.html` });
@@ -142,7 +142,7 @@ it.each(['openai-mcp', 'openai-mcp (Codex)'])(
     await client.connect(ct);
     try {
       const { tools } = await client.listTools();
-      const appTool = tools.find((tool) => tool.name === 'create-lipsync-from-assets');
+      const appTool = tools.find((tool) => tool.name === 'lipsync_create-from-assets');
       expect(appTool).toBeDefined();
       // The host refuses iframe calls to any tool carrying fileParams, even
       // when this particular request contains only asset IDs.
@@ -154,14 +154,14 @@ it.each(['openai-mcp', 'openai-mcp (Codex)'])(
       }
       // Model-initiated attachment handling remains available independently.
       expect(
-        tools.find((tool) => tool.name === 'create-lipsync')?._meta?.['openai/fileParams'],
+        tools.find((tool) => tool.name === 'lipsync_create')?._meta?.['openai/fileParams'],
       ).toEqual(['video', 'image', 'audio']);
       for (const [args, correction] of [
         [{ videoAssetId: 'video-1' }, 'audioAssetId'],
         [{ audioAssetId: 'audio-1' }, 'videoAssetId'],
       ] as const) {
         const rejected = await client.callTool({
-          name: 'create-lipsync-from-assets',
+          name: 'lipsync_create-from-assets',
           arguments: args,
         });
         expect(rejected.isError).toBe(true);
@@ -169,7 +169,7 @@ it.each(['openai-mcp', 'openai-mcp (Codex)'])(
       }
       expect(requests).toEqual([]);
       const result = await client.callTool({
-        name: 'create-lipsync-from-assets',
+        name: 'lipsync_create-from-assets',
         arguments: {
           projectId: 'project-1',
           videoAssetId: 'video-1',
@@ -222,11 +222,9 @@ it.each(['claude', 'unknown', 'openai-mcp (Codex).evil'])(
     await server.connect(serverTransport);
     await client.connect(clientTransport);
     try {
-      expect((await client.listTools()).tools.map((entry) => entry.name)).not.toContain(
-        'open-sync-app',
-      );
+      expect((await client.listTools()).tools.map((entry) => entry.name)).not.toContain('app_open');
       expect((await client.listResources()).resources).toEqual([]);
-      expect((await client.callTool({ name: 'open-sync-app', arguments: {} })).isError).toBe(true);
+      expect((await client.callTool({ name: 'app_open', arguments: {} })).isError).toBe(true);
       await expect(client.readResource({ uri: `ui://sync/app-${digest}.html` })).rejects.toThrow();
     } finally {
       await client.close();
@@ -264,7 +262,7 @@ it.each(['openai-mcp', 'openai-mcp (Codex)'])(
         text: html,
       });
       const tools = await client.listTools();
-      expect(tools.tools.find((t) => t.name === 'open-sync-app')?._meta?.ui).toMatchObject({
+      expect(tools.tools.find((t) => t.name === 'app_open')?._meta?.ui).toMatchObject({
         resourceUri: `ui://sync/app-${newDigest}.html`,
       });
       expect(
@@ -329,7 +327,7 @@ it.each([false, true])(
       await client.connect(ct);
       try {
         const result = await runWithAuth(token, 'chatgpt', () =>
-          client.callTool({ name: 'open-sync-app', arguments: {} }),
+          client.callTool({ name: 'app_open', arguments: {} }),
         );
         if (initialProjects)
           expect(result._meta).toMatchObject({
@@ -403,7 +401,7 @@ it.each(['unavailable', 'timeout'])(
     await server.connect(st);
     await client.connect(ct);
     try {
-      const result = await client.callTool({ name: 'open-sync-app', arguments: {} });
+      const result = await client.callTool({ name: 'app_open', arguments: {} });
       expect(attempted).toBe(true);
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual({

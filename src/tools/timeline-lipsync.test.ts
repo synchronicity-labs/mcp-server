@@ -15,7 +15,7 @@ function setup() {
   return { request, tool };
 }
 
-describe('create-timeline-lipsync', () => {
+describe('lipsync_create-timeline', () => {
   it('sends each audio once and each clip as a segment over its part of that audio', async () => {
     const { request, tool } = setup();
 
@@ -407,7 +407,7 @@ describe('create-timeline-lipsync', () => {
   });
 
   it.each([true, false])(
-    'sends speaker detection %s as the object the API takes, like create-lipsync',
+    'sends speaker detection %s as the object the API takes, like lipsync_create',
     async (detect) => {
       const { request, tool } = setup();
 
@@ -436,7 +436,7 @@ describe('create-timeline-lipsync', () => {
       selectHostedHttpTools([tool], resolveClientProfile(client)).map((t) => t.name);
 
     for (const client of ['claude-ai', 'claude-code', 'openai-mcp (Codex)', 'cursor'])
-      expect(names(client)).toEqual(['create-timeline-lipsync']);
+      expect(names(client)).toEqual(['lipsync_create-timeline']);
     expect(names('openai-mcp')).toEqual([]);
   });
 });

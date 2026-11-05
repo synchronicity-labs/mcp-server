@@ -62,9 +62,9 @@ describe('upload and generation write boundaries', () => {
         throw new Error(`unexpected request ${method} ${path}`);
       });
       const tool = createAppTools({ request }, uploads).find(
-        (candidate) => candidate.name === 'create-lipsync',
+        (candidate) => candidate.name === 'lipsync_create',
       );
-      if (!tool) throw new Error('missing create-lipsync');
+      if (!tool) throw new Error('missing lipsync_create');
       await expect(
         tool.handler(
           {
@@ -92,7 +92,7 @@ describe('upload and generation write boundaries', () => {
       return { id: 'project' };
     });
     const tool = createAppTools({ request }).find(
-      (candidate) => candidate.name === 'create-lipsync',
+      (candidate) => candidate.name === 'lipsync_create',
     );
     await expect(
       tool?.handler({ videoAssetId: 'video', audioAssetId: 'audio' }, { signal: cancel.signal }),
@@ -111,7 +111,7 @@ describe('upload and generation write boundaries', () => {
       throw new Error('unexpected request');
     });
     const tool = createAppTools({ request }).find(
-      (candidate) => candidate.name === 'create-lipsync',
+      (candidate) => candidate.name === 'lipsync_create',
     );
     await expect(
       tool?.handler({ videoAssetId: 'video', audioAssetId: 'audio' }, { signal: cancel.signal }),

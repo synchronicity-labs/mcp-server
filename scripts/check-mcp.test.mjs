@@ -66,7 +66,7 @@ void test('monitor detects tool failure inside HTTP 200 and closes its session o
           serverInfo: { name: 'fixture', version: '1' },
         };
       } else if (body.method === 'tools/list')
-        result = { tools: [{ name: 'get-account-context', inputSchema: { type: 'object' } }] };
+        result = { tools: [{ name: 'account_get-context', inputSchema: { type: 'object' } }] };
       else
         result = {
           isError: toolFails,

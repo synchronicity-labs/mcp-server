@@ -79,10 +79,10 @@ export async function checkMcp(url, token) {
     await client.connect(transport, options);
     stage = 'tools/list';
     const catalog = await client.listTools({}, options);
-    if (!catalog.tools.some((tool) => tool.name === 'get-account-context'))
+    if (!catalog.tools.some((tool) => tool.name === 'account_get-context'))
       throw new Error('Missing account tool');
     stage = 'read-only tool';
-    const result = await client.callTool({ name: 'get-account-context', arguments: {} }, options);
+    const result = await client.callTool({ name: 'account_get-context', arguments: {} }, options);
     if (result.isError) throw new Error('Account read failed');
     stage = 'capacity';
     capacity = await readCapacity(endpoint, requestInit);

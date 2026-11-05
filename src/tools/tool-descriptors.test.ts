@@ -49,22 +49,22 @@ const TOOL_REFERENCE =
 // Optional workflow tools the server instructions may name: their rules are gated by
 // "when available" at the workflow level, not in every sentence.
 const OPTIONAL_INSTRUCTION_TOOLS = new Set([
-  'get-generation-costs',
-  'continue-studio-generation',
-  'create-dialogue-video',
-  'create-lipsync-from-assets',
-  'create-speech-preview',
-  'create-translate-and-dub',
-  'create-translation-preview',
-  'get-studio-draft',
-  'get-studio-view',
-  'open-studio-project',
-  'projects_get-generations',
-  'refresh-studio-assets',
-  'refresh-studio-project',
-  'show-studio-generation',
-  'update-studio-draft',
-  'voices_clone-voice',
+  'generations_get-costs',
+  'studio-views_continue-generation',
+  'dialogue-videos_create',
+  'lipsync_create-from-assets',
+  'speech-previews_create',
+  'dubbing_create',
+  'translation-previews_create',
+  'studio-drafts_get',
+  'studio-views_get',
+  'studio-views_open-project',
+  'projects_list-generations',
+  'studio-views_refresh-assets',
+  'studio-views_refresh-project',
+  'studio-views_show-generation',
+  'studio-drafts_update',
+  'voices_clone',
 ]);
 
 let upstream: Server;
@@ -107,8 +107,8 @@ describe('ChatGPT tool descriptors', () => {
 
   it('only refers ChatGPT to tools it can call, unless qualified as optional', () => {
     const visible = new Set(tools.map((tool) => tool.name));
-    expect(visible.has('projects_get-generations')).toBe(false);
-    expect(visible.has('generate_create-generation')).toBe(false);
+    expect(visible.has('projects_list-generations')).toBe(false);
+    expect(visible.has('generations_create')).toBe(false);
     for (const name of instructions.match(TOOL_REFERENCE) ?? []) {
       expect(
         visible.has(name) || OPTIONAL_INSTRUCTION_TOOLS.has(name),
@@ -129,12 +129,12 @@ describe('ChatGPT tool descriptors', () => {
     // The minimal catalog must exercise the optional-tool path, including project history.
     expect(optionalReferences).toBeGreaterThan(0);
     expect(tools.find((tool) => tool.name === 'projects_get')?.description).toContain(
-      'projects_get-generations when available',
+      'projects_list-generations when available',
     );
   });
 
   it('keeps organization member emails out of the model context', () => {
-    const creators = tools.find((tool) => tool.name === 'get-asset-creators');
+    const creators = tools.find((tool) => tool.name === 'assets_list-creators');
     expect(creators?._meta).toMatchObject({
       ui: { visibility: ['app'] },
       'openai/widgetAccessible': true,

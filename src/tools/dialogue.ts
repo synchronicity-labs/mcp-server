@@ -167,7 +167,7 @@ export function createDialogueTools(
   }
   return [
     {
-      name: 'get-dialogue-options',
+      name: 'dialogue_get-options',
       title: 'Check Edit Dialogue availability',
       description:
         'Check whether the connected API supports timed-word Edit Dialogue. Does not transcribe, synthesize or generate.',
@@ -176,7 +176,7 @@ export function createDialogueTools(
       handler: async () => ({ available: true, keyedPreview, sourceUpload: true }),
     },
     {
-      name: 'upload-dialogue-source',
+      name: 'dialogue_upload-source',
       title: 'Copy a video for Edit Dialogue',
       description:
         'Copy an accessible saved video into Sync storage when transcription rejects its external source URL. Returns a new asset; use its id as videoAssetId for transcription, preview, and final video generation. Does not transcribe or spend generation credits.',
@@ -190,7 +190,7 @@ export function createDialogueTools(
       }),
     },
     {
-      name: 'create-dialogue-transcription',
+      name: 'dialogue-transcriptions_create',
       title: 'Transcribe a video for Edit Dialogue',
       description:
         'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. A video outside Sync storage is copied there first; the result then carries the videoAssetId of that copy, which the rest of the workflow must use. Does not replace dialogue or generate a video.',
@@ -226,7 +226,7 @@ export function createDialogueTools(
       },
     },
     {
-      name: 'get-dialogue-transcription',
+      name: 'dialogue-transcriptions_get',
       title: 'Check an Edit Dialogue transcription',
       description:
         'Read the same transcription job until complete. Requires its original saved video and accessible project.',
@@ -235,10 +235,10 @@ export function createDialogueTools(
       handler: (args, context) => checkedJob(readTranscript, args, context?.signal),
     },
     {
-      name: 'create-dialogue-preview',
+      name: 'dialogue-previews_create',
       title: 'Preview dialogue edits',
       description:
-        'Start an audio synthesis job for user-approved timed word changes/removals in a saved single-speaker video, preserving the original speaker voice. Requires a project, source video and completed transcription or prior preview accessible to the connected Sync account. May clone the source speaker voice and incur synthesis charges; confirm the edits and permission to use that voice before creating. Creates a saved preview without overwriting the source; does not generate the final video. Returns a preview job ID; poll get-dialogue-preview with the same project and source until completion, and disclose any failed edits on partial completion. Persist an idempotencyKey before creating when get-dialogue-options advertises keyedPreview. Recover only through an explicit retry of identical input with that same key; never retry an ambiguous creation automatically. Not for translation, choosing another voice, or arbitrary full-transcript replacement.',
+        'Start an audio synthesis job for user-approved timed word changes/removals in a saved single-speaker video, preserving the original speaker voice. Requires a project, source video and completed transcription or prior preview accessible to the connected Sync account. May clone the source speaker voice and incur synthesis charges; confirm the edits and permission to use that voice before creating. Creates a saved preview without overwriting the source; does not generate the final video. Returns a preview job ID; poll dialogue-previews_get with the same project and source until completion, and disclose any failed edits on partial completion. Persist an idempotencyKey before creating when dialogue_get-options advertises keyedPreview. Recover only through an explicit retry of identical input with that same key; never retry an ambiguous creation automatically. Not for translation, choosing another voice, or arbitrary full-transcript replacement.',
       inputSchema: sourceSchema.extend({
         projectId: sourceSchema.shape.projectId.describe(
           'Accessible Sync project for the preview. Keep unchanged on retries.',
@@ -249,7 +249,7 @@ export function createDialogueTools(
         idempotencyKey: previewKeySchema
           .optional()
           .describe(
-            'Persist a unique key before creation when get-dialogue-options reports keyedPreview. Reuse only with identical inputs for an explicitly requested retry.',
+            'Persist a unique key before creation when dialogue_get-options reports keyedPreview. Reuse only with identical inputs for an explicitly requested retry.',
           ),
         transcriptionJobId: z
           .uuid()
@@ -311,7 +311,7 @@ export function createDialogueTools(
       },
     },
     {
-      name: 'get-dialogue-preview',
+      name: 'dialogue-previews_get',
       title: 'Check a dialogue edit preview',
       description:
         'Read one existing Edit Dialogue audio preview. Partial completion must be disclosed, not described as every edit succeeding.',
@@ -320,7 +320,7 @@ export function createDialogueTools(
       handler: (args, context) => checkedJob(readPreview, args, context?.signal),
     },
     {
-      name: 'estimate-dialogue-video',
+      name: 'dialogue-videos_estimate',
       title: 'Estimate an edited dialogue video',
       description:
         'Estimate final video cost using the completed dialogue preview and canonical server retiming. Does not generate or reserve credits.',
@@ -333,12 +333,12 @@ export function createDialogueTools(
         }),
     },
     {
-      name: 'create-dialogue-video',
+      name: 'dialogue-videos_create',
       title: 'Create the edited dialogue video',
       description:
         'Create a new lip-synced video from a saved single-speaker video and its completed, user-approved Edit Dialogue audio preview. Use this to render targeted corrections or removals of spoken words while preserving the original speaker voice. Not for translation, whole-script replacement, or choosing a different voice. ' +
-        "This is a paid action that starts a generation job and consumes Sync credits. First use estimate-dialogue-video with the same source, preview and model, then obtain the user's approval of the preview, configuration and estimated cost. Requires a project and source video accessible to the connected account, and a completed dialogue preview for that same source. Creates a new output without overwriting the source video. " +
-        'Returns a generation ID, not a finished video. Poll generate_get-generation with that ID until completion. Persist one idempotency key for the approved request; on an uncertain response, reuse that key with identical inputs instead of starting a second paid job.',
+        "This is a paid action that starts a generation job and consumes Sync credits. First use dialogue-videos_estimate with the same source, preview and model, then obtain the user's approval of the preview, configuration and estimated cost. Requires a project and source video accessible to the connected account, and a completed dialogue preview for that same source. Creates a new output without overwriting the source video. " +
+        'Returns a generation ID, not a finished video. Poll generations_get with that ID until completion. Persist one idempotency key for the approved request; on an uncertain response, reuse that key with identical inputs instead of starting a second paid job.',
       inputSchema: generationSchema.extend({
         projectId: sourceSchema.shape.projectId.describe(
           'Accessible Sync project for the new output. Keep unchanged on retries.',
@@ -350,7 +350,7 @@ export function createDialogueTools(
           'Completed Edit Dialogue audio preview ID for this source video and the current user-approved edits. Not a transcription or generation ID.',
         ),
         model: generationSchema.shape.model.describe(
-          'Lip-sync model returned by models_get, matching the approved estimate.',
+          'Lip-sync model returned by models_list, matching the approved estimate.',
         ),
         continuation: generationContextSchema
           .optional()

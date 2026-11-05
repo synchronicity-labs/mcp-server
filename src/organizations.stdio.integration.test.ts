@@ -48,18 +48,18 @@ describe('organizations on stdio', () => {
     });
 
     const create = await client.callTool({
-      name: 'create-lipsync',
+      name: 'lipsync_create',
       arguments: { ...lipsync, organizationId: ACME.id },
     });
     expect(create.isError).toBe(true);
     expect(JSON.stringify(create.content)).toContain('API keys are bound to one organization');
     const sameOrg = await client.callTool({
-      name: 'create-lipsync',
+      name: 'lipsync_create',
       arguments: { ...lipsync, organizationId: HOME.id },
     });
     expect(sameOrg.structuredContent).toMatchObject({ organization: HOME });
 
-    const context = await client.callTool({ name: 'get-account-context', arguments: {} });
+    const context = await client.callTool({ name: 'account_get-context', arguments: {} });
     expect(context.structuredContent).toMatchObject({
       organizationChoice: {
         selectedBy: 'credential',
@@ -78,7 +78,7 @@ describe('organizations on stdio', () => {
       changes++;
     });
 
-    const home = await client.callTool({ name: 'get-account-context', arguments: {} });
+    const home = await client.callTool({ name: 'account_get-context', arguments: {} });
     expect(home.structuredContent).toMatchObject({ features: ['stem_separation'] });
 
     const selected = await client.callTool({
@@ -94,7 +94,7 @@ describe('organizations on stdio', () => {
     // Selecting the same organization again changes nothing.
     await client.callTool({ name: 'organizations_select', arguments: { organizationId: ACME.id } });
     calls.length = 0;
-    const created = await client.callTool({ name: 'create-lipsync', arguments: lipsync });
+    const created = await client.callTool({ name: 'lipsync_create', arguments: lipsync });
     expect(created.structuredContent).toMatchObject({ organization: ACME });
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((item) => item.organization === ACME.id)).toBe(true);

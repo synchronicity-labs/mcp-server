@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { startHttpServer } from './http-server.js';
 import { createMcpServerFactory } from './server.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import { currentTools } from './test-fixtures/tool-names.js';
 
 // Exercise the production factory AND hosted auth/session wiring together.
 // All credentials, media IDs and API responses are local test fixtures.
@@ -373,19 +374,19 @@ it('preserves profiles, authenticated writes and signed results across concurren
   await Promise.all(
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
-      const tools = (await client.listTools()).tools;
+      const tools = currentTools((await client.listTools()).tools);
       expect(tools).toHaveLength(index === 0 ? 24 : 21);
-      expect(tools.some((tool) => tool.name === 'get-asset-creators')).toBe(index === 0);
-      const create = tools.find((tool) => tool.name === 'create-lipsync')!;
+      expect(tools.some((tool) => tool.name === 'assets_list-creators')).toBe(index === 0);
+      const create = tools.find((tool) => tool.name === 'lipsync_create')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
       expect((await client.listResources()).resources.length > 0).toBe(index === 0);
       expect(
-        JSON.stringify(await client.callTool({ name: 'voices_get-voices', arguments: {} })),
+        JSON.stringify(await client.callTool({ name: 'voices_list', arguments: {} })),
       ).toContain('fixture-voice');
       expect(
         (
           await client.callTool({
-            name: 'create-lipsync',
+            name: 'lipsync_create',
             arguments: { imageAssetId: 'fixture-image', script: 'Hello', voiceId: 'fixture-voice' },
           })
         ).isError,
@@ -397,13 +398,13 @@ it('preserves profiles, authenticated writes and signed results across concurren
         `project:${['ChatGPT generations', 'Claude generations', 'Sync generations'][index]}`,
       );
       const pending = await client.callTool({
-        name: 'generate_get-generation',
+        name: 'generations_get',
         arguments: { id: 'generation', wait: true },
       });
       expect(pending.structuredContent).toMatchObject({ id: 'generation', status: 'PENDING' });
       expect(pending.structuredContent).not.toHaveProperty('outputMediaUrl');
       const result = await client.callTool({
-        name: 'generate_get-generation',
+        name: 'generations_get',
         arguments: { id: 'generation', wait: true },
       });
       expect(result.structuredContent).toMatchObject({
@@ -411,7 +412,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
         outputUrl: signedUrl,
       });
       const malformed = await client.callTool({
-        name: 'generate_get-generation',
+        name: 'generations_get',
         arguments: { id: 'malformed' },
       });
       expect(malformed.isError).toBe(true);
@@ -465,7 +466,7 @@ it('propagates explicit cancellation through bearer auth, sessions and the profi
   const cancel = new AbortController();
   const pending = client.callTool(
     {
-      name: 'create-lipsync',
+      name: 'lipsync_create',
       arguments: { videoAssetId: 'fixture-video', audioAssetId: 'fixture-audio' },
     },
     { signal: cancel.signal },
@@ -517,11 +518,11 @@ it('offers asset management through the authenticated widget boundary', async ()
 it('uses authenticated project browsing and canonical selection through the hosted transport', async () => {
   const client = await connect('chatgpt', 'project-picker');
   const tools = (await client.listTools()).tools;
-  const list = tools.find((tool) => tool.name === 'projects_get-all');
+  const list = tools.find((tool) => tool.name === 'projects_list');
   expect(list?.annotations?.readOnlyHint).toBe(true);
   expect(list?._meta?.ui).toEqual({ visibility: ['model', 'app'] });
   const page = await client.callTool({
-    name: 'projects_get-all',
+    name: 'projects_list',
     arguments: {
       searchQuery: 'Web app',
       cursor: 'next-page',
@@ -534,7 +535,7 @@ it('uses authenticated project browsing and canonical selection through the host
     query: { searchQuery: 'Web app', cursor: 'next-page' },
   });
   const result = await client.callTool({
-    name: 'create-lipsync',
+    name: 'lipsync_create',
     arguments: {
       videoAssetId: 'existing-video',
       audioAssetId: 'existing-audio',
@@ -555,7 +556,7 @@ it('uses authenticated project browsing and canonical selection through the host
 it('does not submit a generation or create a fallback for a denied project', async () => {
   const client = await connect('chatgpt', 'denied-project-picker');
   const result = await client.callTool({
-    name: 'create-lipsync',
+    name: 'lipsync_create',
     arguments: {
       videoAssetId: 'existing-video',
       audioAssetId: 'existing-audio',
@@ -573,9 +574,9 @@ it('does not submit a generation or create a fallback for a denied project', asy
 });
 
 it.each([
-  { name: 'models_get', path: '/v2/models', args: {}, query: {}, body: {} },
+  { name: 'models_list', path: '/v2/models', args: {}, query: {}, body: {} },
   {
-    name: 'assets_get-all',
+    name: 'assets_list',
     path: '/v2/assets',
     args: { projectId: 'selected-project', cursor: 'next-asset' },
     query: { projectId: 'selected-project', cursor: 'next-asset' },
@@ -583,14 +584,14 @@ it.each([
   },
   { name: 'assets_get', path: '/v2/assets/asset-1', args: { id: 'asset-1' }, query: {}, body: {} },
   {
-    name: 'generate_get-generations',
+    name: 'generations_list',
     path: '/v2/generations',
     args: { status: 'COMPLETED', cursor: 'next-generation' },
     query: { status: 'COMPLETED', cursor: 'next-generation' },
     body: {},
   },
   {
-    name: 'generate_estimate-cost',
+    name: 'generations_estimate-cost',
     path: '/v2/generate/estimate-cost',
     args: { model: 'sync-3', duration: 12, fps: 24, reasoningEnabled: false },
     query: {},
@@ -624,7 +625,7 @@ it('forwards a caller-owned submission key through hosted MCP as an API header',
     idempotencyKey: 'action_A._~-09',
   };
   const result = await client.callTool({
-    name: 'create-lipsync',
+    name: 'lipsync_create',
     arguments: { ...args, projectIntent: 'explicit' },
   });
   expect(result.isError).not.toBe(true);
@@ -642,7 +643,7 @@ it.each(['', 'contains space', 'comma,key', 'a'.repeat(129)])(
     const client = await connect('chatgpt', 'invalid-submission-key');
     const before = calls.length;
     const result = await client.callTool({
-      name: 'create-lipsync',
+      name: 'lipsync_create',
       arguments: {
         videoAssetId: 'existing-video',
         audioAssetId: 'existing-audio',
@@ -684,7 +685,7 @@ it.each([
     const client = await connect('chatgpt', token);
     await client.listTools();
     const result = await client.callTool({
-      name: 'create-lipsync',
+      name: 'lipsync_create',
       arguments: {
         videoAssetId: 'existing-video',
         audioAssetId: 'existing-audio',
@@ -727,7 +728,7 @@ it('serves a local branded asset placeholder and tells clients not to substitute
   const client = await connect('chatgpt', 'thumbnails');
   expect(client.getInstructions()).toContain('Never search the web');
   const tools = (await client.listTools()).tools;
-  for (const name of ['assets_get', 'assets_get-all']) {
+  for (const name of ['assets_get', 'assets_list']) {
     expect(tools.find((tool) => tool.name === name)?.description).toContain('thumbnailUrl');
     expect(tools.find((tool) => tool.name === name)?.description).toContain(
       'https://mcp.sync.so/asset-placeholder.svg',
@@ -741,7 +742,7 @@ it('serves a local branded asset placeholder and tells clients not to substitute
     id: 'asset-thumbnail',
     thumbnailUrl: 'https://fixture.invalid/thumbnail.png?Signature=a%2Fb%2Bc',
   });
-  const list = await client.callTool({ name: 'assets_get-all', arguments: {} });
+  const list = await client.callTool({ name: 'assets_list', arguments: {} });
   expect(list.structuredContent).toMatchObject({
     items: [single.structuredContent, { id: 'asset-missing', thumbnailUrl: null }],
   });

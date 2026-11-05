@@ -4,12 +4,12 @@ import { MCP_APP_RESOURCE_MIME_TYPE } from './tools/upload-widget.js';
 
 export const GENERATION_STATUS_URI = 'ui://sync/generation-status-v1.html';
 const submissionTools = new Set([
-  'create-lipsync',
-  'create-lipsync-from-assets',
-  'create-timeline-lipsync',
-  'create-translate-and-dub',
-  'create-dialogue-video',
-  'generate_create-generation',
+  'lipsync_create',
+  'lipsync_create-from-assets',
+  'lipsync_create-timeline',
+  'dubbing_create',
+  'dialogue-videos_create',
+  'generations_create',
 ]);
 
 export function withGenerationStatusCard(tool: McpToolDefinition): McpToolDefinition {

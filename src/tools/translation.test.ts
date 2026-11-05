@@ -14,7 +14,7 @@ describe('combined translation generation', () => {
   it('discovers API-supported languages without submitting or probing an account', async () => {
     const request = vi.fn();
     const options = createTranslationTools(parseSpec(translationSpec), { request }).find(
-      (tool) => tool.name === 'get-translation-options',
+      (tool) => tool.name === 'dubbing_get-options',
     );
     expect(options).toBeDefined();
     expect(await options!.handler({})).toEqual({

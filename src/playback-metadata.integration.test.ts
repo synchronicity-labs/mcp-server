@@ -85,12 +85,13 @@ it('reads only user-authorized playback metadata and rechecks identity and asset
   await client.connect(ct);
   const read = (token = 'oauth-user', id = assetId) =>
     runWithAuth(token, 'openai-mcp', () =>
-      client.callTool({ name: 'get-playback-metadata', arguments: { assetId: id } }),
+      client.callTool({ name: 'assets_get-playback-metadata', arguments: { assetId: id } }),
     );
   try {
     const catalog = (await client.listTools()).tools;
     expect(
-      catalog.find((tool) => tool.name === 'get-playback-metadata')?.annotations?.readOnlyHint,
+      catalog.find((tool) => tool.name === 'assets_get-playback-metadata')?.annotations
+        ?.readOnlyHint,
     ).toBe(true);
     const ready = await read();
     expect(ready.isError).not.toBe(true);

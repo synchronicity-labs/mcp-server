@@ -18,7 +18,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export const resultRow = z.object({
   requestId: z.string(),
   status: z.string().describe('The generation status: COMPLETED, FAILED or REJECTED.'),
-  generationId: z.string().optional().describe('Read it with generate_get-generation.'),
+  generationId: z.string().optional().describe('Read it with generations_get.'),
   outputMediaUrl: z.string().optional().describe('The finished video; return it verbatim.'),
   error: z.unknown().optional(),
 });
@@ -110,7 +110,7 @@ export async function withResults(
     const reason = error instanceof Error ? error.message : String(error);
     return {
       ...batch,
-      resultsError: `${reason}. Download outputUrl (JSONL, one line per item with request_id, status, error and response) or find the generations with generate_get-generations.`,
+      resultsError: `${reason}. Download outputUrl (JSONL, one line per item with request_id, status, error and response) or find the generations with generations_list.`,
     };
   }
 }

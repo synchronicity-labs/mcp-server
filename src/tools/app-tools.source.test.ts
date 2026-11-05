@@ -118,9 +118,9 @@ function setup({ timeoutMs = 2_000 } = {}) {
     throw new Error('Rejected source reached asset storage');
   });
   const tool = createAppTools({ request }, runtime).find(
-    (candidate) => candidate.name === 'upload-media',
+    (candidate) => candidate.name === 'assets_upload',
   );
-  if (!tool) throw new Error('missing upload-media');
+  if (!tool) throw new Error('missing assets_upload');
   const upload = (download_url: string) =>
     tool.handler({ mediaType: 'video', file: { download_url, file_id: 'untrusted' } });
   return { upload, request, runtime };

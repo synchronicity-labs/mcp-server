@@ -23,7 +23,7 @@ const FEATURES_TIMEOUT_MS = 5_000;
 
 /**
  * The active organization's features, kept on the MCP session's OrganizationSession: the
- * stdio process, or one hosted session. organizations_select and get-account-context write
+ * stdio process, or one hosted session. organizations_select and account_get-context write
  * the same field when they read the account, so an organization switch changes what is
  * listed. An API without the field means none. A failed read lists no gated tools and keeps
  * nothing, so a later list reads again.

@@ -38,13 +38,13 @@ describe('unattended spend mode', () => {
     const unattended = serverInstructions(profile, false);
     expect(unattended.startsWith(UNATTENDED_INSTRUCTIONS_PREFIX)).toBe(true);
     expect(unattended).not.toMatch(/estimate and confirm|re-quote|Before quoting|displayed cost/i);
-    expect(unattended).toContain('create-translate-and-dub');
+    expect(unattended).toContain('dubbing_create');
     expect(serverDescription(false)).not.toContain('cost');
   });
 
   it('rewrites only the tools it names', () => {
     const tool = {
-      name: 'create-timeline-lipsync',
+      name: 'lipsync_create-timeline',
       description: 'Estimate and confirm before creating; this starts a generation.',
       inputSchema: {},
       handler: async () => ({}),

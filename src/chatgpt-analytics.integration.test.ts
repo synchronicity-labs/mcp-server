@@ -67,19 +67,19 @@ it.each([true, false])(
     try {
       const tools = (await client.listTools()).tools;
       if (!available) {
-        expect(tools.some((tool) => tool.name === 'track-chatgpt-event')).toBe(false);
+        expect(tools.some((tool) => tool.name === 'analytics_track-event')).toBe(false);
         const account = await runWithAuth('fixture-user', 'openai-mcp', () =>
-          client.callTool({ name: 'get-account-context', arguments: {} }),
+          client.callTool({ name: 'account_get-context', arguments: {} }),
         );
         expect(account.structuredContent).not.toHaveProperty('capabilities.chatgptAnalytics');
         expect(calls).toEqual([]);
         return;
       }
-      expect(tools.find((tool) => tool.name === 'track-chatgpt-event')?._meta?.ui).toMatchObject({
+      expect(tools.find((tool) => tool.name === 'analytics_track-event')?._meta?.ui).toMatchObject({
         visibility: ['app'],
       });
       const account = await runWithAuth('fixture-user', 'openai-mcp', () =>
-        client.callTool({ name: 'get-account-context', arguments: {} }),
+        client.callTool({ name: 'account_get-context', arguments: {} }),
       );
       expect(account.structuredContent).toMatchObject({ capabilities: { chatgptAnalytics: true } });
       expect(account.structuredContent).not.toHaveProperty('capabilities.audioTrimming');
@@ -90,7 +90,7 @@ it.each([true, false])(
       };
       const result = await runWithAuth('fixture-user', 'openai-mcp', () =>
         client.callTool({
-          name: 'track-chatgpt-event',
+          name: 'analytics_track-event',
           arguments: event,
           _meta: { 'openai/session': 'private-host-session' },
         }),

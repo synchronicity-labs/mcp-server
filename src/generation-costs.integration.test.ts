@@ -123,12 +123,12 @@ afterAll(async () => {
 });
 const call = (token: string, args: Record<string, unknown> = { generationId }) =>
   runWithAuth(token, 'openai-mcp', () =>
-    client.callTool({ name: 'get-generation-costs', arguments: args }),
+    client.callTool({ name: 'generations_get-costs', arguments: args }),
   );
 
 it('exposes a read tool to ChatGPT and forwards only an authenticated generation-cost GET', async () => {
   const catalog = await client.listTools();
-  const tool = catalog.tools.find((entry) => entry.name === 'get-generation-costs');
+  const tool = catalog.tools.find((entry) => entry.name === 'generations_get-costs');
   expect(tool).toMatchObject({
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     outputSchema: expect.any(Object),
@@ -188,7 +188,7 @@ it('does not advertise cost retrieval against an API without that capability', a
     await oldServer.connect(st);
     await oldClient.connect(ct);
     expect(
-      (await oldClient.listTools()).tools.some((tool) => tool.name === 'get-generation-costs'),
+      (await oldClient.listTools()).tools.some((tool) => tool.name === 'generations_get-costs'),
     ).toBe(false);
   } finally {
     await oldClient.close();

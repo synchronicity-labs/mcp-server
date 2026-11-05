@@ -26,10 +26,10 @@ export function createProjectHistoryTools(
 
   return [
     {
-      name: 'projects_get-generations',
+      name: 'projects_list-generations',
       title: 'Read project history',
       description:
-        'Read generation history for an accessible Sync project. Requires a projectId returned by projects_get-all. Pass limit and the last returned generation id as cursor to load another page. These are the same records used by the Sync web app.',
+        'Read generation history for an accessible Sync project. Requires a projectId returned by projects_list. Pass limit and the last returned generation id as cursor to load another page. These are the same records used by the Sync web app.',
       inputSchema: {
         ...history.inputSchema,
         projectId: history.inputSchema.projectId!.nonoptional(),

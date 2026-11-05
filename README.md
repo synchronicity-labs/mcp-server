@@ -124,12 +124,12 @@ Links can be public media URLs or YouTube, TikTok, Instagram and Facebook videos
 
 | Ask | What the agent does |
 | --- | --- |
-| "Lipsync video asset `<video-asset-id>` with audio asset `<audio-asset-id>`." | `create-lipsync` with the saved assets, then waits for the result |
-| "Lipsync https://example.com/talk.mp4 to https://example.com/voiceover.wav." | `create-lipsync` with public URLs |
-| "Translate https://www.youtube.com/watch?v=… to Spanish." | Imports the link with `assets_create`, quotes the cost, and after you confirm runs `create-translate-and-dub` |
-| "Make video asset `<video-asset-id>` say “thanks for watching” in a calm narrator voice." | Picks a voice with `voices_get-voices`, quotes the script, then `create-lipsync` with `script` |
-| "How many credits do I have left?" | `get-account-usage` |
-| "What did my last generation cost?" | Finds it in history and reads `get-generation-costs` |
+| "Lipsync video asset `<video-asset-id>` with audio asset `<audio-asset-id>`." | `lipsync_create` with the saved assets, then waits for the result |
+| "Lipsync https://example.com/talk.mp4 to https://example.com/voiceover.wav." | `lipsync_create` with public URLs |
+| "Translate https://www.youtube.com/watch?v=… to Spanish." | Imports the link with `assets_create`, quotes the cost, and after you confirm runs `dubbing_create` |
+| "Make video asset `<video-asset-id>` say “thanks for watching” in a calm narrator voice." | Picks a voice with `voices_list`, quotes the script, then `lipsync_create` with `script` |
+| "How many credits do I have left?" | `account_get-usage` |
+| "What did my last generation cost?" | Finds it in history and reads `generations_get-costs` |
 
 Translation, dubbing, speech previews and voice clones are quoted and confirmed
 with you before they start.
@@ -149,14 +149,14 @@ The hosted server exposes a curated set of tools to every client:
 
 | Area | Tools |
 | --- | --- |
-| Lip sync | `create-lipsync`, `create-timeline-lipsync`¹, `generate_estimate-cost`, `generate_get-generation`, `generate_get-generations`, `get-generation-continuation`, `get-generation-costs`, `models_get` |
-| Translation and dubbing | `create-translate-and-dub`, `get-translation-options`, `estimate-translation-preview`, `create-translation-preview`, `get-translation-preview` |
-| Speech and voices | `create-speech-preview`, `get-speech-options`, `get-speech-preview`, `voices_get-voices`, `voices_clone-voice` |
-| Edit Dialogue | `get-dialogue-options`, `upload-dialogue-source`, `create-dialogue-transcription`, `get-dialogue-transcription`, `create-dialogue-preview`, `get-dialogue-preview`, `estimate-dialogue-video`, `create-dialogue-video` |
-| Assets | `assets_create`, `assets_create-upload-url`, `assets_get`, `assets_get-all`, `assets_count`, `assets_get-download-url`, `assets_update`, `assets_delete`, `get-playback-metadata`, `get-audio-trim`, `trim-audio` |
-| Projects | `projects_create`, `projects_get`, `projects_get-all`, `projects_get-generations`, `rename-project` |
+| Lip sync | `lipsync_create`, `lipsync_create-timeline`¹, `generations_estimate-cost`, `generations_get`, `generations_list`, `generations_get-continuation`, `generations_get-costs`, `models_list` |
+| Translation and dubbing | `dubbing_create`, `dubbing_get-options`, `translation-previews_estimate`, `translation-previews_create`, `translation-previews_get` |
+| Speech and voices | `speech-previews_create`, `speech-previews_get-options`, `speech-previews_get`, `voices_list`, `voices_clone` |
+| Edit Dialogue | `dialogue_get-options`, `dialogue_upload-source`, `dialogue-transcriptions_create`, `dialogue-transcriptions_get`, `dialogue-previews_create`, `dialogue-previews_get`, `dialogue-videos_estimate`, `dialogue-videos_create` |
+| Assets | `assets_create`, `assets_create-upload-url`, `assets_get`, `assets_list`, `assets_count`, `assets_get-download-url`, `assets_update`, `assets_delete`, `assets_get-playback-metadata`, `audio-trims_get`, `audio-trims_create` |
+| Projects | `projects_create`, `projects_get`, `projects_list`, `projects_list-generations`, `projects_rename` |
 | Batches | `batches_create`², `batches_get`², `batches_list`² |
-| Account | `get-account-context`, `get-account-usage`, `organizations_list`, `organizations_select` |
+| Account | `account_get-context`, `account_get-usage`, `organizations_list`, `organizations_select` |
 
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
@@ -179,9 +179,9 @@ tools, and their calls to them are refused.
 
 The local stdio server can also offer a tool for every other public API operation in
 the [OpenAPI spec](https://api.sync.so/api-json), 65+ in all. By default it lists the
-hosted set above, without its admin tools (`assets_delete` and `voices_clone-voice`),
+hosted set above, without its admin tools (`assets_delete` and `voices_clone`),
 plus `jobs_get` and `jobs_wait` and the `transcriptions_*` tools, whose speaker face
-tracks feed `create-timeline-lipsync` clips.
+tracks feed `lipsync_create-timeline` clips.
 
 To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separated list:
 
@@ -191,14 +191,14 @@ To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separate
 | `lipsync` | Lip sync, timeline, Edit Dialogue, audio trim and batch tools, plus raw `generate_*`, `generations_*` and `dialogue-edits_*` |
 | `dubbing` | Translation and dubbing tools, and the batch tools |
 | `assets` | `assets_*` (except deletes) and the upload tools |
-| `projects` | `projects_*` (except deletes) and `rename-project` |
+| `projects` | `projects_*` (except deletes) and `projects_rename` |
 | `transcription` | `transcriptions_*` |
 | `voices` | `voices_*` (except cloning and deletes), speech previews and `tts_*` |
-| `admin` | Every delete (`assets_delete`, `projects_delete`, `generations_delete`, `voices_delete-voice`) and `voices_clone-voice` |
+| `admin` | Every delete (`assets_delete`, `projects_delete`, `generations_delete`, `voices_delete`) and `voices_clone` |
 | `all` | Every tool, as before this option existed |
 
-Job, account and generation reads (`jobs_get`, `jobs_wait`, `generate_get-generation`,
-`get-account-context`, `organizations_list`, `organizations_select` and similar) come with
+Job, account and generation reads (`jobs_get`, `jobs_wait`, `generations_get`,
+`account_get-context`, `organizations_list`, `organizations_select` and similar) come with
 every selection. Naming toolsets replaces
 the default rather than adding to it. To get every tool back:
 
@@ -212,6 +212,11 @@ set. The hosted server ignores this setting.
 
 [Tool workflows](docs/tool-workflows.md) describes how the multi-step and paid
 tools behave.
+
+Tool names follow one `<noun>_<verb>` scheme (`lipsync_create`, `generations_get`).
+The names used before it (`create-lipsync`, `generate_get-generation`) still work for a
+deprecation period: calls through them run the same tool and add a one-line notice
+naming the new one. [Tool names](docs/tool-names.md) has the full old → new table.
 
 ## CLI Options
 
@@ -243,14 +248,14 @@ approved spending, start it with `--no-spend-confirmation` (or
 and estimate tools stay available. Agents cannot change this setting.
 
 Job tools take `wait: true` to wait on the server (up to about 50 seconds per call, with
-progress notifications when the client sends a `progressToken`): `generate_get-generation`,
-`get-translation-preview`, `transcriptions_get-transcription-job` and social imports
+progress notifications when the client sends a `progressToken`): `generations_get`,
+`translation-previews_get`, `transcriptions_get` and social imports
 through `assets_create`. On the local server, `jobs_wait` and `jobs_get` do the same for
 every kind of job (generation, transcription, speaker analysis, translation preview,
 import) with one input, `{kind, id, projectId?}`, and one result shape and status set;
 see [Jobs](docs/jobs.md).
 
-When the API offers it, `send-feedback` lets agents report confusing errors, wrong results
+When the API offers it, `feedback_send` lets agents report confusing errors, wrong results
 and missing capabilities to the Sync team.
 
 Environment variables and the HTTP server's session, memory, upload and

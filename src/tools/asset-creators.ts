@@ -16,7 +16,7 @@ const member = z.object({
 
 export function createAssetCreatorsTool(http: HttpClient): McpToolDefinition {
   return {
-    name: 'get-asset-creators',
+    name: 'assets_list-creators',
     title: 'Read Sync asset creators',
     description:
       "Read the connected organization's members (display name, email and avatar) for the Sync interface's asset creator filter. Organization scope is resolved from the authenticated connection.",

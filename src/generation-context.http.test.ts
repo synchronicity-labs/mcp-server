@@ -87,7 +87,7 @@ it.each([
     await once(upstream, 'listening');
     try {
       const http = createHttpClient(`http://127.0.0.1:${(upstream.address() as AddressInfo).port}`);
-      const tool = createAppTools(http).find((item) => item.name === 'create-lipsync-from-assets')!;
+      const tool = createAppTools(http).find((item) => item.name === 'lipsync_create-from-assets')!;
       const args = {
         projectId,
         videoAssetId: 'saved-video',

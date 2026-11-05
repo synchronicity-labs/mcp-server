@@ -98,13 +98,12 @@ it.each(['complete', 'complete-with-analytics', 'missing-create', 'missing-get',
     await server.connect(st);
     await client.connect(ct);
     try {
-      const names = (await client.listTools()).tools.map((tool) => tool.name);
+      const names = new Set((await client.listTools()).tools.map((tool) => tool.name));
       const enabled = scenario.startsWith('complete');
-      expect(names.includes('trim-audio')).toBe(enabled);
-      expect(names.includes('get-audio-trim')).toBe(enabled);
-      expect(names).not.toContain('audio-trims_create');
+      expect(names.has('audio-trims_create')).toBe(enabled);
+      expect(names.has('audio-trims_get')).toBe(enabled);
       const account = await runWithAuth('trim-user', 'openai-mcp', () =>
-        client.callTool({ name: 'get-account-context', arguments: {} }),
+        client.callTool({ name: 'account_get-context', arguments: {} }),
       );
       if (scenario === 'complete-with-analytics')
         expect(account.structuredContent).toHaveProperty('capabilities.chatgptAnalytics', true);
@@ -113,7 +112,7 @@ it.each(['complete', 'complete-with-analytics', 'missing-create', 'missing-get',
         expect(account.structuredContent).toMatchObject({ capabilities: { audioTrimming: true } });
         const trim = await runWithAuth('trim-user', 'openai-mcp', () =>
           client.callTool({
-            name: 'trim-audio',
+            name: 'audio-trims_create',
             arguments: { audioAssetId: id, durationSeconds: 15, idempotencyKey: id },
           }),
         );
@@ -123,7 +122,7 @@ it.each(['complete', 'complete-with-analytics', 'missing-create', 'missing-get',
         ]);
         const scoped = { audioAssetId: id, projectId: id, durationSeconds: 15, idempotencyKey: id };
         const refused = await runWithAuth('trim-user', 'openai-mcp', () =>
-          client.callTool({ name: 'trim-audio', arguments: scoped }),
+          client.callTool({ name: 'audio-trims_create', arguments: scoped }),
         );
         expect(refused.structuredContent).toMatchObject({
           error: { code: 'PROJECT_INTENT_REQUIRED' },
@@ -131,7 +130,7 @@ it.each(['complete', 'complete-with-analytics', 'missing-create', 'missing-get',
         expect(writes).toHaveLength(1);
         const selected = await runWithAuth('trim-user', 'openai-mcp', () =>
           client.callTool({
-            name: 'trim-audio',
+            name: 'audio-trims_create',
             arguments: { ...scoped, projectIntent: 'explicit' },
           }),
         );

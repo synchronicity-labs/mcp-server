@@ -45,7 +45,7 @@ describe('explicit MCP cancellation', () => {
     });
     const server = new McpServer({ name: 'cancellation-test', version: '1' });
     const tools = createAppTools({ request }).map((tool) => {
-      if (tool.name !== 'create-lipsync' || tool.resultFormat === 'mcp') return tool;
+      if (tool.name !== 'lipsync_create' || tool.resultFormat === 'mcp') return tool;
       return {
         ...tool,
         handler: async (args: Record<string, unknown>, context?: ToolRequestContext) => {
@@ -66,7 +66,7 @@ describe('explicit MCP cancellation', () => {
     try {
       const call = client.callTool(
         {
-          name: 'create-lipsync',
+          name: 'lipsync_create',
           arguments: { videoAssetId: 'owned-video', audioAssetId: 'owned-audio' },
         },
         { signal: cancel.signal },

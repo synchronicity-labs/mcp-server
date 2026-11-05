@@ -146,11 +146,11 @@ async function fixture({ denied = false, rejected = false, available = true } = 
 it('admits a durable speech preview with caller identity, then polls that job without another synthesis', async () => {
   const { client, call, writes, paths } = await fixture();
   const descriptor = (await client.listTools()).tools.find(
-    (t) => t.name === 'create-speech-preview',
+    (t) => t.name === 'speech-previews_create',
   );
   expect(descriptor?._meta?.['openai/widgetAccessible']).toBe(true);
   expect(descriptor?.annotations?.idempotentHint).toBe(false);
-  const options = await call('get-speech-options', { projectId });
+  const options = await call('speech-previews_get-options', { projectId });
   expect(options.structuredContent).toMatchObject({
     available: true,
     billingVersion: 'v3',
@@ -159,15 +159,15 @@ it('admits a durable speech preview with caller identity, then polls that job wi
     freeMonthlyLimits: { generations: { used: 2, max: 3 }, sync3: { used: 1, max: 1 } },
   });
   expect(JSON.stringify(options)).not.toContain('private-billing-field');
-  expect((await call('create-speech-preview', input)).structuredContent).toMatchObject({
+  expect((await call('speech-previews_create', input)).structuredContent).toMatchObject({
     id: jobId,
     status: 'PENDING',
   });
   expect(
-    (await call('get-speech-preview', { projectId, id: jobId })).structuredContent,
+    (await call('speech-previews_get', { projectId, id: jobId })).structuredContent,
   ).toMatchObject({ status: 'PROCESSING' });
   expect(
-    (await call('get-speech-preview', { projectId, id: jobId })).structuredContent,
+    (await call('speech-previews_get', { projectId, id: jobId })).structuredContent,
   ).toMatchObject({ status: 'SUCCESS', duration: 2.5 });
   expect(writes).toEqual([
     {
@@ -186,15 +186,15 @@ it('admits a durable speech preview with caller identity, then polls that job wi
 });
 it('does not retry failed admission and forwards the same identity on explicit reconciliation', async () => {
   const { call, writes } = await fixture({ rejected: true });
-  expect((await call('create-speech-preview', input)).isError).toBe(true);
+  expect((await call('speech-previews_create', input)).isError).toBe(true);
   expect(writes).toHaveLength(1);
-  expect((await call('create-speech-preview', input)).isError).toBe(true);
+  expect((await call('speech-previews_create', input)).isError).toBe(true);
   expect(writes.map((write) => write.key)).toEqual([idempotencyKey, idempotencyKey]);
 });
 it('blocks speech writes and billing reads when project access is denied', async () => {
   const { call, writes, paths } = await fixture({ denied: true });
-  expect((await call('get-speech-options', { projectId })).isError).toBe(true);
-  expect((await call('create-speech-preview', input)).isError).toBe(true);
+  expect((await call('speech-previews_get-options', { projectId })).isError).toBe(true);
+  expect((await call('speech-previews_create', input)).isError).toBe(true);
   expect(writes).toHaveLength(0);
   expect(paths).not.toContain('/v2/billing');
   expect(paths).toEqual([`/v2/projects/${projectId}`, `/v2/projects/${projectId}`]);
@@ -210,7 +210,7 @@ it.each([undefined, 'invalid-key'])(
   async (key) => {
     const { call, writes, paths } = await fixture();
     const { idempotencyKey: _key, ...withoutKey } = input;
-    const response = await call('create-speech-preview', {
+    const response = await call('speech-previews_create', {
       ...withoutKey,
       ...(key === undefined ? {} : { idempotencyKey: key }),
     });

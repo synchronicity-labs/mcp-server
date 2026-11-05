@@ -21,7 +21,7 @@ const playbackMetadata = z.object({
 export function createPlaybackMetadataTool(http: HttpClient): McpToolDefinition {
   const input = z.object({ assetId: z.uuid() }).strict();
   return {
-    name: 'get-playback-metadata',
+    name: 'assets_get-playback-metadata',
     title: 'Read video playback metadata',
     description:
       'Read timing, frame rate, dimensions and playback proxy metadata for an accessible Sync asset. Requires a connected user; API keys return unsupported. Missing metadata stays unknown. Does not analyze media, read transcripts, or modify assets.',
