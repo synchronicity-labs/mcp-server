@@ -14,18 +14,35 @@ name: Publish to npm
     branches: [main]
   workflow_dispatch:
 
-# One publish at a time; a queued run still publishes its own version.
-concurrency:
-  group: publish-npm
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
 jobs:
+  # Reads the version first so the publish job can lock on it. A workflow-wide
+  # concurrency group would keep only one pending run, and a later merge would
+  # cancel a queued run for an earlier version that was never published.
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - id: read
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
   publish:
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Runs for different versions never wait on or cancel each other. Runs for
+    # the same version take turns, and the registry check below makes every
+    # run after the one that published a no-op.
+    concurrency:
+      group: publish-npm-${{ needs.version.outputs.version }}
+      cancel-in-progress: false
     permissions:
       # write: create the release tag. id-token: npm Trusted Publishing.
       contents: write
