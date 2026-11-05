@@ -2,14 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
+import { BATCH_DONE, resultRow, withResults } from './batch-results.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
-import { boundedBy, pollUntil, TIMED_OUT, waitInput } from './job-wait.js';
+import { pollUntil, waitInput } from './job-wait.js';
+import { projectIntentError, projectUseAllowed } from './project-intent.js';
 
 /**
  * batches_create, batches_get and batches_list: many independent /v2/generate generations
  * as one Sync batch. batches_create builds the API's JSON `rows` form and checks locally
- * what the API would refuse anyway, naming the item. batches_get reads the batch's JSONL
- * output file once it finishes, so the agent gets each row's generation without a download.
+ * what the API would refuse anyway, naming the item. batches_get adds each row's result
+ * from batch-results.ts once the batch finishes.
  */
 
 export const BATCH_TOOLS = ['batches_create', 'batches_get', 'batches_list'] as const;
@@ -18,9 +20,6 @@ const MIN_ITEMS = 20;
 // The API measures the rows as JSONL, one compact JSON object per line.
 const MAX_JSONL_BYTES = 5 * 1024 * 1024;
 const LIST_STATUSES = ['PENDING', 'JOBS_CREATED', 'PROCESSING', 'COMPLETED', 'FAILED'] as const;
-const DONE = new Set(['COMPLETED', 'FAILED']);
-const RESULTS_TIMEOUT_MS = 30_000;
-const MAX_RESULTS_BYTES = 20 * 1024 * 1024;
 const MAX_REPORTED_PROBLEMS = 10;
 
 const BATCH_ROUTES = ['post /v2/batch', 'get /v2/batch', 'get /v2/batch/{id}'];
@@ -80,8 +79,33 @@ const createInput = z
       .describe(
         'URL Sync POSTs the batch to when it finishes, signed with the organization webhook secret.',
       ),
+    projectIntent: z
+      .literal('explicit')
+      .optional()
+      .describe(
+        'Required when any payload sets projectId. Set only when the user explicitly chose that project, or it is the project just created for this request; never infer it from a matching name or an open editor.',
+      ),
   })
   .strict();
+
+/** Items writing into an existing project need the same explicit intent as every write tool. */
+function assertProjectIntent(
+  items: z.infer<typeof item>[],
+  projectIntent: 'explicit' | undefined,
+): void {
+  const refused = items.flatMap(({ payload }, index) =>
+    projectUseAllowed(payload.projectId, projectIntent) ? [] : [`items[${index}]`],
+  );
+  if (refused.length === 0) return;
+  const named = refused.slice(0, MAX_REPORTED_PROBLEMS).join(', ');
+  const more =
+    refused.length > MAX_REPORTED_PROBLEMS
+      ? ` and ${refused.length - MAX_REPORTED_PROBLEMS} more`
+      : '';
+  throw projectIntentError(
+    `The batch was not sent: ${named}${more} set payload.projectId without projectIntent=explicit. `,
+  );
+}
 
 const metrics = z
   .looseObject({
@@ -108,15 +132,6 @@ const batchFields = {
     .optional()
     .describe('The JSONL result file once the batch finishes; empty while it runs.'),
 };
-
-const resultRow = z.object({
-  requestId: z.string(),
-  status: z.string().describe('The generation status: COMPLETED, FAILED or REJECTED.'),
-  generationId: z.string().optional().describe('Read it with generate_get-generation.'),
-  outputMediaUrl: z.string().optional().describe('The finished video; return it verbatim.'),
-  error: z.unknown().optional(),
-});
-type ResultRow = z.infer<typeof resultRow>;
 
 const createOutput = {
   ...batchFields,
@@ -234,75 +249,6 @@ function explainCreateError(error: unknown): never {
   throw error;
 }
 
-function rowOf(line: unknown): ResultRow | undefined {
-  if (!isRecord(line) || typeof line.request_id !== 'string') return undefined;
-  const response = isRecord(line.response) ? line.response : {};
-  const output = response.outputMediaUrl ?? response.outputUrl;
-  return {
-    requestId: line.request_id,
-    status: typeof line.status === 'string' ? line.status : 'UNKNOWN',
-    ...(typeof response.id === 'string' ? { generationId: response.id } : {}),
-    ...(typeof output === 'string' && output ? { outputMediaUrl: output } : {}),
-    ...(line.error === null || line.error === undefined ? {} : { error: line.error }),
-  };
-}
-
-/**
- * The result file is public behind the API origin, which redirects to a signed copy; it
- * is fetched without credentials, and only from the API origin.
- */
-async function readResults(
-  outputUrl: string,
-  apiBaseUrl: string,
-  signal: AbortSignal | undefined,
-): Promise<ResultRow[]> {
-  const url = new URL(outputUrl);
-  if (url.origin !== new URL(apiBaseUrl).origin)
-    throw new Error(`the result file is not on the Sync API (${url.origin})`);
-  const response = await boundedBy(RESULTS_TIMEOUT_MS, signal, (bounded) =>
-    fetch(url, { signal: bounded, redirect: 'follow' }).then(async (res) => {
-      if (!res.ok) throw new Error(`the result file answered ${res.status}`);
-      if (Number(res.headers.get('content-length') ?? 0) > MAX_RESULTS_BYTES)
-        throw new Error('the result file is too large to read here');
-      return res.text();
-    }),
-  );
-  if (response === TIMED_OUT) throw new Error('reading the result file timed out');
-  if (response.length > MAX_RESULTS_BYTES)
-    throw new Error('the result file is too large to read here');
-  return response
-    .split('\n')
-    .filter((line) => line.trim() !== '')
-    .map((line) => rowOf(JSON.parse(line)))
-    .filter((row): row is ResultRow => row !== undefined);
-}
-
-const FAILED_ROW = new Set(['FAILED', 'REJECTED']);
-
-async function withResults(
-  batch: Record<string, unknown>,
-  which: 'all' | 'failed' | 'none',
-  apiBaseUrl: string,
-  signal: AbortSignal | undefined,
-): Promise<Record<string, unknown>> {
-  if (which === 'none' || !DONE.has(String(batch.status))) return batch;
-  if (typeof batch.outputUrl !== 'string' || batch.outputUrl === '') return batch;
-  try {
-    const rows = await readResults(batch.outputUrl, apiBaseUrl, signal);
-    return {
-      ...batch,
-      results: which === 'failed' ? rows.filter((row) => FAILED_ROW.has(row.status)) : rows,
-    };
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    const reason = error instanceof Error ? error.message : String(error);
-    return {
-      ...batch,
-      resultsError: `${reason}. Download outputUrl (JSONL, one line per item with request_id, status, error and response) or find the generations with generate_get-generations.`,
-    };
-  }
-}
-
 /** Running share of the batch, for progress notifications. */
 export function batchProgress(batch: Record<string, unknown>): number | undefined {
   const counts = isRecord(batch.metrics) ? batch.metrics : {};
@@ -326,7 +272,7 @@ export function createBatchTools(
     const batch = input.wait
       ? await pollUntil(
           (signal) => readBatch(input.id, signal),
-          (b) => DONE.has(String(b.status)),
+          (b) => BATCH_DONE.has(String(b.status)),
           context,
           {
             describe: (b) => {
@@ -342,7 +288,7 @@ export function createBatchTools(
     {
       name: 'batches_create',
       title: 'Create a batch of generations',
-      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Use it for ${MIN_ITEMS} or more generations that do not depend on each other; for fewer, or when one result feeds the next, use create-lipsync or create-translate-and-dub per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generate_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
+      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Use it for ${MIN_ITEMS} or more generations that do not depend on each other; for fewer, or when one result feeds the next, use create-lipsync or create-translate-and-dub per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generate_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Leave payload.projectId out for new work; a payload with projectId needs projectIntent=explicit, which only an explicit user selection or a project just created for this request allows. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
       inputSchema: createInput.shape,
       outputSchema: createOutput,
       annotations: {
@@ -352,7 +298,8 @@ export function createBatchTools(
         openWorldHint: true,
       },
       handler: async (args, context) => {
-        const { items, dryRun, webhookUrl } = createInput.parse(args);
+        const { items, dryRun, webhookUrl, projectIntent } = createInput.parse(args);
+        assertProjectIntent(items, projectIntent);
         const rows = buildBatchRows(items);
         const response = await http
           .request('post', '/v2/batch', {

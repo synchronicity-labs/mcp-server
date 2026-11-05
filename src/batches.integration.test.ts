@@ -1,143 +1,27 @@
-import { once } from 'node:events';
-import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SyncMcpConfig } from './config.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
-import { asyncRequestListener } from './test-fixtures/request-listener.js';
-import { translationSpec } from './test-fixtures/translation.js';
+import {
+  type BatchApiCall as Call,
+  type BatchApiReply as Reply,
+  batchItems as items,
+  batchPayload as payload,
+  startBatchApi,
+} from './test-fixtures/batch-api.js';
 import type { Toolset } from './toolsets.js';
 
 // batches_create, batches_get, batches_list and jobs kind batch, on a stub API.
-const op = (operationId: string, extra: Record<string, unknown> = {}) => ({
-  operationId,
-  tags: [operationId.replace(/Controller_.*/, '')],
-  summary: operationId,
-  ...extra,
-});
-const spec = {
-  openapi: '3.0.0',
-  components: translationSpec.components,
-  paths: {
-    ...translationSpec.paths,
-    '/v2/batch': {
-      post: op('BatchController_createBatch', {
-        requestBody: {
-          content: { 'application/json': { schema: { type: 'object', properties: {} } } },
-        },
-      }),
-      get: op('BatchController_listBatches'),
-    },
-    '/v2/batch/{id}': {
-      get: op('BatchController_getBatch', {
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      }),
-    },
-  },
-};
-
-const payload = (n: number) => ({
-  model: 'sync-3',
-  input: [
-    { type: 'video', url: `https://cdn.test/v${n}.mp4` },
-    { type: 'audio', url: `https://cdn.test/a${n}.wav` },
-  ],
-});
-const items = (count: number) => Array.from({ length: count }, (_, n) => ({ payload: payload(n) }));
-
-type Call = { method: string; url: string; body?: unknown };
-type Reply = { status?: number; body: unknown };
-
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
   const pending = cleanups.splice(0);
   while (pending.length > 0) await pending.pop()!();
 });
 
-async function api(createReply: Reply = { status: 201, body: { id: 'b-1', status: 'PENDING' } }) {
-  const calls: Call[] = [];
-  let reads = 0;
-  let baseUrl = '';
-  const upstream: Server = createServer(
-    asyncRequestListener(async (req, res) => {
-      res.setHeader('Content-Type', 'application/json');
-      if (req.url === '/api-json') return void res.end(JSON.stringify(spec));
-      let text = '';
-      for await (const chunk of req) text += chunk;
-      calls.push({
-        method: req.method!,
-        url: req.url!,
-        ...(text ? { body: JSON.parse(text) } : {}),
-      });
-      if (req.url === '/v2/batch' && req.method === 'POST') {
-        res.statusCode = createReply.status ?? 201;
-        return void res.end(JSON.stringify(createReply.body));
-      }
-      if (req.url?.startsWith('/v2/batch?') || req.url === '/v2/batch')
-        return void res.end(JSON.stringify([{ id: 'b-1', status: 'PROCESSING' }]));
-      if (req.url === '/v2/batch/b-1') {
-        reads += 1;
-        const metrics = { total_generations: 20, success_count: reads === 1 ? 5 : 19 };
-        return void res.end(
-          JSON.stringify(
-            reads === 1
-              ? { id: 'b-1', status: 'JOBS_CREATED', metrics, outputUrl: '' }
-              : {
-                  id: 'b-1',
-                  status: 'COMPLETED',
-                  metrics: { ...metrics, failed_count: 1 },
-                  outputUrl: `${baseUrl}/v2/batches/b-1/result`,
-                },
-          ),
-        );
-      }
-      if (req.url === '/v2/batch/b-2')
-        return void res.end(
-          JSON.stringify({ id: 'b-2', status: 'FAILED', outputUrl: 'https://elsewhere.test/o' }),
-        );
-      // The public result route redirects to a signed copy of the JSONL file.
-      if (req.url === '/v2/batches/b-1/result') {
-        expect(req.headers.authorization).toBeUndefined();
-        res.statusCode = 302;
-        res.setHeader('Location', '/signed/out.jsonl');
-        return void res.end();
-      }
-      if (req.url === '/signed/out.jsonl') {
-        res.setHeader('Content-Type', 'application/jsonl');
-        return void res.end(
-          [
-            {
-              request_id: 'item-1',
-              endpoint: '/v2/generate',
-              status: 'COMPLETED',
-              error: null,
-              response: { id: 'g-1', status: 'COMPLETED', outputUrl: 'https://cdn.test/out1.mp4' },
-            },
-            {
-              request_id: 'item-2',
-              endpoint: '/v2/generate',
-              status: 'FAILED',
-              error: { code: 'INVALID_INPUT', message: 'no face' },
-              response: null,
-            },
-          ]
-            .map((line) => JSON.stringify(line))
-            .join('\n'),
-        );
-      }
-      res.statusCode = 404;
-      res.end(JSON.stringify({ message: 'not found' }));
-    }),
-  );
-  upstream.listen(0, '127.0.0.1');
-  await once(upstream, 'listening');
-  cleanups.push(async () => {
-    upstream.closeAllConnections();
-    await new Promise<void>((resolve) => upstream.close(() => resolve()));
-  });
-  baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+async function api(createReply?: Reply) {
+  const { calls, baseUrl, close } = await startBatchApi(createReply);
+  cleanups.push(close);
   return { calls, baseUrl };
 }
 
@@ -228,6 +112,33 @@ describe('batches_create', () => {
     expect(text).toContain('items[12]: payload.input[0] needs a type');
     expect(text).toContain('items[15]: payload.input must list the inputs');
     expect(batchCalls(calls)).toEqual([]);
+  });
+
+  it('requires projectIntent=explicit before any item writes into an existing project', async () => {
+    const { client, calls } = await stdio();
+    const list = items(20).map((entry, index) =>
+      index === 2 || index === 5
+        ? { payload: { ...entry.payload, projectId: 'existing-project' } }
+        : entry,
+    );
+    const refused = await client.callTool({ name: 'batches_create', arguments: { items: list } });
+    expect(refused.isError).toBe(true);
+    const { error } = refused.structuredContent as { error: Record<string, unknown> };
+    expect(error).toMatchObject({ status: 400, code: 'PROJECT_INTENT_REQUIRED' });
+    expect(error.message).toContain('items[2], items[5] set payload.projectId');
+    expect(batchCalls(calls)).toEqual([]);
+
+    const allowed = await client.callTool({
+      name: 'batches_create',
+      arguments: { items: list, projectIntent: 'explicit' },
+    });
+    expect(allowed.isError).not.toBe(true);
+    const [create] = batchCalls(calls);
+    // projectIntent is this server's guard, not an API field.
+    expect(create!.body).not.toHaveProperty('projectIntent');
+    expect((create!.body as { rows: { payload: unknown }[] }).rows[2]!.payload).toMatchObject({
+      projectId: 'existing-project',
+    });
   });
 
   it('refuses fewer than 20 items and batches over 5 MB before calling the API', async () => {
@@ -356,6 +267,12 @@ describe('batches_get and jobs_wait', () => {
       '/v2/batches/b-1/result',
       '/signed/out.jsonl',
     ]);
+    // The result file is public; it is fetched without the account's credentials.
+    expect(
+      calls
+        .filter((call) => ['/v2/batches/b-1/result', '/signed/out.jsonl'].includes(call.url))
+        .map((call) => call.authorized),
+    ).toEqual([false, false]);
   });
 
   it('returns only failed rows, or none, when asked', async () => {
@@ -385,6 +302,17 @@ describe('batches_get and jobs_wait', () => {
     expect(resultsError).toContain('not on the Sync API');
     expect(resultsError).toContain('generate_get-generations');
     expect(apiUrls(calls)).toEqual(['/v2/batch/b-2']);
+  });
+
+  it('stops reading a result file past the size cap, even without Content-Length', async () => {
+    const { client } = await stdio();
+    const result = await client.callTool({ name: 'batches_get', arguments: { id: 'b-3' } });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ id: 'b-3', status: 'COMPLETED' });
+    expect(result.structuredContent).not.toHaveProperty('results');
+    expect((result.structuredContent as { resultsError: string }).resultsError).toContain(
+      'too large to read here',
+    );
   });
 
   it('waits on a batch through jobs_wait kind batch', async () => {

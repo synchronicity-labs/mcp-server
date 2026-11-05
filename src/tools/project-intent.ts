@@ -31,6 +31,23 @@ function createdHere(projectId: string): boolean {
   return (createdProjects.get(createdProjectKey(projectId)) ?? 0) > Date.now();
 }
 
+const PROJECT_INTENT_MESSAGE =
+  'Existing project use requires an explicit user selection. Create a new project for a new workflow request; do not reuse a matching name or the active editor.';
+
+/** Whether writing into projectId is allowed: explicit intent, or a project created here. */
+export function projectUseAllowed(projectId: unknown, projectIntent: unknown): boolean {
+  return (
+    projectId === undefined ||
+    projectIntent === 'explicit' ||
+    (typeof projectId === 'string' && createdHere(projectId))
+  );
+}
+
+/** The refusal every write tool gives for an existing project without explicit intent. */
+export function projectIntentError(prefix = ''): ApiRequestError {
+  return new ApiRequestError(`${prefix}${PROJECT_INTENT_MESSAGE}`, 400, 'PROJECT_INTENT_REQUIRED');
+}
+
 export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
   if (tool.name === 'projects_create' && tool.resultFormat !== 'mcp')
     return {
@@ -66,16 +83,7 @@ export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
   };
   const input = (args: Record<string, unknown>) => {
     const { projectIntent, ...fields } = args;
-    if (
-      fields.projectId !== undefined &&
-      projectIntent !== 'explicit' &&
-      !(typeof fields.projectId === 'string' && createdHere(fields.projectId))
-    )
-      throw new ApiRequestError(
-        'Existing project use requires an explicit user selection. Create a new project for a new workflow request; do not reuse a matching name or the active editor.',
-        400,
-        'PROJECT_INTENT_REQUIRED',
-      );
+    if (!projectUseAllowed(fields.projectId, projectIntent)) throw projectIntentError();
     return fields;
   };
   return tool.resultFormat === 'mcp'
