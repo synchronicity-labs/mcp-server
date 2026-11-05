@@ -67,25 +67,26 @@ type Route = (req: IncomingMessage, res: ServerResponse) => Promise<boolean> | b
 /** b-1 runs then completes; b-2 points off the API origin; b-3's result file is oversized. */
 function batchReads(baseUrl: () => string): Route {
   let reads = 0;
-  // A switch over known ids, so a request path never selects what gets called.
+  // A switch over known ids with literal bodies: the request path never selects what gets
+  // called, and nothing from it is echoed back.
   const read = (id: string): unknown => {
     switch (id) {
       case 'b-1': {
         reads += 1;
         const metrics = { total_generations: 20, success_count: reads === 1 ? 5 : 19 };
         return reads === 1
-          ? { id, status: 'JOBS_CREATED', metrics, outputUrl: '' }
+          ? { id: 'b-1', status: 'JOBS_CREATED', metrics, outputUrl: '' }
           : {
-              id,
+              id: 'b-1',
               status: 'COMPLETED',
               metrics: { ...metrics, failed_count: 1 },
               outputUrl: `${baseUrl()}/v2/batches/b-1/result`,
             };
       }
       case 'b-2':
-        return { id, status: 'FAILED', outputUrl: 'https://elsewhere.test/o' };
+        return { id: 'b-2', status: 'FAILED', outputUrl: 'https://elsewhere.test/o' };
       case 'b-3':
-        return { id, status: 'COMPLETED', outputUrl: `${baseUrl()}/v2/batches/b-3/result` };
+        return { id: 'b-3', status: 'COMPLETED', outputUrl: `${baseUrl()}/v2/batches/b-3/result` };
       default:
         return undefined;
     }
