@@ -57,7 +57,7 @@ export function createTranslationTools(
         ),
       targetLang: z.enum(target.data).describe('Target language from the API-supported list.'),
       sourceLang: z.enum(source.data).default('auto'),
-      model: z.string().trim().min(1).describe('Video lip-sync model returned by models_get.'),
+      model: z.string().trim().min(1).describe('Video lip-sync model returned by models_list.'),
       options: modelOptionsSchema.optional(),
       idempotencyKey: z
         .string()
@@ -70,12 +70,12 @@ export function createTranslationTools(
 
   return [
     {
-      name: 'create-translate-and-dub',
+      name: 'dubbing_create',
       title: 'Translate and dub a video',
       description:
         'Use this when the user wants to translate and dub a video into another language with matching lip movements. Not for subtitles only or translating a text document. Requires a saved video asset, model, and persistent idempotency key. By default creates a NEW project using a fresh projectCreationKey, even when projectName matches existing work. Preserve that UUID and key on retries. Supply projectId only for an explicit selection or the project just created for this request; never infer it from a workflow name or open editor. For social video URLs, import through assets_create and wait for the saved asset before estimating or calling this tool. ' +
-        'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generate_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. ' +
-        'The API manages dubbing and final rendering under the returned generation id. Poll generate_get-generation for that same id until COMPLETED; do not create another job to finish or recover it.',
+        'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generations_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. ' +
+        'The API manages dubbing and final rendering under the returned generation id. Poll generations_get for that same id until COMPLETED; do not create another job to finish or recover it.',
       inputSchema: schema.shape,
       outputSchema: generationOutputSchema,
       annotations: {
@@ -141,7 +141,7 @@ export function createTranslationTools(
       },
     },
     {
-      name: 'get-translation-options',
+      name: 'dubbing_get-options',
       title: 'Translation options',
       description:
         'Read the source and target languages supported by the current translation API. Does not create a generation or estimate pricing.',

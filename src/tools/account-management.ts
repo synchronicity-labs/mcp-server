@@ -50,7 +50,7 @@ const project = z.object({ id: z.uuid(), name: z.string() });
 export function createAccountManagementTools(http: HttpClient): McpToolDefinition[] {
   return [
     {
-      name: 'get-account-usage',
+      name: 'account_get-usage',
       title: 'Read Sync usage and balance',
       description:
         'Read the connected organization’s available credits, free allowance, or complete billed usage for the current period. Does not purchase credits, change plans, or start generation.',
@@ -103,7 +103,7 @@ export function createAccountManagementTools(http: HttpClient): McpToolDefinitio
       },
     },
     {
-      name: 'rename-project',
+      name: 'projects_rename',
       title: 'Rename a Sync project',
       description:
         'Change only the name of an accessible Sync project in the connected organization. Does not change visibility, ownership, media, or generations. Requires an explicit user request.',

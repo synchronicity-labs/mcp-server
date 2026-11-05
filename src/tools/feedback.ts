@@ -5,7 +5,7 @@ import type { McpToolDefinition } from './generator.js';
 
 /**
  * Agents hit friction no one sees: an error that does not say what to fix, a workflow
- * that needs a workaround, a missing tool. send-feedback lets them report it to the team
+ * that needs a workaround, a missing tool. feedback_send lets them report it to the team
  * as it happens, through the API's POST /v2/feedback (captured for daily triage). The tool
  * exists only when the connected API publishes that operation.
  */
@@ -63,7 +63,7 @@ export function createFeedbackTools(
   if (!operations.some(feedbackOperation)) return [];
   return [
     {
-      name: 'send-feedback',
+      name: 'feedback_send',
       title: 'Send feedback to Sync',
       description:
         'Tell the Sync team about friction with these tools: an error that did not say what to fix, a result that was wrong, a capability you needed, or extra steps you had to take. Send one report per problem, after you have dealt with it; the team reviews reports daily. Does not change, retry or cancel any job, and never needs the user’s approval.',
@@ -97,4 +97,4 @@ export function createFeedbackTools(
 }
 
 export const FEEDBACK_INSTRUCTIONS =
-  'When send-feedback is available and a Sync tool error does not say what to fix, a result is wrong, or you need a workaround or a missing capability, finish or stop the task as you normally would, then call send-feedback once for that problem with the tool, the exact error and what would have helped. ';
+  'When feedback_send is available and a Sync tool error does not say what to fix, a result is wrong, or you need a workaround or a missing capability, finish or stop the task as you normally would, then call feedback_send once for that problem with the tool, the exact error and what would have helped. ';

@@ -91,7 +91,7 @@ const generation = z.object({
 export function createGenerationContinuationTool(http: HttpClient): McpToolDefinition {
   const input = z.object({ projectId: z.uuid(), id: z.uuid() }).strict();
   return {
-    name: 'get-generation-continuation',
+    name: 'generations_get-continuation',
     title: 'Read generation continuation inputs',
     description:
       'Read one accessible generation and its original inputs through the same Studio API. Rechecks project and referenced asset access. Does not create a draft, asset, transcription, preview or generation. Use the shared Studio continuation policy to choose source versus completed output.',

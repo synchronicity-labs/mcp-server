@@ -51,7 +51,7 @@ export function createGenerationCostsTools(
   if (!operations.some(generationCostsOperation)) return [];
   return [
     {
-      name: 'get-generation-costs',
+      name: 'generations_get-costs',
       title: 'View actual generation costs',
       description:
         'Read recorded costs for a past Sync generation, with dubbing and lip sync listed separately. Use for what a generation actually cost, not a preflight estimate. Credit amounts express credit face value, not a card payment. Pending or unavailable components have no known total. Does not generate media or change billing.',

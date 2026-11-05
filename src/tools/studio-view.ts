@@ -29,34 +29,34 @@ export function createStudioViewTools(
   if (!supportsStudioViews(operations)) return [];
   const viewId = z.uuid();
   const instructions =
-    ' First get-studio-view for the exact published viewId, use its expectedRevision and a fresh UUID id; retry an uncertain handoff with the SAME id/body. Do not replace unresolved actions, guess a widget, or overwrite stale edits. On "Studio context is stale", get-studio-view again and retry once with its expectedRevision and a fresh id. On STUDIO_VIEW_NOT_OPEN, Studio is not open in this chat: tell the user to open Studio, then get-studio-view again; do not keep retrying. This never repeats backend creation or paid work. Check the action receipt through get-studio-view: only applied confirms UI display; pending/blocked/failed do not. Draft selection/settings edits use get-studio-draft and update-studio-draft.';
+    ' First studio-views_get for the exact published viewId, use its expectedRevision and a fresh UUID id; retry an uncertain handoff with the SAME id/body. Do not replace unresolved actions, guess a widget, or overwrite stale edits. On "Studio context is stale", studio-views_get again and retry once with its expectedRevision and a fresh id. On STUDIO_VIEW_NOT_OPEN, Studio is not open in this chat: tell the user to open Studio, then studio-views_get again; do not keep retrying. This never repeats backend creation or paid work. Check the action receipt through studio-views_get: only applied confirms UI display; pending/blocked/failed do not. Draft selection/settings edits use studio-drafts_get and studio-drafts_update.';
   const actions = {
     'open-project': {
-      name: 'open-studio-project',
+      name: 'studio-views_open-project',
       title: 'Open a project in Studio',
       description:
         'Open an existing project in the mounted Studio, optionally selecting its workflow. Can replace the active editor state, archiving the prior draft. Does not create a project or generate media.',
     },
     'refresh-project': {
-      name: 'refresh-studio-project',
+      name: 'studio-views_refresh-project',
       title: 'Refresh Studio project details',
       description:
         'Refresh an existing project in the mounted Studio after its backend details change, such as a rename. Does not rename or create the project.',
     },
     'refresh-assets': {
-      name: 'refresh-studio-assets',
+      name: 'studio-views_refresh-assets',
       title: 'Refresh Studio media',
       description:
         'Refresh an existing project’s media in the mounted Studio after an upload or asset registration succeeds. Does not upload, register, delete or select media.',
     },
     'open-generation': {
-      name: 'show-studio-generation',
+      name: 'studio-views_show-generation',
       title: 'Show an existing Studio generation',
       description:
         'Display an already accepted generation or its result in the mounted Studio, opening its project if needed. Replaces the active editor state and archives the prior draft. Does not submit or retry generation.',
     },
     'continue-generation': {
-      name: 'continue-studio-generation',
+      name: 'studio-views_continue-generation',
       title: 'Continue an existing Studio generation',
       description:
         'For an explicit user request, stage an existing generation’s source input or output as a new editable draft in the selected workflow. Replaces the active draft and archives its prior state; output continuation may register existing output as Sync media. Does not generate or synthesize media.',
@@ -83,7 +83,7 @@ export function createStudioViewTools(
   });
   const tools = [
     [
-      'get-studio-view',
+      'studio-views_get',
       'Read mounted Studio view',
       z.object({}),
       '',
@@ -92,7 +92,7 @@ export function createStudioViewTools(
       'Read the exact viewId published by the mounted Studio, including its current revision and last action receipt. No view list or inferred latest widget. pending means not displayed; blocked needs the UI action/recovery completed; failed was not confirmed; applied confirms that action was displayed. An unavailable view must be reopened.',
     ],
     [
-      'register-studio-view',
+      'studio-views_register',
       'Register mounted Studio view',
       RegisterStudioViewSchema,
       '',
@@ -101,7 +101,7 @@ export function createStudioViewTools(
       'Studio-only view ownership/context registration. No provider work.',
     ],
     [
-      'ack-studio-view',
+      'studio-views_ack',
       'Acknowledge displayed Studio action',
       AcknowledgeStudioViewSchema,
       '/acknowledgement',

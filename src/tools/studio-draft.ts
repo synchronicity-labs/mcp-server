@@ -110,7 +110,7 @@ export function createStudioDraftTools(
   const appOnly = { ui: { visibility: ['app'] } };
   return [
     {
-      name: 'get-studio-draft',
+      name: 'studio-drafts_get',
       title: 'Read current Studio draft',
       description:
         'Read the draftId/projectId published by the open Studio. Use its current revision before changing selections or settings. appliedRevision equal to revision means Studio acknowledged the change; otherwise it is saved but awaiting Studio. Never infer a displayed selection from chat prose.',
@@ -125,10 +125,10 @@ export function createStudioDraftTools(
       handler: (args, context) => read(z.object(identity).parse(args), context?.signal),
     },
     {
-      name: 'update-studio-draft',
+      name: 'studio-drafts_update',
       title: 'Change Studio selections and settings',
       description:
-        'Update only the open editable Studio draft, using its published draftId/projectId and the expectedRevision returned by get-studio-draft. Replaces the specified media selections, workflow, model options, language or unsent speech settings; changing the visual can clear audio derived from the previous visual. Only make changes requested by the user. This does not generate, translate, clone, upload, or spend credits. On a conflict, read the draft and reconcile; never automatically overwrite newer edits. A successful save is awaiting Studio until appliedRevision equals revision; only then claim the UI applied it.',
+        'Update only the open editable Studio draft, using its published draftId/projectId and the expectedRevision returned by studio-drafts_get. Replaces the specified media selections, workflow, model options, language or unsent speech settings; changing the visual can clear audio derived from the previous visual. Only make changes requested by the user. This does not generate, translate, clone, upload, or spend credits. On a conflict, read the draft and reconcile; never automatically overwrite newer edits. A successful save is awaiting Studio until appliedRevision equals revision; only then claim the UI applied it.',
       inputSchema: edit.shape,
       outputSchema: draft.shape,
       annotations: writeAnnotations,
@@ -179,7 +179,7 @@ export function createStudioDraftTools(
       },
     },
     {
-      name: 'save-studio-draft',
+      name: 'studio-drafts_save',
       title: 'Save Studio draft',
       description:
         'Studio-only save of its own editable snapshot and recovery lock. Compare-and-set against the revision Studio last read, so it never replaces newer edits from chat or another Studio. No provider work is performed.',
@@ -205,7 +205,7 @@ export function createStudioDraftTools(
       },
     },
     {
-      name: 'ack-studio-draft',
+      name: 'studio-drafts_ack',
       title: 'Acknowledge applied Studio draft',
       description:
         'Studio-only acknowledgement after validating, applying and persisting the exact revision. Does not edit settings or start jobs.',

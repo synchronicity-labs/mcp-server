@@ -226,10 +226,10 @@ it.each(['http', 'stdio'] as const)(
     const { client, call, calls, setReadStatus } = await fixture({ transport });
     const catalog = (await client.listTools()).tools;
     expect(catalog.filter((tool) => tool.name.startsWith('dubbing_'))).toEqual([]);
-    const tool = catalog.find((t) => t.name === 'create-translation-preview');
+    const tool = catalog.find((t) => t.name === 'translation-previews_create');
     expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
     expect(tool?.annotations?.idempotentHint).toBe(false);
-    const quote = await call('estimate-translation-preview', { projectId, audioAssetId });
+    const quote = await call('translation-previews_estimate', { projectId, audioAssetId });
     expect(quote.structuredContent).toMatchObject({
       billing: 'external',
       preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
@@ -237,7 +237,7 @@ it.each(['http', 'stdio'] as const)(
     expect(JSON.stringify(quote)).not.toContain('must-not-leak');
     expect(
       (
-        await call('create-translation-preview', {
+        await call('translation-previews_create', {
           projectId,
           audioAssetId,
           targetLang: 'es',
@@ -246,14 +246,14 @@ it.each(['http', 'stdio'] as const)(
       ).structuredContent,
     ).toMatchObject({ id: jobId, status: 'PROCESSING' });
     setReadStatus('COMPLETING');
-    const completing = await call('get-translation-preview', { projectId, id: jobId });
+    const completing = await call('translation-previews_get', { projectId, id: jobId });
     expect(completing.structuredContent).toMatchObject({
       id: jobId,
       status: 'COMPLETING',
       createdAt: '2026-10-15T12:00:00.000Z',
     });
     setReadStatus('COMPLETED');
-    const completed = await call('get-translation-preview', { projectId, id: jobId });
+    const completed = await call('translation-previews_get', { projectId, id: jobId });
     expect(completed.structuredContent).toMatchObject({
       status: 'COMPLETED',
       // DubbingGenerationDto returns cloningStrength; the job no longer drops it.
@@ -295,7 +295,7 @@ it('preserves the server preview cap and accepts an older uncapped quote without
   });
   await limited.client.listTools();
   expect(
-    (await limited.call('estimate-translation-preview', { projectId, audioAssetId }))
+    (await limited.call('translation-previews_estimate', { projectId, audioAssetId }))
       .structuredContent,
   ).toMatchObject({
     billing: 'included',
@@ -307,7 +307,7 @@ it('preserves the server preview cap and accepts an older uncapped quote without
   const legacy = await fixture({ preview: null });
   await legacy.client.listTools();
   expect(
-    (await legacy.call('estimate-translation-preview', { projectId, audioAssetId }))
+    (await legacy.call('translation-previews_estimate', { projectId, audioAssetId }))
       .structuredContent,
   ).toEqual({
     billing: 'external',
@@ -324,7 +324,7 @@ it.each([undefined, 'invalid-key'])(
     const { call, calls } = await fixture();
     expect(
       (
-        await call('create-translation-preview', {
+        await call('translation-previews_create', {
           projectId,
           audioAssetId,
           targetLang: 'es',
@@ -352,8 +352,8 @@ it.each([
   const { client, call, calls } = await fixture({ rejection });
   await client.listTools();
   for (const [name, args] of [
-    ['estimate-translation-preview', { projectId, audioAssetId }],
-    ['create-translation-preview', { projectId, audioAssetId, targetLang: 'es', idempotencyKey }],
+    ['translation-previews_estimate', { projectId, audioAssetId }],
+    ['translation-previews_create', { projectId, audioAssetId, targetLang: 'es', idempotencyKey }],
   ] as const) {
     const rejected = await call(name, args);
     expect(rejected.isError).toBe(true);
@@ -386,7 +386,7 @@ it.each([
 ] as const)('omits standalone translation tools against an older API %j', async (options) => {
   const { client, calls } = await fixture({ ...options, transport: 'stdio' });
   const catalog = (await client.listTools()).tools;
-  expect(catalog.some((t) => t.name === 'create-translation-preview')).toBe(false);
+  expect(catalog.some((t) => t.name === 'translation-previews_create')).toBe(false);
   expect(catalog.filter((t) => t.name.startsWith('dubbing_'))).toEqual([]);
   expect(calls).toHaveLength(0);
 });

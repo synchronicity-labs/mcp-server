@@ -7,7 +7,8 @@ import { z } from 'zod';
 import type { McpToolDefinition } from './generator.js';
 
 export const MCP_APP_RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
-export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v7.html';
+// v8 calls the renamed tools; v7 and earlier are still served for widgets ChatGPT kept.
+export const UPLOAD_WIDGET_URI = 'ui://sync/upload-widget-v8.html';
 export const UPLOAD_WIDGET_LEGACY_URIS = [
   'ui://sync/upload-widget-v1.html',
   'ui://sync/upload-widget-v2.html',
@@ -15,6 +16,7 @@ export const UPLOAD_WIDGET_LEGACY_URIS = [
   'ui://sync/upload-widget-v4.html',
   'ui://sync/upload-widget-v5.html',
   'ui://sync/upload-widget-v6.html',
+  'ui://sync/upload-widget-v7.html',
 ] as const;
 
 const UPLOAD_WIDGET_RESOURCE_URIS = [UPLOAD_WIDGET_URI, ...UPLOAD_WIDGET_LEGACY_URIS] as const;
@@ -528,7 +530,7 @@ export const UPLOAD_WIDGET_HTML = `
             script: script,
             lipsyncStarted: true,
           });
-          var voicesResult = await openai.callTool("voices_get-voices", {});
+          var voicesResult = await openai.callTool("voices_list", {});
           var voice = voiceFromToolResult(voicesResult);
           if (!voice || !voice.id) {
             throw new Error("No Sync voice id was returned.");
@@ -542,7 +544,7 @@ export const UPLOAD_WIDGET_HTML = `
             lipsyncStarted: true,
           });
           var createArgs = { imageAssetId: assetId, script: script, voiceId: voice.id };
-          var createResult = await openai.callTool("create-lipsync-from-assets", createArgs);
+          var createResult = await openai.callTool("lipsync_create-from-assets", createArgs);
           var generationId = generationIdFrom(createResult);
           if (!generationId) {
             throw new Error("Sync did not return a generation id.");
@@ -557,7 +559,7 @@ export const UPLOAD_WIDGET_HTML = `
               generationId: generationId,
               lipsyncStarted: true,
             });
-            var generation = await openai.callTool("generate_get-generation", { id: generationId });
+            var generation = await openai.callTool("generations_get", { id: generationId });
             var statusText = generationStatusFrom(generation).toUpperCase();
             var outputUrl = outputUrlFrom(generation);
             if (statusText === "COMPLETED" || outputUrl) {
@@ -614,7 +616,7 @@ export const UPLOAD_WIDGET_HTML = `
           var downloadUrl = await getDownloadUrl(fileId);
           setStatus("Uploading to Sync", fileName, { fileId: fileId, fileName: fileName, mediaType: mediaType });
 
-          var result = await openai.callTool("upload-media", {
+          var result = await openai.callTool("assets_upload", {
             mediaType: mediaType,
             file: {
               download_url: downloadUrl,
@@ -774,7 +776,7 @@ export function registerUploadWidgetResource(server: UploadWidgetResourceServer)
 
 export function createUploadWidgetTool(): McpToolDefinition {
   return {
-    name: 'open-upload-widget',
+    name: 'assets_open-upload-widget',
     title: 'Open image/audio upload widget',
     description:
       'Display the Sync image/audio uploader in ChatGPT. The widget can stage a selected local image or audio file as a Sync asset and start a lipsync generation. It does not accept video files.',

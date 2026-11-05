@@ -46,7 +46,7 @@ it.each(['http', 'stdio'] as const)(
       transport,
       port: 0,
       apiKey: 'fixture-key',
-      // generate_create-generation is outside the default local toolset.
+      // generations_create is outside the default local toolset.
       toolsets: ['all' as const],
     };
     const server =
@@ -60,11 +60,11 @@ it.each(['http', 'stdio'] as const)(
     try {
       const { tools } = await client.listTools();
       const submissions = [
-        'create-lipsync',
-        'create-lipsync-from-assets',
-        'create-translate-and-dub',
-        'create-dialogue-video',
-        ...(transport === 'stdio' ? ['generate_create-generation'] : []),
+        'lipsync_create',
+        'lipsync_create-from-assets',
+        'dubbing_create',
+        'dialogue-videos_create',
+        ...(transport === 'stdio' ? ['generations_create'] : []),
       ];
       for (const name of submissions) {
         const tool = tools.find((entry) => entry.name === name);

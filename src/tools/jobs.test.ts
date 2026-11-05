@@ -59,7 +59,7 @@ const importing = (importStatus: string, progress: number) =>
 describe('jobs_get and jobs_wait', () => {
   it('offer only the kinds whose read tool this server has', () => {
     expect(createJobTools([])).toEqual([]);
-    const { get } = jobs([tool('generate_get-generation', [{}]), tool('assets_create', [{}])]);
+    const { get } = jobs([tool('generations_get', [{}]), tool('assets_create', [{}])]);
     expect(get?.name).toBe('jobs_get');
     expect((get!.inputSchema.kind as z.ZodEnum).options).toEqual(['generation', 'import']);
     expect(get!.description).toContain('generation: the generation id');
@@ -69,7 +69,7 @@ describe('jobs_get and jobs_wait', () => {
 
   it('reads a generation once with its progress, server estimate and projected result', async () => {
     const generation = tool(
-      'generate_get-generation',
+      'generations_get',
       [
         {
           id: 'g-1',
@@ -106,7 +106,7 @@ describe('jobs_get and jobs_wait', () => {
   });
 
   it('waits for a generation, reporting progress until it completes', async () => {
-    const generation = tool('generate_get-generation', [
+    const generation = tool('generations_get', [
       { id: 'g-1', status: 'PROCESSING', progress_percent: 40 },
       { id: 'g-1', status: 'COMPLETED', outputMediaUrl: 'https://cdn.test/out.mp4' },
     ]);
@@ -124,7 +124,7 @@ describe('jobs_get and jobs_wait', () => {
   });
 
   it('returns a terminal failure at once, without waiting', async () => {
-    const generation = tool('generate_get-generation', [
+    const generation = tool('generations_get', [
       { id: 'g-2', status: 'FAILED', error: 'face not found', errorCode: 'no_face' },
     ]);
     const { waitFor } = jobs([generation]);
@@ -139,7 +139,7 @@ describe('jobs_get and jobs_wait', () => {
 
   it('maps a rejected generation to REJECTED', async () => {
     const { waitFor } = jobs([
-      tool('generate_get-generation', [{ id: 'g-3', status: 'REJECTED', error: 'moderation' }]),
+      tool('generations_get', [{ id: 'g-3', status: 'REJECTED', error: 'moderation' }]),
     ]);
     expect(await waitFor({ kind: 'generation', id: 'g-3' }).result).toMatchObject({
       status: 'REJECTED',
@@ -147,7 +147,7 @@ describe('jobs_get and jobs_wait', () => {
   });
 
   it('waits for a transcription', async () => {
-    const transcription = tool('transcriptions_get-transcription-job', [
+    const transcription = tool('transcriptions_get', [
       { id: 't-1', status: 'PENDING' },
       { id: 't-1', status: 'COMPLETED', transcript: [] },
     ]);
@@ -176,7 +176,7 @@ describe('jobs_get and jobs_wait', () => {
   });
 
   it('reads a translation preview in its project and stops when it needs recovery', async () => {
-    const preview = tool('get-translation-preview', [
+    const preview = tool('translation-previews_get', [
       { id: 'p-1', status: 'COMPLETING', recoveryRequired: true },
     ]);
     const { waitFor } = jobs([preview]);
@@ -267,7 +267,7 @@ describe('jobs_get and jobs_wait', () => {
   });
 
   it('rejects an unknown kind or a missing id', async () => {
-    const { read } = jobs([tool('generate_get-generation', [{}])]);
+    const { read } = jobs([tool('generations_get', [{}])]);
     await expect(read({ kind: 'transcription', id: 't-1' }).result).rejects.toThrow();
     await expect(read({ kind: 'generation', id: ' ' }).result).rejects.toThrow();
   });

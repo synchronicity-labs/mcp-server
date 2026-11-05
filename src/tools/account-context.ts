@@ -95,7 +95,7 @@ export function createAccountContextTool(
   credential: CredentialKind = 'user',
 ): McpToolDefinition {
   return {
-    name: 'get-account-context',
+    name: 'account_get-context',
     title: 'Read connected Sync account',
     description:
       'Read the authenticated account and the organization this session runs in (all generations are created there), for account display and personal asset scope, its plan, generation limits (concurrency and longest output), feature flags, team seats and voice-clone limits. organizationChoice says how that organization was chosen and how to switch. API keys have no signed-in account. This does not grant permissions or change the organization.',

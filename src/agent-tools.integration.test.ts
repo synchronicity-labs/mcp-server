@@ -7,7 +7,7 @@ import { createSyncMcpServer } from './server.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
 import type { Toolset } from './toolsets.js';
 
-// Generated-tool adapters, server-side waits and send-feedback, over stdio with an API key.
+// Generated-tool adapters, server-side waits and feedback_send, over stdio with an API key.
 const PROJECT = '3c1f0f4e-1b2d-4c5e-8f6a-7b8c9d0e1f2a';
 const ASSET = '51ef4ef2-84af-4622-b0d0-c47ac04785da';
 const path = (name: string) => ({ name, in: 'path', required: true, schema: { type: 'string' } });
@@ -205,13 +205,13 @@ describe('agent tool adapters', () => {
 
   it('transcribes a saved asset by id and waits for the transcript on the server', async () => {
     const { call, calls } = await setup();
-    const created = await call('transcriptions_create-transcription', { assetId: ASSET });
+    const created = await call('transcriptions_create', { assetId: ASSET });
     expect(created.isError).not.toBe(true);
     expect(calls.find((c) => c.path === '/v2/transcriptions')?.body).toEqual({
       sourceVideoUrl: 'https://cdn.example.test/clip.mp4',
     });
 
-    const done = await call('transcriptions_get-transcription-job', { id: 't-1', wait: true });
+    const done = await call('transcriptions_get', { id: 't-1', wait: true });
     expect(
       done.structuredContent ?? JSON.parse((done.content as { text: string }[])[0]!.text),
     ).toMatchObject({
@@ -249,11 +249,11 @@ describe('agent tool adapters', () => {
 
   it('sends feedback with its source and client, only when the API takes it', async () => {
     const { client, call, calls } = await setup();
-    expect(client.getInstructions()).toContain('call send-feedback once');
-    const result = await call('send-feedback', {
+    expect(client.getInstructions()).toContain('call feedback_send once');
+    const result = await call('feedback_send', {
       kind: 'confusing_error',
       message: 'The face rejection did not name the clip.',
-      tool: 'create-timeline-lipsync',
+      tool: 'lipsync_create-timeline',
       severity: 'major',
     });
     expect(result.structuredContent).toEqual({ id: 'feedback-1', received: true });
@@ -261,7 +261,7 @@ describe('agent tool adapters', () => {
       path: '/v2/feedback',
       body: {
         kind: 'confusing_error',
-        tool: 'create-timeline-lipsync',
+        tool: 'lipsync_create-timeline',
         source: 'mcp',
         mcpVersion: expect.any(String),
         client: { name: 'claude-code' },
@@ -270,16 +270,16 @@ describe('agent tool adapters', () => {
 
     const without = await setup({ feedback: false });
     expect((await without.client.listTools()).tools.map((t) => t.name)).not.toContain(
-      'send-feedback',
+      'feedback_send',
     );
-    expect(without.client.getInstructions()).not.toContain('send-feedback');
+    expect(without.client.getInstructions()).not.toContain('feedback_send');
   });
 
   it('drops spend confirmation from instructions and descriptions when the operator turns it off', async () => {
     const { client } = await setup({ spendConfirmation: false });
     expect(client.getInstructions()).toMatch(/^This connection runs unattended automation/);
     const timeline = (await client.listTools()).tools.find(
-      (t) => t.name === 'create-timeline-lipsync',
+      (t) => t.name === 'lipsync_create-timeline',
     );
     expect(timeline?.description).not.toContain('Estimate and confirm');
     expect(timeline?.description).toContain('This starts an asynchronous generation');

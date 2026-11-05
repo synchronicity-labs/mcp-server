@@ -44,7 +44,7 @@ describe('HTTP cancellation versus response disconnect', () => {
     registerTools(
       mcp,
       createAppTools(createHttpClient(baseUrl)).map((tool) => {
-        if (tool.name !== 'create-lipsync' || tool.resultFormat === 'mcp') return tool;
+        if (tool.name !== 'lipsync_create' || tool.resultFormat === 'mcp') return tool;
         return {
           ...tool,
           handler: async (args, context) => {
@@ -95,7 +95,7 @@ describe('HTTP cancellation versus response disconnect', () => {
           id: 2,
           method: 'tools/call',
           params: {
-            name: 'create-lipsync',
+            name: 'lipsync_create',
             arguments: { videoAssetId: 'video', audioAssetId: 'audio' },
           },
         },

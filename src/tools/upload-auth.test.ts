@@ -53,7 +53,7 @@ describe('ChatGPT upload OAuth compatibility', () => {
       vi.stubGlobal('fetch', fetchMock);
       const runtime = new UploadRuntime();
       const upload = createAppTools(createHttpClient('https://api.example'), runtime).find(
-        (tool) => tool.name === 'upload-media',
+        (tool) => tool.name === 'assets_upload',
       );
       if (!upload) throw new Error('Missing upload tool');
       const result = await runWithAuth('oauth-upload-test', clientName, () =>

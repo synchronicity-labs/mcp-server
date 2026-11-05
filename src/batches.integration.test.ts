@@ -182,7 +182,7 @@ describe('batches_create', () => {
     });
     expect(error.message).toContain('Batch requires the scale plan or above.');
     expect(error.nextStep).toContain('It needs the scale plan or above.');
-    expect(error.nextStep).toContain('create-lipsync');
+    expect(error.nextStep).toContain('lipsync_create');
   });
 
   it('explains the batch concurrency limit rather than a running generation', async () => {
@@ -205,7 +205,7 @@ describe('batches_create', () => {
     const { error } = result.structuredContent as { error: Record<string, unknown> };
     expect(error).toMatchObject({ status: 429, activeBatches: 3, concurrencyLimit: 3 });
     expect(error.nextStep).toContain('batches_list');
-    expect(error.nextStep).not.toContain('generate_get-generation');
+    expect(error.nextStep).not.toContain('generations_get');
   });
 
   it('maps an API line number to the item', async () => {
@@ -300,7 +300,7 @@ describe('batches_get and jobs_wait', () => {
     expect(result.structuredContent).not.toHaveProperty('results');
     const { resultsError } = result.structuredContent as { resultsError: string };
     expect(resultsError).toContain('not on the Sync API');
-    expect(resultsError).toContain('generate_get-generations');
+    expect(resultsError).toContain('generations_list');
     expect(apiUrls(calls)).toEqual(['/v2/batch/b-2']);
   });
 

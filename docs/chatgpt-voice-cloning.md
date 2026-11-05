@@ -1,6 +1,6 @@
 # Hosted voice-cloning acceptance
 
-CRAFT-6568 adds `voices_clone-voice` to the hosted catalog when the API exposes
+CRAFT-6568 adds `voices_clone` to the hosted catalog when the API exposes
 the operation. The existing generated API schema and request-scoped OAuth client
 remain in use. The API remains authoritative for access, plan and sample checks.
 There is no new frontend bundle or voice-cloning form in this change.
@@ -41,7 +41,7 @@ claim an unknown outcome failed without creating a voice. A successful clone
 does not authorize subsequent paid synthesis or video generation.
 
 After the reviewed deployment, rescan the existing publisher connection and
-verify `voices_clone-voice` is approved/live in a fresh ChatGPT conversation.
+verify `voices_clone` is approved/live in a fresh ChatGPT conversation.
 Record any review hold separately from server deployment status. Keep CRAFT-6568
 open until the provider-backed and published-plugin checks are complete.
 
@@ -50,7 +50,7 @@ open until the provider-backed and published-plugin checks are complete.
 On October 8, 2026 at 21:37 EDT, the private Sync Dev ChatGPT connector
 successfully created an ElevenLabs-backed reusable clone from Noah's approved
 13.76-second video. The test confirmed sample/name/voice rights and checked for
-an existing exact-name clone before creation. A subsequent `voices_get-voices`
+an existing exact-name clone before creation. A subsequent `voices_list`
 response returned the saved clone with matching Sync and provider identifiers.
 The task's `discovery-voice-acceptance/voice-clone-tools.txt` capture preserves
 the tool response. Clone creation and persistence are verified; this test does

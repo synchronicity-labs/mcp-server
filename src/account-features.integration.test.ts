@@ -225,7 +225,7 @@ describe('feature-gated tools on the hosted server', () => {
     });
     const client = await hostedSession(factory, 'claude-ai', 'token-both');
     const names = (await client.listTools()).tools.map((tool) => tool.name);
-    expect(names).toContain('create-lipsync');
+    expect(names).toContain('lipsync_create');
     expect(names.filter((name) => GATED.includes(name))).toEqual([]);
   });
 });

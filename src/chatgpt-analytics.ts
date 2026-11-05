@@ -27,6 +27,8 @@ const attributionSchema = uiAnalyticsSchema.extend({
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
 });
+// The API's names for these tools: the collector predates the tool rename, so events
+// keep the legacy names (see previousToolName in tool-names.ts).
 const toolNames = [
   'open-sync-app',
   'create-lipsync',
@@ -167,7 +169,7 @@ export async function trackToolExecution<T>(
 
 export function createAnalyticsTool(http: HttpClient): McpToolDefinition {
   return {
-    name: 'track-chatgpt-event',
+    name: 'analytics_track-event',
     title: 'Record Sync interface interaction',
     description:
       'Record bounded interface telemetry for the authenticated Sync user. No prompts, media, credentials or account identifiers are accepted.',

@@ -28,7 +28,7 @@ do not reuse a user's ChatGPT refresh token or put a short-lived access token in
 a permanent cron configuration. The check never logs account contents or tokens.
 
 The probe initializes the real SDK client, lists tools, calls the fixed read-only
-`get-account-context` tool, reads authenticated aggregate `/status`, then deletes
+`account_get-context` tool, reads authenticated aggregate `/status`, then deletes
 its session even on failure. Requests have deadlines and reject redirects.
 A successful HTTP status containing an MCP tool error is a failure.
 

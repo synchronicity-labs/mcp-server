@@ -14,6 +14,7 @@ import * as tokenStore from './auth/token-store.js';
 import { resolveClientProfile } from './client-profile.js';
 import { HttpSession } from './http-session.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
+import { currentTools } from './test-fixtures/tool-names.js';
 import { UPLOAD_WIDGET_URI } from './tools/upload-widget.js';
 
 const nativeFetch = globalThis.fetch;
@@ -192,7 +193,7 @@ describe('immutable client profiles', () => {
       const cancel = new AbortController();
       const call = client.callTool(
         {
-          name: 'create-lipsync',
+          name: 'lipsync_create',
           arguments: { imageAssetId: 'image', script: 'Hello', voiceId: 'real-voice' },
         },
         { signal: cancel.signal },
@@ -215,17 +216,19 @@ describe('immutable client profiles', () => {
     await Promise.all(
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
-        // create-timeline-lipsync stays out of the ChatGPT app listing only.
+        // lipsync_create-timeline stays out of the ChatGPT app listing only.
         const chatgpt = index < 2;
-        const { tools } = await client.listTools();
+        const tools = currentTools((await client.listTools()).tools);
         expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 1));
-        expect(tools.some((tool) => tool.name === 'create-timeline-lipsync')).toBe(!chatgpt);
-        expect(tools.some((tool) => tool.name === 'upload-media')).toBe(supportsUploads);
-        expect(tools.some((tool) => tool.name === 'open-upload-widget')).toBe(supportsUploads);
+        expect(tools.some((tool) => tool.name === 'lipsync_create-timeline')).toBe(!chatgpt);
+        expect(tools.some((tool) => tool.name === 'assets_upload')).toBe(supportsUploads);
+        expect(tools.some((tool) => tool.name === 'assets_open-upload-widget')).toBe(
+          supportsUploads,
+        );
         // The initialize response carries the announced client's instructions.
         expect(client.getInstructions()?.includes('When Studio publishes')).toBe(supportsUploads);
         expect(client.getInstructions()).toContain('exactly one visual input');
-        const create = tools.find((tool) => tool.name === 'create-lipsync')!;
+        const create = tools.find((tool) => tool.name === 'lipsync_create')!;
         expect(create._meta?.['openai/fileParams']).toEqual(
           supportsUploads ? ['video', 'image', 'audio'] : undefined,
         );
@@ -236,7 +239,7 @@ describe('immutable client profiles', () => {
         expect(
           (
             await client.callTool({
-              name: 'create-lipsync',
+              name: 'lipsync_create',
               arguments: { imageAssetId: 'image', script: 'Hello', voiceId: 'real-voice' },
             })
           ).isError,
@@ -318,18 +321,18 @@ describe('immutable client profiles', () => {
       const { client } = await connect(factory, clientName, true);
       const { tools } = await client.listTools();
       expect(
-        tools.find((tool) => tool.name === 'upload-media')?._meta?.['openai/fileParams'],
+        tools.find((tool) => tool.name === 'assets_upload')?._meta?.['openai/fileParams'],
       ).toEqual(['file']);
       expect(
-        tools.find((tool) => tool.name === 'create-lipsync')?._meta?.['openai/fileParams'],
+        tools.find((tool) => tool.name === 'lipsync_create')?._meta?.['openai/fileParams'],
       ).toEqual(['video', 'image', 'audio']);
       expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
       expect(
-        (await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError,
+        (await client.callTool({ name: 'assets_open-upload-widget', arguments: {} })).isError,
       ).not.toBe(true);
 
       const result = await client.callTool({
-        name: 'upload-media',
+        name: 'assets_upload',
         arguments: { mediaType: 'video', file },
       });
       expect(result.isError).not.toBe(true);
@@ -341,7 +344,7 @@ describe('immutable client profiles', () => {
       expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
 
       const generation = await client.callTool({
-        name: 'create-lipsync',
+        name: 'lipsync_create',
         arguments: { video: file, audioAssetId: 'audio' },
       });
       expect(generation.isError).not.toBe(true);
@@ -360,7 +363,7 @@ describe('immutable client profiles', () => {
         { ...file, download_url: 'file:///tmp/media.mp4' },
       ]) {
         const rejected = await client.callTool({
-          name: 'upload-media',
+          name: 'assets_upload',
           arguments: { mediaType: 'video', file: invalid },
         });
         expect(rejected.isError).toBe(true);
@@ -378,43 +381,43 @@ describe('immutable client profiles', () => {
     const names = ['ChatGPT generations', 'Claude generations', 'Sync generations'];
     await Promise.all(
       sessions.map(async ({ client }, index) => {
-        const { tools } = await client.listTools();
+        const tools = currentTools((await client.listTools()).tools);
         expect(tools.map((tool) => tool.name)).toEqual(
           index === 0
             ? [
-                'open-upload-widget',
-                'get-account-context',
+                'assets_open-upload-widget',
+                'account_get-context',
                 'organizations_list',
                 'organizations_select',
-                'get-account-usage',
-                'rename-project',
-                'get-asset-creators',
-                'get-playback-metadata',
-                'get-generation-continuation',
-                'upload-media',
-                'create-lipsync',
-                'create-lipsync-from-assets',
-                'voices_get-voices',
-                'generate_get-generation',
+                'account_get-usage',
+                'projects_rename',
+                'assets_list-creators',
+                'assets_get-playback-metadata',
+                'generations_get-continuation',
+                'assets_upload',
+                'lipsync_create',
+                'lipsync_create-from-assets',
+                'voices_list',
+                'generations_get',
               ]
             : [
-                'get-account-context',
+                'account_get-context',
                 'organizations_list',
                 'organizations_select',
-                'get-account-usage',
-                'rename-project',
-                'get-playback-metadata',
-                'get-generation-continuation',
-                'create-lipsync',
-                'create-timeline-lipsync',
-                'voices_get-voices',
-                'generate_get-generation',
+                'account_get-usage',
+                'projects_rename',
+                'assets_get-playback-metadata',
+                'generations_get-continuation',
+                'lipsync_create',
+                'lipsync_create-timeline',
+                'voices_list',
+                'generations_get',
               ],
         );
-        const create = tools.find((tool) => tool.name === 'create-lipsync')!;
+        const create = tools.find((tool) => tool.name === 'lipsync_create')!;
         expect(create.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false });
         expect(
-          tools.find((tool) => tool.name === 'generate_get-generation')?.annotations?.readOnlyHint,
+          tools.find((tool) => tool.name === 'generations_get')?.annotations?.readOnlyHint,
         ).toBe(true);
         expect(create.inputSchema.properties).toHaveProperty('videoUrl');
         expect(Boolean(create.inputSchema.properties?.video)).toBe(index === 0);
@@ -425,17 +428,17 @@ describe('immutable client profiles', () => {
         if (index === 0) {
           expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
           expect(
-            (await client.callTool({ name: 'open-upload-widget', arguments: {} })).isError,
+            (await client.callTool({ name: 'assets_open-upload-widget', arguments: {} })).isError,
           ).not.toBe(true);
         } else {
           expect(JSON.stringify(tools)).not.toMatch(
-            /openai\/|upload-media|assets_create|tts_create|ChatGPT/,
+            /openai\/|assets_upload|assets_create|tts_create|ChatGPT/,
           );
           await expect(client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow(
             'assets_create-upload-url',
           );
           const denied = await client.callTool({
-            name: 'upload-media',
+            name: 'assets_upload',
             arguments: {
               mediaType: 'image',
               file: { file_id: 'x', download_url: 'https://media.test/image' },
@@ -443,11 +446,14 @@ describe('immutable client profiles', () => {
           });
           expect(denied.isError).toBe(true);
           expect(JSON.stringify(denied)).toContain('assets_create-upload-url');
-          const widget = await client.callTool({ name: 'open-upload-widget', arguments: {} });
+          const widget = await client.callTool({
+            name: 'assets_open-upload-widget',
+            arguments: {},
+          });
           expect(widget.isError).toBe(true);
           expect(JSON.stringify(widget)).toContain('assets_create-upload-url');
           const file = await client.callTool({
-            name: 'create-lipsync',
+            name: 'lipsync_create',
             arguments: {
               image: { file_id: 'x', download_url: 'https://media.test/image' },
               audioAssetId: 'audio',
@@ -458,14 +464,14 @@ describe('immutable client profiles', () => {
           // Widget-only tools stay registered but refuse model-only clients before any request.
           const before = calls.length;
           const creators = await runWithAuth(`token-${index}`, `untrusted-${index}`, () =>
-            client.callTool({ name: 'get-asset-creators', arguments: {} }),
+            client.callTool({ name: 'assets_list-creators', arguments: {} }),
           );
           expect(creators.isError).toBe(true);
           expect(calls).toHaveLength(before);
         }
         const result = await runWithAuth(`token-${index}`, `untrusted-${index}`, () =>
           client.callTool({
-            name: 'create-lipsync',
+            name: 'lipsync_create',
             arguments: { videoAssetId: 'video', audioAssetId: 'audio' },
           }),
         );
@@ -480,7 +486,7 @@ describe('immutable client profiles', () => {
     expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(3);
     // Repeated notifications cannot reconfigure the immutable session profile.
     sessions[0]!.server.server.oninitialized?.();
-    expect((await sessions[0]!.client.listTools()).tools).toHaveLength(14);
+    expect(currentTools((await sessions[0]!.client.listTools()).tools)).toHaveLength(14);
   });
 
   it.each(['chatgpt', 'claude', 'unknown'])(
@@ -488,7 +494,7 @@ describe('immutable client profiles', () => {
     async (name) => {
       const calls = fakeApi();
       const { client } = await connect(await createMcpServerFactory(config), name);
-      const voices = await client.callTool({ name: 'voices_get-voices', arguments: {} });
+      const voices = await client.callTool({ name: 'voices_list', arguments: {} });
       expect(JSON.stringify(voices)).toContain('real-voice');
       for (const visual of ['video', 'image']) {
         for (const driver of ['audio', 'script']) {
@@ -507,7 +513,7 @@ describe('immutable client profiles', () => {
               projectName: 'Explicit project',
             };
             const result = await client.callTool({
-              name: 'create-lipsync',
+              name: 'lipsync_create',
               arguments: { ...args, projectIntent: 'explicit' },
             });
             expect(result.isError).not.toBe(true);
@@ -530,7 +536,7 @@ describe('immutable client profiles', () => {
                 [source === 'Url' ? 'url' : 'assetId']: args[`audio${source}`],
               });
             const poll = await client.callTool({
-              name: 'generate_get-generation',
+              name: 'generations_get',
               arguments: { id: 'generation', wait: true, timeout: 55 },
             });
             // The API's name and the deprecated alias carry the same signed URL.
@@ -564,12 +570,12 @@ describe('immutable client profiles', () => {
       );
       const { client: httpClient } = await connect(await createMcpServerFactory(config), 'unknown');
       await stdioClient.callTool({
-        name: 'create-lipsync',
+        name: 'lipsync_create',
         arguments: { videoAssetId: 'video', audioAssetId: 'audio' },
       });
       await runWithAuth('http-token', undefined, () =>
         httpClient.callTool({
-          name: 'create-lipsync',
+          name: 'lipsync_create',
           arguments: { videoAssetId: 'video', audioAssetId: 'audio' },
         }),
       );
@@ -609,14 +615,14 @@ it.each([0, 1, 2])(
     expect(factory.toolCount).toBe(15 + count);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
-    const chatTools = (await chatgpt.client.listTools()).tools;
+    const chatTools = currentTools((await chatgpt.client.listTools()).tools);
     const claudeTools = (await claude.client.listTools()).tools;
-    // create-timeline-lipsync stays out of the ChatGPT app listing.
+    // lipsync_create-timeline stays out of the ChatGPT app listing.
     expect(chatTools).toHaveLength(12 + count);
-    // Widget-only tools such as get-asset-creators (member emails) stay out of model-only catalogs.
+    // Widget-only tools such as assets_list-creators (member emails) stay out of model-only catalogs.
     expect(claudeTools).toHaveLength(9 + count);
-    expect(claudeTools.map((tool) => tool.name)).not.toContain('get-asset-creators');
-    expect(chatTools.map((tool) => tool.name)).toContain('get-asset-creators');
+    expect(claudeTools.map((tool) => tool.name)).not.toContain('assets_list-creators');
+    expect(chatTools.map((tool) => tool.name)).toContain('assets_list-creators');
     expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
   },
 );

@@ -75,19 +75,19 @@ it.each(cases)(
     try {
       const names = (await client.listTools()).tools.map((tool) => tool.name);
       for (const name of [
-        'get-studio-view',
-        'open-studio-project',
-        'refresh-studio-project',
-        'refresh-studio-assets',
-        'show-studio-generation',
-        'continue-studio-generation',
-        'register-studio-view',
-        'ack-studio-view',
+        'studio-views_get',
+        'studio-views_open-project',
+        'studio-views_refresh-project',
+        'studio-views_refresh-assets',
+        'studio-views_show-generation',
+        'studio-views_continue-generation',
+        'studio-views_register',
+        'studio-views_ack',
       ])
         expect(names.includes(name)).toBe(enabled);
       expect(names).not.toContain('request-studio-view-action');
       const result = await runWithAuth('view-user', 'openai-mcp', () =>
-        client.callTool({ name: 'get-account-context', arguments: {} }),
+        client.callTool({ name: 'account_get-context', arguments: {} }),
       );
       expect(result.isError).not.toBe(true);
       if (enabled)

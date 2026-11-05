@@ -131,7 +131,7 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
   expect(importTool.description).toContain('YouTube');
   expect(importTool.description).toContain('import_in_progress');
   expect(importTool._meta?.['openai/widgetAccessible']).toBe(true);
-  const translate = tools.find((tool) => tool.name === 'create-translate-and-dub')!;
+  const translate = tools.find((tool) => tool.name === 'dubbing_create')!;
   expect(translate.description).toContain('assets_create');
   expect(client.getInstructions()).toContain('Translate this YouTube link to Spanish');
   expect(client.getInstructions()).toContain('do not submit a generation while importing');
@@ -172,12 +172,12 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
   const saved = z
     .object({ id: z.uuid(), durationSeconds: z.number() })
     .parse(imported.structuredContent);
-  await call('generate_estimate-cost', {
+  await call('generations_estimate-cost', {
     model: translationInput.model,
     duration: saved.durationSeconds,
     workflow: 'translate-and-dub',
   });
-  const result = await call('create-translate-and-dub', {
+  const result = await call('dubbing_create', {
     ...translationInput,
     videoAssetId: saved.id,
   });

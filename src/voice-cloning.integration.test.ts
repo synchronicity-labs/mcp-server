@@ -166,7 +166,7 @@ async function fixture(
 it('advertises voice creation as a non-idempotent external write, without enabling deletion', async () => {
   const { client } = await fixture();
   const tools = (await client.listTools()).tools;
-  const clone = tools.find((tool) => tool.name === 'voices_clone-voice');
+  const clone = tools.find((tool) => tool.name === 'voices_clone');
   expect(clone?.annotations).toMatchObject({
     readOnlyHint: false,
     destructiveHint: true,
@@ -175,16 +175,16 @@ it('advertises voice creation as a non-idempotent external write, without enabli
   });
   expect(clone?._meta?.securitySchemes).toEqual([{ type: 'oauth2', scopes: [] }]);
   expect(clone?.inputSchema.required).toEqual(['name', 'provider']);
-  expect(tools.some((tool) => tool.name === 'voices_delete-voice')).toBe(false);
+  expect(tools.some((tool) => tool.name === 'voices_delete')).toBe(false);
 });
 
 it('clones once from a saved sample and reuses the internal id for script generation', async () => {
   const { calls, call } = await fixture();
-  const result = await call('voices_clone-voice', input);
+  const result = await call('voices_clone', input);
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toMatchObject({ id: voiceId, name: input.name });
-  await call('voices_get-voices', {});
-  const generation = await call('create-lipsync', {
+  await call('voices_list', {});
+  const generation = await call('lipsync_create', {
     imageAssetId: assetId,
     script: 'Hello',
     voiceId: z.object({ id: z.uuid() }).parse(result.structuredContent).id,
@@ -212,7 +212,7 @@ it('clones once from a saved sample and reuses the internal id for script genera
 it('passes a Sync-hosted sample URL verbatim for API validation', async () => {
   const { calls, call } = await fixture();
   const url = 'https://storage.fixture.invalid/sample.mp4?Signature=a%2Fb';
-  const result = await call('voices_clone-voice', {
+  const result = await call('voices_clone', {
     name: input.name,
     provider: input.provider,
     url,
@@ -227,7 +227,7 @@ it('forwards multiple Studio samples as one explicit clone request', async () =>
     'https://storage.fixture.invalid/one.wav',
     'https://storage.fixture.invalid/two.wav',
   ];
-  const result = await call('voices_clone-voice', {
+  const result = await call('voices_clone', {
     name: input.name,
     provider: input.provider,
     sampleUrls,
@@ -251,7 +251,7 @@ it.each([
   },
 ])('rejects missing or ambiguous clone samples before sending a write: %j', async (sample) => {
   const { calls, call } = await fixture();
-  const result = await call('voices_clone-voice', {
+  const result = await call('voices_clone', {
     name: input.name,
     provider: input.provider,
     ...sample,
@@ -262,9 +262,9 @@ it.each([
 
 it('does not repeat a clone when the API receives the write but loses its response', async () => {
   const { calls, call } = await fixture({ dropResponse: true });
-  expect((await call('voices_get-voices', {})).content).toEqual([{ type: 'text', text: '[]' }]);
-  expect((await call('voices_clone-voice', input)).isError).toBe(true);
-  expect((await call('voices_get-voices', {})).content).toEqual([
+  expect((await call('voices_list', {})).content).toEqual([{ type: 'text', text: '[]' }]);
+  expect((await call('voices_clone', input)).isError).toBe(true);
+  expect((await call('voices_list', {})).content).toEqual([
     {
       type: 'text',
       text: JSON.stringify([{ id: voiceId, name: input.name, provider: 'elevenlabs' }], null, 2),
@@ -282,7 +282,7 @@ it.each([
   [500, 'PROVIDER_ERROR'],
 ])('preserves API refusal %s/%s and never retries the write', async (status, code) => {
   const { calls, call } = await fixture({ status: status as number, code: code as string });
-  const result = await call('voices_clone-voice', input);
+  const result = await call('voices_clone', input);
   expect(result).toMatchObject({
     isError: true,
     structuredContent: { error: { status, code, retryAfterMs: 60_000 } },
@@ -292,8 +292,6 @@ it.each([
 
 it('does not advertise cloning when the connected API has no clone operation', async () => {
   const { client, calls } = await fixture({ available: false });
-  expect((await client.listTools()).tools.some((tool) => tool.name === 'voices_clone-voice')).toBe(
-    false,
-  );
+  expect((await client.listTools()).tools.some((tool) => tool.name === 'voices_clone')).toBe(false);
   expect(calls).toHaveLength(0);
 });

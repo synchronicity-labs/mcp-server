@@ -195,12 +195,12 @@ it.each(['', '/api-proxy'])(
   async (basePath) => {
     const { client, calls, rows } = await fixture({ basePath });
     const tool = (await client.listTools()).tools.find(
-      (item) => item.name === 'projects_get-generations',
+      (item) => item.name === 'projects_list-generations',
     );
     expect(tool?.inputSchema.required).toContain('projectId');
     expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
     const result = await client.callTool({
-      name: 'projects_get-generations',
+      name: 'projects_list-generations',
       arguments: { projectId, limit: 2, cursor: generationId },
     });
     expect(result.isError).not.toBe(true);
@@ -220,10 +220,10 @@ it.each(['', '/api-proxy'])(
 it('keeps legacy organization history available without advertising unsupported project history', async () => {
   const { client, calls } = await fixture({ supported: false });
   const names = (await client.listTools()).tools.map((tool) => tool.name);
-  expect(names).toContain('generate_get-generations');
-  expect(names).not.toContain('projects_get-generations');
+  expect(names).toContain('generations_list');
+  expect(names).not.toContain('projects_list-generations');
   await expect(
-    client.callTool({ name: 'projects_get-generations', arguments: { projectId } }),
+    client.callTool({ name: 'projects_list-generations', arguments: { projectId } }),
   ).rejects.toMatchObject({ code: -32602 });
   expect(calls).toEqual([]);
 });
@@ -231,7 +231,7 @@ it('keeps legacy organization history available without advertising unsupported 
 it('rejects a mixed rollout response that ignores the project filter without forwarding records', async () => {
   const { client, calls } = await fixture({ ignoresFilter: true });
   const result = await client.callTool({
-    name: 'projects_get-generations',
+    name: 'projects_list-generations',
     arguments: { projectId, limit: 10 },
   });
   expect(calls.some((call) => call.path === '/v2/generations')).toBe(true);
@@ -243,7 +243,7 @@ it('rejects a mixed rollout response that ignores the project filter without for
 it('stops before reading history when the current project access check fails', async () => {
   const { client, calls } = await fixture({ denied: true });
   const result = await client.callTool({
-    name: 'projects_get-generations',
+    name: 'projects_list-generations',
     arguments: { projectId, limit: 10 },
   });
   expect(result.isError).toBe(true);
@@ -255,7 +255,7 @@ it.each(['', '/api-proxy'])(
   async (basePath) => {
     const { client, calls, rows } = await fixture({ basePath });
     const result = await client.callTool({
-      name: 'get-generation-continuation',
+      name: 'generations_get-continuation',
       arguments: { projectId, id: generationId },
     });
     expect(result.isError).not.toBe(true);
@@ -308,7 +308,7 @@ it.each(['denied', 'ignoresFilter', 'wrongGeneration', 'sourceDenied'] as const)
   async (failure) => {
     const { client, calls } = await fixture({ [failure]: true });
     const result = await client.callTool({
-      name: 'get-generation-continuation',
+      name: 'generations_get-continuation',
       arguments: { projectId, id: generationId },
     });
     expect(result.isError).toBe(true);

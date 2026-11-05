@@ -96,9 +96,9 @@ async function exerciseStorageUpload(redirectStorage = false) {
       timeoutMs: 5_000,
     });
     const tool = createAppTools(createHttpClient(baseUrl), runtime).find(
-      (candidate) => candidate.name === 'upload-media',
+      (candidate) => candidate.name === 'assets_upload',
     );
-    if (!tool) throw new Error('Missing upload-media tool');
+    if (!tool) throw new Error('Missing assets_upload tool');
     const result = await tool
       .handler({
         mediaType: 'video',
@@ -117,7 +117,7 @@ async function exerciseStorageUpload(redirectStorage = false) {
   }
 }
 
-describe('upload-media with real HTTP streams', () => {
+describe('assets_upload with real HTTP streams', () => {
   it('uploads all bytes without retaining a duplicate storage request body', async () => {
     const { value, error, observed, size, stats } = await exerciseStorageUpload();
     expect(error).toBeUndefined();

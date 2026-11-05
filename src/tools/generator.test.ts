@@ -5,9 +5,9 @@ import { deriveAnnotations, generateTools, operationIdToToolName } from './gener
 
 describe('deriveAnnotations', () => {
   it('treats cost estimation as a read despite its POST method', () => {
-    expect(deriveAnnotations('post', 'generate_estimate-cost').readOnlyHint).toBe(true);
-    expect(deriveAnnotations('post', 'generations_estimate-cost').destructiveHint).toBe(false);
-    expect(deriveAnnotations('post', 'generate_create-generation').idempotentHint).toBe(false);
+    expect(deriveAnnotations('post', 'generations_estimate-cost').readOnlyHint).toBe(true);
+    expect(deriveAnnotations('post', 'generations_estimate').destructiveHint).toBe(false);
+    expect(deriveAnnotations('post', 'generations_create').idempotentHint).toBe(false);
   });
   it('marks reads read-only, deletes destructive, and writes open-world', () => {
     expect(deriveAnnotations('get')).toEqual({
@@ -31,10 +31,8 @@ describe('deriveAnnotations', () => {
 
 describe('operationIdToToolName', () => {
   it('converts controller operation IDs to tool names', () => {
-    expect(operationIdToToolName('GenerateController_createGeneration')).toBe(
-      'generate_create-generation',
-    );
-    expect(operationIdToToolName('AssetsController_getAll')).toBe('assets_get-all');
+    expect(operationIdToToolName('GenerateController_createGeneration')).toBe('generations_create');
+    expect(operationIdToToolName('AssetsController_getAll')).toBe('assets_list');
     expect(operationIdToToolName('ModelsController_getPublic')).toBe('models_get-public');
   });
 
@@ -94,9 +92,9 @@ describe('generateTools', () => {
   it('generates tools from operations', () => {
     const tools = generateTools(operations, mockHttpClient);
     expect(tools).toHaveLength(2);
-    expect(tools[0]?.name).toBe('generate_create-generation');
-    expect(tools[0]?.title).toBe('Generate Create Generation');
-    expect(tools[1]?.name).toBe('generate_get-generation');
+    expect(tools[0]?.name).toBe('generations_create');
+    expect(tools[0]?.title).toBe('Generations Create');
+    expect(tools[1]?.name).toBe('generations_get');
   });
 
   it('uses overrides for known tools', () => {

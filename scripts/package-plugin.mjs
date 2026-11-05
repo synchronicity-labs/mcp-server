@@ -203,20 +203,42 @@ export function packagePlugin({ root = ROOT, checkout, out = resolve(root, DEFAU
   };
 }
 
-// The server's tool names are `<area>_<method>` for generated tools (`assets_get-all`) and
-// `<verb>-<noun>` for hand-written ones (`create-lipsync`, `get-account-context`). The areas and
-// verbs are fixed here, not read from the allowlist, so a name stays recognizable after its last
-// tool is removed; verify-plugin-package.mjs fails when a hosted tool fits neither.
+// Tool names are `<noun>_<verb>` (`lipsync_create`, `generations_get`; docs/tool-names.md).
+// Names from before that rename, `<verb>-<noun>` (`create-lipsync`) and the `generate_` area,
+// are still recognized so a skill that names one fails verification: in ChatGPT those are
+// app-only aliases the model cannot call. The areas and verbs are fixed here, not read from
+// the allowlist, so a name stays recognizable after its last tool is removed;
+// verify-plugin-package.mjs fails when a hosted tool fits neither scheme.
 const TOOL_AREAS = [
+  'account',
+  'analytics',
+  'app',
   'assets',
+  'audio-trims',
   'batches',
+  'dialogue',
+  'dialogue-edits',
+  'dialogue-previews',
+  'dialogue-transcriptions',
+  'dialogue-videos',
+  'dubbing',
+  'feedback',
   'generate',
+  'generations',
   'jobs',
+  'lipsync',
   'models',
   'organizations',
   'projects',
   'scenes',
+  'speech-previews',
   'stems',
+  'studio-drafts',
+  'studio-views',
+  'transcriptions',
+  'translation-previews',
+  'tts',
+  'tts-jobs',
   'voices',
 ];
 const TOOL_VERBS = [

@@ -106,7 +106,7 @@ it.each([projectId, projectId.toUpperCase()])(
   'renames only the requested project %s through the authenticated patch boundary',
   async (requestedId) => {
     const before = writes.length;
-    const result = await call('member', 'rename-project', {
+    const result = await call('member', 'projects_rename', {
       projectId: requestedId,
       name: '  Launch video  ',
     });
@@ -121,11 +121,11 @@ it.each([projectId, projectId.toUpperCase()])(
 it('refuses unauthorized or empty renames and never forwards extra mutation fields', async () => {
   const before = writes.length;
   expect(
-    (await call('forbidden', 'rename-project', { projectId, name: 'No access' })).isError,
+    (await call('forbidden', 'projects_rename', { projectId, name: 'No access' })).isError,
   ).toBe(true);
-  expect((await call('member', 'rename-project', { projectId, name: ' ' })).isError).toBe(true);
+  expect((await call('member', 'projects_rename', { projectId, name: ' ' })).isError).toBe(true);
   expect(writes).toHaveLength(before);
-  await call('member', 'rename-project', {
+  await call('member', 'projects_rename', {
     projectId,
     name: 'Name only',
     visibility: 'ORGANIZATION',
@@ -147,7 +147,7 @@ it.each([
 ])(
   'projects the %s allowance without exposing unrelated billing fields',
   async (token, credits, freeMonthlyLimits) => {
-    const result = await call(token as string, 'get-account-usage');
+    const result = await call(token as string, 'account_get-usage');
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toMatchObject({ credits, freeMonthlyLimits, usage: null });
     expect(JSON.stringify(result)).not.toContain('secret');
@@ -155,18 +155,18 @@ it.each([
 );
 
 it('sums complete metered usage and retains the authoritative billing permission', async () => {
-  const result = await call('member', 'get-account-usage');
+  const result = await call('member', 'account_get-usage');
   expect(result.structuredContent).toMatchObject({
     canManageBilling: false,
     usage: { totalCostCents: 150, totalFrames: 300, totalTtsSeconds: 12 },
   });
-  expect((await call('admin', 'get-account-usage')).structuredContent).toMatchObject({
+  expect((await call('admin', 'account_get-usage')).structuredContent).toMatchObject({
     canManageBilling: true,
   });
 });
 
 it('never presents incomplete or unauthorized usage as a zero total', async () => {
-  const result = await call('incomplete', 'get-account-usage');
+  const result = await call('incomplete', 'account_get-usage');
   expect(result.structuredContent).toMatchObject({ usage: null });
-  expect((await call('forbidden', 'get-account-usage')).isError).toBe(true);
+  expect((await call('forbidden', 'account_get-usage')).isError).toBe(true);
 });

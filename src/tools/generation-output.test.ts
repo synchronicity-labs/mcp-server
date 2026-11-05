@@ -74,7 +74,7 @@ describe('generation results', () => {
   it('return the API name outputMediaUrl and the deprecated outputUrl with one value', async () => {
     const { client } = await connect();
     const done = await client.callTool({
-      name: 'generate_get-generation',
+      name: 'generations_get',
       arguments: { id: 'done' },
     });
     expect(done.isError).not.toBe(true);
@@ -89,21 +89,21 @@ describe('generation results', () => {
     expect([text.outputMediaUrl, text.outputUrl]).toEqual([signedUrl, signedUrl]);
 
     const failed = await client.callTool({
-      name: 'generate_get-generation',
+      name: 'generations_get',
       arguments: { id: 'failed' },
     });
     expect(failed.structuredContent).toMatchObject({ outputMediaUrl: null, outputUrl: null });
     const pending = await client.callTool({
-      name: 'generate_get-generation',
+      name: 'generations_get',
       arguments: { id: 'pending' },
     });
     expect(pending.structuredContent).toEqual({ id: 'pending', status: 'PENDING' });
   });
 
-  it("keep GenerationDto's names and add the older ones on generations_get-by-id", async () => {
+  it("keep GenerationDto's names and add the older ones on generations_get-details", async () => {
     const { client } = await connect();
     const result = await client.callTool({
-      name: 'generations_get-by-id',
+      name: 'generations_get-details',
       arguments: { id: 'dto' },
     });
     // GenerationDto.model is an object; the old string-only schema refused this result.
@@ -123,7 +123,7 @@ describe('generation results', () => {
 
   it('name each listed generation outputMediaUrl too', async () => {
     const { client } = await connect();
-    const result = await client.callTool({ name: 'generate_get-generations', arguments: {} });
+    const result = await client.callTool({ name: 'generations_list', arguments: {} });
     expect(JSON.parse((result.content as Array<{ text: string }>)[0]!.text)).toEqual([
       { id: 'done', status: 'COMPLETED', outputUrl: signedUrl, outputMediaUrl: signedUrl },
       { id: 'pending', status: 'PENDING' },
@@ -138,8 +138,8 @@ describe('generation results', () => {
   it('mark outputUrl deprecated in the output schema and point descriptions at outputMediaUrl', async () => {
     const { client } = await connect();
     const descriptors = (await client.listTools()).tools;
-    const get = descriptors.find((tool) => tool.name === 'generate_get-generation')!;
-    const byId = descriptors.find((tool) => tool.name === 'generations_get-by-id')!;
+    const get = descriptors.find((tool) => tool.name === 'generations_get')!;
+    const byId = descriptors.find((tool) => tool.name === 'generations_get-details')!;
     for (const tool of [get, byId]) {
       const properties = outputProperties(tool);
       expect(properties.outputMediaUrl?.deprecated).toBeUndefined();
@@ -155,7 +155,7 @@ describe('generation results', () => {
     expect(get.description).toContain('`outputUrl` is a deprecated alias');
     expect(get.description).not.toContain('structuredContent.outputUrl');
     expect(byId.description).toContain('when COMPLETED, `outputMediaUrl`');
-    expect(getOverride('generate_create-generation')?.description).toContain(
+    expect(getOverride('generations_create')?.description).toContain(
       'when completed, read `outputMediaUrl` (`outputUrl` is a deprecated alias)',
     );
   });

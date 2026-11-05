@@ -21,7 +21,7 @@ const requestSchema = projectSchema.extend({
   voiceId: z
     .string()
     .min(1)
-    .describe('An id returned by voices_get-voices. Restricted voices cannot synthesize.'),
+    .describe('An id returned by voices_list. Restricted voices cannot synthesize.'),
   stability: z.number().min(0).max(1).optional(),
   similarityBoost: z.number().min(0).max(1).optional(),
 });
@@ -77,7 +77,7 @@ export function createSpeechTools(
   }
   return [
     {
-      name: 'get-speech-options',
+      name: 'speech-previews_get-options',
       title: 'Check speech preview availability',
       description:
         'Read speech-preview availability and the connected organization’s billing mode/free allowance for a Studio quote. Does not synthesize or change billing.',
@@ -93,10 +93,10 @@ export function createSpeechTools(
       },
     },
     {
-      name: 'create-speech-preview',
+      name: 'speech-previews_create',
       title: 'Generate a speech preview',
       description:
-        'Synthesize the confirmed script and selected available voice into a durable audio job for the project. This is a potentially paid action. Persist idempotencyKey before calling, reuse that same key and identical input after uncertain admission, and poll get-speech-preview by returned id. Never create again merely because attaching the resulting audio failed.',
+        'Synthesize the confirmed script and selected available voice into a durable audio job for the project. This is a potentially paid action. Persist idempotencyKey before calling, reuse that same key and identical input after uncertain admission, and poll speech-previews_get by returned id. Never create again merely because attaching the resulting audio failed.',
       inputSchema: requestSchema.shape,
       outputSchema: jobSchema.shape,
       annotations: {
@@ -119,7 +119,7 @@ export function createSpeechTools(
       },
     },
     {
-      name: 'get-speech-preview',
+      name: 'speech-previews_get',
       title: 'Check a speech preview',
       description:
         'Read the same durable speech job until SUCCESS or FAILED. Reads do not synthesize. Requires an accessible project in the connected organization; the audio is attached separately by the app.',

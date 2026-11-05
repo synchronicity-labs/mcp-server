@@ -111,7 +111,7 @@ it('projects the authenticated account and keeps API-key identity null across th
   try {
     for (const token of ['oauth-user', 'api-key', 'unnamed-user']) {
       const result = await runWithAuth(token, 'openai-mcp', () =>
-        client.callTool({ name: 'get-account-context', arguments: {} }),
+        client.callTool({ name: 'account_get-context', arguments: {} }),
       );
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual({
@@ -134,7 +134,7 @@ it('projects the authenticated account and keeps API-key identity null across th
       expect(JSON.stringify(result)).not.toContain('must-not-leak');
       const members = await runWithAuth(token, 'openai-mcp', () =>
         client.callTool({
-          name: 'get-asset-creators',
+          name: 'assets_list-creators',
           arguments: { organizationId: 'foreign-org' },
         }),
       );

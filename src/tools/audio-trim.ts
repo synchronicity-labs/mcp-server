@@ -45,10 +45,10 @@ export function createAudioTrimTools(
   const read = z.object({ id: z.uuid() }).strict();
   return [
     {
-      name: 'trim-audio',
+      name: 'audio-trims_create',
       title: 'Prepare shorter audio',
       description:
-        'Save the first durationSeconds of an authorized Sync audio asset, passed as assetId, as a new reusable asset. Explain and confirm the partial duration first. Persist one idempotencyKey and reuse it with identical inputs after an uncertain response. This prepares audio only: it never generates video, spends generation credits, or consumes a free generation. Poll get-audio-trim until completed, then use its assetId and actual duration for a fresh quote. Partial video lipsync must use cut_off; keep the original draft unchanged. Failed operations require an explicit new attempt.',
+        'Save the first durationSeconds of an authorized Sync audio asset, passed as assetId, as a new reusable asset. Explain and confirm the partial duration first. Persist one idempotencyKey and reuse it with identical inputs after an uncertain response. This prepares audio only: it never generates video, spends generation credits, or consumes a free generation. Poll audio-trims_get until completed, then use its assetId and actual duration for a fresh quote. Partial video lipsync must use cut_off; keep the original draft unchanged. Failed operations require an explicit new attempt.',
       inputSchema: create.shape,
       outputSchema: result.shape,
       annotations: {
@@ -73,7 +73,7 @@ export function createAudioTrimTools(
       },
     },
     {
-      name: 'get-audio-trim',
+      name: 'audio-trims_get',
       title: 'Read audio preparation',
       description:
         'Read the same authorized audio preparation. Pending status is resumable; do not create another trim. This never starts video generation.',

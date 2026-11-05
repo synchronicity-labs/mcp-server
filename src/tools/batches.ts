@@ -51,7 +51,7 @@ const item = z
     payload: z
       .record(z.string(), z.unknown())
       .describe(
-        'One POST /v2/generate body, the same as a single generation: {model, input: [{type: "video", url}, {type: "audio", url}], options?}. Input items take a public URL or a Sync assetId; a text input takes {type: "text", provider: {...}} with a voice from voices_get-voices.',
+        'One POST /v2/generate body, the same as a single generation: {model, input: [{type: "video", url}, {type: "audio", url}], options?}. Input items take a public URL or a Sync assetId; a text input takes {type: "text", provider: {...}} with a voice from voices_list.',
       ),
   })
   .strict();
@@ -178,7 +178,7 @@ function payloadProblem(payload: Record<string, unknown>): string | undefined {
   // The API expands Edit Dialogue rows itself, with their own checks.
   if (payload.dialogueEdit !== undefined) return undefined;
   if (typeof payload.model !== 'string' || payload.model.trim() === '')
-    return 'payload.model must name a model, such as sync-3 (see models_get)';
+    return 'payload.model must name a model, such as sync-3 (see models_list)';
   if (!Array.isArray(payload.input) || payload.input.length === 0)
     return 'payload.input must list the inputs, such as {type: "video", url} and {type: "audio", url}';
   const bad = payload.input.findIndex(
@@ -232,7 +232,7 @@ function planStep(requiredPlan: string | undefined): string {
       : requiredPlan
         ? ` It needs the ${requiredPlan} plan or above.`
         : '';
-  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, create the generations one at a time with create-lipsync or create-translate-and-dub. Creating the batch again fails the same way until the plan changes.`;
+  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, create the generations one at a time with lipsync_create or dubbing_create. Creating the batch again fails the same way until the plan changes.`;
 }
 
 /** Tell the agent what changes the outcome; API lines are 1-based item positions. */
@@ -288,7 +288,7 @@ export function createBatchTools(
     {
       name: 'batches_create',
       title: 'Create a batch of generations',
-      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Use it for ${MIN_ITEMS} or more generations that do not depend on each other; for fewer, or when one result feeds the next, use create-lipsync or create-translate-and-dub per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generate_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Leave payload.projectId out for new work; a payload with projectId needs projectIntent=explicit, which only an explicit user selection or a project just created for this request allows. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
+      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Use it for ${MIN_ITEMS} or more generations that do not depend on each other; for fewer, or when one result feeds the next, use lipsync_create or dubbing_create per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generations_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Leave payload.projectId out for new work; a payload with projectId needs projectIntent=explicit, which only an explicit user selection or a project just created for this request allows. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
       inputSchema: createInput.shape,
       outputSchema: createOutput,
       annotations: {

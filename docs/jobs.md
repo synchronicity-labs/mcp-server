@@ -14,10 +14,10 @@ server can read, because each kind reads through its own tool:
 
 | `kind` | `id` | Reads through |
 | --- | --- | --- |
-| `generation` | the id a create tool returned (`create-lipsync`, `create-translate-and-dub`, `create-timeline-lipsync`, `create-dialogue-video`) | `generate_get-generation`, with `include=progress` when the API offers it |
-| `transcription` | the transcription id | `transcriptions_get-transcription-job` |
+| `generation` | the id a create tool returned (`lipsync_create`, `dubbing_create`, `lipsync_create-timeline`, `dialogue-videos_create`) | `generations_get`, with `include=progress` when the API offers it |
+| `transcription` | the transcription id | `transcriptions_get` |
 | `speaker_analysis` | the transcription id | `transcriptions_get-speaker-analysis` (once the API publishes it) |
-| `translation_preview` | the `create-translation-preview` id; `projectId` is required | `get-translation-preview` |
+| `translation_preview` | the `translation-previews_create` id; `projectId` is required | `translation-previews_get` |
 | `import` | the social video link passed to `assets_create`, with the same `projectId` (and `projectIntent` if that call needed it) | `assets_create`, repeated with the same input; the API reuses the running import |
 | `batch` | the batch id `batches_create` returned | `batches_get`; a finished batch's `result.results` lists each item's generation |
 
@@ -80,6 +80,6 @@ same rules to decide when to stop.
 The hosted tool list is the ChatGPT app's reviewed listing, and Codex shares those
 descriptors. Adding tools there needs a Rescan in the OpenAI publisher and may need app
 review. Hosted clients can already wait on every hosted job kind with `wait: true` on
-`generate_get-generation`, `get-translation-preview` and `assets_create`, and the hosted
+`generations_get`, `translation-previews_get` and `assets_create`, and the hosted
 server has no transcription or speaker-analysis tools that would produce those ids.
 Offering the jobs tools to hosted Claude, Cursor and Codex clients is a possible follow-up.

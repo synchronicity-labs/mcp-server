@@ -50,7 +50,7 @@ it('recovers account reads through MCP without confusing expired credentials, pe
   await client.connect(ct);
   const read = () =>
     runWithAuth('fixture-token', 'openai-mcp', () =>
-      client.callTool({ name: 'get-account-context', arguments: {} }),
+      client.callTool({ name: 'account_get-context', arguments: {} }),
     );
   try {
     // Preserve extension fields that the generic SDK's Tool schema strips.
@@ -58,7 +58,7 @@ it('recovers account reads through MCP without confusing expired credentials, pe
       { method: 'tools/list' },
       z.object({ tools: z.array(z.looseObject({ name: z.string() })) }),
     );
-    const descriptor = catalog.tools.find((tool) => tool.name === 'get-account-context');
+    const descriptor = catalog.tools.find((tool) => tool.name === 'account_get-context');
     expect(descriptor).toMatchObject({
       securitySchemes: [{ type: 'oauth2', scopes: [] }],
       _meta: { securitySchemes: [{ type: 'oauth2', scopes: [] }] },

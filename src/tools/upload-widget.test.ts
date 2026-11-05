@@ -17,7 +17,7 @@ describe('createUploadWidgetTool', () => {
   it('declares the ChatGPT render template metadata', () => {
     const tool = createUploadWidgetTool();
 
-    expect(tool.name).toBe('open-upload-widget');
+    expect(tool.name).toBe('assets_open-upload-widget');
     expect(tool.title).toBe('Open image/audio upload widget');
     expect(tool.description).toContain('does not accept video files');
     expect(tool.description).not.toContain('Never');
@@ -37,7 +37,7 @@ describe('createUploadWidgetTool', () => {
   it('returns structured widget input as a raw MCP result', async () => {
     const tool = createUploadWidgetTool();
     if (tool.resultFormat !== 'mcp') {
-      throw new Error('open-upload-widget must return a raw MCP result');
+      throw new Error('assets_open-upload-widget must return a raw MCP result');
     }
     const result = await tool.handler({
       requestedMediaType: 'image',
@@ -57,7 +57,7 @@ describe('createUploadWidgetTool', () => {
   it('does not accept video as a requested widget media type', async () => {
     const tool = createUploadWidgetTool();
     if (tool.resultFormat !== 'mcp') {
-      throw new Error('open-upload-widget must return a raw MCP result');
+      throw new Error('assets_open-upload-widget must return a raw MCP result');
     }
     const result = await tool.handler({
       requestedMediaType: 'video',
@@ -68,7 +68,7 @@ describe('createUploadWidgetTool', () => {
 });
 
 describe('UPLOAD_WIDGET_HTML', () => {
-  it('uses ChatGPT file APIs and calls the upload-media tool', () => {
+  it('uses ChatGPT file APIs and calls the assets_upload tool', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('openai.selectFiles');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.uploadFile');
     expect(UPLOAD_WIDGET_HTML).toContain('openai.getFileDownloadUrl');
@@ -84,10 +84,10 @@ describe('UPLOAD_WIDGET_HTML', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('sourceOpenai.toolOutput');
     expect(UPLOAD_WIDGET_HTML).toContain('openai:set_globals');
     expect(UPLOAD_WIDGET_HTML).toContain('mcpToolResult._meta');
-    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("upload-media"');
-    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("voices_get-voices"');
-    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("create-lipsync-from-assets"');
-    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("generate_get-generation"');
+    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("assets_upload"');
+    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("voices_list"');
+    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("lipsync_create-from-assets"');
+    expect(UPLOAD_WIDGET_HTML).toContain('openai.callTool("generations_get"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="scriptInput"');
     expect(UPLOAD_WIDGET_HTML).toContain('id="runLipsync"');
   });
@@ -160,13 +160,14 @@ describe('registerUploadWidgetResource', () => {
       ...UPLOAD_WIDGET_LEGACY_URIS,
     ]);
     expect(registrations.map((registration) => registration.name)).toEqual([
-      'sync-upload-widget-v7',
+      'sync-upload-widget-v8',
       'sync-upload-widget-v1',
       'sync-upload-widget-v2',
       'sync-upload-widget-v3',
       'sync-upload-widget-v4',
       'sync-upload-widget-v5',
       'sync-upload-widget-v6',
+      'sync-upload-widget-v7',
     ]);
 
     const legacyRegistration = registrations.find(

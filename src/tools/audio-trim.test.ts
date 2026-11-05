@@ -74,8 +74,8 @@ describe('audio preparation tools', () => {
       },
     });
     expect(createAudioTrimTools(parsed, { request: vi.fn() }).map((tool) => tool.name)).toEqual([
-      'trim-audio',
-      'get-audio-trim',
+      'audio-trims_create',
+      'audio-trims_get',
     ]);
   });
   it('fails closed until keyed trim routes are advertised', () => {

@@ -108,7 +108,7 @@ it.each([
     await mkdir('.cache/status-card', { recursive: true });
     try {
       const descriptor = (await client.listTools()).tools.find(
-        (tool) => tool.name === 'create-lipsync',
+        (tool) => tool.name === 'lipsync_create',
       );
       const accepted = await client.callTool({
         name: descriptor.name,

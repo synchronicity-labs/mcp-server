@@ -10,6 +10,7 @@ import { createHttpClient } from './http-client.js';
 import { parseSpec } from './openapi/parser.js';
 import { createMcpServerFactory } from './server.js';
 import { asyncRequestListener, skipAccountReads } from './test-fixtures/request-listener.js';
+import { currentTools } from './test-fixtures/tool-names.js';
 import { projectId, translationInput, translationSpec } from './test-fixtures/translation.js';
 import { createTranslationTools } from './tools/translation.js';
 
@@ -97,19 +98,19 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   const client = new Client({ name: 'openai-mcp', version: '1.0.0' });
   clients.push(client);
   await client.connect(clientTransport);
-  const tools = (await client.listTools()).tools;
-  // Every registered tool but create-timeline-lipsync and the feature-gated scenes_detect and
+  const tools = currentTools((await client.listTools()).tools);
+  // Every registered tool but lipsync_create-timeline and the feature-gated scenes_detect and
   // stems_separate, kept out of the ChatGPT app listing.
   expect(tools).toHaveLength(factory.toolCount - 3);
-  expect(tools.some((tool) => tool.name === 'generate_create-generation')).toBe(false);
-  const options = await client.callTool({ name: 'get-translation-options', arguments: {} });
+  expect(tools.some((tool) => tool.name === 'generations_create')).toBe(false);
+  const options = await client.callTool({ name: 'dubbing_get-options', arguments: {} });
   expect(options.structuredContent).toEqual({
     previewAvailable: false,
     targetLanguages: ['es', 'fr', 'ja'],
     sourceLanguages: ['auto', 'en', 'es', 'fr', 'ja'],
   });
   expect(calls).toEqual([]);
-  const tool = tools.find((candidate) => candidate.name === 'create-translate-and-dub')!;
+  const tool = tools.find((candidate) => candidate.name === 'dubbing_create')!;
   expect(tool.inputSchema.properties?.targetLang).toMatchObject({ enum: ['es', 'fr', 'ja'] });
   expect(tool.inputSchema.required).toContain('idempotencyKey');
   expect(tool._meta?.['openai/widgetAccessible']).toBe(true);
@@ -151,7 +152,7 @@ it('carries the combined estimate through the authenticated MCP boundary without
   clients.push(client);
   await client.connect(clientTransport);
   const tool = (await client.listTools()).tools.find(
-    (item) => item.name === 'generate_estimate-cost',
+    (item) => item.name === 'generations_estimate-cost',
   )!;
   expect(tool.inputSchema.properties?.workflow).toMatchObject({
     enum: ['lipsync', 'translate-and-dub'],

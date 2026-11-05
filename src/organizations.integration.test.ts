@@ -96,7 +96,7 @@ describe('organizations on the hosted server', () => {
     });
 
     calls.length = 0;
-    const context = await callTool(0, 'get-account-context');
+    const context = await callTool(0, 'account_get-context');
     expect(context.structuredContent).toMatchObject({
       organization: { id: ACME.id, name: 'Acme', role: 'member' },
       plan: { id: 'scale' },
@@ -110,7 +110,7 @@ describe('organizations on the hosted server', () => {
 
     // Another session of the same user keeps its own organization.
     calls.length = 0;
-    const other = await callTool(1, 'get-account-context');
+    const other = await callTool(1, 'account_get-context');
     expect(other.structuredContent).toMatchObject({
       organization: { id: HOME.id },
       organizationChoice: { selectedBy: 'credential' },
@@ -122,7 +122,7 @@ describe('organizations on the hosted server', () => {
     const { baseUrl, calls } = await api();
     const { call } = await hosted(baseUrl);
 
-    const created = await call('create-lipsync', { ...lipsync, organizationId: ACME.id });
+    const created = await call('lipsync_create', { ...lipsync, organizationId: ACME.id });
     expect(created.isError).not.toBe(true);
     expect(created.structuredContent).toMatchObject({ id: GENERATION, organization: ACME });
     const generate = calls.find((item) => item.method === 'POST' && item.url === '/v2/generate');
@@ -130,7 +130,7 @@ describe('organizations on the hosted server', () => {
     expect(calls.find((item) => item.url === '/v2/projects')?.organization).toBe(ACME.id);
 
     calls.length = 0;
-    const read = await call('generate_get-generation', { id: GENERATION });
+    const read = await call('generations_get', { id: GENERATION });
     expect(read.isError).not.toBe(true);
     expect(calls.filter((item) => item.url.startsWith('/v2/generate/'))).toEqual([
       expect.objectContaining({ organization: ACME.id }),
@@ -138,13 +138,13 @@ describe('organizations on the hosted server', () => {
 
     // The session itself never switched.
     calls.length = 0;
-    const next = await call('create-lipsync', {
+    const next = await call('lipsync_create', {
       ...lipsync,
       projectCreationKey: '00000000-0000-4000-8000-0000000000e2',
     });
     expect(next.structuredContent).toMatchObject({ organization: HOME });
     expect(calls.every((item) => item.organization === undefined)).toBe(true);
-    const context = await call('get-account-context');
+    const context = await call('account_get-context');
     expect(context.structuredContent).toMatchObject({
       organization: { id: HOME.id },
       organizationChoice: { selectedBy: 'credential' },
@@ -155,8 +155,8 @@ describe('organizations on the hosted server', () => {
     const { baseUrl, calls } = await api();
     const { call } = await hosted(baseUrl);
     const results = await Promise.all([
-      call('create-lipsync', lipsync),
-      call('create-lipsync', { ...lipsync, organizationId: ACME.id }),
+      call('lipsync_create', lipsync),
+      call('lipsync_create', { ...lipsync, organizationId: ACME.id }),
     ]);
     expect(
       results.map(
@@ -189,7 +189,7 @@ describe('organizations on the hosted server', () => {
       },
     });
     const { call } = await hosted(baseUrl);
-    const creating = call('create-lipsync', lipsync);
+    const creating = call('lipsync_create', lipsync);
     await projectStarted;
     const switched = await call('organizations_select', { organizationId: ACME.id });
     expect(switched.isError).not.toBe(true);
@@ -204,18 +204,18 @@ describe('organizations on the hosted server', () => {
   it('refuses a write that names an id from another organization unless it names that organization', async () => {
     const { baseUrl, calls } = await api();
     const { call } = await hosted(baseUrl);
-    const first = await call('create-lipsync', { ...lipsync, organizationId: ACME.id });
+    const first = await call('lipsync_create', { ...lipsync, organizationId: ACME.id });
     const { projectId } = first.structuredContent as { projectId: string };
     const { projectCreationKey: _key, ...media } = lipsync;
     const again = { ...media, projectId, projectIntent: 'explicit' };
 
     calls.length = 0;
-    const refused = await call('create-lipsync', again);
+    const refused = await call('lipsync_create', again);
     expect(refused.isError).toBe(true);
     expect(JSON.stringify(refused.content)).toContain(`Pass organizationId \\"${ACME.id}\\"`);
     expect(calls).toEqual([]);
 
-    const accepted = await call('create-lipsync', { ...again, organizationId: ACME.id });
+    const accepted = await call('lipsync_create', { ...again, organizationId: ACME.id });
     expect(accepted.structuredContent).toMatchObject({ organization: ACME });
     expect(
       calls.filter((item) => item.url === '/v2/generate').map((item) => item.organization),
@@ -226,12 +226,12 @@ describe('organizations on the hosted server', () => {
     const { baseUrl, calls } = await api();
     const { call } = await hosted(baseUrl);
     // Nothing read yet: naming the default organization still runs without the header.
-    const first = await call('create-lipsync', { ...lipsync, organizationId: HOME.id });
+    const first = await call('lipsync_create', { ...lipsync, organizationId: HOME.id });
     expect(first.structuredContent).toMatchObject({ organization: HOME });
     expect(calls.every((item) => item.organization === undefined)).toBe(true);
     const { projectId } = first.structuredContent as { projectId: string };
     const { projectCreationKey: _key, ...media } = lipsync;
-    const again = await call('create-lipsync', { ...media, projectId, projectIntent: 'explicit' });
+    const again = await call('lipsync_create', { ...media, projectId, projectIntent: 'explicit' });
     expect(again.isError).not.toBe(true);
     expect(again.structuredContent).toMatchObject({ organization: HOME });
   });
@@ -239,12 +239,12 @@ describe('organizations on the hosted server', () => {
   it('keeps ids from the default organization writable after selecting that same organization', async () => {
     const { baseUrl } = await api();
     const { call } = await hosted(baseUrl);
-    const first = await call('create-lipsync', lipsync);
+    const first = await call('lipsync_create', lipsync);
     expect(first.structuredContent).toMatchObject({ organization: HOME });
     const { projectId } = first.structuredContent as { projectId: string };
     await call('organizations_select', { organizationId: HOME.id });
     const { projectCreationKey: _key, ...media } = lipsync;
-    const again = await call('create-lipsync', { ...media, projectId, projectIntent: 'explicit' });
+    const again = await call('lipsync_create', { ...media, projectId, projectIntent: 'explicit' });
     expect(again.isError).not.toBe(true);
     expect(again.structuredContent).toMatchObject({ organization: HOME });
   });
@@ -268,14 +268,14 @@ describe('organizations on the hosted server', () => {
     });
     const { call } = await hosted(baseUrl);
     await call('organizations_select', { organizationId: ACME.id });
-    const creating = call('create-lipsync', { ...lipsync, organizationId: ACME.id });
+    const creating = call('lipsync_create', { ...lipsync, organizationId: ACME.id });
     await generating;
     await call('organizations_select', { organizationId: HOME.id });
     release();
     expect((await creating).structuredContent).toMatchObject({ organization: ACME });
 
     calls.length = 0;
-    await call('generate_get-generation', { id: GENERATION });
+    await call('generations_get', { id: GENERATION });
     expect(calls.map((item) => item.organization)).toEqual([ACME.id]);
   });
 
@@ -294,11 +294,11 @@ describe('organizations on the hosted server', () => {
           : undefined,
     });
     const { call } = await hosted(baseUrl);
-    const created = await call('create-lipsync', { ...lipsync, organizationId: ACME.id });
+    const created = await call('lipsync_create', { ...lipsync, organizationId: ACME.id });
     expect(created.structuredContent).toMatchObject({ error: { generationId: GENERATION } });
 
     calls.length = 0;
-    const read = await call('generate_get-generation', { id: GENERATION });
+    const read = await call('generations_get', { id: GENERATION });
     expect(read.isError).not.toBe(true);
     expect(calls.map((item) => item.organization)).toEqual([ACME.id]);
   });
@@ -318,7 +318,7 @@ describe('organizations on the hosted server', () => {
     });
     const { call } = await hosted(baseUrl);
     const started = Date.now();
-    const created = await call('create-lipsync', lipsync);
+    const created = await call('lipsync_create', lipsync);
     expect(created.isError).not.toBe(true);
     expect(created.structuredContent).toMatchObject({ id: GENERATION });
     expect(created.structuredContent).not.toHaveProperty('organization');
@@ -327,7 +327,7 @@ describe('organizations on the hosted server', () => {
     // It ran in the credential's default: after a switch, its generation is read there.
     await call('organizations_select', { organizationId: ACME.id });
     calls.length = 0;
-    await call('generate_get-generation', { id: GENERATION });
+    await call('generations_get', { id: GENERATION });
     expect(calls.map((item) => item.organization)).toEqual([undefined]);
   });
 
@@ -346,13 +346,13 @@ describe('organizations on the hosted server', () => {
       },
     });
 
-    const create = await call('create-lipsync', { ...lipsync, organizationId: FOREIGN });
+    const create = await call('lipsync_create', { ...lipsync, organizationId: FOREIGN });
     expect(create.isError).toBe(true);
     expect(JSON.stringify(create.content)).toContain('You are not a member of the organization');
     expect(calls.some((item) => item.url === '/v2/generate')).toBe(false);
 
     calls.length = 0;
-    await call('get-account-context');
+    await call('account_get-context');
     expect(calls.every((item) => item.organization === undefined)).toBe(true);
   });
 
@@ -382,10 +382,10 @@ describe('organizations on the hosted server', () => {
     const refused = await call('organizations_select', { organizationId: UNGRANTED });
     expect(refused.isError).toBe(true);
     expect(refused.structuredContent).toMatchObject({ error: guidance });
-    const create = await call('create-lipsync', { ...lipsync, organizationId: UNGRANTED });
+    const create = await call('lipsync_create', { ...lipsync, organizationId: UNGRANTED });
     expect(create.structuredContent).toMatchObject({ error: guidance });
     expect(calls.some((item) => item.url === '/v2/generate')).toBe(false);
-    const context = await call('get-account-context');
+    const context = await call('account_get-context');
     expect(context.structuredContent).toMatchObject({
       organization: { id: HOME.id },
       organizationChoice: { selectedBy: 'credential' },
@@ -394,7 +394,7 @@ describe('organizations on the hosted server', () => {
     // A selection whose grant goes away mid-session: every call says what to do.
     await call('organizations_select', { organizationId: ACME.id });
     revoked = true;
-    const later = await call('create-lipsync', lipsync);
+    const later = await call('lipsync_create', lipsync);
     expect(later.structuredContent).toMatchObject({ error: guidance });
   });
 
@@ -405,7 +405,7 @@ describe('organizations on the hosted server', () => {
     const result = await call('organizations_select', { organizationId: ACME.id });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('Sync did not switch to organization');
-    const create = await call('create-lipsync', { ...lipsync, organizationId: ACME.id });
+    const create = await call('lipsync_create', { ...lipsync, organizationId: ACME.id });
     expect(create.isError).toBe(true);
     expect(calls.some((item) => item.url === '/v2/generate')).toBe(false);
   });
@@ -419,10 +419,10 @@ describe('organizations on the hosted server', () => {
       .filter((tool) => 'organizationId' in (tool.inputSchema.properties ?? {}))
       .map((tool) => tool.name);
     expect(withChoice).toEqual(
-      expect.arrayContaining(['create-lipsync', 'create-timeline-lipsync', 'organizations_select']),
+      expect.arrayContaining(['lipsync_create', 'lipsync_create-timeline', 'organizations_select']),
     );
-    expect(withChoice).not.toContain('generate_get-generation');
-    const lipsyncTool = tools.find((tool) => tool.name === 'create-lipsync')!;
+    expect(withChoice).not.toContain('generations_get');
+    const lipsyncTool = tools.find((tool) => tool.name === 'lipsync_create')!;
     expect(JSON.stringify(lipsyncTool.outputSchema)).toContain('"organization"');
   });
 });

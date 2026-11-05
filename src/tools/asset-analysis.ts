@@ -86,7 +86,7 @@ function createScenesTool(http: HttpClient): McpToolDefinition {
     description:
       'Find the shots in a saved VIDEO asset. A scene is one continuous shot between two camera cuts. Returns scenes in video order, each with startFrame and endFrame (frames from 0, both inclusive; the next scene starts at endFrame + 1) and startSeconds and endSeconds (seconds from the start of the video; endSeconds equals the next scene startSeconds). ' +
       'Starts detection only when the asset has no stored scenes or the last run failed; otherwise it returns the stored or running result, so calling again never reruns a finished detection. Pass wait: true to wait on the server; while status is pending, call again with wait: true. ' +
-      'Typical use: shot-aware lipsync with create-timeline-lipsync. Give each speaker one clip per shot and start and end clips on scene boundaries, so the lipsynced face never switches mid-shot; clip startFrame and endFrame are inclusive too, so a scene maps onto a clip as is.',
+      'Typical use: shot-aware lipsync with lipsync_create-timeline. Give each speaker one clip per shot and start and end clips on scene boundaries, so the lipsynced face never switches mid-shot; clip startFrame and endFrame are inclusive too, so a scene maps onto a clip as is.',
     inputSchema: input.shape,
     outputSchema: scenesOutput,
     annotations: {

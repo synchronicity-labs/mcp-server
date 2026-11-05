@@ -8,14 +8,14 @@ monitoring and cost reporting. Moved out of the README, which covers using the s
 
 Hosted sessions select one immutable presentation profile after MCP initialization.
 Exact ChatGPT aliases retain the upload widget, file metadata and optional file arguments.
-All hosted clients can discover models (`models_get`), search/list and read projects
-(`projects_get-all`, `projects_get`), search/list and read assets (`assets_get-all`,
-`assets_get`), list organization generation history (`generate_get-generations`),
-and estimate cost (`generate_estimate-cost`). These tools use the API's OpenAPI
+All hosted clients can discover models (`models_list`), search/list and read projects
+(`projects_list`, `projects_get`), search/list and read assets (`assets_list`,
+`assets_get`), list organization generation history (`generations_list`),
+and estimate cost (`generations_estimate-cost`). These tools use the API's OpenAPI
 contracts and the caller's existing Sync permissions. Lists retain the API cursor
 parameters. ChatGPT can also call these tools from its UI.
 
-When the backend advertises project filtering, `projects_get-generations` provides
+When the backend advertises project filtering, `projects_list-generations` provides
 history for one required canonical `projectId`, with the same cursor and limit
 parameters as the public API. It verifies project access before reading history
 and rejects responses containing another project's records, including responses
@@ -24,8 +24,8 @@ tool remains available on older backends. Deploy the compatible backend to every
 instance, then restart MCP to refresh its OpenAPI catalog before enabling project
 history in the app. This does not create a second plugin or a mirrored database.
 
-Claude and unknown clients also expose `create-lipsync`, `voices_get-voices`, and
-`generate_get-generation` for public/Sync-hosted URLs and existing Sync asset IDs.
+Claude and unknown clients also expose `lipsync_create`, `voices_list`, and
+`generations_get` for public/Sync-hosted URLs and existing Sync asset IDs.
 Upload local media in authenticated Sync and use **Copy ID** in the same organization,
 or **Copy URL**. Unsupported file/widget calls return this guidance without uploading.
 
@@ -74,7 +74,7 @@ review readiness.
 
 ## Recovering a generation submission
 
-`create-lipsync` accepts an optional `idempotencyKey` and forwards it as the
+`lipsync_create` accepts an optional `idempotencyKey` and forwards it as the
 existing Sync API's `Idempotency-Key` header. Clients should persist a key for
 one intentional generation action and reuse the same key and payload after an
 ambiguous response. A new intentional generation uses a new key. The backend
@@ -82,7 +82,7 @@ owns replay, conflict detection and credit accounting; MCP does not retry writes
 
 For a new project, preserve `projectCreationKey` with the generation key. For an
 explicitly selected project, retain its canonical `projectId` and supply
-`projectIntent: explicit`. Use durable asset IDs or stable URLs for keyed submissions. Stage ChatGPT files with `upload-media` first, then use the
+`projectIntent: explicit`. Use durable asset IDs or stable URLs for keyed submissions. Stage ChatGPT files with `assets_upload` first, then use the
 returned asset IDs. Re-transferring transient file inputs can produce different
 asset IDs and a changed-payload conflict. Keys accept 1-128 ASCII letters,
 digits, periods, underscores, tildes and hyphens. Omitting the key preserves
@@ -90,7 +90,7 @@ existing behavior.
 
 An `IDEMPOTENCY_OUTCOME_UNKNOWN` error may contain a UUID `generationId`.
 MCP preserves that ID in `structuredContent.error`; clients should retain it
-and use `generate_get-generation` for status reads instead of creating again.
+and use `generations_get` for status reads instead of creating again.
 
 ## Embedded Sync app
 
@@ -104,7 +104,7 @@ URI. Invalid configured artifacts fail startup rather than silently serving a
 different interface. These checks establish artifact consistency; deployment
 must still obtain the bundle from the approved frontend build.
 
-The `open-sync-app` tool exposes the resource through the standard MCP Apps UI
+The `app_open` tool exposes the resource through the standard MCP Apps UI
 metadata and declares ChatGPT global/sidebar and thread/panel entrypoints.
 Opening it is read-only. Existing uploads and tool-only clients are preserved;
 the new tool and resource are only presented to the ChatGPT client profile.
@@ -163,7 +163,7 @@ Downstream tool responses with status 401 include `mcp/www_authenticate` pointin
 to the same protected-resource metadata as the HTTP authentication middleware.
 Tool descriptors expose `securitySchemes` and its compatibility metadata mirror.
 403 permission failures and service outages do not request another sign-in.
-`get-account-context` preserves verified account/workspace identity when optional
+`account_get-context` preserves verified account/workspace identity when optional
 seat and voice-clone limits are unavailable; a limits 401 still requests linking.
 
 To verify account recovery across the packaged UI and the real MCP HTTP server:
@@ -203,7 +203,7 @@ with the approved request and key. Older saved requests without it keep their
 original header set and idempotency fingerprint; do not add context on recovery.
 Submission checks do not read unrelated parent media or parse its settings, so
 deleting an old source does not block same-key reconciliation. The API still
-authorizes the inputs of a new submission. `get-generation-continuation` retains
+authorizes the inputs of a new submission. `generations_get-continuation` retains
 its full source-access checks before returning media or settings to the app.
 
 Asset previews must use only the exact `thumbnailUrl` returned by Sync for the same
@@ -226,7 +226,7 @@ HTTP session IDs retain only isolation metadata; SDK servers and transports clos
 ## Actual costs of past generations
 
 When the connected Sync API supports `GET /v2/generate/:id/costs`, the server
-exposes `get-generation-costs` to ChatGPT and other supported MCP clients.
+exposes `generations_get-costs` to ChatGPT and other supported MCP clients.
 Pass `{ "generationId": "<Sync generation UUID>" }`, using the ID from creation
 or generation history. This is a read-only call under the connected account.
 

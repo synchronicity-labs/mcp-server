@@ -156,26 +156,26 @@ it('routes chat draft edits through the authenticated API without confirming UI 
   await client.connect(ct);
   try {
     const catalog = (await client.listTools()).tools;
-    expect(catalog.find((t) => t.name === 'get-studio-draft')).toBeDefined();
+    expect(catalog.find((t) => t.name === 'studio-drafts_get')).toBeDefined();
     // A chat edit asks the user first; Studio's own compare-and-set autosave must not.
     for (const [name, destructiveHint] of [
-      ['update-studio-draft', true],
-      ['save-studio-draft', false],
+      ['studio-drafts_update', true],
+      ['studio-drafts_save', false],
     ] as const)
       expect(catalog.find((tool) => tool.name === name)?.annotations).toMatchObject({
         readOnlyHint: false,
         destructiveHint,
       });
-    expect(catalog.find((tool) => tool.name === 'ack-studio-draft')?.annotations).toMatchObject({
+    expect(catalog.find((tool) => tool.name === 'studio-drafts_ack')?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: false,
     });
-    expect(catalog.find((t) => t.name === 'save-studio-draft')?._meta?.ui).toMatchObject({
+    expect(catalog.find((t) => t.name === 'studio-drafts_save')?._meta?.ui).toMatchObject({
       visibility: ['app'],
     });
     const inferred = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
-        name: 'update-studio-draft',
+        name: 'studio-drafts_update',
         arguments: { projectId, draftId, expectedRevision: 4, patch: { visualId: null } },
       }),
     );
@@ -187,7 +187,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     expect(current.state.visualId).toBe(visualId);
     const result = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
-        name: 'update-studio-draft',
+        name: 'studio-drafts_update',
         arguments: {
           projectId,
           draftId,
@@ -219,7 +219,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     calls.length = 0;
     const stale = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
-        name: 'update-studio-draft',
+        name: 'studio-drafts_update',
         arguments: {
           projectId,
           draftId,
@@ -235,7 +235,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     current.editable = false;
     const busy = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
-        name: 'update-studio-draft',
+        name: 'studio-drafts_update',
         arguments: {
           projectId,
           draftId,
@@ -250,7 +250,7 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     calls.length = 0;
     const invalid = await runWithAuth('draft-user', 'openai-mcp', () =>
       client.callTool({
-        name: 'update-studio-draft',
+        name: 'studio-drafts_update',
         arguments: {
           projectId,
           draftId,
@@ -269,11 +269,11 @@ it('routes chat draft edits through the authenticated API without confirming UI 
     await nonUi.connect(nonUiClientTransport);
     try {
       expect(
-        (await nonUi.listTools()).tools.some((tool) => tool.name === 'save-studio-draft'),
+        (await nonUi.listTools()).tools.some((tool) => tool.name === 'studio-drafts_save'),
       ).toBe(false);
       const rejected = await runWithAuth('draft-user', 'claude', () =>
         nonUi.callTool({
-          name: 'ack-studio-draft',
+          name: 'studio-drafts_ack',
           arguments: { projectId, draftId, revision: 5 },
         }),
       );

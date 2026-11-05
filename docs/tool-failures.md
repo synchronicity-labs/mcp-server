@@ -29,9 +29,9 @@ GROUP BY route, sc, code, msg ORDER BY n DESC LIMIT 60 FORMAT JSON
 
 ## What the November 2026 audit found
 
-Five days of `create-lipsync` calls from ChatGPT, October 29 to November 3, failed 30–60% of the time. The causes, largest first:
+Five days of `lipsync_create` calls from ChatGPT, October 29 to November 3, failed 30–60% of the time. The causes, largest first:
 
-- **Resubmitting while a generation still rendered.** Agents called `create-lipsync` again every few seconds and uploaded the same file each time. Free plans run one generation at a time, so every resubmission failed with `concurrency_limit_reached`. `create-lipsync` now returns the running generation for an identical request.
+- **Resubmitting while a generation still rendered.** Agents called `lipsync_create` again every few seconds and uploaded the same file each time. Free plans run one generation at a time, so every resubmission failed with `concurrency_limit_reached`. `lipsync_create` now returns the running generation for an identical request.
 - **Free-plan limits.** Outputs are limited to 15 seconds and speech to 20 seconds, and the plan includes 3 generations a month. Error results now tell the agent to shorten the input instead of retrying.
 - **Uploads.** ChatGPT file links sometimes report `application/octet-stream`, and the API rejects that type. The upload now uses the first media type of the expected kind.
 - **Options the API rejects.** Agents turned on `reasoning_enabled` for sync-3 and speaker detection for a still image. Both are now dropped.

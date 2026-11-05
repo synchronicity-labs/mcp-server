@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ClientProfile } from '../client-profile.js';
 import type { HttpClient } from '../http-client.js';
 import type { JsonSchema, ParsedOperation } from '../openapi/types.js';
+import { currentToolName } from '../tool-names.js';
 import { estimateDurationInputs, resolveEstimateDuration } from './estimate-duration.js';
 import { getOverride } from './overrides.js';
 
@@ -85,7 +86,7 @@ export function generateTools(
 export function deriveAnnotations(method: string, toolName?: string): ToolAnnotations {
   if (
     method === 'get' ||
-    ['generate_estimate-cost', 'generations_estimate-cost'].includes(toolName ?? '')
+    ['generations_estimate-cost', 'generations_estimate'].includes(toolName ?? '')
   ) {
     return { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   }
@@ -104,7 +105,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
   const inputSchema = buildInputSchema(operation);
   const admission = admissionKey(operation);
   if (admission) inputSchema.idempotencyKey = admission.schema;
-  const estimatesCost = ['generate_estimate-cost', 'generations_estimate-cost'].includes(name);
+  const estimatesCost = ['generations_estimate-cost', 'generations_estimate'].includes(name);
   if (estimatesCost) {
     if (inputSchema.duration) {
       inputSchema.duration = inputSchema.duration
@@ -115,7 +116,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     }
     Object.assign(inputSchema, estimateDurationInputs);
   }
-  if (name === 'voices_clone-voice') {
+  if (name === 'voices_clone') {
     // Flattening the API's allOf/oneOf alternatives makes both sources required.
     // Keep the descriptor flat, then enforce the exclusive choice before writing.
     Object.assign(inputSchema, voiceCloneSourceSchema.shape);
@@ -129,7 +130,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     outputSchema: override?.outputSchema,
     annotations: deriveAnnotations(operation.method, name),
     handler: async (args, context) => {
-      if (name === 'voices_clone-voice') voiceCloneSourceSchema.parse(args);
+      if (name === 'voices_clone') voiceCloneSourceSchema.parse(args);
       const prepared = prepareAdmission(args, admission);
       const estimate = estimatesCost ? resolveEstimateDuration(prepared.args) : undefined;
       const requestArgs = estimate?.args ?? prepared.args;
@@ -187,14 +188,19 @@ function titleForToolName(name: string): string {
   return name.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function operationIdToToolName(operationId: string): string {
-  // "GenerateController_createGeneration" → "generate_create-generation"
+/** "AssetsController_getAll" → "assets_get-all", the name before tool-names.ts renames it. */
+export function derivedToolName(operationId: string): string {
   const parts = operationId.split('_');
   if (parts.length < 2) return toKebab(operationId);
 
   const controller = toKebab(parts[0]!.replace(/Controller$/, ''));
   const method = toKebab(parts.slice(1).join('_'));
   return `${controller}_${method}`;
+}
+
+/** "AssetsController_getAll" → "assets_list". */
+export function operationIdToToolName(operationId: string): string {
+  return currentToolName(derivedToolName(operationId));
 }
 
 function toKebab(str: string): string {

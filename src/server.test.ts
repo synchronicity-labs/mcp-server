@@ -32,7 +32,7 @@ describe('registered tool labels', () => {
     const result = { outputUrl: 'https://Example.com/Video.mp4?Token=AbC' };
     registerTools(server, [
       {
-        ...tool('projects_get-all'),
+        ...tool('projects_list'),
         resultFormat: 'json',
         title: 'List Sync Projects',
         meta: { 'openai/toolInvocation/invoking': 'Loading Sync Projects…' },
@@ -45,13 +45,11 @@ describe('registered tool labels', () => {
     try {
       await client.connect(clientTransport);
       expect((await client.listTools()).tools[0]).toMatchObject({
-        name: 'projects_get-all',
+        name: 'projects_list',
         title: 'list sync projects',
         _meta: { 'openai/toolInvocation/invoking': 'loading sync projects…' },
       });
-      expect((await client.callTool({ name: 'projects_get-all' })).structuredContent).toEqual(
-        result,
-      );
+      expect((await client.callTool({ name: 'projects_list' })).structuredContent).toEqual(result);
     } finally {
       await client.close();
       await server.close();
@@ -74,8 +72,8 @@ describe('createToolErrorResult', () => {
   });
 
   it.each([
-    [429, 'concurrency_limit_reached', 'generate_get-generation'],
-    [402, 'generation_plan_duration_exceeded', 'trim-audio'],
+    [429, 'concurrency_limit_reached', 'generations_get'],
+    [402, 'generation_plan_duration_exceeded', 'audio-trims_create'],
     [402, 'free_tier_generations_exhausted', 'Sending the same request again fails'],
     [400, undefined, 'Sending the same request again fails'],
   ])('tells the agent what to do after a %i %s', (status, code, guidance) => {
@@ -90,12 +88,12 @@ describe('createToolErrorResult', () => {
     const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     try {
       logToolError(() => 'chatgpt')(
-        'create-lipsync',
+        'lipsync_create',
         new ApiRequestError('limit', 429, 'concurrency_limit_reached'),
       );
       expect(JSON.parse(String(write.mock.calls[0]?.[0]))).toMatchObject({
         event: 'mcp_tool_error',
-        tool: 'create-lipsync',
+        tool: 'lipsync_create',
         profile: 'chatgpt',
         status: 429,
         code: 'concurrency_limit_reached',
@@ -250,12 +248,12 @@ describe('SERVER_INSTRUCTIONS', () => {
   });
 
   it('describes only tools available to every profile and exact result handling', () => {
-    expect(SERVER_INSTRUCTIONS).toContain('voices_get-voices');
+    expect(SERVER_INSTRUCTIONS).toContain('voices_list');
     expect(SERVER_INSTRUCTIONS).toContain('Create once');
     expect(SERVER_INSTRUCTIONS).toContain('exact structuredContent.outputMediaUrl verbatim');
     expect(SERVER_INSTRUCTIONS).toContain('outputUrl is a deprecated alias with the same value');
     expect(SERVER_INSTRUCTIONS).not.toContain('structuredContent.outputUrl');
-    expect(SERVER_INSTRUCTIONS).not.toContain('open-upload-widget');
+    expect(SERVER_INSTRUCTIONS).not.toContain('assets_open-upload-widget');
     expect(SERVER_INSTRUCTIONS).not.toContain('tts_create');
   });
 
@@ -275,13 +273,13 @@ describe('selectHostedHttpTools', () => {
       tool('assets_create'),
       tool('assets_create-upload-url'),
       tool('projects_create'),
-      tool('open-upload-widget'),
-      tool('upload-media'),
-      tool('create-lipsync'),
-      tool('models_get'),
-      tool('voices_get-voices'),
-      tool('generate_get-generation'),
-      tool('projects_get-all'),
+      tool('assets_open-upload-widget'),
+      tool('assets_upload'),
+      tool('lipsync_create'),
+      tool('models_list'),
+      tool('voices_list'),
+      tool('generations_get'),
+      tool('projects_list'),
       tool('projects_delete'),
       tool('assets_delete'),
     ];
@@ -292,34 +290,34 @@ describe('selectHostedHttpTools', () => {
       'assets_create',
       'assets_create-upload-url',
       'projects_create',
-      'open-upload-widget',
-      'upload-media',
-      'create-lipsync',
-      'models_get',
-      'voices_get-voices',
-      'generate_get-generation',
-      'projects_get-all',
+      'assets_open-upload-widget',
+      'assets_upload',
+      'lipsync_create',
+      'models_list',
+      'voices_list',
+      'generations_get',
+      'projects_list',
       'assets_delete',
     ]);
   });
 
   it('marks hosted data tools callable from the upload widget', () => {
     const tools = [
-      tool('open-upload-widget'),
-      tool('upload-media'),
-      tool('create-lipsync'),
-      tool('voices_get-voices'),
-      tool('generate_get-generation'),
+      tool('assets_open-upload-widget'),
+      tool('assets_upload'),
+      tool('lipsync_create'),
+      tool('voices_list'),
+      tool('generations_get'),
     ];
 
     const selected = selectHostedHttpTools(tools, resolveClientProfile('chatgpt'));
-    const widgetCallableTools = selected.filter((t) => t.name !== 'open-upload-widget');
+    const widgetCallableTools = selected.filter((t) => t.name !== 'assets_open-upload-widget');
 
     expect(widgetCallableTools.map((t) => t.name)).toEqual([
-      'upload-media',
-      'create-lipsync',
-      'voices_get-voices',
-      'generate_get-generation',
+      'assets_upload',
+      'lipsync_create',
+      'voices_list',
+      'generations_get',
     ]);
     for (const selectedTool of widgetCallableTools) {
       expect(selectedTool.meta?.['openai/widgetAccessible']).toBe(true);

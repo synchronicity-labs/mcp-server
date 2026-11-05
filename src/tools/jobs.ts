@@ -77,9 +77,9 @@ const readJob =
 
 const KINDS: Record<JobKind, KindSpec> = {
   generation: {
-    tool: 'generate_get-generation',
+    tool: 'generations_get',
     label: 'generation',
-    id: 'the generation id a create tool returned (create-lipsync, create-translate-and-dub, create-timeline-lipsync, create-dialogue-video)',
+    id: 'the generation id a create tool returned (lipsync_create, dubbing_create, lipsync_create-timeline, dialogue-videos_create)',
     read: async (tool, input, context, signal) => {
       // include=progress adds the worker's percent; the API's own long-poll would drop it.
       const progressQuery = 'include' in tool.inputSchema ? { include: 'progress' } : {};
@@ -104,9 +104,9 @@ const KINDS: Record<JobKind, KindSpec> = {
     },
   },
   transcription: {
-    tool: 'transcriptions_get-transcription-job',
+    tool: 'transcriptions_get',
     label: 'transcription',
-    id: 'the transcription id (transcriptions_create-transcription or create-dialogue-transcription)',
+    id: 'the transcription id (transcriptions_create or dialogue-transcriptions_create)',
     read: readJob((input) => ({ id: input.id })),
   },
   speaker_analysis: {
@@ -116,9 +116,9 @@ const KINDS: Record<JobKind, KindSpec> = {
     read: readJob((input) => ({ id: input.id })),
   },
   translation_preview: {
-    tool: 'get-translation-preview',
+    tool: 'translation-previews_get',
     label: 'translation',
-    id: 'the create-translation-preview id, with its projectId',
+    id: 'the translation-previews_create id, with its projectId',
     read: readJob((input) => {
       if (!input.projectId) throw new Error('Pass the projectId of the translation preview.');
       return { projectId: input.projectId, id: input.id };

@@ -11,7 +11,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   return { ...actual, mkdtemp: vi.fn(actual.mkdtemp), rm: vi.fn(actual.rm) };
 });
 
-describe('createAppTools — create-lipsync', () => {
+describe('createAppTools — lipsync_create', () => {
   // Default fetch mock: a GET reads the upload bytes, a PUT stores them.
   beforeEach(() => {
     vi.stubGlobal(
@@ -73,10 +73,10 @@ describe('createAppTools — create-lipsync', () => {
     );
     const httpClient: HttpClient = { request };
     const tools = createAppTools(httpClient, runtime, () => resolveClientProfile(clientName));
-    const uploadTool = tools.find((t) => t.name === 'upload-media');
-    const tool = tools.find((t) => t.name === 'create-lipsync');
-    if (!uploadTool) throw new Error('upload-media tool not found');
-    if (!tool) throw new Error('create-lipsync tool not found');
+    const uploadTool = tools.find((t) => t.name === 'assets_upload');
+    const tool = tools.find((t) => t.name === 'lipsync_create');
+    if (!uploadTool) throw new Error('assets_upload tool not found');
+    if (!tool) throw new Error('lipsync_create tool not found');
     return { tool, uploadTool, request };
   }
 
@@ -185,7 +185,7 @@ describe('createAppTools — create-lipsync', () => {
     expect(tool.annotations?.destructiveHint).toBe(true);
   });
 
-  it('declares upload-media as a file-param asset staging tool', () => {
+  it('declares assets_upload as a file-param asset staging tool', () => {
     const { uploadTool } = setup();
     expect(uploadTool.title).toBe('Upload media');
     expect(uploadTool.meta?.['openai/fileParams']).toEqual(['file']);
@@ -672,7 +672,7 @@ describe('createAppTools — create-lipsync', () => {
     }
   });
 
-  it('rejects a URL string passed to upload-media file with a clear message', async () => {
+  it('rejects a URL string passed to assets_upload file with a clear message', async () => {
     const { uploadTool, request } = setup();
 
     await expect(
