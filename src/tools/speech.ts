@@ -103,7 +103,8 @@ export function createSpeechTools(
         readOnlyHint: false,
         destructiveHint: true,
         openWorldHint: true,
-        idempotentHint: true,
+        // Paid, and only the model-chosen idempotencyKey deduplicates it: a retry with a new key bills again.
+        idempotentHint: false,
       },
       handler: async (args, context) => {
         const { projectId: _projectId, idempotencyKey, ...body } = requestSchema.parse(args);
