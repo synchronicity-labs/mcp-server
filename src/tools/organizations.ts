@@ -203,7 +203,10 @@ const selectOutput = {
   howToSwitch: z.string(),
 };
 
-function sameFeatures(left: string[] | undefined, right: string[] | undefined): boolean {
+function sameFeatures(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean {
   if ((left === undefined) !== (right === undefined)) return false;
   return (left ?? []).join('\n') === (right ?? []).join('\n');
 }
@@ -231,10 +234,11 @@ async function selectWithApiKey(
   organizationId: string,
   signal: AbortSignal | undefined,
 ) {
+  const stamp = session.featureStamp();
   const account = await readAccount(http, signal);
   if (!account.organization || account.organization.id !== organizationId)
     throw apiKeyBound(account.organization && summary(account.organization));
-  session.features = account.features;
+  session.recordFeatures(account.features, stamp, account.organization.id);
   return selection(
     { ...account, organization: account.organization },
     summary(account.organization),
@@ -302,9 +306,8 @@ export function createOrganizationTools(
           return selectWithApiKey(http, session, organizationId, context?.signal);
         const previous = session.selected ?? session.defaultOrganization();
         const account = await readAccountAs(http, organizationId, context?.signal);
-        const previousFeatures = session.features;
-        session.selected = summary(account.organization);
-        session.features = account.features;
+        const previousFeatures = session.activeFeatures();
+        session.select(summary(account.organization), account.features);
         // Tools that depend on a feature flag follow the organization; let the client re-list.
         if (previous?.id !== organizationId || !sameFeatures(previousFeatures, account.features))
           context?.toolListChanged?.();

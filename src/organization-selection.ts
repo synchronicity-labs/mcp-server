@@ -15,19 +15,81 @@ export type RanIn = OrganizationSummary | null;
 const REMEMBERED_IDS_LIMIT = 500;
 const DEFAULT_ORGANIZATION_TTL_MS = 60_000;
 
+/** Taken before an account read starts; recordFeatures refuses its answer after a switch. */
+export type FeatureStamp = Readonly<{ generation: number }>;
+
 /**
  * One MCP session's organization: the stdio process, or one hosted session. Nothing here
  * grants access; the API checks membership on every request that names an organization.
  */
 export class OrganizationSession {
-  /** Chosen with organizations_select; every later call in this session sends it. */
-  selected?: OrganizationSummary;
-  /** Feature flags of the active organization from GET /v2/account, when it reports them. */
-  features?: string[];
+  #selected?: OrganizationSummary;
+  // Bumped by every select(), so an account read that began before a switch can't write after it.
+  #generation = 0;
+  // Feature flags from GET /v2/account, stamped with the organization and selection they belong to.
+  #features?: { organizationId?: string; generation: number; names: readonly string[] };
   #default?: { organization: OrganizationSummary; expiresAt: number };
   // Kept after the cache expires: tells the credential's own organization from others.
   #defaultId?: string;
   readonly #organizationById = new Map<string, RanIn>();
+
+  /** Chosen with organizations_select; every later call in this session sends it. */
+  get selected(): OrganizationSummary | undefined {
+    return this.#selected;
+  }
+
+  /** Switches the session, with the features read for `organization` (undefined: unknown). */
+  select(organization: OrganizationSummary, features: readonly string[] | undefined): void {
+    this.#selected = organization;
+    this.#generation += 1;
+    this.#features = features
+      ? { organizationId: organization.id, generation: this.#generation, names: [...features] }
+      : undefined;
+  }
+
+  featureStamp(): FeatureStamp {
+    return { generation: this.#generation };
+  }
+
+  /** The organization calls in this session run in, when known: the selection, else the default. */
+  activeOrganizationId(): string | undefined {
+    return this.#selected?.id ?? this.#defaultId;
+  }
+
+  /**
+   * Keeps features GET /v2/account answered for `organizationId`, unless the session switched
+   * since `stamp` was taken or the answer is for another organization than the active one.
+   * Undefined features clear what was kept. Returns whether the write was kept.
+   */
+  recordFeatures(
+    features: readonly string[] | undefined,
+    stamp: FeatureStamp,
+    organizationId: string | undefined,
+  ): boolean {
+    if (stamp.generation !== this.#generation) return false;
+    const active = this.activeOrganizationId();
+    if (organizationId && active && organizationId !== active) return false;
+    this.#features = features
+      ? {
+          organizationId: organizationId ?? active,
+          generation: this.#generation,
+          names: [...features],
+        }
+      : undefined;
+    return true;
+  }
+
+  /**
+   * The active organization's features, when they were read for it in the current selection;
+   * undefined means unknown, so read them again.
+   */
+  activeFeatures(): readonly string[] | undefined {
+    const kept = this.#features;
+    if (!kept || kept.generation !== this.#generation) return undefined;
+    const active = this.activeOrganizationId();
+    if (kept.organizationId && active && kept.organizationId !== active) return undefined;
+    return kept.names;
+  }
 
   /** The credential's own organization, as last read without a selection. */
   defaultOrganization(): OrganizationSummary | undefined {

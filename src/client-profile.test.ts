@@ -605,7 +605,8 @@ it.each([0, 1, 2])(
       vi.fn(async () => Response.json({ ...spec, paths: { ...paths, ...excluded } })),
     );
     const factory = await createMcpServerFactory(config);
-    expect(factory.toolCount).toBe(13 + count);
+    // Includes scenes_detect and stems_separate, which only accounts with their features list.
+    expect(factory.toolCount).toBe(15 + count);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = (await chatgpt.client.listTools()).tools;

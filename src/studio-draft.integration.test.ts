@@ -128,7 +128,9 @@ it('routes chat draft edits through the authenticated API without confirming UI 
       let raw = '';
       for await (const part of req) raw += part;
       const body = raw ? JSON.parse(raw) : {};
-      calls.push({ method: req.method, path: req.url, auth: req.headers.authorization, body });
+      // tools/list reads the account's features; the assertions cover the tools' own calls.
+      if (req.url !== '/v2/account')
+        calls.push({ method: req.method, path: req.url, auth: req.headers.authorization, body });
       if (req.url !== `/v2/projects/${projectId}/studio-drafts/${draftId}`) {
         res.statusCode = 500;
         res.end(JSON.stringify({ message: 'Unexpected or paid request' }));

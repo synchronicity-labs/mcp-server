@@ -1,6 +1,7 @@
 import type { CallToolResult, Resource, Tool } from '@modelcontextprotocol/server';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { isFeatureGatedTool, listedForAccount } from './account-features.js';
 import { relayUploadTool } from './app-upload-relay.js';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from './asset-thumbnail.js';
 import { createApiKeyAuth } from './auth/api-key.js';
@@ -47,6 +48,7 @@ import {
 import { createAccountContextTool } from './tools/account-context.js';
 import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
+import { createAssetAnalysisTools } from './tools/asset-analysis.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { BATCH_TOOLS, createBatchTools, isBatchOperation } from './tools/batches.js';
@@ -263,6 +265,9 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'batches_create',
   'batches_get',
   'batches_list',
+  // Listed only to accounts with the feature; see account-features.ts.
+  'scenes_detect',
+  'stems_separate',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'track-chatgpt-event',
@@ -440,6 +445,10 @@ const NEXT_STEP_BY_CODE: Record<string, string> = {
     'A generation is still running for this account. Poll generate_get-generation with its id, or list running ones with generate_get-generations and status PROCESSING, until it finishes, then submit once. Submitting again before then fails the same way.',
   generation_plan_duration_exceeded:
     'This plan limits how long the output can be. Shorten the script or audio (trim-audio keeps the first part of saved audio), quote again, then create once.',
+  feature_not_enabled:
+    'This Sync account does not have the feature yet. Tell the user it needs to be enabled for their account; calling again fails the same way.',
+  stem_separation_source_not_hosted:
+    'Stem separation reads only files in Sync storage. Upload the file (assets_create-upload-url, PUT the bytes, then assets_create with the returned URL) and separate the new asset.',
 };
 
 function nextStep(error: ApiRequestError): string | undefined {
@@ -608,6 +617,8 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   if (tool.name === 'send-feedback') return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet.
   if ((BATCH_TOOLS as readonly string[]).includes(tool.name)) return profile.name !== 'chatgpt';
+  // Not in the reviewed ChatGPT app listing yet; other profiles list them per account.
+  if (isFeatureGatedTool(tool.name)) return profile.name !== 'chatgpt';
   if (['upload-media', 'open-upload-widget'].includes(tool.name)) return profile.supportsUploads;
   return true;
 }
@@ -755,6 +766,7 @@ function createTools(
     ...createDialogueTools(operations, httpClient),
     ...createSpeechTools(operations, httpClient),
     ...createFeedbackTools(operations, httpClient, PACKAGE_VERSION),
+    ...createAssetAnalysisTools(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
@@ -942,9 +954,11 @@ function createProfiledServer(
     );
   }
   let descriptors: Tool[] = [];
-  server.server.setRequestHandler('tools/list', () => {
+  server.server.setRequestHandler('tools/list', async () => {
     if (!profile) throw new Error('Complete MCP initialization before listing tools.');
-    return { tools: descriptors };
+    // Feature-gated tools follow the session's active organization (organizations_select).
+    const session = currentOrganizationSession() ?? ownOrganizationSession;
+    return { tools: await listedForAccount(descriptors, session, httpClient) };
   });
   server.server.setRequestHandler('resources/list', () => ({
     resources: resources.filter((resource) =>

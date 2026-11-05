@@ -98,8 +98,9 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   clients.push(client);
   await client.connect(clientTransport);
   const tools = (await client.listTools()).tools;
-  // Every registered tool but create-timeline-lipsync, kept out of the ChatGPT app listing.
-  expect(tools).toHaveLength(factory.toolCount - 1);
+  // Every registered tool but create-timeline-lipsync and the feature-gated scenes_detect and
+  // stems_separate, kept out of the ChatGPT app listing.
+  expect(tools).toHaveLength(factory.toolCount - 3);
   expect(tools.some((tool) => tool.name === 'generate_create-generation')).toBe(false);
   const options = await client.callTool({ name: 'get-translation-options', arguments: {} });
   expect(options.structuredContent).toEqual({

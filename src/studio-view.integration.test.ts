@@ -52,7 +52,9 @@ it('delivers explicit view requests over authenticated HTTP, preserves pending r
       let raw = '';
       for await (const part of req) raw += part;
       const body = raw ? JSON.parse(raw) : {};
-      calls.push({ path: req.url, auth: req.headers.authorization, body });
+      // tools/list reads the account's features; the assertions cover the tools' own calls.
+      if (req.url !== '/v2/account')
+        calls.push({ path: req.url, auth: req.headers.authorization, body });
       if (req.url === `/v2/studio-views/${viewId}/actions`) {
         res.end(
           JSON.stringify({

@@ -99,7 +99,13 @@ async function setup({
       if (req.url === '/api-json') return void res.end(JSON.stringify(spec(feedback)));
       let raw = '';
       for await (const chunk of req) raw += chunk.toString();
-      calls.push({ method: req.method!, path: req.url!, body: raw ? JSON.parse(raw) : undefined });
+      // tools/list reads the account's features; these tests assert the tools' own calls.
+      if (req.url !== '/v2/account')
+        calls.push({
+          method: req.method!,
+          path: req.url!,
+          body: raw ? JSON.parse(raw) : undefined,
+        });
       if (req.url === `/v2/projects/${PROJECT}/assets`) {
         res.statusCode = 204;
         return void res.end();

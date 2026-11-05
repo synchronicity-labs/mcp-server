@@ -72,6 +72,9 @@ const CATEGORY_BY_TOOL: Record<string, Category> = {
   'estimate-translation-preview': 'dubbing',
   'create-translation-preview': 'dubbing',
   'get-translation-preview': 'dubbing',
+  // Feature-gated: listed only to accounts with the feature (account-features.ts).
+  scenes_detect: 'lipsync',
+  stems_separate: 'assets',
   'upload-media': 'assets',
   'open-upload-widget': 'assets',
   'rename-project': 'projects',

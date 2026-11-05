@@ -165,6 +165,10 @@ The hosted server exposes a curated set of tools to every client:
 Where the account's plan doesn't include batch, the API answers 402 with `requiredPlan`
 and `billingUrl`, which the tools pass on.
 
+Organizations with the matching feature also get `scenes_detect` (camera cuts in a
+video) and `stems_separate` (vocals and background audio), outside the ChatGPT
+app. They are in the `lipsync` and `assets` toolsets locally.
+
 Clients with app support also get the tools behind the embedded Studio app:
 Studio views and drafts, the upload widget and app helpers. Those are clients
 whose MCP handshake name selects the ChatGPT or Codex app profile (`openai-mcp`,

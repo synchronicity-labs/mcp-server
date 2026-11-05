@@ -215,6 +215,8 @@ const TOOL_AREAS = [
   'models',
   'organizations',
   'projects',
+  'scenes',
+  'stems',
   'voices',
 ];
 const TOOL_VERBS = [

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
-import { currentOrganizationSession } from '../organization-selection.js';
+import { currentOrganizationSession, type FeatureStamp } from '../organization-selection.js';
 import type { McpToolDefinition } from './generator.js';
 import {
   type AccountOverview,
@@ -63,11 +63,13 @@ type Caller = Pick<z.infer<typeof accountContext>, 'account' | 'organization'>;
 
 /**
  * GET /v2/account reflects the organization chosen for this request, so it wins over the
- * caller identity. Remembers what was read for this MCP session.
+ * caller identity. Remembers what was read for this MCP session, unless the session switched
+ * organization while it was read (`stamp`, taken before the read).
  */
 function activeOrganization(
   caller: Caller,
   overview: AccountOverview | undefined,
+  stamp: FeatureStamp | undefined,
 ): Caller['organization'] {
   const organization = overview?.organization
     ? {
@@ -79,7 +81,8 @@ function activeOrganization(
   const session = currentOrganizationSession();
   if (session && !session.selected)
     session.rememberDefault({ id: organization.id, name: organization.name });
-  if (session && overview) session.features = overview.features;
+  if (session && overview && stamp)
+    session.recordFeatures(overview.features, stamp, overview.organization?.id);
   return organization;
 }
 
@@ -119,6 +122,7 @@ export function createAccountContextTool(
         }
       };
       const limits = await optional('/v2/plans/limits');
+      const stamp = currentOrganizationSession()?.featureStamp();
       const overview = await optional('/v2/account');
       const plan = overview === undefined ? undefined : parseAccountOverview(overview);
       const caller = z
@@ -129,7 +133,7 @@ export function createAccountContextTool(
         .parse(identity);
       return accountContext.parse({
         account: caller.account,
-        organization: activeOrganization(caller, plan),
+        organization: activeOrganization(caller, plan, stamp),
         ...(limits === undefined ? {} : { limits }),
         ...(plan?.plan ? { plan: plan.plan } : {}),
         ...(plan?.limits ? { generationLimits: plan.limits } : {}),
