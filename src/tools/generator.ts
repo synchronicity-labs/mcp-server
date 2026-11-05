@@ -100,6 +100,8 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
   const description = override?.description ?? truncate(operation.summary, 200);
 
   const inputSchema = buildInputSchema(operation);
+  const admission = admissionKey(operation);
+  if (admission) inputSchema.idempotencyKey = admission.schema;
   const estimatesCost = ['generate_estimate-cost', 'generations_estimate-cost'].includes(name);
   if (estimatesCost) {
     if (inputSchema.duration) {
@@ -126,8 +128,9 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
     annotations: deriveAnnotations(operation.method, name),
     handler: async (args, context) => {
       if (name === 'voices_clone-voice') voiceCloneSourceSchema.parse(args);
-      const estimate = estimatesCost ? resolveEstimateDuration(args) : undefined;
-      const requestArgs = estimate?.args ?? args;
+      const prepared = prepareAdmission(args, admission);
+      const estimate = estimatesCost ? resolveEstimateDuration(prepared.args) : undefined;
+      const requestArgs = estimate?.args ?? prepared.args;
       if (estimatesCost && inputSchema.duration && requestArgs.duration === undefined)
         throw new Error('Supply duration, script or audioDuration for a cost estimate.');
       const path = buildPath(operation.path, requestArgs);
@@ -137,6 +140,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
       const result = await httpClient.request(operation.method, path, {
         query,
         body,
+        ...prepared.headers,
         signal: context?.signal,
       });
       if (!estimate?.durationEstimate) return result;
@@ -145,6 +149,35 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
         durationEstimate: estimate.durationEstimate,
       };
     },
+  };
+}
+
+/** Generated stdio writes must carry API admission keys as headers, not JSON fields. */
+function admissionKey(operation: ParsedOperation) {
+  const parameter = operation.parameters.find(
+    (entry) => entry.in === 'header' && entry.name.toLowerCase() === 'idempotency-key',
+  );
+  if (!parameter) return undefined;
+  const key =
+    parameter.schema.format === 'uuid' ? z.uuid() : z.string().regex(/^[A-Za-z0-9._~-]{1,128}$/);
+  return {
+    name: parameter.name,
+    schema: (parameter.required ? key : key.optional()).describe(
+      'Persist before creation. Reuse this same key and identical inputs only to reconcile uncertain admission; do not create a new key for a retry.',
+    ),
+  };
+}
+
+function prepareAdmission(
+  args: Record<string, unknown>,
+  admission: ReturnType<typeof admissionKey>,
+) {
+  if (!admission) return { args, headers: {} };
+  const { idempotencyKey, ...fields } = args;
+  const key = admission.schema.parse(idempotencyKey);
+  return {
+    args: fields,
+    headers: key === undefined ? {} : { headers: { [admission.name]: key } },
   };
 }
 
