@@ -1,12 +1,14 @@
-FROM node:22-trixie-slim AS build
+FROM node:26-trixie-slim AS build
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 RUN apt-get update \
   && apt-get upgrade -y \
   && rm -rf /var/lib/apt/lists/*
-# Corepack provides the pnpm version pinned in package.json.
-RUN corepack enable
+# Node 26 images no longer ship Corepack, so install the pnpm version pinned in
+# package.json with the bundled npm.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN npm install -g --no-fund --no-audit \
+  "pnpm@$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '').split('+')[0]")"
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
 # The deploy job writes the commit it builds to .revision; other builds record unknown.
@@ -15,13 +17,16 @@ RUN pnpm run build
 RUN pnpm run package:chatgpt
 
 # Production dependencies only, installed apart from the build's dev tooling.
-FROM node:22-trixie-slim AS prod-deps
+FROM node:26-trixie-slim AS prod-deps
 WORKDIR /app
-RUN corepack enable
+# Node 26 images no longer ship Corepack, so install the pnpm version pinned in
+# package.json with the bundled npm.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN npm install -g --no-fund --no-audit \
+  "pnpm@$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '').split('+')[0]")"
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
-FROM node:22-trixie-slim
+FROM node:26-trixie-slim
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 # Apply Debian security updates on top of the base image (notably openssl
@@ -40,13 +45,12 @@ COPY --from=build /app/deploy/generation-status ./deploy/generation-status
 # Strip tooling the runtime never uses but that AWS Inspector flags via the
 # base image. The server starts with `node dist/cli.js`, and production
 # dependencies come from the build stage, so no package manager is needed:
-#  - the bundled npm CLI and Corepack, whose vendored picomatch /
-#    brace-expansion / ip-address carry CVEs independent of our app dependencies.
+#  - the bundled npm CLI, whose vendored picomatch / brace-expansion /
+#    ip-address carry CVEs independent of our app dependencies.
 #  - Node's C headers, present only to build native addons; their vendored
 #    OpenSSL version (opensslv.h) is what Inspector reads the openssl CVEs from
 #    (the Debian system openssl is already patched by the apt upgrade above).
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
-  /usr/local/lib/node_modules/corepack /usr/local/bin/corepack \
   /usr/local/include/node
 
 # Select the approved UI with the image, independent of stale legacy directory settings.
