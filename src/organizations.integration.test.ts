@@ -236,6 +236,19 @@ describe('organizations on the hosted server', () => {
     expect(again.structuredContent).toMatchObject({ organization: HOME });
   });
 
+  it('keeps ids from the default organization writable after selecting that same organization', async () => {
+    const { baseUrl } = await api();
+    const { call } = await hosted(baseUrl);
+    const first = await call('create-lipsync', lipsync);
+    expect(first.structuredContent).toMatchObject({ organization: HOME });
+    const { projectId } = first.structuredContent as { projectId: string };
+    await call('organizations_select', { organizationId: HOME.id });
+    const { projectCreationKey: _key, ...media } = lipsync;
+    const again = await call('create-lipsync', { ...media, projectId, projectIntent: 'explicit' });
+    expect(again.isError).not.toBe(true);
+    expect(again.structuredContent).toMatchObject({ organization: HOME });
+  });
+
   it('reads what a create returned in its organization after the session switches away', async () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {

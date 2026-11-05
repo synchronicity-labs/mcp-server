@@ -43,10 +43,11 @@ export class OrganizationSession {
 
   /** Whether calls in this session now run where `organization` is. */
   isCurrent(organization: RanIn): boolean {
-    if (organization === null) return this.selected === undefined;
-    return this.selected
-      ? this.selected.id === organization.id
-      : this.#defaultId === organization.id;
+    // Compare by id where one is known: selecting the default organization is no switch.
+    const current = this.selected?.id ?? this.#defaultId;
+    if (organization === null)
+      return this.selected === undefined || this.selected.id === this.#defaultId;
+    return current === organization.id;
   }
 
   /** The credential's own organization id, if it was ever read. */
