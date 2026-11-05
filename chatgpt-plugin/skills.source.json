@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/synchronicity-labs/skills",
-  "commit": "6e98ce270be1f893cb19447b02bddfdf25eb7465",
+  "commit": "77971a9580496fae54f506d11315f9d41db86aa8",
   "skills": [
     { "name": "setup", "policy": { "allow_implicit_invocation": false } },
     { "name": "lipsync" },
