@@ -10,6 +10,8 @@ sync.'s MCP server. It runs two ways from the same code:
 - **stdio** through `npx @sync.so/mcp-server` with `SYNC_API_KEY`, for local clients.
 
 Every merge to `main` deploys production. Treat each merge as a release.
+A merge that changes `version` in `package.json` also publishes that version to npm
+(`.github/workflows/publish.yml`); merges that keep the version only deploy.
 
 ## Where things live
 
