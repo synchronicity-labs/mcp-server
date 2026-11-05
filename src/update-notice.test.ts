@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
+import { toolsetInstruction } from './toolsets.js';
 import type { AvailableUpdate, UpdateCheck } from './update-check.js';
 import { PACKAGE_VERSION } from './version.js';
 
@@ -71,7 +72,9 @@ describe('update notice', () => {
   it('tells the agent in the instructions and the first tool result only', async () => {
     fakeApi();
     const client = await connect(await stdioServer(fakeUpdateCheck(UPDATE).check));
-    expect(client.getInstructions()).toMatch(new RegExp(`same value\\. ${escape(INSTRUCTION)}$`));
+    expect(client.getInstructions()).toMatch(
+      new RegExp(`same value\\. ${escape(toolsetInstruction(undefined))} ${escape(INSTRUCTION)}$`),
+    );
 
     const first = await texts(client);
     expect(first.texts).toHaveLength(2);

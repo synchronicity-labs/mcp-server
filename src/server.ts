@@ -50,6 +50,7 @@ import { withGenerationOutputAliases } from './tools/generation-output.js';
 import { generateTools, operationIdToToolName } from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { progressSender } from './tools/job-wait.js';
+import { createJobTools } from './tools/jobs.js';
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { withProjectIntent } from './tools/project-intent.js';
@@ -67,6 +68,7 @@ import {
 } from './tools/translation-preview.js';
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
+import { toolsetIncludes, toolsetInstruction } from './toolsets.js';
 import {
   type AvailableUpdate,
   type UpdateCheck,
@@ -148,10 +150,12 @@ export function serverInstructions(
   spendConfirmation = true,
   feedback = false,
   update?: AvailableUpdate,
+  toolsetNote = '',
 ): string {
   const instructions =
     (profile.supportsAppUi ? SERVER_INSTRUCTIONS : MODEL_ONLY_INSTRUCTIONS) +
     (feedback && profile.name !== 'chatgpt' ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '') +
+    (toolsetNote ? ` ${toolsetNote}` : '') +
     (update ? ` ${updateInstruction(update)}` : '');
   return spendConfirmation
     ? instructions
@@ -721,14 +725,18 @@ function createTools(
         : tool,
     ),
   ];
-  const tools = allTools
+  const adapted = allTools
     .map(withProjectIntent)
     .map(withGenerationStatusCard)
     .map(withGenerationOutputAliases)
     .map((tool) => (config.spendConfirmation === false ? withoutSpendConfirmation(tool) : tool));
+  // Built from every tool, so jobs_wait reaches a kind whose own tools a toolset leaves out.
+  const tools = [...adapted, ...createJobTools(adapted)];
   return config.transport === 'http'
     ? tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-    : tools;
+    : tools.filter((tool) =>
+        toolsetIncludes(config.toolsets, tool.name, HOSTED_HTTP_TOOL_ALLOWLIST),
+      );
 }
 
 function createProfiledServer(
@@ -771,6 +779,7 @@ function createProfiledServer(
         operations.some(feedbackOperation),
         // The hosted server deploys on every merge, so only local installs report updates.
         config.transport === 'stdio' ? updateCheck?.available() : undefined,
+        config.transport === 'stdio' ? toolsetInstruction(config.toolsets) : '',
       ),
     },
   );

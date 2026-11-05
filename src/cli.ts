@@ -3,6 +3,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { resolveConfig } from './config.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
+import { parseToolsets, type Toolset } from './toolsets.js';
 import { startConfiguredUpdateCheck } from './update-check.js';
 import { PACKAGE_VERSION } from './version.js';
 
@@ -31,6 +32,7 @@ function parseArgs(args: string[]): Partial<{
   port: number;
   spendConfirmation: boolean;
   updateCheck: boolean;
+  toolsets: Toolset[];
 }> {
   const result: Record<string, unknown> = {};
 
@@ -54,6 +56,9 @@ function parseArgs(args: string[]): Partial<{
       result.spendConfirmation = false;
     } else if (arg === '--no-update-check') {
       result.updateCheck = false;
+    } else if (arg === '--toolsets' && next) {
+      result.toolsets = parseToolsets(next);
+      i++;
     } else if (arg === '--help' || arg === '-h') {
       printUsage();
       process.exit(0);
@@ -76,6 +81,9 @@ Options:
                       instructions (or set SYNC_MCP_SPEND_CONFIRMATION=off)
   --no-update-check   Skip the daily npm check for a newer version (or set
                       SYNC_MCP_UPDATE_CHECK=off; skipped when CI is set)
+  --toolsets <list>   stdio only: comma-separated tools to list (or set SYNC_MCP_TOOLSETS):
+                      default, lipsync, dubbing, assets, projects, transcription,
+                      voices, admin or all (default: the hosted set without admin)
   -h, --help          Show this help message
 `);
 }

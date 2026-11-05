@@ -152,9 +152,39 @@ whose MCP handshake name selects the ChatGPT or Codex app profile (`openai-mcp`,
 `openai-mcp (Codex)`; see `src/client-profile.ts`). Other clients don't see these
 tools, and their calls to them are refused.
 
-The local stdio server has all of these, plus a tool for every other public API
-operation in the [OpenAPI spec](https://api.sync.so/api-json), such as
-`projects_delete` and `voices_delete-voice`.
+### Local toolsets
+
+The local stdio server can also offer a tool for every other public API operation in
+the [OpenAPI spec](https://api.sync.so/api-json), 65+ in all. By default it lists the
+hosted set above, without its admin tools (`assets_delete` and `voices_clone-voice`),
+plus `jobs_get` and `jobs_wait` and the `transcriptions_*` tools, whose speaker face
+tracks feed `create-timeline-lipsync` clips.
+
+To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separated list:
+
+| Toolset | Adds |
+| --- | --- |
+| `default` | The default above, so `default,admin` adds the admin tools to it |
+| `lipsync` | Lip sync, timeline, Edit Dialogue and audio trim tools, plus raw `generate_*`, `generations_*` and `dialogue-edits_*` |
+| `dubbing` | Translation and dubbing tools |
+| `assets` | `assets_*` (except deletes) and the upload tools |
+| `projects` | `projects_*` (except deletes) and `rename-project` |
+| `transcription` | `transcriptions_*` |
+| `voices` | `voices_*` (except cloning and deletes), speech previews and `tts_*` |
+| `admin` | Every delete (`assets_delete`, `projects_delete`, `generations_delete`, `voices_delete-voice`) and `voices_clone-voice` |
+| `all` | Every tool, as before this option existed |
+
+Job, account and generation reads (`jobs_get`, `jobs_wait`, `generate_get-generation`,
+`get-account-context` and similar) come with every selection. Naming toolsets replaces
+the default rather than adding to it. To get every tool back:
+
+```bash
+claude mcp add sync -e SYNC_API_KEY=your-api-key -e SYNC_MCP_TOOLSETS=all -- npx -y @sync.so/mcp-server@latest
+```
+
+Unless it lists everything, the server's instructions tell the agent which toolsets are
+listed and how to get the rest, so it can ask you to restart the server with a wider
+set. The hosted server ignores this setting.
 
 [Tool workflows](docs/tool-workflows.md) describes how the multi-step and paid
 tools behave.
@@ -174,6 +204,9 @@ Options:
                       instructions (or set SYNC_MCP_SPEND_CONFIRMATION=off)
   --no-update-check   Skip the daily npm check for a newer version (or set
                       SYNC_MCP_UPDATE_CHECK=off; skipped when CI is set)
+  --toolsets <list>   stdio only: comma-separated tools to list (or set SYNC_MCP_TOOLSETS):
+                      default, lipsync, dubbing, assets, projects, transcription,
+                      voices, admin or all (default: the hosted set without admin)
   -h, --help          Show this help message
 ```
 
@@ -188,7 +221,10 @@ and estimate tools stay available. Agents cannot change this setting.
 Job tools take `wait: true` to wait on the server (up to about 50 seconds per call, with
 progress notifications when the client sends a `progressToken`): `generate_get-generation`,
 `get-translation-preview`, `transcriptions_get-transcription-job` and social imports
-through `assets_create`.
+through `assets_create`. On the local server, `jobs_wait` and `jobs_get` do the same for
+every kind of job (generation, transcription, speaker analysis, translation preview,
+import) with one input, `{kind, id, projectId?}`, and one result shape and status set;
+see [Jobs](docs/jobs.md).
 
 When the API offers it, `send-feedback` lets agents report confusing errors, wrong results
 and missing capabilities to the Sync team.

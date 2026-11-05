@@ -46,6 +46,8 @@ it.each(['http', 'stdio'] as const)(
       transport,
       port: 0,
       apiKey: 'fixture-key',
+      // generate_create-generation is outside the default local toolset.
+      toolsets: ['all' as const],
     };
     const server =
       transport === 'stdio'

@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createSyncMcpServer } from './server.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import type { Toolset } from './toolsets.js';
 
 // Generated-tool adapters, server-side waits and send-feedback, over stdio with an API key.
 const PROJECT = '3c1f0f4e-1b2d-4c5e-8f6a-7b8c9d0e1f2a';
@@ -83,7 +84,11 @@ afterEach(async () => {
   while (pending.length > 0) await pending.pop()!();
 });
 
-async function setup({ feedback = true, spendConfirmation = true } = {}) {
+async function setup({
+  feedback = true,
+  spendConfirmation = true,
+  toolsets = ['all'] as Toolset[] | undefined,
+} = {}) {
   const calls: Call[] = [];
   let transcriptReads = 0;
   let analysisReads = 0;
@@ -151,6 +156,7 @@ async function setup({ feedback = true, spendConfirmation = true } = {}) {
     transport: 'stdio',
     port: 0,
     spendConfirmation,
+    toolsets,
   });
   cleanups.push(() => server.close());
   const [ct, st] = InMemoryTransport.createLinkedPair();
