@@ -54,7 +54,7 @@ const CORE = new Set([
 
 // Hand-written tools. Generated tools fall back to their API controller below.
 const CATEGORY_BY_TOOL: Record<string, Category> = {
-  'lipsync_create': 'lipsync',
+  lipsync_create: 'lipsync',
   'lipsync_create-from-assets': 'lipsync',
   'lipsync_create-timeline': 'lipsync',
   'audio-trims_create': 'lipsync',
@@ -67,7 +67,7 @@ const CATEGORY_BY_TOOL: Record<string, Category> = {
   'dialogue-previews_get': 'lipsync',
   'dialogue-videos_estimate': 'lipsync',
   'dialogue-videos_create': 'lipsync',
-  'dubbing_create': 'dubbing',
+  dubbing_create: 'dubbing',
   'dubbing_get-options': 'dubbing',
   'translation-previews_estimate': 'dubbing',
   'translation-previews_create': 'dubbing',
@@ -75,9 +75,9 @@ const CATEGORY_BY_TOOL: Record<string, Category> = {
   // Feature-gated: listed only to accounts with the feature (account-features.ts).
   scenes_detect: 'lipsync',
   stems_separate: 'assets',
-  'assets_upload': 'assets',
+  assets_upload: 'assets',
   'assets_open-upload-widget': 'assets',
-  'projects_rename': 'projects',
+  projects_rename: 'projects',
   'speech-previews_get-options': 'voices',
   'speech-previews_create': 'voices',
   'speech-previews_get': 'voices',
