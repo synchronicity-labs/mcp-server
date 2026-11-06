@@ -56,7 +56,7 @@ export function createAccountManagementTools(http: HttpClient): McpToolDefinitio
       name: 'account_get-usage',
       title: 'Read Sync usage and balance',
       description:
-        'Read the connected organization’s available credits, free allowance, or complete billed usage for the current period. Does not purchase credits, change plans, or start generation.',
+        "Read the connected organization's available credits, free allowance, or complete billed usage for the current period. Use it to answer what is left to spend; for the plan, limits and organization use account_get-context. Does not purchase credits, change plans, or start generation.",
       inputSchema: {},
       outputSchema: response.shape,
       annotations: {

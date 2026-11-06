@@ -98,7 +98,7 @@ export function createAccountContextTool(
     name: 'account_get-context',
     title: 'Read connected Sync account',
     description:
-      'Read the authenticated account and the organization this session runs in (all generations are created there), for account display and personal asset scope, its plan, generation limits (concurrency and longest output), feature flags, team seats and voice-clone limits. organizationChoice says how that organization was chosen and how to switch. API keys have no signed-in account. This does not grant permissions or change the organization.',
+      'Read the authenticated account and the organization this session runs in (all generations are created there), for account display and personal asset scope, its plan, generation limits (concurrency and longest output), feature flags, team seats and voice-clone limits. organizationChoice says how that organization was chosen and how to switch. API keys have no signed-in account. For credits, balance or billed usage use account_get-usage; to switch organization use organizations_select when available. This does not grant permissions or change the organization.',
     inputSchema: {},
     outputSchema: accountContext.shape,
     annotations: {

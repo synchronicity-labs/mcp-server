@@ -147,7 +147,7 @@ export function createTranslationTools(
       name: 'dubbing_get-options',
       title: 'Translation options',
       description:
-        'Read the source and target languages supported by the current translation API. Does not create a generation or estimate pricing.',
+        'List the language codes translation accepts, as targetLanguages and sourceLanguages, and whether translated-audio previews are available. Call it before dubbing_create, or translation-previews_create when available, to pick a valid targetLang. Does not create a generation or estimate pricing.',
       inputSchema: {},
       outputSchema: {
         targetLanguages: languageList,
