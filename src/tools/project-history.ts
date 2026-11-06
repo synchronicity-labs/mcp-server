@@ -32,7 +32,9 @@ export function createProjectHistoryTools(
         'Read generation history for an accessible Sync project. Requires a projectId returned by projects_list. Pass limit and the last returned generation id as cursor to load another page. These are the same records used by the Sync web app.',
       inputSchema: {
         ...history.inputSchema,
-        projectId: history.inputSchema.projectId!.nonoptional(),
+        projectId: history.inputSchema
+          .projectId!.nonoptional()
+          .describe('Project whose history to read, from projects_list.'),
       },
       annotations: history.annotations,
       handler: async (args, context) => {

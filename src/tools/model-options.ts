@@ -3,31 +3,65 @@ import { z } from 'zod';
 // Public model controls accepted by the generation API. Do not expose service-only options.
 export const modelOptionsSchema = z
   .object({
-    sync_mode: z.enum(['bounce', 'loop', 'cut_off', 'silence', 'remap']).optional(),
-    temperature: z.number().min(0).max(1).nullable().optional(),
+    sync_mode: z
+      .enum(['bounce', 'loop', 'cut_off', 'silence', 'remap'])
+      .optional()
+      .describe(
+        'How to fit audio and video of different lengths: bounce (play the video forward, then in reverse), loop, cut_off (stop at the shorter input), silence (pad with silence to the longer input) or remap (change the video speed to match the audio).',
+      ),
+    temperature: z
+      .number()
+      .min(0)
+      .max(1)
+      .nullable()
+      .optional()
+      .describe('How expressive the mouth movement is, from 0 to 1. Omit for the model default.'),
     active_speaker_detection: z
       .union([
         z.boolean(),
         z
           .object({
-            auto_detect: z.boolean().optional(),
-            use_v2: z.boolean().optional(),
-            v3: z.boolean().optional(),
-            face_image: z.string().optional(),
-            frame_number: z.number().int().nonnegative().optional(),
-            coordinates: z.tuple([z.number(), z.number()]).optional(),
+            auto_detect: z.boolean().optional().describe('Find the person speaking automatically.'),
+            use_v2: z.boolean().optional().describe('Use the second-generation speaker detector.'),
+            v3: z.boolean().optional().describe('Use the third-generation speaker detector.'),
+            face_image: z
+              .string()
+              .optional()
+              .describe("URL of a reference image of the speaker's face."),
+            frame_number: z
+              .number()
+              .int()
+              .nonnegative()
+              .optional()
+              .describe('Zero-based video frame that coordinates refer to.'),
+            coordinates: z
+              .tuple([z.number(), z.number()])
+              .optional()
+              .describe("[x, y] pixel position of the speaker's face on frame_number."),
           })
           .strict(),
       ])
-      .optional(),
-    occlusion_detection_enabled: z.boolean().optional(),
+      .optional()
+      .describe(
+        'Which face to lipsync when several people are visible: true or { auto_detect: true } to find the speaker, or frame_number plus coordinates to pick one. Omit for a single face or an image.',
+      ),
+    occlusion_detection_enabled: z
+      .boolean()
+      .optional()
+      .describe(
+        'Keep hands, microphones and other objects that pass in front of the mouth in front of it. Slower.',
+      ),
     reasoning_enabled: z
       .boolean()
       .optional()
       .describe('Only lipsync-2-pro supports reasoning; it is ignored for other models.'),
-    model_mode: z.enum(['lips', 'face', 'head']).optional(),
+    model_mode: z
+      .enum(['lips', 'face', 'head'])
+      .optional()
+      .describe('How much of the face the model may change: lips, face or head.'),
   })
-  .strict();
+  .strict()
+  .describe('Optional model controls. Omit any field to use its default.');
 
 const REASONING_MODELS = new Set(['lipsync-2-pro', 'sync-2-pro']);
 

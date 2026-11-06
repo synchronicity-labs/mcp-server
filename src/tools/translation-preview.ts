@@ -91,21 +91,40 @@ export function createTranslationPreviewTools(
   http: HttpClient,
 ): McpToolDefinition[] {
   if (!translationPreviewAvailable(operations)) return [];
-  const source = z.object({ projectId: z.uuid(), audioAssetId: z.uuid() }).strict();
+  const projectId = z
+    .uuid()
+    .describe('Project the translation belongs to, from projects_create or projects_list.');
+  const source = z
+    .object({
+      projectId,
+      audioAssetId: z
+        .uuid()
+        .describe('Saved AUDIO asset to translate, such as an audio-trims_create result.'),
+    })
+    .strict();
   const create = source.extend({
-    targetLang: z.string().trim().min(1),
+    targetLang: z.string().trim().min(1).describe('Target language code from dubbing_get-options.'),
     // Detected from the audio. Still accepted from callers holding the old tool list.
     sourceLang: z.string().optional().describe('Optional; the source language is detected.'),
-    idempotencyKey: z.uuid(),
+    idempotencyKey: z
+      .uuid()
+      .describe(
+        'A new UUID saved before the call. Reuse it with identical input only to recover an uncertain response.',
+      ),
   });
-  const read = z.object({ projectId: z.uuid(), id: z.uuid() }).strict();
+  const read = z
+    .object({
+      projectId,
+      id: z.uuid().describe('Translation preview id from translation-previews_create.'),
+    })
+    .strict();
   const waitable = read.extend({ wait: waitInput });
   return [
     {
       name: 'translation-previews_estimate',
       title: 'Estimate translated audio preview',
       description:
-        'Read the server quote for translating saved audio in an accessible project. Does not translate, create a video, modify saved audio, or incur provider charges. If preview.quotedDurationSeconds is shorter than preview.sourceDurationSeconds, explain the duration limit and offer the bounded preview. Before admission, save a new trimmed audio asset and quote that asset; this estimate never trims the original. External provider charges must be disclosed separately.',
+        'Quote translating one saved audio asset before translation-previews_create, and return the billing mode, estimated cost or credits, and preview durations. Does not translate, create a video, modify saved audio, or incur provider charges. If preview.quotedDurationSeconds is shorter than preview.sourceDurationSeconds, explain the duration limit and offer the bounded preview. Before admission, save a new trimmed audio asset and quote that asset; this estimate never trims the original. External provider charges must be disclosed separately.',
       inputSchema: source.shape,
       outputSchema: quoteSchema.shape,
       annotations: {
@@ -151,7 +170,7 @@ export function createTranslationPreviewTools(
       name: 'translation-previews_get',
       title: 'Read translated audio preview',
       description:
-        'Read the same project-authorized translation job; pass wait: true to wait for it on the server. A recoveryRequired result means provider acceptance is uncertain; do not create another job. Does not start or retry translation. When COMPLETED, outputMediaUrl can be registered with assets_create (type=AUDIO) or, when available, passed as a clip audioUrl to lipsync_create-timeline.',
+        'Read one translated-audio preview by id: its status, source and target languages, and once COMPLETED the outputMediaUrl and duration. Pass wait: true to wait for it on the server instead of polling. A recoveryRequired result means provider acceptance is uncertain; do not create another job. Does not start or retry translation. When COMPLETED, outputMediaUrl can be registered with assets_create (type=AUDIO) or, when available, passed as a clip audioUrl to lipsync_create-timeline.',
       inputSchema: waitable.shape,
       outputSchema: jobSchema.shape,
       annotations: {

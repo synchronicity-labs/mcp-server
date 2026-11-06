@@ -56,7 +56,10 @@ export function createTranslationTools(
           'Project ID only when explicitly selected by the user, or just created for this request. Otherwise omit it to create a new project. Keep unchanged on retries.',
         ),
       targetLang: z.enum(target.data).describe('Target language from the API-supported list.'),
-      sourceLang: z.enum(source.data).default('auto'),
+      sourceLang: z
+        .enum(source.data)
+        .default('auto')
+        .describe('Spoken language of the source video. Leave as auto to detect it.'),
       model: z.string().trim().min(1).describe('Video lip-sync model returned by models_list.'),
       options: modelOptionsSchema.optional(),
       idempotencyKey: z
@@ -144,7 +147,7 @@ export function createTranslationTools(
       name: 'dubbing_get-options',
       title: 'Translation options',
       description:
-        'Read the source and target languages supported by the current translation API. Does not create a generation or estimate pricing.',
+        'List the language codes translation accepts, as targetLanguages and sourceLanguages, and whether translated-audio previews are available. Call it before dubbing_create, or translation-previews_create when available, to pick a valid targetLang. Does not create a generation or estimate pricing.',
       inputSchema: {},
       outputSchema: {
         targetLanguages: languageList,

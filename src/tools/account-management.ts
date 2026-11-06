@@ -44,7 +44,10 @@ const totals = z.object({
     ]),
   ),
 });
-const rename = z.object({ projectId: z.uuid(), name: z.string().trim().min(1).max(255) });
+const rename = z.object({
+  projectId: z.uuid().describe('Project to rename, from projects_list or projects_create.'),
+  name: z.string().trim().min(1).max(255).describe('New project name, up to 255 characters.'),
+});
 const project = z.object({ id: z.uuid(), name: z.string() });
 
 export function createAccountManagementTools(http: HttpClient): McpToolDefinition[] {
@@ -53,7 +56,7 @@ export function createAccountManagementTools(http: HttpClient): McpToolDefinitio
       name: 'account_get-usage',
       title: 'Read Sync usage and balance',
       description:
-        'Read the connected organization’s available credits, free allowance, or complete billed usage for the current period. Does not purchase credits, change plans, or start generation.',
+        "Read the connected organization's available credits, free allowance, or complete billed usage for the current period. Use it to answer what is left to spend; for the plan, limits and organization use account_get-context. Does not purchase credits, change plans, or start generation.",
       inputSchema: {},
       outputSchema: response.shape,
       annotations: {

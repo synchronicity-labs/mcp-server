@@ -52,10 +52,17 @@ const draft = z.object({
   updatedAt: z.string(),
   state,
 });
-const identity = { projectId: z.uuid(), draftId: z.uuid() };
+const identity = {
+  projectId: z.uuid().describe('The projectId the open Studio published.'),
+  draftId: z.uuid().describe('The draftId the open Studio published.'),
+};
 const edit = z.strictObject({
   ...identity,
-  expectedRevision: z.number().int().positive(),
+  expectedRevision: z
+    .number()
+    .int()
+    .positive()
+    .describe('The draft revision from studio-drafts_get.'),
   patch: state
     .omit({ parentGenerationId: true, derivedAudioVisualId: true, audioRemoved: true })
     .partial()
@@ -64,7 +71,8 @@ const edit = z.strictObject({
       speech: speech.partial().optional(),
     })
     .strict()
-    .refine((patch) => Object.keys(patch).length > 0, 'Supply a draft change.'),
+    .refine((patch) => Object.keys(patch).length > 0, 'Supply a draft change.')
+    .describe('Only the draft fields the user asked to change.'),
 });
 
 const save = z.object({

@@ -2,6 +2,13 @@ import { z } from 'zod';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import { uploadRuntime } from '../upload-runtime.js';
+import {
+  dialogueEdits,
+  previewId,
+  previewKeySchema,
+  sourceSchema,
+  transcriptionIdInput,
+} from './dialogue-inputs.js';
 import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import { generateTools, type McpToolDefinition } from './generator.js';
 import { uploadMediaAsset } from './media-upload.js';
@@ -17,37 +24,7 @@ const paths = [
 export function dialogueOperations(operations: ParsedOperation[]) {
   return operations.filter((operation) => paths.includes(operation.path));
 }
-const sourceSchema = z.object({ projectId: z.uuid(), videoAssetId: z.uuid() });
 const object = z.record(z.string(), z.unknown());
-const previewKeySchema = z.string().regex(/^[A-Za-z0-9._~-]{1,128}$/);
-
-// The API's edit items are a oneOf, which the OpenAPI conversion turns into untyped items,
-// so agents had to guess their shape.
-const dialogueEdits = z
-  .array(
-    z.discriminatedUnion('kind', [
-      z.object({
-        kind: z.literal('change'),
-        wordId: z.string().describe('Timed word ID from the source transcript.'),
-        replacement: z.string().min(1).max(500).describe('What the speaker says instead.'),
-        pronunciation: z
-          .string()
-          .min(1)
-          .max(100)
-          .optional()
-          .describe(
-            'Plain-text respelling for a name or word the voice would otherwise mispronounce.',
-          ),
-      }),
-      z.object({
-        kind: z.literal('remove'),
-        wordIds: z.array(z.string()).min(1).describe('Timed word IDs to remove.'),
-      }),
-    ]),
-  )
-  .min(1)
-  .max(100)
-  .describe('User-approved changes/removals referencing timed word IDs in the source transcript.');
 
 /** transcriptionJobId is the API's name; transcriptionId is the older MCP name. */
 function transcriptionJobId(args: Record<string, unknown>): unknown {
@@ -146,8 +123,10 @@ export function createDialogueTools(
     openWorldHint: true,
   };
   const generationSchema = sourceSchema.extend({
-    dialogueEditId: z.uuid(),
-    model: z.string().min(1),
+    dialogueEditId: z
+      .uuid()
+      .describe('Id of the completed, user-approved preview from dialogue-previews_create.'),
+    model: z.string().min(1).describe('Lipsync model name from models_list, such as sync-3.'),
     options: modelOptionsSchema.optional(),
   });
   async function generationBody(args: Record<string, unknown>, signal?: AbortSignal) {
@@ -170,7 +149,7 @@ export function createDialogueTools(
       name: 'dialogue_get-options',
       title: 'Check Edit Dialogue availability',
       description:
-        'Check whether the connected API supports timed-word Edit Dialogue. Does not transcribe, synthesize or generate.',
+        'Check whether Edit Dialogue (correcting or removing spoken words in a video while keeping the speaker voice) is available, and return { available, keyedPreview, sourceUpload }. keyedPreview means dialogue-previews_create accepts an idempotencyKey. Call it once before dialogue-transcriptions_create. Does not transcribe, synthesize or generate.',
       inputSchema: {},
       annotations: readHints,
       handler: async () => ({ available: true, keyedPreview, sourceUpload: true }),
@@ -229,8 +208,8 @@ export function createDialogueTools(
       name: 'dialogue-transcriptions_get',
       title: 'Check an Edit Dialogue transcription',
       description:
-        'Read the same transcription job until complete. Requires its original saved video and accessible project.',
-      inputSchema: sourceSchema.extend({ id: z.uuid() }).shape,
+        'Read one Edit Dialogue transcription by id: its status and, once COMPLETED, the timed-word transcript and speakers to base edits on. Call it again while it is still running; never start another transcription. Pass the same projectId and videoAssetId used to create it.',
+      inputSchema: sourceSchema.extend({ id: transcriptionIdInput }).shape,
       annotations: readHints,
       handler: (args, context) => checkedJob(readTranscript, args, context?.signal),
     },
@@ -314,8 +293,8 @@ export function createDialogueTools(
       name: 'dialogue-previews_get',
       title: 'Check a dialogue edit preview',
       description:
-        'Read one existing Edit Dialogue audio preview. Partial completion must be disclosed, not described as every edit succeeding.',
-      inputSchema: sourceSchema.extend({ id: z.uuid() }).shape,
+        'Read one Edit Dialogue audio preview by id: its status, previewAudioUrl, the transcript after the edits, and partialDetail when it ends COMPLETED_PARTIAL. Call it again while it is processing; never create another preview. Pass the same projectId and videoAssetId used to create it. When some edits failed, tell the user which ones rather than reporting every edit as done.',
+      inputSchema: sourceSchema.extend({ id: previewId }).shape,
       annotations: readHints,
       handler: (args, context) => checkedJob(readPreview, args, context?.signal),
     },
@@ -323,7 +302,7 @@ export function createDialogueTools(
       name: 'dialogue-videos_estimate',
       title: 'Estimate an edited dialogue video',
       description:
-        'Estimate final video cost using the completed dialogue preview and canonical server retiming. Does not generate or reserve credits.',
+        'Quote the credits to render the final lipsynced video from a completed Edit Dialogue preview, using the same source, preview and model as dialogue-videos_create, and return the cost estimate. Call it before dialogue-videos_create and show the user the quote. Does not generate or reserve credits.',
       inputSchema: generationSchema.shape,
       annotations: readHints,
       handler: async (args, context) =>

@@ -168,7 +168,10 @@ const getOutput = {
 
 const listInput = z
   .object({
-    status: z.enum(LIST_STATUSES).optional(),
+    status: z
+      .enum(LIST_STATUSES)
+      .optional()
+      .describe('Only batches in this status, such as PROCESSING for batches still running.'),
     createdAfter: z.string().optional().describe('ISO 8601 date-time.'),
     createdBefore: z.string().optional().describe('ISO 8601 date-time.'),
   })
@@ -336,7 +339,7 @@ export function createBatchTools(
       name: 'batches_list',
       title: 'List batches',
       description:
-        'List this account’s Sync batches with their status and metrics, optionally by status or creation time. Use it to find a batch id, to check for a batch just created after an uncertain batches_create response, or to see which batches are still running.',
+        'List this account’s Sync batches with their status and metrics, optionally by status or creation time. Use it to find a batch id, to check for a batch just created after an uncertain batches_create response, or to see which batches are still running. For the per-item results of one batch use batches_get.',
       inputSchema: listInput.shape,
       outputSchema: { batches: z.array(z.looseObject(batchFields)) },
       annotations: {

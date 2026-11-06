@@ -32,9 +32,20 @@ export function createAudioTrimTools(
   const create = z
     .object({
       assetId: z.uuid().optional().describe('Saved AUDIO asset to shorten.'),
-      projectId: z.uuid().optional(),
-      durationSeconds: z.number().min(0.01).max(3600),
-      idempotencyKey: z.uuid(),
+      projectId: z
+        .uuid()
+        .optional()
+        .describe('Project to save the shortened audio in, from projects_create or projects_list.'),
+      durationSeconds: z
+        .number()
+        .min(0.01)
+        .max(3600)
+        .describe('Seconds to keep from the start of the audio, up to 3600.'),
+      idempotencyKey: z
+        .uuid()
+        .describe(
+          'A new UUID saved before the call. Reuse it with identical input only to recover an uncertain response.',
+        ),
       audioAssetId: z
         .uuid()
         .optional()
@@ -42,7 +53,9 @@ export function createAudioTrimTools(
         .meta({ deprecated: true }),
     })
     .strict();
-  const read = z.object({ id: z.uuid() }).strict();
+  const read = z
+    .object({ id: z.uuid().describe('Audio trim id from audio-trims_create.') })
+    .strict();
   return [
     {
       name: 'audio-trims_create',
@@ -76,7 +89,7 @@ export function createAudioTrimTools(
       name: 'audio-trims_get',
       title: 'Read audio preparation',
       description:
-        'Read the same authorized audio preparation. Pending status is resumable; do not create another trim. This never starts video generation.',
+        'Read one audio trim by id: its status (queued, processing, completed or failed), and once completed the assetId and durationSeconds of the shortened audio, or its errorCode. While it is queued or processing, call it again after retryAfterMs; never create another trim. Never starts video generation.',
       inputSchema: read.shape,
       outputSchema: result.shape,
       annotations: {
