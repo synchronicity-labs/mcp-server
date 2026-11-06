@@ -91,7 +91,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   transcriptions_create: {
     title: 'Transcribe a video',
     description:
-      'Start a word-level transcription of a video or audio source and return its job id and status. Use it before Edit Dialogue, speaker analysis or timeline lipsync; read the result with transcriptions_get, or jobs_wait with kind transcription.',
+      'Start a word-level transcription of a video or audio source and return its job id and status. Use it for general transcription, speaker analysis or timeline lipsync; for Edit Dialogue use dialogue-transcriptions_create when available. Read the result with transcriptions_get, or jobs_wait with kind transcription.',
   },
   transcriptions_get: {
     title: 'Read a transcription',
@@ -239,6 +239,9 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     title: 'List generations',
     description:
       'List recent generations for your organization to find generation ids or check status. Pass a small `limit`, or narrow with its filters; for the history of one project, prefer projects_list-generations when available.',
+    params: {
+      projectId: 'Only generations in this project, from projects_list or projects_create.',
+    },
   },
   'generations_estimate-cost': {
     title: 'Estimate generation cost',

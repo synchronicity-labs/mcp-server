@@ -6,77 +6,13 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createMcpServerFactory, createSyncMcpServer } from '../server.js';
-import { translationSpec } from '../test-fixtures/translation.js';
+import { descriptorSpec } from '../test-fixtures/descriptor-spec.js';
 
 // Agents pick tools and fill inputs from these descriptors alone, and directories such as
 // Glama score them on it: every tool a model sees needs a title, read/write annotations
-// and a description on each input. Spec parameters here carry no descriptions, as most of
-// the public API's do, so the server's own text has to cover them.
-const op = (operationId: string, parameters: unknown[] = [], body?: Record<string, unknown>) => ({
-  operationId,
-  parameters,
-  tags: [operationId.replace(/Controller_.*/, '').toLowerCase()],
-  ...(body && {
-    requestBody: {
-      content: { 'application/json': { schema: { type: 'object', properties: body } } },
-    },
-  }),
-});
-const id = [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }];
-const query = (...names: string[]) =>
-  names.map((name) => ({ name, in: 'query', schema: { type: 'string' } }));
-const strings = (...names: string[]) =>
-  Object.fromEntries(names.map((name) => [name, { type: 'string' }]));
-const assetFilters = query(
-  'projectId',
-  'userId',
-  'limit',
-  'cursor',
-  'searchQuery',
-  'sortBy',
-  'types',
-);
-// The public API describes the estimate's fps and workflow itself.
-const estimate = structuredClone(translationSpec.paths['/v2/generate/estimate-cost']);
-const estimateBody: Record<string, Record<string, unknown>> = estimate.post.requestBody.content[
-  'application/json'
-].schema.properties;
-estimateBody.fps = { ...estimateBody.fps, description: 'Source video frame rate.' };
-estimateBody.workflow = { ...estimateBody.workflow, description: 'Omit for lip-sync only.' };
-const spec = {
-  openapi: '3.0.0',
-  paths: {
-    ...translationSpec.paths,
-    '/v2/generate/estimate-cost': estimate,
-    '/v2/models': { get: op('ModelsController_get') },
-    '/v2/voices': { get: op('VoicesController_getVoices', query('provider')) },
-    '/v2/assets': {
-      get: op('AssetsController_getAll', assetFilters),
-      post: op(
-        'AssetsController_create',
-        [],
-        strings('url', 'type', 'name', 'projectId', 'visibility', 'format', 'contentSha256'),
-      ),
-    },
-    '/v2/assets/count': { get: op('AssetsController_count', assetFilters) },
-    '/v2/assets/upload': {
-      post: op('AssetsController_createUploadUrl', [], strings('fileName', 'contentType', 'size')),
-    },
-    '/v2/assets/{id}': {
-      get: op('AssetsController_get', id),
-      patch: op('AssetsController_update', id, strings('name', 'visibility')),
-      delete: op('AssetsController_delete', id),
-    },
-    '/v2/assets/{id}/download': { get: op('AssetsController_getDownloadUrl', id) },
-    '/v2/generate': { get: op('GenerateController_getGenerations', query('limit')) },
-    '/v2/generate/{id}': { get: op('GenerateController_getGeneration', id) },
-    '/v2/projects': {
-      get: op('ProjectsController_getAll', query('limit', 'cursor', 'searchQuery', 'sortBy')),
-      post: op('ProjectsController_create', [], strings('name', 'description')),
-    },
-    '/v2/projects/{id}': { get: op('ProjectsController_get', id) },
-  },
-};
+// and a description on each input. descriptorSpec turns on every feature-gated tool and
+// leaves its parameters undescribed, so the server's own text has to cover them.
+const spec = descriptorSpec;
 
 let upstream: Server;
 const profiles: Record<string, Tool[]> = {};
@@ -118,6 +54,32 @@ afterAll(async () => {
   await new Promise<void>((resolve) => upstream.close(() => resolve()));
 });
 
+const EVERY_PROFILE = [
+  'lipsync_create',
+  'dubbing_create',
+  'dialogue-previews_get',
+  'dialogue-videos_estimate',
+  'speech-previews_get',
+  'audio-trims_get',
+  'translation-previews_get',
+  'generations_get-costs',
+  'generations_get-continuation',
+  'projects_list-generations',
+  'organizations_list',
+];
+const MODEL_CLIENTS = [
+  ...EVERY_PROFILE,
+  'lipsync_create-timeline',
+  'batches_list',
+  'feedback_send',
+];
+const EXPECTED: Record<string, string[]> = {
+  'stdio default': [...MODEL_CLIENTS, 'jobs_wait'],
+  'stdio all': [...MODEL_CLIENTS, 'jobs_wait', 'tts-jobs_get'],
+  'hosted claude-code': MODEL_CLIENTS,
+  'hosted openai-mcp': [...EVERY_PROFILE, 'studio-views_get', 'studio-drafts_get'],
+};
+
 // App-only tools serve the ChatGPT widgets; the model never sees them.
 const modelVisible = (tool: Tool) => {
   const visibility = (tool._meta?.ui as { visibility?: string[] } | undefined)?.visibility;
@@ -129,7 +91,8 @@ describe('tool descriptors', () => {
     '%s: every model-visible tool has a title, annotations and described inputs',
     (profile) => {
       const tools = profiles[profile]!.filter(modelVisible);
-      expect(tools.length).toBeGreaterThan(10);
+      // The spec must build every feature-gated tool, or the check below skips them.
+      expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(EXPECTED[profile]!));
       const undocumented = tools.flatMap((tool) =>
         Object.entries(tool.inputSchema.properties ?? {})
           .filter(([, schema]) => !(schema as { description?: string }).description)
