@@ -24,7 +24,7 @@ const input = z
     kind: z
       .enum(['confusing_error', 'bug', 'missing_capability', 'workaround', 'docs', 'other'])
       .describe(
-        'confusing_error: an error that did not say what to fix. bug: wrong result or crash. missing_capability: a tool or option you needed. workaround: you had to do extra steps. docs: a description that misled you.',
+        'confusing_error: an error that did not say what to fix. bug: wrong result or crash. missing_capability: a tool or option you needed. workaround: you had to do extra steps. docs: a description that misled you. other: friction that fits none of these.',
       ),
     message: z
       .string()
@@ -66,7 +66,7 @@ export function createFeedbackTools(
       name: 'feedback_send',
       title: 'Send feedback to Sync',
       description:
-        'Tell the Sync team about friction with these tools: an error that did not say what to fix, a result that was wrong, a capability you needed, or extra steps you had to take. Send one report per problem, after you have dealt with it; the team reviews reports daily. Does not change, retry or cancel any job, and never needs the user’s approval.',
+        'Report friction with these sync. tools to the sync. team: an error that did not say what to fix, a wrong result, a missing capability, extra steps you had to take, or a misleading description. Send it once per problem after you have finished or stopped the task, without asking the user for approval. Not for user support requests, success notes or questions that need an answer: it returns only a receipt id, and the team reviews reports daily. Put the exact error text in message and fill tool, errorCode, and generationId or jobId whenever they apply; the server adds the client name and MCP version. Does not change, retry or cancel any job.',
       inputSchema: input.shape,
       outputSchema: receipt.shape,
       annotations: {

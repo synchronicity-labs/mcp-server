@@ -19,12 +19,14 @@ const playbackMetadata = z.object({
 });
 
 export function createPlaybackMetadataTool(http: HttpClient): McpToolDefinition {
-  const input = z.object({ assetId: z.uuid().describe('Asset id from assets_list.') }).strict();
+  const input = z
+    .object({ assetId: z.uuid().describe('Asset id (UUID) from assets_list or assets_get.') })
+    .strict();
   return {
     name: 'assets_get-playback-metadata',
     title: 'Read video playback metadata',
     description:
-      "Read one asset's duration, frame rate, frame count, dimensions, codec and playback proxy URLs, for timing frame-accurate edits such as timeline clips. Use assets_get for its name and media url. Requires a connected user; API keys return unsupported. Missing metadata stays unknown. Does not analyze media, read transcripts, or modify assets.",
+      "Read one asset's measured playback metadata: duration in seconds, fps, frameCount, width, height, codec, container format, proxyPath (a browser playback proxy), proxyRequested (a proxy was requested, so proxyPath may appear later) and thumbnailsManifestUrl. Use it to convert between seconds and frames for frame-accurate edits such as lipsync_create-timeline clips; use assets_get for the name and media url, and assets_get-download-url to download the file. Requires a signed-in user: with an API key it returns {supported: false, metadata: null}. metadata is null when nothing has been recorded for the asset, and a field it could not measure is null or omitted; treat those values as unknown and never guess them. It does not analyze media, read transcripts, or change the asset.",
     inputSchema: input.shape,
     outputSchema: { supported: z.boolean(), metadata: playbackMetadata.nullable() },
     annotations: {

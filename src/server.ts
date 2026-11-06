@@ -695,12 +695,21 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
   if (tool.name === 'lipsync_create') {
     for (const key of ['video', 'image', 'audio']) delete inputSchema[key];
     description =
-      'Create one lipsync generation from exactly one image/video URL or Sync asset ID and one audio URL/asset ID or script plus a voiceId returned by voices_list. Defaults to sync-3; new work creates a NEW project, even with a duplicate projectName. Supply a fresh projectCreationKey for keyed creation; preserve it on retries. Use projectId only for an explicit user selection and supply projectIntent=explicit. Poll the returned id with generations_get.';
-    for (const key of ['videoAssetId', 'imageAssetId', 'audioAssetId']) {
-      inputSchema[key] = z
-        .string()
-        .optional()
-        .describe('Existing Sync asset ID in the same organization.');
+      'Create one lipsync video from exactly one visual (videoUrl, videoAssetId, imageUrl or imageAssetId) and one driver (audioUrl, audioAssetId, or script plus voiceId), to make a photo or video say a script or match its lips to supplied audio. When available, use lipsync_create-timeline instead for several audio clips or to lipsync only some ranges of one video, batches_create for 20 or more independent generations, dubbing_create to translate speech, and the Edit Dialogue tools (starting with dialogue_get-options) to change words in existing speech.\n\n' +
+      'For a local file, when the assets tools are available, call assets_create-upload-url, PUT the bytes to its uploadUrl with the same Content-Type, register the url it returned (not the uploadUrl) with assets_create, and pass that asset id. provider, stability and similarityBoost apply only to script.\n\n' +
+      "This is a paid generation, billed in the session's organization unless organizationId names another. It returns the generation id and status at once; poll generations_get with wait: true until it finishes, then copy outputMediaUrl verbatim.\n\n" +
+      "Without projectId it first creates a NEW project, named projectName or a default, even if that name matches existing work. The input combination is checked before that; rejections from the API itself come after the project exists. Pass projectId, with projectIntent=explicit and without projectName or projectCreationKey, only for a project the user explicitly chose or one just created for this request. continuation, from generations_get-continuation, requires the parent generation's projectId.\n\n" +
+      'Before calling, persist an idempotencyKey and, without projectId, a fresh projectCreationKey. After a lost or uncertain response, never create again with new keys: if the error names a generationId, poll it with generations_get; otherwise resend the identical request with the same keys.';
+    const assetIdDescriptions = {
+      videoAssetId:
+        'Saved video asset id in the same organization as this call, from assets_list or assets_create when available. Supply exactly one visual input.',
+      imageAssetId:
+        'Saved still image asset id in the same organization as this call, from assets_list or assets_create when available, for image-to-video lipsync. Supply exactly one visual input.',
+      audioAssetId:
+        'Saved audio asset id in the same organization as this call, from assets_list or assets_create when available. Supply audio or script, not both.',
+    };
+    for (const [key, text] of Object.entries(assetIdDescriptions)) {
+      inputSchema[key] = z.string().optional().describe(text);
     }
     inputSchema.videoUrl = z
       .string()

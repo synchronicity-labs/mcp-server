@@ -488,9 +488,23 @@ describe('immutable client profiles', () => {
             (await client.callTool({ name: 'assets_open-upload-widget', arguments: {} })).isError,
           ).not.toBe(true);
         } else {
-          expect(JSON.stringify(tools)).not.toMatch(
-            /openai\/|assets_upload|assets_create|tts_create|ChatGPT/,
-          );
+          expect(JSON.stringify(tools)).not.toMatch(/openai\/|assets_upload|tts_create|ChatGPT/);
+          // These sessions have no asset tools, so naming one must be qualified as optional.
+          let assetReferences = 0;
+          for (const tool of tools) {
+            const texts = [
+              tool.description ?? '',
+              ...Object.values(tool.inputSchema.properties ?? {}).map(
+                (property) => (property as { description?: string }).description ?? '',
+              ),
+            ];
+            for (const sentence of texts.flatMap((text) => text.split(/(?<=[.;])\s+/))) {
+              if (!/\bassets_create\b/.test(sentence)) continue;
+              assetReferences += 1;
+              expect(sentence, tool.name).toMatch(/\bavailable\b/i);
+            }
+          }
+          expect(assetReferences).toBeGreaterThan(0);
           await expect(client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow(
             'assets_create-upload-url',
           );

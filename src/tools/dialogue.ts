@@ -9,6 +9,7 @@ import {
   sourceSchema,
   transcriptionIdInput,
 } from './dialogue-inputs.js';
+import { DIALOGUE_TEXT } from './dialogue-text.js';
 import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import { generateTools, type McpToolDefinition } from './generator.js';
 import { uploadMediaAsset } from './media-upload.js';
@@ -122,11 +123,10 @@ export function createDialogueTools(
     idempotentHint: false,
     openWorldHint: true,
   };
+  const estimateText = DIALOGUE_TEXT['dialogue-videos_estimate'];
   const generationSchema = sourceSchema.extend({
-    dialogueEditId: z
-      .uuid()
-      .describe('Id of the completed, user-approved preview from dialogue-previews_create.'),
-    model: z.string().min(1).describe('Lipsync model name from models_list, such as sync-3.'),
+    dialogueEditId: z.uuid().describe(estimateText.params.dialogueEditId),
+    model: z.string().min(1).describe(estimateText.params.model),
     options: modelOptionsSchema.optional(),
   });
   async function generationBody(args: Record<string, unknown>, signal?: AbortSignal) {
@@ -148,8 +148,7 @@ export function createDialogueTools(
     {
       name: 'dialogue_get-options',
       title: 'Check Edit Dialogue availability',
-      description:
-        'Check whether Edit Dialogue (correcting or removing spoken words in a video while keeping the speaker voice) is available, and return { available, keyedPreview, sourceUpload }. keyedPreview means dialogue-previews_create accepts an idempotencyKey. Call it once before dialogue-transcriptions_create. Does not transcribe, synthesize or generate.',
+      description: DIALOGUE_TEXT['dialogue_get-options'].description,
       inputSchema: {},
       annotations: readHints,
       handler: async () => ({ available: true, keyedPreview, sourceUpload: true }),
@@ -157,9 +156,15 @@ export function createDialogueTools(
     {
       name: 'dialogue_upload-source',
       title: 'Copy a video for Edit Dialogue',
-      description:
-        'Copy an accessible saved video into Sync storage when transcription rejects its external source URL. Returns a new asset; use its id as videoAssetId for transcription, preview, and final video generation. Does not transcribe or spend generation credits.',
-      inputSchema: sourceSchema.shape,
+      description: DIALOGUE_TEXT['dialogue_upload-source'].description,
+      inputSchema: sourceSchema.extend({
+        projectId: sourceSchema.shape.projectId.describe(
+          DIALOGUE_TEXT['dialogue_upload-source'].params.projectId,
+        ),
+        videoAssetId: sourceSchema.shape.videoAssetId.describe(
+          DIALOGUE_TEXT['dialogue_upload-source'].params.videoAssetId,
+        ),
+      }).shape,
       outputSchema: {
         asset: z.object({ id: z.uuid(), type: z.literal('VIDEO'), url: z.url() }).passthrough(),
       },
@@ -171,9 +176,15 @@ export function createDialogueTools(
     {
       name: 'dialogue-transcriptions_create',
       title: 'Transcribe a video for Edit Dialogue',
-      description:
-        'Use this to start correcting or removing spoken words in a saved single-speaker video while keeping the original speaker voice. Transcribes timed words for Edit Dialogue; not whole-script replacement, translation, or choosing a different voice. Transcription is unbilled and identical sources reuse their existing job. A video outside Sync storage is copied there first; the result then carries the videoAssetId of that copy, which the rest of the workflow must use. Does not replace dialogue or generate a video.',
-      inputSchema: sourceSchema.shape,
+      description: DIALOGUE_TEXT['dialogue-transcriptions_create'].description,
+      inputSchema: sourceSchema.extend({
+        projectId: sourceSchema.shape.projectId.describe(
+          DIALOGUE_TEXT['dialogue-transcriptions_create'].params.projectId,
+        ),
+        videoAssetId: sourceSchema.shape.videoAssetId.describe(
+          DIALOGUE_TEXT['dialogue-transcriptions_create'].params.videoAssetId,
+        ),
+      }).shape,
       annotations: writeHints,
       handler: async (args, context) => {
         const input = await source(args, context?.signal);
@@ -207,20 +218,26 @@ export function createDialogueTools(
     {
       name: 'dialogue-transcriptions_get',
       title: 'Check an Edit Dialogue transcription',
-      description:
-        'Read one Edit Dialogue transcription by id: its status and, once COMPLETED, the timed-word transcript and speakers to base edits on. Call it again while it is still running; never start another transcription. Pass the same projectId and videoAssetId used to create it.',
-      inputSchema: sourceSchema.extend({ id: transcriptionIdInput }).shape,
+      description: DIALOGUE_TEXT['dialogue-transcriptions_get'].description,
+      inputSchema: sourceSchema.extend({
+        projectId: sourceSchema.shape.projectId.describe(
+          DIALOGUE_TEXT['dialogue-transcriptions_get'].params.projectId,
+        ),
+        videoAssetId: sourceSchema.shape.videoAssetId.describe(
+          DIALOGUE_TEXT['dialogue-transcriptions_get'].params.videoAssetId,
+        ),
+        id: transcriptionIdInput.describe(DIALOGUE_TEXT['dialogue-transcriptions_get'].params.id),
+      }).shape,
       annotations: readHints,
       handler: (args, context) => checkedJob(readTranscript, args, context?.signal),
     },
     {
       name: 'dialogue-previews_create',
       title: 'Preview dialogue edits',
-      description:
-        'Start an audio synthesis job for user-approved timed word changes/removals in a saved single-speaker video, preserving the original speaker voice. Requires a project, source video and completed transcription or prior preview accessible to the connected Sync account. May clone the source speaker voice and incur synthesis charges; confirm the edits and permission to use that voice before creating. Creates a saved preview without overwriting the source; does not generate the final video. Returns a preview job ID; poll dialogue-previews_get with the same project and source until completion, and disclose any failed edits on partial completion. Persist an idempotencyKey before creating when dialogue_get-options advertises keyedPreview. Recover only through an explicit retry of identical input with that same key; never retry an ambiguous creation automatically. Not for translation, choosing another voice, or arbitrary full-transcript replacement.',
+      description: DIALOGUE_TEXT['dialogue-previews_create'].description,
       inputSchema: sourceSchema.extend({
         projectId: sourceSchema.shape.projectId.describe(
-          'Accessible Sync project for the preview. Keep unchanged on retries.',
+          DIALOGUE_TEXT['dialogue-previews_create'].params.projectId,
         ),
         videoAssetId: sourceSchema.shape.videoAssetId.describe(
           'Saved VIDEO asset for the transcription or prior preview, accessible to the connected account.',
@@ -233,16 +250,12 @@ export function createDialogueTools(
         transcriptionJobId: z
           .uuid()
           .optional()
-          .describe(
-            'Completed transcription ID for this source. Supply exactly one of transcriptionJobId or previousPreviewId.',
-          ),
+          .describe(DIALOGUE_TEXT['dialogue-previews_create'].params.transcriptionJobId),
         previousPreviewId: z
           .uuid()
           .optional()
-          .describe(
-            'Completed or partially completed preview ID for this source when reopening. Supply exactly one of previousPreviewId or transcriptionJobId.',
-          ),
-        edits: dialogueEdits,
+          .describe(DIALOGUE_TEXT['dialogue-previews_create'].params.previousPreviewId),
+        edits: dialogueEdits.describe(DIALOGUE_TEXT['dialogue-previews_create'].params.edits),
         transcriptionId: z
           .uuid()
           .optional()
@@ -292,17 +305,23 @@ export function createDialogueTools(
     {
       name: 'dialogue-previews_get',
       title: 'Check a dialogue edit preview',
-      description:
-        'Read one Edit Dialogue audio preview by id: its status, previewAudioUrl, the transcript after the edits, and partialDetail when it ends COMPLETED_PARTIAL. Call it again while it is processing; never create another preview. Pass the same projectId and videoAssetId used to create it. When some edits failed, tell the user which ones rather than reporting every edit as done.',
-      inputSchema: sourceSchema.extend({ id: previewId }).shape,
+      description: DIALOGUE_TEXT['dialogue-previews_get'].description,
+      inputSchema: sourceSchema.extend({
+        projectId: sourceSchema.shape.projectId.describe(
+          DIALOGUE_TEXT['dialogue-previews_get'].params.projectId,
+        ),
+        videoAssetId: sourceSchema.shape.videoAssetId.describe(
+          DIALOGUE_TEXT['dialogue-previews_get'].params.videoAssetId,
+        ),
+        id: previewId.describe(DIALOGUE_TEXT['dialogue-previews_get'].params.id),
+      }).shape,
       annotations: readHints,
       handler: (args, context) => checkedJob(readPreview, args, context?.signal),
     },
     {
       name: 'dialogue-videos_estimate',
       title: 'Estimate an edited dialogue video',
-      description:
-        'Quote the credits to render the final lipsynced video from a completed Edit Dialogue preview, using the same source, preview and model as dialogue-videos_create, and return the cost estimate. Call it before dialogue-videos_create and show the user the quote. Does not generate or reserve credits.',
+      description: estimateText.description,
       inputSchema: generationSchema.shape,
       annotations: readHints,
       handler: async (args, context) =>
@@ -314,13 +333,10 @@ export function createDialogueTools(
     {
       name: 'dialogue-videos_create',
       title: 'Create the edited dialogue video',
-      description:
-        'Create a new lip-synced video from a saved single-speaker video and its completed, user-approved Edit Dialogue audio preview. Use this to render targeted corrections or removals of spoken words while preserving the original speaker voice. Not for translation, whole-script replacement, or choosing a different voice. ' +
-        "This is a paid action that starts a generation job and consumes Sync credits. First use dialogue-videos_estimate with the same source, preview and model, then obtain the user's approval of the preview, configuration and estimated cost. Requires a project and source video accessible to the connected account, and a completed dialogue preview for that same source. Creates a new output without overwriting the source video. " +
-        'Returns a generation ID, not a finished video. Poll generations_get with that ID until completion. Persist one idempotency key for the approved request; on an uncertain response, reuse that key with identical inputs instead of starting a second paid job.',
+      description: DIALOGUE_TEXT['dialogue-videos_create'].description,
       inputSchema: generationSchema.extend({
         projectId: sourceSchema.shape.projectId.describe(
-          'Accessible Sync project for the new output. Keep unchanged on retries.',
+          DIALOGUE_TEXT['dialogue-videos_create'].params.projectId,
         ),
         videoAssetId: sourceSchema.shape.videoAssetId.describe(
           'Saved VIDEO asset used for the approved dialogue preview, accessible to the connected account.',

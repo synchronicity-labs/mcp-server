@@ -91,7 +91,7 @@ const generation = z.object({
 export function createGenerationContinuationTool(http: HttpClient): McpToolDefinition {
   const input = z
     .object({
-      projectId: z.uuid().describe('Project the generation belongs to.'),
+      projectId: z.uuid().describe("The generation's own project id."),
       id: z.uuid().describe('Id of the existing generation to continue from.'),
     })
     .strict();
@@ -99,7 +99,7 @@ export function createGenerationContinuationTool(http: HttpClient): McpToolDefin
     name: 'generations_get-continuation',
     title: 'Read generation continuation inputs',
     description:
-      'Read one generation and the inputs it was made from (workflow, model, options, media inputs, segments, speakers and output url), to start a follow-up generation from it, such as redoing it with other audio or dubbing its output. Use generations_get for status and output only. Rechecks project and referenced asset access. Does not create a draft, asset, transcription, preview or generation.',
+      "Read one existing generation with the inputs it was made from (workflow, modelName, options, inputs with asset ids or urls, segments, speakers, parentGenerationId and outputMediaUrl), so a follow-up generation can reuse them, such as redoing it with other audio or dubbing its output. Use it only when the user explicitly continues an existing generation; not for polling status or getting the result url (generations_get). projectId must be the generation's own project, such as projectId from generations_get; id comes from generations_list, projects_list-generations (when available) or a create response. Then pass continuation { workflow, parentGenerationId: id } with the same projectId to lipsync_create (workflow lipsync, image_to_video or translate_and_dub), dubbing_create (translate_and_dub) or dialogue-videos_create (edit_dialogue); other workflows cannot be continued. Returns the generation whatever its status, after checking access to the project and to every asset it references; it fails if the generation is not in that project or a referenced asset is no longer accessible.",
     inputSchema: input.shape,
     outputSchema: { submissionContextVersion: z.literal(1), generation },
     annotations: {
