@@ -68,17 +68,21 @@ export function withProjectIntent(tool: McpToolDefinition): McpToolDefinition {
   if (ui?.visibility?.length === 1 && ui.visibility[0] === 'app') return tool;
   const definition = {
     ...tool,
-    description:
-      tool.description +
-      ' When supplying projectId, projectIntent=explicit is required: the user must explicitly ask to work in that project, select it in the interface, or this must be the project just created for this request. A matching workflow/name or an already-open editor is never permission to modify it. Default new work to a new project.',
+    // Descriptions that already state the rule keep their own wording.
+    description: tool.description.includes('projectIntent=explicit')
+      ? tool.description
+      : tool.description +
+        ' When supplying projectId, projectIntent=explicit is required: the user must explicitly ask to work in that project, select it in the interface, or this must be the project just created for this request. A matching workflow/name or an already-open editor is never permission to modify it. Default new work to a new project.',
     inputSchema: {
       ...tool.inputSchema,
-      projectIntent: z
-        .literal('explicit')
-        .optional()
-        .describe(
-          'Required with projectId. Set only for an explicit user project selection/update, or the new project just created for this request. Never infer intent from a matching project name, workflow name or active editor.',
-        ),
+      projectIntent:
+        tool.inputSchema.projectIntent ??
+        z
+          .literal('explicit')
+          .optional()
+          .describe(
+            'Required with projectId. Set only for an explicit user project selection/update, or the new project just created for this request. Never infer intent from a matching project name, workflow name or active editor.',
+          ),
     },
   };
   const input = (args: Record<string, unknown>) => {

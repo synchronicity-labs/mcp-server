@@ -36,7 +36,11 @@ export function createTranslationTools(
 
   const schema = z
     .object({
-      continuation: generationContextSchema.optional(),
+      continuation: generationContextSchema
+        .describe(
+          'Only when the user explicitly continues an existing generation in this project: the parent generation (from generations_get-continuation) and its workflow, which must be translate_and_dub. Requires projectId.',
+        )
+        .optional(),
       videoAssetId: z
         .uuid()
         .describe(
@@ -48,25 +52,39 @@ export function createTranslationTools(
         .trim()
         .min(1)
         .optional()
-        .describe('Name for a NEW project. A matching existing name is never reused.'),
+        .describe(
+          'Name for the NEW project created when projectId is omitted; defaults to "Translate and Dub". Cannot be combined with projectId. A matching existing name is never reused.',
+        ),
       projectId: z
         .uuid()
         .optional()
         .describe(
-          'Project ID only when explicitly selected by the user, or just created for this request. Otherwise omit it to create a new project. Keep unchanged on retries.',
+          'Project ID only when explicitly selected by the user, or just created for this request; requires projectIntent=explicit. Cannot be combined with projectName or projectCreationKey. Otherwise omit it to create a new project. Keep unchanged on retries.',
         ),
-      targetLang: z.enum(target.data).describe('Target language from the API-supported list.'),
+      targetLang: z
+        .enum(target.data)
+        .describe(
+          'Language code to dub into, for example es or pt-BR; the same list dubbing_get-options returns as targetLanguages.',
+        ),
       sourceLang: z
         .enum(source.data)
         .default('auto')
-        .describe('Spoken language of the source video. Leave as auto to detect it.'),
-      model: z.string().trim().min(1).describe('Video lip-sync model returned by models_list.'),
+        .describe(
+          'Spoken language of the source video, from dubbing_get-options sourceLanguages. Defaults to auto, which detects it; set a code only when the user names the source language.',
+        ),
+      model: z
+        .string()
+        .trim()
+        .min(1)
+        .describe(
+          'Lip-sync model name from models_list (for example sync-3), used for the final render. Any generations_estimate-cost quote for this dub must use the same model.',
+        ),
       options: modelOptionsSchema.optional(),
       idempotencyKey: z
         .string()
         .regex(/^[A-Za-z0-9._~-]{1,128}$/)
         .describe(
-          'Persist one unique key per approved generation. Retry an uncertain request with this exact key and unchanged inputs; never automatically create a new key.',
+          'Persist one unique key per approved generation before calling. Retry an uncertain request with this exact key, the same projectCreationKey and unchanged inputs; never automatically create a new key.',
         ),
     })
     .strict();
@@ -76,9 +94,7 @@ export function createTranslationTools(
       name: 'dubbing_create',
       title: 'Translate and dub a video',
       description:
-        'Use this when the user wants to translate and dub a video into another language with matching lip movements. Not for subtitles only or translating a text document. Requires a saved video asset, model, and persistent idempotency key. By default creates a NEW project using a fresh projectCreationKey, even when projectName matches existing work. Preserve that UUID and key on retries. Supply projectId only for an explicit selection or the project just created for this request; never infer it from a workflow name or open editor. For social video URLs, import through assets_create and wait for the saved asset before estimating or calling this tool. ' +
-        'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generations_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. ' +
-        'The API manages dubbing and final rendering under the returned generation id. Poll generations_get for that same id until COMPLETED; do not create another job to finish or recover it.',
+        "Translate a saved video's speech into another language and lip-sync it to the dubbed audio, as one paid sync. generation that covers both dubbing and the final render. Use it for a finished dubbed video. Not for subtitles only or translating a text document; to lip-sync audio you already have, use lipsync_create. To review translated audio first, translation-previews_create (offered only when dubbing_get-options reports previewAvailable) translates a saved AUDIO asset, not a video.\n\nFor social video URLs, import through assets_create and wait for the saved asset before estimating or calling this tool. This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generations_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. Omit projectId to start a NEW project (fresh projectCreationKey); pass projectId with projectIntent=explicit only for a project the user selected or one just created for this request, never because a name matches or an editor is open.\n\nReturns the generation (id, status, projectId); poll that id with generations_get or jobs_wait (kind generation) until COMPLETED, then read outputMediaUrl. After an uncertain response, retry only with the same idempotencyKey, projectCreationKey and inputs; never create another job to finish or recover it.",
       inputSchema: schema.shape,
       outputSchema: generationOutputSchema,
       annotations: {
@@ -147,7 +163,7 @@ export function createTranslationTools(
       name: 'dubbing_get-options',
       title: 'Translation options',
       description:
-        'List the language codes translation accepts, as targetLanguages and sourceLanguages, and whether translated-audio previews are available. Call it before dubbing_create, or translation-previews_create when available, to pick a valid targetLang. Does not create a generation or estimate pricing.',
+        "List the language codes sync. translation accepts (targetLanguages, and sourceLanguages, which also includes auto for detection) and whether the translated-audio preview tools are offered (previewAvailable). Use it to pick a valid targetLang or sourceLang for dubbing_create or translation-previews_create; translation-previews_create takes targetLang as free text, so check the code here first. Not for prices: use generations_estimate-cost or translation-previews_estimate. Takes no input and answers from the API's published schema, so it creates nothing and costs nothing. Codes look like es, pt-BR or zh-TW; the translation-previews tools exist only when previewAvailable is true.",
       inputSchema: {},
       outputSchema: {
         targetLanguages: languageList,

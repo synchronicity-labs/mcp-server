@@ -13,19 +13,30 @@ export function speechOperations(operations: ParsedOperation[]) {
 const projectSchema = z.object({
   projectId: z
     .uuid()
-    .describe('Project the speech belongs to, from projects_create or projects_list.'),
+    .describe(
+      'Project the speech preview is for, from projects_create or projects_list. Use the same id for speech-previews_create; an id you cannot access returns an error.',
+    ),
 });
 const requestSchema = projectSchema.extend({
+  projectId: projectSchema.shape.projectId.describe(
+    'Project the preview is for, from projects_create or projects_list. The tool checks you can access it before synthesizing; pass the same id to speech-previews_get.',
+  ),
   idempotencyKey: z
     .uuid()
     .describe(
-      'Persist this request identity before synthesis. Reuse it with the identical script and voice after an uncertain response.',
+      'A fresh UUID, persisted before the call and sent as the Idempotency-Key header. After an uncertain response, reuse it with the identical script and voice; only this key deduplicates, so a new key can bill a second synthesis.',
     ),
-  script: z.string().min(1).max(5000).describe('Text to speak, up to 5,000 characters.'),
+  script: z
+    .string()
+    .min(1)
+    .max(5000)
+    .describe('Exact text the user confirmed, spoken as written; up to 5,000 characters.'),
   voiceId: z
     .string()
     .min(1)
-    .describe('An id returned by voices_list. Restricted voices cannot synthesize.'),
+    .describe(
+      "Voice id returned by voices_list (premade ElevenLabs voices or this organization's clones). A voice with a restriction cannot synthesize; pick another.",
+    ),
   stability: z
     .number()
     .min(0)
@@ -94,7 +105,7 @@ export function createSpeechTools(
       name: 'speech-previews_get-options',
       title: 'Check speech preview availability',
       description:
-        "Check that speech previews are available and return the organization's plan, billing mode and remaining free text-to-speech allowance, so you can tell the user what a preview will cost before speech-previews_create. Does not synthesize or change billing.",
+        "Preflight one speech preview before speech-previews_create: confirm you can read projectId, then read the organization's text-to-speech billing state. It returns no price, so use it to tell the user before creating whether the preview fits the free monthly allowance (freeMonthlyLimits.tts used against max, when freeMonthlyLimits is not null) or will draw on paid usage, judged from hasActiveCredits, plan and billingVersion. If freeTtsExhausted or paymentFailureCountExceededLimit is true, tell the user to check their plan or billing in Studio instead of creating. Ignore freeGenerationsExhausted and the generations and sync3 counters; they cover other generations, not speech. available is always true when the call succeeds; if the project check or billing read fails, the call returns an error and no billing fields. Not for overall balance or spend (account_get-usage) or choosing a voice (voices_list). Does not synthesize or bill.",
       inputSchema: projectSchema.shape,
       outputSchema: optionsSchema.shape,
       annotations: readHints,
@@ -110,7 +121,7 @@ export function createSpeechTools(
       name: 'speech-previews_create',
       title: 'Generate a speech preview',
       description:
-        'Synthesize the confirmed script and selected available voice into a durable audio job for the project. This is a potentially paid action. Persist idempotencyKey before calling, reuse that same key and identical input after uncertain admission, and poll speech-previews_get by returned id. Never create again merely because attaching the resulting audio failed.',
+        'Synthesize a confirmed script in a voice from voices_list into one standalone speech audio job (ElevenLabs), after verifying access to projectId. This is a potentially paid action. Check speech-previews_get-options first, persist idempotencyKey before calling, and after an uncertain response retry only with that same key and identical input; a new key can bill again. Returns the job: status PENDING, PROCESSING, SUCCESS or FAILED, with url and duration filled only on SUCCESS, so poll speech-previews_get by the returned id (jobs_get and jobs_wait do not cover speech jobs). Never create again because attaching the resulting audio failed. An inaccessible project or a malformed idempotencyKey fails before anything is synthesized. Not for lipsyncing a script directly (lipsync_create with script and voiceId), editing words in a video in the original speaker voice (dialogue-previews_create) or translating audio (translation-previews_create). Pass projectIntent=explicit with projectId only for a project the user explicitly chose or one just created for this request, never because its name matches or it is open; default new work to a new project.',
       inputSchema: requestSchema.shape,
       outputSchema: jobSchema.shape,
       annotations: {
@@ -136,8 +147,11 @@ export function createSpeechTools(
       name: 'speech-previews_get',
       title: 'Check a speech preview',
       description:
-        'Read one speech preview job by id: its status (PENDING, PROCESSING, SUCCESS or FAILED), and the audio url and duration once it succeeds, or its error. Call it again while it is running; never create another preview. Reads do not synthesize. Pass the projectId used to create it.',
+        "Read the status of one speech preview job created by speech-previews_create. PENDING or PROCESSING means it is still running; SUCCESS fills the audio url and duration; FAILED usually fills error with a code and message, but error can be null, so check it before reading. jobs_get and jobs_wait do not cover speech previews, and this tool has no wait option: call it again while the job runs, and never create another preview to recover a running one. projectId is only an access check (pass the one used at create); the job is looked up by id within the session's organization, and an inaccessible project or an id not found there returns an error. Does not synthesize or bill.",
       inputSchema: projectSchema.extend({
+        projectId: projectSchema.shape.projectId.describe(
+          'Project you passed to speech-previews_create, from projects_create or projects_list. It is read first to check access; an id you cannot access returns an error.',
+        ),
         id: z.uuid().describe('Speech preview id from speech-previews_create.'),
       }).shape,
       outputSchema: jobSchema.shape,

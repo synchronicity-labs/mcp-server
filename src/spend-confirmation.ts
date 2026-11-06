@@ -71,14 +71,12 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
     ],
   ],
   'translation-previews_create': [
+    ['Start one paid job that translates', 'Start one job that translates'],
     [
-      'Create one paid translated-audio preview from a saved audio asset. Confirm language and displayed cost first. ',
-      'Create one translated-audio preview from a saved audio asset. ',
+      'Confirm the source audio, target language and the translation-previews_estimate quote with the user first. ',
+      '',
     ],
-    [
-      'Final video generation is a separate, explicitly approved lip-sync operation',
-      'Final video generation is a separate lip-sync operation',
-    ],
+    ['is a separate, explicitly approved lipsync_create', 'is a separate lipsync_create'],
   ],
   // Permission to reuse a voice is consent, not spend, so it stays.
   'dialogue-previews_create': [
@@ -89,7 +87,7 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
   ],
   'dialogue-videos_create': [
     [
-      "This is a paid action that starts a generation job and consumes Sync credits. First use dialogue-videos_estimate with the same source, preview and model, then obtain the user's approval of the preview, configuration and estimated cost. ",
+      "This is a paid action that starts a generation job and consumes sync. credits. First use dialogue-videos_estimate with the same source, preview and model, then obtain the user's approval of the preview, configuration and estimated cost. ",
       'This starts a generation job. ',
     ],
   ],

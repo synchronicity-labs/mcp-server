@@ -29,12 +29,17 @@ export function createProjectHistoryTools(
       name: 'projects_list-generations',
       title: 'Read project history',
       description:
-        'Read generation history for an accessible Sync project. Requires a projectId returned by projects_list. Pass limit and the last returned generation id as cursor to load another page. These are the same records used by the Sync web app.',
+        "List the generations in one sync. project you can access, after first checking your access to that project. Use it for a project's history; for the whole organization, or without a projectId, use generations_list, and for one generation whose id you have use generations_get. A missing or inaccessible project fails with an error instead of returning an empty list. Always pass limit to get newest first; without it every generation in the project comes back unpaged in no guaranteed order. For the next page pass the last returned id as cursor with the same limit. Each entry has id, status, model, createdAt, projectId, input, options, outputMediaUrl once COMPLETED (outputUrl is a deprecated alias with the same value), and error and errorCode on failure.",
       inputSchema: {
         ...history.inputSchema,
+        ...(history.inputSchema.status && {
+          status: history.inputSchema.status.describe(
+            'Only generations in this status: PENDING, PROCESSING, COMPLETED, FAILED or REJECTED.',
+          ),
+        }),
         projectId: history.inputSchema
           .projectId!.nonoptional()
-          .describe('Project whose history to read, from projects_list.'),
+          .describe('Project whose history to read (UUID), from projects_list or projects_create.'),
       },
       annotations: history.annotations,
       handler: async (args, context) => {

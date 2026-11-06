@@ -31,7 +31,12 @@ export function createAudioTrimTools(
   // assetId is the API's name for the source; audioAssetId is the older MCP name.
   const create = z
     .object({
-      assetId: z.uuid().optional().describe('Saved AUDIO asset to shorten.'),
+      assetId: z
+        .uuid()
+        .optional()
+        .describe(
+          'Saved AUDIO asset to shorten, from assets_list or assets_create. Required in practice; audioAssetId is only its deprecated alias.',
+        ),
       projectId: z
         .uuid()
         .optional()
@@ -54,14 +59,20 @@ export function createAudioTrimTools(
     })
     .strict();
   const read = z
-    .object({ id: z.uuid().describe('Audio trim id from audio-trims_create.') })
+    .object({
+      id: z
+        .uuid()
+        .describe(
+          'The id that audio-trims_create returned (a UUID). Poll with this same id until the trim is completed or failed.',
+        ),
+    })
     .strict();
   return [
     {
       name: 'audio-trims_create',
       title: 'Prepare shorter audio',
       description:
-        'Save the first durationSeconds of an authorized Sync audio asset, passed as assetId, as a new reusable asset. Explain and confirm the partial duration first. Persist one idempotencyKey and reuse it with identical inputs after an uncertain response. This prepares audio only: it never generates video, spends generation credits, or consumes a free generation. Poll audio-trims_get until completed, then use its assetId and actual duration for a fresh quote. Partial video lipsync must use cut_off; keep the original draft unchanged. Failed operations require an explicit new attempt.',
+        'Save the first durationSeconds of an authorized audio asset (assetId) as a new, reusable audio asset. Use it only when audio is longer than a lipsync can take and only its beginning is needed. Not for a partial video lipsync: there, leave the original video and draft unchanged and set options.sync_mode to cut_off on lipsync_create.\n\nExplain and confirm the partial duration first. This prepares audio only: it never generates video, spends generation credits, or consumes a free generation. Persist one idempotencyKey before calling and reuse it with identical inputs only after an uncertain response. Failed operations require an explicit new attempt.\n\nReturns id and status (queued, processing, completed or failed) at once; assetId and durationSeconds stay null until completed, errorCode is set on failure, and retryAfterMs is the wait in milliseconds before the next read. Poll audio-trims_get until completed (jobs_get and jobs_wait do not read trims), then use its assetId and actual duration for a fresh quote.\n\nPass assetId, not its deprecated alias audioAssetId; the call fails when neither is given or the two name different assets. projectId saves the new asset in that project and needs projectIntent=explicit, which only an explicit user choice or a project just created for this request allows.',
       inputSchema: create.shape,
       outputSchema: result.shape,
       annotations: {
@@ -89,7 +100,8 @@ export function createAudioTrimTools(
       name: 'audio-trims_get',
       title: 'Read audio preparation',
       description:
-        'Read one audio trim by id: its status (queued, processing, completed or failed), and once completed the assetId and durationSeconds of the shortened audio, or its errorCode. While it is queued or processing, call it again after retryAfterMs; never create another trim. Never starts video generation.',
+        'Read one audio trim by the id audio-trims_create returned, to follow it until it ends; jobs_get and jobs_wait do not read audio trims. Returns its status; once completed, the assetId (the same value as this id) and actual durationSeconds of the new shortened audio asset, both null before; once failed, its errorCode; and retryAfterMs, the wait before the next read.\n\n' +
+        'While it is queued or processing, call again after retryAfterMs milliseconds; never create another trim. When completed, use the new assetId and its actual duration in place of the original audio. If it failed, tell the user the errorCode; another trim needs an explicit new attempt with audio-trims_create. An API error returns {error: {message, status, code when given}} instead. It never starts video generation or spends credits.',
       inputSchema: read.shape,
       outputSchema: result.shape,
       annotations: {

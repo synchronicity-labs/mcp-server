@@ -99,13 +99,32 @@ export function createTranslationPreviewTools(
       projectId,
       audioAssetId: z
         .uuid()
-        .describe('Saved AUDIO asset to translate, such as an audio-trims_create result.'),
+        .describe(
+          'Saved AUDIO asset to quote, such as one from assets_create (type=AUDIO), assets_list or audio-trims_create; the same asset translation-previews_create will translate.',
+        ),
     })
     .strict();
   const create = source.extend({
-    targetLang: z.string().trim().min(1).describe('Target language code from dubbing_get-options.'),
+    projectId: projectId.describe(
+      'Project for the job: one just created with projects_create for this request, or one the user explicitly selected; pass projectIntent=explicit with it. Use the same id for translation-previews_get.',
+    ),
+    audioAssetId: z
+      .uuid()
+      .describe(
+        'Saved AUDIO asset to translate, such as one from assets_create (type=AUDIO), assets_list or audio-trims_create; the same asset you quoted with translation-previews_estimate.',
+      ),
+    targetLang: z
+      .string()
+      .trim()
+      .min(1)
+      .describe(
+        'Language code to translate into, from dubbing_get-options targetLanguages (for example es or pt-BR).',
+      ),
     // Detected from the audio. Still accepted from callers holding the old tool list.
-    sourceLang: z.string().optional().describe('Optional; the source language is detected.'),
+    sourceLang: z
+      .string()
+      .optional()
+      .describe('Optional and usually omitted: the source language is detected (sent as auto).'),
     idempotencyKey: z
       .uuid()
       .describe(
@@ -114,7 +133,9 @@ export function createTranslationPreviewTools(
   });
   const read = z
     .object({
-      projectId,
+      projectId: projectId.describe(
+        'The projectId passed to translation-previews_create for this job.',
+      ),
       id: z.uuid().describe('Translation preview id from translation-previews_create.'),
     })
     .strict();
@@ -124,7 +145,7 @@ export function createTranslationPreviewTools(
       name: 'translation-previews_estimate',
       title: 'Estimate translated audio preview',
       description:
-        'Quote translating one saved audio asset before translation-previews_create, and return the billing mode, estimated cost or credits, and preview durations. Does not translate, create a video, modify saved audio, or incur provider charges. If preview.quotedDurationSeconds is shorter than preview.sourceDurationSeconds, explain the duration limit and offer the bounded preview. Before admission, save a new trimmed audio asset and quote that asset; this estimate never trims the original. External provider charges must be disclosed separately.',
+        "Quote translating one saved audio asset with translation-previews_create, before creating it. Use it to price a translated-audio preview; for a full video dub, quote dubbing_create with generations_estimate-cost workflow=translate-and-dub instead. Read-only and free: it does not translate, create a job, trim or modify the audio, or incur provider charges. Pass the same projectId, audioAssetId and organizationId you will pass to translation-previews_create, so the quote matches the job that gets billed.\n\nReturns billing (sync_credits, sync_usd, included, or external, meaning provider charges outside sync. that you must disclose separately), estimatedGenerationCost and estimatedCredits (either may be null), and preview durations.\n\nIf preview.quotedDurationSeconds is shorter than sourceDurationSeconds, the source exceeds limitSeconds, the free plan's dubbing duration limit (a paid plan lifts it), and only that bounded part was quoted. Explain the limit and offer the bounded preview, but never submit the original: translation-previews_create refuses it instead of trimming it. Save a shorter copy as a new audio asset (audio-trims_create, when listed, with durationSeconds up to limitSeconds), then quote and create with that asset.",
       inputSchema: source.shape,
       outputSchema: quoteSchema.shape,
       annotations: {
@@ -145,7 +166,7 @@ export function createTranslationPreviewTools(
       name: 'translation-previews_create',
       title: 'Translate audio for preview',
       description:
-        'Create one paid translated-audio preview from a saved audio asset. Confirm language and displayed cost first. Persist one UUID idempotencyKey and reuse the same immutable request after an uncertain response. Poll the returned job; never redub because audio attachment failed. Final video generation is a separate, explicitly approved lip-sync operation using the translated audio asset.',
+        "Start one paid job that translates a saved audio asset's speech into another language, producing translated audio the user can review before a separate lip-sync. Use it when the user wants to hear the translation first or place the audio on a timeline; for a finished dubbed video in one step use dubbing_create, and for speech from a script use speech-previews_create. Confirm the source audio, target language and the translation-previews_estimate quote with the user first. It needs a project: for new work call projects_create (defaultWorkflow translate_and_dub) and pass that id with projectIntent=explicit; use an existing project only when the user explicitly selected it, never because of a matching name or open editor. Persist one UUID idempotencyKey before calling and, after an uncertain response, resend the identical request with it; a new key bills again. Returns the job (id, status, outputMediaUrl once done, error, recoveryRequired); follow it with translation-previews_get wait: true or jobs_wait kind translation_preview. Never translate again because attaching the output failed or recoveryRequired is true. Lip-syncing the translated audio is a separate, explicitly approved lipsync_create or lipsync_create-timeline call, not dubbing_create.",
       inputSchema: create.shape,
       outputSchema: jobSchema.shape,
       annotations: {
@@ -170,7 +191,7 @@ export function createTranslationPreviewTools(
       name: 'translation-previews_get',
       title: 'Read translated audio preview',
       description:
-        'Read one translated-audio preview by id: its status, source and target languages, and once COMPLETED the outputMediaUrl and duration. Pass wait: true to wait for it on the server instead of polling. A recoveryRequired result means provider acceptance is uncertain; do not create another job. Does not start or retry translation. When COMPLETED, outputMediaUrl can be registered with assets_create (type=AUDIO) or, when available, passed as a clip audioUrl to lipsync_create-timeline.',
+        'Read one translated-audio preview job by id: status (PENDING, PROCESSING, COMPLETING while the finished audio is attached, then COMPLETED or FAILED), source and target languages, error, recoveryRequired, and once COMPLETED outputMediaUrl and outputDurationSec. Use it to follow a translation-previews_create job; jobs_get and jobs_wait with kind translation_preview read the same job through the generic job tools. Pass wait: true to hold on the server for up to about 50 seconds until the job finishes or recoveryRequired is set; if it is still running, call again. Read-only: it never starts, retries or bills a translation. On FAILED, report error.message; another attempt is a new paid translation-previews_create the user must approve. recoveryRequired means provider acceptance is uncertain and only sync. can resolve it: do not create another job. Once COMPLETED, register outputMediaUrl with assets_create (type=AUDIO) or pass it as a clip audioUrl to lipsync_create-timeline for the separate lip-sync step.',
       inputSchema: waitable.shape,
       outputSchema: jobSchema.shape,
       annotations: {

@@ -45,8 +45,18 @@ const totals = z.object({
   ),
 });
 const rename = z.object({
-  projectId: z.uuid().describe('Project to rename, from projects_list or projects_create.'),
+  projectId: z
+    .uuid()
+    .describe(
+      'Project to rename (UUID), from projects_list, or from projects_create for the project just made for this request.',
+    ),
   name: z.string().trim().min(1).max(255).describe('New project name, up to 255 characters.'),
+  projectIntent: z
+    .literal('explicit')
+    .optional()
+    .describe(
+      'Set to explicit whenever you pass projectId: the user asked to rename this project, selected it in the interface, or it is the project just created for this request. Never infer it from a matching project name, workflow name or open editor.',
+    ),
 });
 const project = z.object({ id: z.uuid(), name: z.string() });
 
@@ -56,7 +66,7 @@ export function createAccountManagementTools(http: HttpClient): McpToolDefinitio
       name: 'account_get-usage',
       title: 'Read Sync usage and balance',
       description:
-        "Read the connected organization's available credits, free allowance, or complete billed usage for the current period. Use it to answer what is left to spend; for the plan, limits and organization use account_get-context. Does not purchase credits, change plans, or start generation.",
+        "Read what the connected sync. organization has left to spend in the current billing period. Which section is filled depends on how it is billed: credits gives balance, available (spendable now) and inFlight (held by running jobs); freeMonthlyLimits gives generations and text-to-speech used and max, with monthlyResetDate. Only when both are null does it fill usage with the period's billed totalCostCents, totalFrames and totalTtsSeconds, and usage stays null if the API reports those totals as incomplete. canManageBilling is true only when billing allows it and the caller is an owner or admin. Not for what one past generation cost (generations_get-costs, when available), a quote for new work (generations_estimate-cost), or plan limits and organization (account_get-context). Buys no credits, changes no plan and starts no generation.",
       inputSchema: {},
       outputSchema: response.shape,
       annotations: {
@@ -109,7 +119,7 @@ export function createAccountManagementTools(http: HttpClient): McpToolDefinitio
       name: 'projects_rename',
       title: 'Rename a Sync project',
       description:
-        'Change only the name of an accessible Sync project in the connected organization. Does not change visibility, ownership, media, or generations. Requires an explicit user request.',
+        "Rename one existing project you can access in the current organization; only the name changes, while visibility, owner, media and generations stay as they are. Use it only when the user explicitly asks to rename that project, never because its name or workflow matches the request or its editor is open; new work gets a new project from projects_create instead. Always pass projectIntent=explicit, including for a project you just created for this request; a rename without it can be refused with PROJECT_INTENT_REQUIRED. A missing, deleted or inaccessible project returns a 404 error. Returns the project's id and new name.",
       inputSchema: rename.shape,
       outputSchema: project.shape,
       annotations: {

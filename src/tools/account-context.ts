@@ -98,7 +98,7 @@ export function createAccountContextTool(
     name: 'account_get-context',
     title: 'Read connected Sync account',
     description:
-      'Read the authenticated account and the organization this session runs in (all generations are created there), for account display and personal asset scope, its plan, generation limits (concurrency and longest output), feature flags, team seats and voice-clone limits. organizationChoice says how that organization was chosen and how to switch. API keys have no signed-in account. For credits, balance or billed usage use account_get-usage; to switch organization use organizations_select when available. This does not grant permissions or change the organization.',
+      "Read who is signed in and which sync. organization this session runs in (paid work is created and billed there), with its plan, generation limits, feature flags, and team seat and voice-clone limits. Use it to name the organization before paid work or to check limits before planning a job; for credits, balance or spend use account_get-usage, and to list or switch organizations use organizations_list or organizations_select. account is null with an API key. limits, plan, generationLimits and features are omitted when their lookup fails, while an expired sign-in returns an error. organizationChoice says whether the organization came from organizations_select or the credential's default, and how to switch; capabilities lists optional features this MCP server has enabled, such as audioTrimming or studioDraftSync. Grants no permissions and changes no organization.",
     inputSchema: {},
     outputSchema: accountContext.shape,
     annotations: {

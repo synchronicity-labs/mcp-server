@@ -20,10 +20,10 @@ export const estimateDurationInputs = {
     'Visual input type. Set image for image-to-video quotes; images always follow speech duration, including with cut_off or silence. Videos require videoDuration for those modes.',
   ),
   videoDuration: contextSchema.shape.videoDuration.describe(
-    'Source video duration in seconds, used with syncMode to account for cut_off or silence. Omit for an image.',
+    'Source video length in seconds. Needed with syncMode cut_off or silence when quoting script or audioDuration for a video; only valid alongside script or audioDuration, and rejected for an image.',
   ),
   syncMode: contextSchema.shape.syncMode.describe(
-    'The same sync_mode selected for generation. For videos, cut_off uses the shorter input and silence the longer input. Images and other modes follow replacement audio duration.',
+    'The sync_mode the generation will use; only valid alongside script or audioDuration. For a video, cut_off bills the shorter of speech and videoDuration and silence the longer; images and other modes follow the speech length.',
   ),
 };
 

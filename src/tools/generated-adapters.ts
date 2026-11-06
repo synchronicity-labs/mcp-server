@@ -4,6 +4,7 @@ import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import { isImportInProgress, jobSettled, rawStatus } from './job-status.js';
 import { pollUntil, waitInput } from './job-wait.js';
+import { getOverride } from './overrides.js';
 
 /**
  * Agent-facing fixes for tools generated straight from the public OpenAPI spec. Each one
@@ -27,7 +28,10 @@ function withProjectIdAlias(tool: JsonTool): JsonTool {
   const adapted: JsonTool = {
     ...tool,
     inputSchema: {
-      projectId: z.string().optional().describe('Project ID (UUID).'),
+      projectId: z
+        .string()
+        .optional()
+        .describe(getOverride(tool.name)?.params?.projectId ?? 'Project ID (UUID).'),
       ...rest,
       id: z.string().optional().describe('Deprecated alias of projectId.'),
     },
@@ -91,10 +95,14 @@ function withTranscriptionAsset(tool: JsonTool, http: HttpClient): JsonTool {
 
 function withJobWait(tool: JsonTool, label: string): JsonTool {
   const handler = tool.handler;
+  const waitText = getOverride(tool.name)?.params?.wait;
   return {
     ...tool,
-    description: `${tool.description} Pass wait: true to wait for the job on the server.`,
-    inputSchema: { ...tool.inputSchema, wait: waitInput },
+    // A description that already explains wait: true needs no generic hint.
+    description: tool.description.includes('wait: true')
+      ? tool.description
+      : `${tool.description} Pass wait: true to wait for the job on the server.`,
+    inputSchema: { ...tool.inputSchema, wait: waitText ? waitInput.describe(waitText) : waitInput },
     handler: async ({ wait, ...args }, context) => {
       const read = (signal = context?.signal) => handler(args, { ...context, signal });
       if (wait !== true) return read();
@@ -155,10 +163,14 @@ export const importWaitOptions = {
 /** A social import answers 409 import_in_progress until the asset is saved. */
 function withImportWait(tool: JsonTool): JsonTool {
   const handler = tool.handler;
+  const waitText = getOverride(tool.name)?.params?.wait;
   return {
     ...tool,
-    description: `${tool.description} For a social link, pass wait: true to wait for the import on the server; a 409 import_in_progress then only means it is still downloading after about 50 seconds, so call again with the same input.`,
-    inputSchema: { ...tool.inputSchema, wait: waitInput },
+    // A description that already explains wait: true needs no generic hint.
+    description: tool.description.includes('wait: true')
+      ? tool.description
+      : `${tool.description} For a social link, pass wait: true to wait for the import on the server; a 409 import_in_progress then only means it is still downloading after about 50 seconds, so call again with the same input.`,
+    inputSchema: { ...tool.inputSchema, wait: waitText ? waitInput.describe(waitText) : waitInput },
     handler: async ({ wait, ...args }, context) => {
       if (wait !== true) return handler(args, context);
       const last = await pollUntil(

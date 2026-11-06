@@ -32,7 +32,9 @@ const input = z
   .object({
     generationId: z
       .uuid()
-      .describe('Existing Sync generation ID returned by generation creation or history tools.'),
+      .describe(
+        'Id of the past generation, as returned by the create tool, generations_list or projects_list-generations.',
+      ),
   })
   .strict();
 
@@ -54,7 +56,7 @@ export function createGenerationCostsTools(
       name: 'generations_get-costs',
       title: 'View actual generation costs',
       description:
-        'Read recorded costs for a past Sync generation, with dubbing and lip sync listed separately. Use for what a generation actually cost, not a preflight estimate. Credit amounts express credit face value, not a card payment. Pending or unavailable components have no known total. Does not generate media or change billing.',
+        'Read the recorded cost of one past sync. generation in the current organization, split into lipsync, dubbing and speech_synthesis components. Use it to answer what a generation actually cost; not for a price before generating (generations_estimate-cost) or remaining credits (account_get-usage), and never substitute an estimate or start a paid generation to answer a past-cost question. If the user does not know the generationId, find it with generations_list or projects_list-generations and ask which one when several match. totalCostUsd is null unless availability is complete; then present knownSubtotalUsd only as a partial amount. Whenever retryAfterSeconds is set, read again after that many seconds. Report each component separately, give credit amounts as credit face value rather than cash paid, and tell the user that the excludedCosts (tax, subscription fees, external provider charges, account-level adjustments) are not counted. An unknown or inaccessible id returns an error.',
       inputSchema: input.shape,
       outputSchema: receipt.shape,
       annotations: {
