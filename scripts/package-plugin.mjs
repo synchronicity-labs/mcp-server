@@ -233,6 +233,7 @@ const TOOL_AREAS = [
   'scenes',
   'speech-previews',
   'stems',
+  'sync-app',
   'studio-drafts',
   'studio-views',
   'transcriptions',

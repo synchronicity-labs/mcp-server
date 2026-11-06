@@ -37,9 +37,9 @@ const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 await server.connect(serverTransport);
 await client.connect(clientTransport);
 try {
-  const tool = (await client.listTools()).tools.find((entry) => entry.name === 'app_open');
+  const tool = (await client.listTools()).tools.find((entry) => entry.name === 'sync-app_open');
   assert.equal(tool?._meta?.ui?.resourceUri, `ui://sync/app-${releases[0]}.html`);
-  const opened = await client.callTool({ name: 'app_open', arguments: {} });
+  const opened = await client.callTool({ name: 'sync-app_open', arguments: {} });
   assert.equal(opened.isError, undefined);
   assert.deepEqual(opened.structuredContent, { requested: true, renderStatus: 'awaiting_client' });
   for (const digest of releases) {

@@ -7,7 +7,7 @@ translate,direct,"Translate and dub my English video into Spanish with matching 
 translate-indirect,indirect,"I want a French-speaking version of this product demo, with the presenter’s lips matching.","Identify Translate & Dub; clarify video and configuration."
 dialogue,direct,"Change one word in my video but keep my voice.","Identify timed-word Edit Dialogue; obtain transcript and edit choice before preview; do not substitute full-script TTS."
 dialogue-indirect,indirect,"I said Tuesday instead of Thursday on camera. Can you fix that without rerecording?","Identify Edit Dialogue; ask for source video and review the timed-word change."
-open,direct,"Open Sync so I can choose my media.","Call app_open; no generation or credit spend; do not claim rendered UI without evidence."
+open,direct,"Open Sync so I can choose my media.","Call sync-app_open; no generation or credit spend; do not claim rendered UI without evidence."
 subtitles,negative,"Add Spanish subtitles only. Keep the original audio and video unchanged.","Do not call a lipsync or Translate & Dub generation; explain the supported scope."
 text-translation,negative,"Translate this paragraph into French.","No Sync generation."
 audio-only,negative,"I only want an MP3 voiceover, no image or video.","Do not call lipsync_create; do not invent a hosted standalone TTS tool."

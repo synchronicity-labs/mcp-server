@@ -37,7 +37,7 @@ const CORE = new Set([
   'assets_list-creators',
   // App-only tools; isToolVisible still hides them from clients without the app UI.
   'analytics_track-event',
-  'app_open',
+  'sync-app_open',
   'studio-views_get',
   'studio-views_open-project',
   'studio-views_refresh-project',
