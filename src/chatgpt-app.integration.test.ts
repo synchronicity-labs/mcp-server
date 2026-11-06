@@ -239,7 +239,10 @@ it.each(['claude', 'unknown', 'openai-mcp (Codex).evil'])(
       expect((await client.listTools()).tools.map((entry) => entry.name)).not.toContain(
         'sync-app_open',
       );
-      expect((await client.listResources()).resources).toEqual([]);
+      // Claude renders the generation status card, never the Studio app.
+      expect((await client.listResources()).resources.map((resource) => resource.name)).toEqual(
+        name === 'claude' ? ['sync-generation-status'] : [],
+      );
       for (const tool of ['sync-app_open', 'app_open', 'open-sync-app'])
         expect((await client.callTool({ name: tool, arguments: {} })).isError, tool).toBe(true);
       await expect(client.readResource({ uri: `ui://sync/app-${digest}.html` })).rejects.toThrow();

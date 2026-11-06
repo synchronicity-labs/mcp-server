@@ -18,7 +18,10 @@ are not listed, such as `assets_create`, `projects_get` and `jobs_wait`, kept th
   listed under its old name as an app-only tool (`ui.visibility: ["app"]`), which the model
   does not see. Widgets can call only listed, widget-accessible tools, and ChatGPT keeps
   the earlier Studio bundles (`deploy/chatgpt/`, one current and eleven previous) and
-  widget templates, which call tools by their old names.
+  widget templates, which call tools by their old names. Claude (`claude`, `claude-ai`, `Anthropic/ClaudeAI`)
+  renders only the generation status card, so it lists just the one old name the card
+  calls, `generate_get-generation`, as app-only (`withStatusCardTool` in
+  `src/generation-status.ts`).
 - **Analytics** events still carry the old names, because the deployed collector's
   `tool_name` enum lists them. Moving the collector to the new names is a separate API change.
 - `generations_estimate-cost` was the stdio-only `GenerationsController_estimateCost`

@@ -1,6 +1,12 @@
 export type ClientProfile = Readonly<{
   name: 'chatgpt' | 'codex' | 'claude' | 'generic';
   supportsAppUi: boolean;
+  /**
+   * Renders the MCP Apps generation status card, which checks a running generation every
+   * ten seconds while visible. Set without supportsAppUi, a client gets only the card,
+   * never the Studio app, its bridge tools or the ChatGPT-only instructions.
+   */
+  supportsStatusCard: boolean;
   supportsUploads: boolean;
   defaultProjectName: string;
 }>;
@@ -8,18 +14,21 @@ export type ClientProfile = Readonly<{
 const GENERIC: ClientProfile = Object.freeze({
   name: 'generic',
   supportsAppUi: false,
+  supportsStatusCard: false,
   supportsUploads: false,
   defaultProjectName: 'Sync generations',
 });
 const CHATGPT: ClientProfile = Object.freeze({
   name: 'chatgpt',
   supportsAppUi: true,
+  supportsStatusCard: true,
   supportsUploads: true,
   defaultProjectName: 'ChatGPT generations',
 });
 const CODEX: ClientProfile = Object.freeze({
   name: 'codex',
   supportsAppUi: true,
+  supportsStatusCard: true,
   // The hosted OpenAI connector supplies validated fileParams for this client too.
   // Keep its project default separate without rejecting those files by host name.
   supportsUploads: true,
@@ -28,6 +37,7 @@ const CODEX: ClientProfile = Object.freeze({
 const CLAUDE: ClientProfile = Object.freeze({
   name: 'claude',
   supportsAppUi: false,
+  supportsStatusCard: true,
   supportsUploads: false,
   defaultProjectName: 'Claude generations',
 });
@@ -44,6 +54,8 @@ export function resolveClientProfile(name?: string): ClientProfile {
       return CODEX;
     case 'claude':
     case 'claude-ai':
+    // Claude.ai's hosted connector, as production logs record it (2026-11-06).
+    case 'anthropic/claudeai':
       return CLAUDE;
     // Muse remains generic until Meta documentation or a real handshake verifies its alias.
     default:

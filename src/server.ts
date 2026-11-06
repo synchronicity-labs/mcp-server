@@ -25,7 +25,9 @@ import { GENERATION_STATUS_HTML } from './generation-status-html.js';
 import {
   GENERATION_STATUS_METADATA,
   GENERATION_STATUS_URI,
+  statusCardMeta,
   withGenerationStatusCard,
+  withStatusCardTool,
 } from './generation-status.js';
 import { ApiRequestError, createHttpClient } from './http-client.js';
 import { fetchSpec } from './openapi/fetcher.js';
@@ -144,6 +146,11 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
   },
   {
     text: 'When dubbing_create is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generations_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ',
+  },
+  {
+    // Nothing reaches the model after its reply ends, so a job it hands back is one no one
+    // reports on until the user asks again.
+    text: 'After a create returns a generation id, call generations_get with wait: true. While it is still running, keep waiting in this same reply for up to about 15 minutes in total: tell the user once that you are waiting, call generations_get with wait: true again each time it returns unfinished, then give the finished result. Hand back sooner only when generationEstimate expects it to take longer than that or the user asks not to wait; then give the id and say they can ask you to check it. Nothing notifies you after your reply ends, so never say you will watch the job or report back on your own. ',
   },
   {
     text: 'When standalone translation-preview tools are available, the app can translate saved audio before final lip-sync. Confirm the source audio, language and quote before translation-previews_create. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, estimate and confirm a separate lipsync_create-from-assets using that audio; do not send it through dubbing_create again. ',
@@ -702,11 +709,14 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
   }
   const meta = profile.supportsAppUi
     ? tool.meta
-    : Object.fromEntries(
-        Object.entries(tool.meta ?? {}).filter(
-          ([key]) => !key.startsWith('openai/') && key !== 'ui',
+    : {
+        ...Object.fromEntries(
+          Object.entries(tool.meta ?? {}).filter(
+            ([key]) => !key.startsWith('openai/') && key !== 'ui',
+          ),
         ),
-      );
+        ...(profile.supportsStatusCard ? statusCardMeta(tool.meta) : {}),
+      };
   const presented = { ...tool, inputSchema, description, meta };
   return profile.supportsAppUi && WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name)
     ? exposeToolToWidget(presented)
@@ -930,7 +940,7 @@ function createProfiledServer(
     GENERATION_STATUS_URI,
     GENERATION_STATUS_METADATA,
     async () => {
-      if (!getProfile().supportsAppUi)
+      if (!getProfile().supportsStatusCard)
         throw new Error('This interface requires an app-compatible client.');
       return {
         contents: [
@@ -986,11 +996,11 @@ function createProfiledServer(
     return { tools: await listedForAccount(descriptors, session, httpClient) };
   });
   server.server.setRequestHandler('resources/list', () => ({
-    resources: resources.filter((resource) =>
-      resource.name === 'sync-app' || resource.name === 'sync-generation-status'
-        ? getProfile().supportsAppUi
-        : getProfile().supportsUploads,
-    ),
+    resources: resources.filter((resource) => {
+      if (resource.name === 'sync-app') return getProfile().supportsAppUi;
+      if (resource.name === 'sync-generation-status') return getProfile().supportsStatusCard;
+      return getProfile().supportsUploads;
+    }),
   }));
   const onInitialized = server.server.oninitialized;
   server.server.oninitialized = () => {
@@ -1033,6 +1043,7 @@ function createProfiledServer(
         securitySchemes: tool.meta?.securitySchemes ?? TOOL_SECURITY_SCHEMES,
       }));
       if (initializedProfile.supportsAppUi) descriptors = withLegacyAppDescriptors(descriptors);
+      else if (initializedProfile.supportsStatusCard) descriptors = withStatusCardTool(descriptors);
       sharedCatalog?.descriptors.set(initializedProfile.name, descriptors);
     }
     onInitialized?.();

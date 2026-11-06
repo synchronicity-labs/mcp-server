@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import * as tokenStore from './auth/token-store.js';
 import { resolveClientProfile } from './client-profile.js';
+import { GENERATION_STATUS_URI } from './generation-status.js';
 import { HttpSession } from './http-session.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { currentTools } from './test-fixtures/tool-names.js';
@@ -138,9 +139,12 @@ describe('immutable client profiles', () => {
       expect(resolveClientProfile(name).name).toBe('chatgpt');
     },
   );
-  it.each(['claude', 'claude-ai', 'Claude'])('recognizes exact Claude alias %s', (name) => {
-    expect(resolveClientProfile(name).name).toBe('claude');
-  });
+  it.each(['claude', 'claude-ai', 'Claude', 'Anthropic/ClaudeAI'])(
+    'recognizes exact Claude alias %s',
+    (name) => {
+      expect(resolveClientProfile(name).name).toBe('claude');
+    },
+  );
   it.each([
     'not-claude',
     'claude-desktop-unverified',
@@ -208,6 +212,55 @@ describe('immutable client profiles', () => {
     },
   );
 
+  it('gives Claude the generation status card and nothing else from the app', async () => {
+    fakeApi();
+    const factory = await createMcpServerFactory(config);
+    const { client } = await connect(factory, 'claude-ai');
+    const { tools } = await client.listTools();
+    const create = tools.find((tool) => tool.name === 'lipsync_create')!;
+    expect(create._meta?.ui).toEqual({ resourceUri: GENERATION_STATUS_URI });
+    expect(JSON.stringify(tools)).not.toContain('openai/');
+    expect(tools.find((tool) => tool.name === 'generations_get')?._meta?.ui).toBeUndefined();
+    // The card checks through the old name, so it is listed for the card but not the model.
+    const legacy = tools.find((tool) => tool.name === 'generate_get-generation');
+    expect(legacy?._meta?.ui).toEqual({ visibility: ['app'] });
+    expect(legacy?.inputSchema).toEqual(
+      tools.find((tool) => tool.name === 'generations_get')?.inputSchema,
+    );
+    const card = await client.readResource({ uri: GENERATION_STATUS_URI });
+    expect(card.contents[0]).toMatchObject({ uri: GENERATION_STATUS_URI });
+    const checked = await client.callTool({
+      name: 'generate_get-generation',
+      arguments: { id: 'generation' },
+    });
+    expect(checked.isError).not.toBe(true);
+    expect(checked.structuredContent).toMatchObject({ id: 'generation', status: 'COMPLETED' });
+    await expect(client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow();
+  });
+
+  it('keeps the status card from unknown clients', async () => {
+    fakeApi();
+    const { client } = await connect(await createMcpServerFactory(config), 'unverified-muse');
+    const { tools } = await client.listTools();
+    expect(JSON.stringify(tools)).not.toContain(GENERATION_STATUS_URI);
+    expect(tools.some((tool) => tool.name === 'generate_get-generation')).toBe(false);
+    await expect(client.readResource({ uri: GENERATION_STATUS_URI })).rejects.toThrow(
+      'app-compatible client',
+    );
+  });
+
+  it.each(['chatgpt', 'openai-mcp (Codex)', 'claude-ai', 'unknown'])(
+    'tells %s to wait for a generation in the same reply',
+    async (name) => {
+      fakeApi();
+      const { client } = await connect(await createMcpServerFactory(config), name);
+      expect(client.getInstructions()).toContain(
+        'keep waiting in this same reply for up to about 15 minutes',
+      );
+      expect(client.getInstructions()).toContain('never say you will watch the job');
+    },
+  );
+
   it('configures concurrent real HTTP sessions before discovery', async () => {
     const calls = fakeApi();
     const factory = await createMcpServerFactory(config);
@@ -235,7 +288,10 @@ describe('immutable client profiles', () => {
         for (const field of ['video', 'image', 'audio']) {
           expect(Boolean(create.inputSchema.properties?.[field])).toBe(supportsUploads);
         }
-        expect((await client.listResources()).resources.length > 0).toBe(supportsUploads);
+        const resources = (await client.listResources()).resources.map((resource) => resource.name);
+        // Claude renders the generation status card, and only that card.
+        expect(resources.includes('sync-generation-status')).toBe(index < 4);
+        expect(resources.some((name) => name !== 'sync-generation-status')).toBe(supportsUploads);
         expect(
           (
             await client.callTool({
@@ -423,8 +479,9 @@ describe('immutable client profiles', () => {
         expect(Boolean(create.inputSchema.properties?.video)).toBe(index === 0);
         expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
         expect(Boolean(create._meta?.['openai/widgetAccessible'])).toBe(index === 0);
-        const { resources } = await client.listResources();
-        expect(resources.length > 0).toBe(index === 0);
+        const resources = (await client.listResources()).resources.map((resource) => resource.name);
+        expect(resources.includes('sync-generation-status')).toBe(index < 2);
+        expect(resources.some((name) => name !== 'sync-generation-status')).toBe(index === 0);
         if (index === 0) {
           expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
           expect(
@@ -620,7 +677,11 @@ it.each([0, 1, 2])(
     // lipsync_create-timeline stays out of the ChatGPT app listing.
     expect(chatTools).toHaveLength(12 + count);
     // Widget-only tools such as assets_list-creators (member emails) stay out of model-only catalogs.
-    expect(claudeTools).toHaveLength(9 + count);
+    expect(currentTools(claudeTools)).toHaveLength(9 + count);
+    // The status card's app-only old name comes with generations_get, and only with it.
+    const names = new Set(claudeTools.map((tool) => tool.name));
+    expect(names.has('generate_get-generation')).toBe(names.has('generations_get'));
+    expect(claudeTools).toHaveLength(9 + count + (names.has('generations_get') ? 1 : 0));
     expect(claudeTools.map((tool) => tool.name)).not.toContain('assets_list-creators');
     expect(chatTools.map((tool) => tool.name)).toContain('assets_list-creators');
     expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);
