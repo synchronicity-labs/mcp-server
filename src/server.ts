@@ -114,8 +114,9 @@ const SERVER_DESCRIPTION =
   'Sync makes photos talk, lip-syncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
-// Paragraphs marked appOnly apply only inside the ChatGPT app and its Studio bridge.
-const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
+// Paragraphs marked appOnly apply only inside the ChatGPT app and its Studio bridge;
+// notChatgpt ones cover tools the ChatGPT app does not list.
+const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean }[] = [
   {
     text: 'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. ',
   },
@@ -144,6 +145,7 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
   },
   {
     text: 'When jobs_create-many is available and the user wants 2 or more independent jobs (one video lip-synced to several audios, dubbed into several languages, or one Edit Dialogue variant per name), start them with one jobs_create-many call instead of calling the create tool repeatedly or using batches_create, and follow them with jobs_get-many. It uses the same API, limits and billing as single calls on any paid plan; quote and confirm the whole set once. Keep batches_create for Scale accounts with large runs (20 to 500) that can wait hours. ',
+    notChatgpt: true,
   },
   {
     text: 'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ',
@@ -188,6 +190,9 @@ export const SERVER_INSTRUCTIONS = INSTRUCTION_PARTS.map((part) => part.text).jo
 const MODEL_ONLY_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.appOnly)
   .map((part) => part.text)
   .join('');
+const CHATGPT_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.notChatgpt)
+  .map((part) => part.text)
+  .join('');
 
 export function serverInstructions(
   profile: ClientProfile,
@@ -197,7 +202,11 @@ export function serverInstructions(
   toolsetNote = '',
 ): string {
   const instructions =
-    (profile.supportsAppUi ? SERVER_INSTRUCTIONS : MODEL_ONLY_INSTRUCTIONS) +
+    (profile.name === 'chatgpt'
+      ? CHATGPT_INSTRUCTIONS
+      : profile.supportsAppUi
+        ? SERVER_INSTRUCTIONS
+        : MODEL_ONLY_INSTRUCTIONS) +
     (feedback && profile.name !== 'chatgpt' ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '') +
     (toolsetNote ? ` ${toolsetNote}` : '') +
     (update ? ` ${updateInstruction(update)}` : '');
