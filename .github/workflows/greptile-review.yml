@@ -1,0 +1,48 @@
+name: Request Greptile review
+
+# Greptile reviews a pull request only when someone comments @greptileai, and it
+# approves the head on a 5/5 review, which satisfies the required approval. This
+# asks once per head so review-fix loops need no manual request. Each review is
+# paid, so a burst of pushes waits for the last one, a head that already has a
+# Greptile Review check is skipped, and drafts, closed PRs and forks are never
+# requested (scripts/request-greptile-review.mjs checks them after the wait).
+"on":
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: greptile-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  request:
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Wait for pushes to settle
+        run: sleep 120
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # Reads the PR's state, draft flag and head live, so a PR closed, marked
+      # draft or pushed to during the wait gets no request.
+      - name: Request a review of this head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/request-greptile-review.mjs
+          "${{ github.event.pull_request.number }}"
+          "${{ github.event.pull_request.head.sha }}"
