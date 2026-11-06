@@ -38,6 +38,8 @@ const SPEECH_PARAMS = {
   similarityBoost: 'How closely to match the original voice, from 0 to 1.',
 };
 
+const GENERATION_ID = 'Generation id returned by a create tool or generations_list.';
+
 const ESTIMATE_PARAMS = {
   model: 'Model name from models_list, such as sync-3.',
   reasoningEnabled: 'Quote with reasoning on. Only lipsync-2-pro supports it.',
@@ -231,6 +233,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     description:
       'Get a generation by id. Pass `wait: true` and omit `timeout` to use the API default. If still pending, poll the same generation id again; never resubmit the generation. When status is COMPLETED, copy the exact `structuredContent.outputMediaUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited. `outputUrl` is a deprecated alias with the same value.',
     outputSchema: generationOutputSchema,
+    params: { id: GENERATION_ID },
   },
   generations_list: {
     title: 'List generations',
@@ -247,11 +250,12 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     description:
       'Get a generation by id (organization-scoped). Returns status and, when COMPLETED, `outputMediaUrl` (`outputUrl` is a deprecated alias).',
     outputSchema: generationDtoOutputSchema,
+    params: { id: GENERATION_ID },
   },
   generations_delete: {
     description:
       'Delete a generation by id. Only terminal generations (COMPLETED/FAILED/REJECTED) can be deleted; deleting one that is still processing returns 409.',
-    params: { id: 'Generation id from generations_list or a create tool.' },
+    params: { id: GENERATION_ID },
   },
   generations_estimate: {
     description:
@@ -305,7 +309,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generations_update-output-file-name': {
     params: {
-      id: 'Generation id from generations_list or a create tool.',
+      id: GENERATION_ID,
       outputFileName: 'New file name for the generated output, up to 255 characters.',
     },
   },
