@@ -151,14 +151,14 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     description:
       'Get one asset by id: its type, name, media url, duration, size, dimensions and thumbnailUrl. For a signed download link use assets_get-download-url; for playback details use assets_get-playback-metadata when available. ' +
       ASSET_THUMBNAIL_INSTRUCTIONS,
-    params: { id: 'Asset id from assets_list or assets_create.' },
+    params: { id: 'Asset id from assets_list.' },
   },
   assets_update: {
     title: 'Update an asset',
     description:
       'Rename an asset or change its visibility by id. Change only what the user asked for.',
     params: {
-      id: 'Asset id from assets_list or assets_create.',
+      id: 'Asset id from assets_list.',
       name: 'New display name.',
       visibility: 'USER keeps it private to you; ORGANIZATION shares it with your team.',
       ...ASSET_METADATA,
@@ -168,7 +168,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     title: 'Delete an asset',
     description:
       'Delete an asset by id. Use only on an explicit user request, after confirming which asset.',
-    params: { id: 'Asset id from assets_list or assets_create.' },
+    params: { id: 'Asset id from assets_list.' },
   },
   assets_count: {
     title: 'Count assets',
@@ -180,7 +180,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     title: 'Get an asset download URL',
     description:
       "Get a signed download URL for one asset's media file. Use it to download the file; use assets_get for the asset's details. Return the URL exactly as given; signed URLs must not be edited.",
-    params: { id: 'Asset id from assets_list or assets_create.' },
+    params: { id: 'Asset id from assets_list.' },
   },
 
   // --- Voices (clone + manage) ---
@@ -293,10 +293,10 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     },
   },
   'projects_attach-asset': {
-    params: { assetId: 'Asset id from assets_list or assets_create to attach to the project.' },
+    params: { assetId: 'Asset id from assets_list to attach to the project.' },
   },
   'assets_get-many': {
-    params: { ids: 'Asset ids from assets_list or assets_create.' },
+    params: { ids: 'Asset ids from assets_list.' },
   },
   generations_count: {
     params: {

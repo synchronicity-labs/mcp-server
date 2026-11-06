@@ -19,9 +19,7 @@ const playbackMetadata = z.object({
 });
 
 export function createPlaybackMetadataTool(http: HttpClient): McpToolDefinition {
-  const input = z
-    .object({ assetId: z.uuid().describe('Asset id from assets_list or assets_create.') })
-    .strict();
+  const input = z.object({ assetId: z.uuid().describe('Asset id from assets_list.') }).strict();
   return {
     name: 'assets_get-playback-metadata',
     title: 'Read video playback metadata',
