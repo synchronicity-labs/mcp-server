@@ -22,6 +22,7 @@ export const DESCRIPTION_EDITS: readonly Edit[] = [
 ];
 
 export const INSTRUCTION_EDITS: readonly Edit[] = [
+  ['; quote and confirm the whole set once. ', '. '],
   [
     'Once ready, estimate and confirm the paid translation before calling dubbing_create when available with the returned asset id as videoAssetId. ',
     'Once ready, call dubbing_create when available with the returned asset id as videoAssetId. ',
@@ -57,6 +58,12 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
     ],
   ],
   'lipsync_create-timeline': [['Estimate and confirm before creating; this starts', 'This starts']],
+  'jobs_create-many': [
+    [
+      'This is a paid action: every item is billed as its own job. Before calling, estimate each distinct configuration with the matching estimate tool, tell the user the item count and the estimated total, and wait for one confirmation of the whole set. ',
+      'Every item is billed as its own job. ',
+    ],
+  ],
   batches_create: [
     [
       'This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generations_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. ',

@@ -30,6 +30,12 @@ export type ToolRequestContext = {
   progress?: (progress: number, message?: string) => Promise<void>;
   // Sends notifications/tools/list_changed where the session can deliver it; absent otherwise.
   toolListChanged?: () => void;
+  // Runs another listed tool on this connection exactly as a client call would, checks included.
+  callTool?: (
+    name: string,
+    args: Record<string, unknown>,
+    context: { signal?: AbortSignal },
+  ) => Promise<unknown>;
 };
 
 type JsonMcpToolDefinition = McpToolBaseDefinition & {

@@ -1,4 +1,4 @@
-# Jobs: `jobs_get` and `jobs_wait`
+# Jobs: `jobs_get`, `jobs_wait` and many jobs at once
 
 Sync work runs as jobs of several kinds, and each kind has its own read tool with its
 own idea of "done". `jobs_get` and `jobs_wait` read and wait on all of them the same way.
@@ -75,11 +75,95 @@ resolve it. Do not create another job for it.
 The mapping lives in `src/tools/job-status.ts`. The per-kind `wait: true` waiters use the
 same rules to decide when to stop.
 
-## Why not on the hosted server
+## Many jobs at once
+
+`jobs_create-many` starts 2 to 50 independent jobs by running one create tool once per
+item, and `jobs_get-many` reads up to 50 jobs of any kind at once. They are for requests
+such as "lip-sync this video to these 7 audios", "translate this video into 7 languages"
+(one `dubbing_create` item per language) or "one Edit Dialogue variant per name" (one
+`dialogue-previews_create` item per name, then one `dialogue-videos_create` item per
+approved preview).
+
+They are not the batch API. Every item is an ordinary call to the create tool, so it uses
+the same API path, plan limits and billing as calling the tool once per item, on any plan,
+and starts as soon as the account has capacity. `batches_create` stays for Scale accounts
+with large runs (20 to 500 generations) that can wait hours in the batch queue.
+
+### `jobs_create-many`
+
+Input: `{tool, idempotencyKey, items}`.
+
+- `tool` is one of the create tools this connection lists: `lipsync_create`,
+  `lipsync_create-timeline`, `dubbing_create`, `dialogue-videos_create`,
+  `dialogue-previews_create`, `speech-previews_create`, `translation-previews_create`, and
+  locally `generations_create`. Any other name is refused by the input schema, which lists
+  the allowed ones.
+- `items` are that tool's own arguments, one object per job. Every item is validated
+  against the tool's schema before anything starts, and a repeated item is refused, so a
+  typo never leaves half a set started.
+- `idempotencyKey` is a fresh UUID for the approved set. An item without its own
+  `idempotencyKey` gets one derived from the set key, the tool and the item's other
+  arguments; an item without `projectId` gets a derived `projectCreationKey` the same way.
+  Calling again with the same set key and the same items therefore resends the same keyed
+  requests and the same new projects, which the API replays instead of creating again.
+
+Each item runs through the same server path as a direct call (`callTool` in
+`src/server.ts`), so the project-intent guard, the per-call `organizationId`, upload
+refusals for clients without uploads, and every error behave exactly as they do for one
+call. The tool's description carries the spend-confirmation sentence (estimate each
+distinct configuration, tell the user the count and total, wait for one confirmation of the
+set); unattended mode removes it like the other paid tools' sentences.
+
+Scheduling:
+
+- It reads the plan's concurrent generation limit (`GET /v2/account`, the
+  `generationLimits.concurrency` that `account_get-context` shows) and keeps at most that
+  many items in flight, at most 10, or 2 when the limit cannot be read.
+- A 429 (`concurrency_limit_reached`) pauses every item for its `Retry-After` (20 seconds
+  from the API; at least 1 second), then the same request is sent again with the same key.
+  A 409 `IDEMPOTENCY_IN_PROGRESS` or `import_in_progress` waits for that item alone. These
+  refusals come before the API admits anything, so resending never duplicates a job.
+- A 401 or 402 stops new items from starting, since every other item would be refused the
+  same way. Any other error fails only its own item.
+- No new attempt starts after 40 seconds, and requests in flight are never abandoned, so
+  the call returns within about 50 seconds. It never waits for the jobs themselves.
+
+Output: `{tool, summary, items, jobs, remaining?, nextStep}`. `items` has one
+`{index, status, kind?, id?, error?}` per input item, in order, with `status` one of
+`started`, `failed` or `not_started`. `jobs` lists the started ones as `{kind, id,
+projectId?, videoAssetId?}`, ready to pass to `jobs_get-many`. When some items could not
+start because the account stayed at its limit, `remaining` holds `{tool, idempotencyKey,
+items}` to send again later, unchanged. Progress notifications report how many items have
+started.
+
+### `jobs_get-many`
+
+Input: `{jobs: [{kind, id, projectId?, videoAssetId?, projectIntent?}], wait?}`, up to 50.
+It reads each job through the same per-kind reader as `jobs_get`, eight at a time, and
+returns `{jobs, counts}`: each job's unified state in input order, or `{kind, id, error}`
+for one that could not be read, and counts of `running`, `completed`, `failed` (also
+REJECTED and CANCELED) and `unreadable` jobs. With `wait: true` it waits like `jobs_wait`,
+up to about 50 seconds, reading again only the jobs still running.
+
+Besides the kinds above it reads `dialogue_preview` (needs `projectId` and `videoAssetId`)
+and `speech_preview` (needs `projectId`), so every job `jobs_create-many` starts can be
+followed. A speech preview's `SUCCESS` and an Edit Dialogue preview's `COMPLETED_PARTIAL`
+count as `COMPLETED`. `jobs_get` and `jobs_wait` keep their published kind list.
+
+A job created in another organization through a one-call `organizationId` is read in that
+organization, as `jobs_get` does.
+
+## Why `jobs_get` and `jobs_wait` are not on the hosted server
 
 The hosted tool list is the ChatGPT app's reviewed listing, and Codex shares those
 descriptors. Adding tools there needs a Rescan in the OpenAI publisher and may need app
 review. Hosted clients can already wait on every hosted job kind with `wait: true` on
 `generations_get`, `translation-previews_get` and `assets_create`, and the hosted
 server has no transcription or speaker-analysis tools that would produce those ids.
-Offering the jobs tools to hosted Claude, Cursor and Codex clients is a possible follow-up.
+Offering `jobs_get` and `jobs_wait` to hosted Claude, Cursor and Codex clients is a
+possible follow-up.
+
+`jobs_create-many` and `jobs_get-many` are hosted, like the batch tools: every hosted client
+but the ChatGPT app lists them (`isToolVisible` in `src/server.ts`), so the reviewed ChatGPT
+listing is unchanged. On the hosted server `jobs_get-many` reads only the kinds whose read
+tool is hosted (no transcriptions).

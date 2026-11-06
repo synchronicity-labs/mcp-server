@@ -67,9 +67,16 @@ import { adaptGeneratedTool } from './tools/generated-adapters.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
 import { createGenerationCostsTools, generationCostsOperation } from './tools/generation-costs.js';
 import { withGenerationOutputAliases } from './tools/generation-output.js';
-import { derivedToolName, generateTools, operationIdToToolName } from './tools/generator.js';
+import {
+  derivedToolName,
+  generateTools,
+  operationIdToToolName,
+  type ToolRequestContext,
+} from './tools/generator.js';
 import type { McpToolDefinition } from './tools/index.js';
 import { progressSender } from './tools/job-wait.js';
+import { createJobsCreateManyTool } from './tools/jobs-create-many.js';
+import { createJobsGetManyTool } from './tools/jobs-get-many.js';
 import { createJobTools } from './tools/jobs.js';
 import { withOrganizationChoice } from './tools/organization-choice.js';
 import {
@@ -136,6 +143,9 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean }[] = [
     text: 'When audio-trims_create is available, offer prefix audio preparation for an over-limit lip-sync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lip-sync uses cut_off and preserves the original media. ',
   },
   {
+    text: 'When jobs_create-many is available and the user wants 2 or more independent jobs (one video lip-synced to several audios, dubbed into several languages, or one Edit Dialogue variant per name), start them with one jobs_create-many call instead of calling the create tool repeatedly or using batches_create, and follow them with jobs_get-many. It uses the same API, limits and billing as single calls on any paid plan; quote and confirm the whole set once. Keep batches_create for Scale accounts with large runs (20 to 500) that can wait hours. ',
+  },
+  {
     text: 'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ',
   },
   {
@@ -200,6 +210,7 @@ export function serverDescription(spendConfirmation = true): string {
   return spendConfirmation ? SERVER_DESCRIPTION : applyEdits(SERVER_DESCRIPTION, DESCRIPTION_EDITS);
 }
 
+const JOB_SET_TOOLS = ['jobs_create-many', 'jobs_get-many'];
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
   'analytics_track-event',
@@ -275,10 +286,12 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'generations_list',
   'projects_list-generations',
   'generations_estimate-cost',
-  // Hidden from the ChatGPT app listing in isToolVisible.
+  // Hidden from the ChatGPT app listing in isToolVisible, as are the jobs_*-many tools.
   'batches_create',
   'batches_get',
   'batches_list',
+  'jobs_create-many',
+  'jobs_get-many',
   // Listed only to accounts with the feature; see account-features.ts.
   'scenes_detect',
   'stems_separate',
@@ -645,7 +658,7 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   // Agents report friction; the reviewed ChatGPT app listing keeps its tool set.
   if (tool.name === 'feedback_send') return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet.
-  if ((BATCH_TOOLS as readonly string[]).includes(tool.name)) return profile.name !== 'chatgpt';
+  if ([...BATCH_TOOLS, ...JOB_SET_TOOLS].includes(tool.name)) return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet; other profiles list them per account.
   if (isFeatureGatedTool(tool.name)) return profile.name !== 'chatgpt';
   if (['assets_upload', 'assets_open-upload-widget'].includes(tool.name))
@@ -816,19 +829,26 @@ function createTools(
         : tool,
     ),
   ];
+  const spend = (tool: McpToolDefinition) =>
+    config.spendConfirmation === false ? withoutSpendConfirmation(tool) : tool;
   const adapted = allTools
     .map(withProjectIntent)
     .map((tool) => withOrganizationChoice(tool, httpClient, credential))
     .map(withGenerationStatusCard)
     .map(withGenerationOutputAliases)
-    .map((tool) => (config.spendConfirmation === false ? withoutSpendConfirmation(tool) : tool));
-  // Built from every tool, so jobs_wait reaches a kind whose own tools a toolset leaves out.
-  const tools = [...adapted, ...createJobTools(adapted)];
-  return config.transport === 'http'
-    ? tools.filter((tool) => HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name))
-    : tools.filter((tool) =>
-        toolsetIncludes(config.toolsets, tool.name, HOSTED_HTTP_TOOL_ALLOWLIST),
-      );
+    .map(spend);
+  const listed = (tool: McpToolDefinition) =>
+    config.transport === 'http'
+      ? HOSTED_HTTP_TOOL_ALLOWLIST.has(tool.name)
+      : toolsetIncludes(config.toolsets, tool.name, HOSTED_HTTP_TOOL_ALLOWLIST);
+  // Readers are built from every tool, so jobs_wait reaches a kind whose own tools a toolset
+  // leaves out. jobs_create-many runs creates as client calls, so only listed ones.
+  const tools = [...adapted, ...createJobTools(adapted), ...createJobsGetManyTool(adapted)].filter(
+    listed,
+  );
+  return [...tools, ...createJobsCreateManyTool(tools, adapted, httpClient).map(spend)].filter(
+    listed,
+  );
 }
 
 function createProfiledServer(
@@ -879,60 +899,68 @@ function createProfiledServer(
   );
   // Keep the SDK's input/output validation and execution. Hidden upload tools remain
   // callable only to return an actionable error; they cannot perform any upload.
+  const handlers = new Map<string, McpToolDefinition['handler']>();
+  // jobs_create-many runs each item through the same checks as a client's own call.
+  const callTool: NonNullable<ToolRequestContext['callTool']> = async (name, args, nested) => {
+    const handler = handlers.get(name);
+    if (!handler) throw new Error(`${name} is not available on this connection.`);
+    return handler(args, nested);
+  };
+  const sessionTools = tools.map(
+    (tool) =>
+      ({
+        ...tool,
+        handler: async (...parameters: Parameters<typeof tool.handler>) => {
+          const [args] = parameters;
+          if (!profile) throw new Error('Complete MCP initialization before calling tools.');
+          if (isAppOnlyTool(tool) && !profile.supportsAppUi)
+            throw new Error('Open the Sync app in ChatGPT, or use the Sync tools in this client.');
+          if (
+            !profile.supportsUploads &&
+            (['assets_upload', 'assets_open-upload-widget'].includes(tool.name) ||
+              (tool.name === 'lipsync_create' &&
+                ['video', 'image', 'audio'].some((key) => args[key] !== undefined)))
+          ) {
+            throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
+          }
+          const activeProfile = profile;
+          const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
+          const execute = () =>
+            trackToolExecution(
+              // The analytics collector still names tools as they were before the rename.
+              previousToolName(tool.name) ?? tool.name,
+              args,
+              parameters[1]?._meta,
+              activeProfile.name,
+              httpClient,
+              (businessArgs) =>
+                tool.handler(businessArgs, {
+                  ...parameters[1],
+                  clientProfile: activeProfile,
+                  clientName,
+                  callTool,
+                  // Only stdio holds a connection that can carry an unrelated notification.
+                  ...(config.transport === 'stdio'
+                    ? {
+                        toolListChanged: () =>
+                          void server.server.sendToolListChanged().catch(() => {}),
+                      }
+                    : {}),
+                }),
+              analytics,
+            );
+          // Each call keeps the organization it started in, even if the session switches.
+          const organization = organizationForCall(tool, args, organizationSession);
+          return runInOrganizationSession(organizationSession, () =>
+            runInOrganization(organization, execute),
+          );
+        },
+      }) as McpToolDefinition,
+  );
+  for (const tool of sessionTools) handlers.set(tool.name, tool.handler);
   registerTools(
     server,
-    tools.map(
-      (tool) =>
-        ({
-          ...tool,
-          handler: async (...parameters: Parameters<typeof tool.handler>) => {
-            const [args] = parameters;
-            if (!profile) throw new Error('Complete MCP initialization before calling tools.');
-            if (isAppOnlyTool(tool) && !profile.supportsAppUi)
-              throw new Error(
-                'Open the Sync app in ChatGPT, or use the Sync tools in this client.',
-              );
-            if (
-              !profile.supportsUploads &&
-              (['assets_upload', 'assets_open-upload-widget'].includes(tool.name) ||
-                (tool.name === 'lipsync_create' &&
-                  ['video', 'image', 'audio'].some((key) => args[key] !== undefined)))
-            ) {
-              throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
-            }
-            const activeProfile = profile;
-            const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
-            const execute = () =>
-              trackToolExecution(
-                // The analytics collector still names tools as they were before the rename.
-                previousToolName(tool.name) ?? tool.name,
-                args,
-                parameters[1]?._meta,
-                activeProfile.name,
-                httpClient,
-                (businessArgs) =>
-                  tool.handler(businessArgs, {
-                    ...parameters[1],
-                    clientProfile: activeProfile,
-                    clientName,
-                    // Only stdio holds a connection that can carry an unrelated notification.
-                    ...(config.transport === 'stdio'
-                      ? {
-                          toolListChanged: () =>
-                            void server.server.sendToolListChanged().catch(() => {}),
-                        }
-                      : {}),
-                  }),
-                analytics,
-              );
-            // Each call keeps the organization it started in, even if the session switches.
-            const organization = organizationForCall(tool, args, organizationSession);
-            return runInOrganizationSession(organizationSession, () =>
-              runInOrganization(organization, execute),
-            );
-          },
-        }) as McpToolDefinition,
-    ),
+    sessionTools,
     config.transport === 'http' ? resourceMetadataUrl(config.port) : undefined,
     // stdout is the protocol channel over stdio.
     config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,

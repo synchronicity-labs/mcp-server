@@ -11,6 +11,15 @@ export const newProjectFields = {
     ),
 };
 
+/** A version 8 UUID from the SHA-256 of the parts, each separated by a NUL byte. */
+export function hashUuid(...parts: string[]): string {
+  const bytes = createHash('sha256').update(parts.join('\0')).digest();
+  bytes[6] = (bytes[6]! & 0x0f) | 0x80;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export function assertProjectDestination(
   projectId?: string,
   projectName?: string,
@@ -46,16 +55,11 @@ export async function createProjectId(
   if (projectCreationKey !== undefined) {
     z.uuid().parse(projectCreationKey);
     // A creation key cannot be substituted with an existing project's UUID.
-    const bytes = createHash('sha256')
-      .update('sync:mcp:new-project:v1\0')
-      .update(projectCreationKey.toLowerCase())
-      .update('\0')
-      .update(idempotencyKey ?? '')
-      .digest();
-    bytes[6] = (bytes[6]! & 0x0f) | 0x80;
-    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-    const hex = bytes.subarray(0, 16).toString('hex');
-    id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    id = hashUuid(
+      'sync:mcp:new-project:v1',
+      projectCreationKey.toLowerCase(),
+      idempotencyKey ?? '',
+    );
   }
   signal?.throwIfAborted();
   const project = z.object({ id: z.string().min(1) }).parse(
