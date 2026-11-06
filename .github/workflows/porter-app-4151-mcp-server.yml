@@ -7,6 +7,8 @@ name: Deploy to mcp-server
 # commit triggered it, and skips when production already serves that tip. A late
 # run or a rerun therefore never rolls production back, and when a new run
 # replaces a pending one in this group, the survivor still ships the tip.
+permissions:
+    contents: read
 concurrency:
     group: deploy-mcp-server-production
     cancel-in-progress: false
