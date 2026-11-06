@@ -60,7 +60,9 @@ export const RENAMED_TOOLS: Readonly<Record<string, string>> = {
   'get-account-usage': 'account_get-usage',
   'send-feedback': 'feedback_send',
   'track-chatgpt-event': 'analytics_track-event',
-  'open-sync-app': 'app_open',
+  'open-sync-app': 'sync-app_open',
+  // Renamed again: OpenAI's review found `app_open` too vague. It was live from b0c91b3.
+  app_open: 'sync-app_open',
   'get-studio-view': 'studio-views_get',
   'open-studio-project': 'studio-views_open-project',
   'refresh-studio-project': 'studio-views_refresh-project',
@@ -75,9 +77,10 @@ export const RENAMED_TOOLS: Readonly<Record<string, string>> = {
   'ack-studio-draft': 'studio-drafts_ack',
 };
 
-const LEGACY_BY_NAME = new Map(
-  Object.entries(RENAMED_TOOLS).map(([legacy, name]) => [name, legacy]),
-);
+// A tool renamed twice has two old names; the first is the original, which analytics report.
+const LEGACY_BY_NAME = new Map<string, string>();
+for (const [legacy, name] of Object.entries(RENAMED_TOOLS))
+  if (!LEGACY_BY_NAME.has(name)) LEGACY_BY_NAME.set(name, legacy);
 
 /** The current name for a name derived from an operationId or used before the rename. */
 export function currentToolName(name: string): string {
@@ -95,7 +98,7 @@ export function nameTakenByRenamedTool(derived: string): boolean {
   return !(derived in RENAMED_TOOLS) && CURRENT_NAMES.has(derived);
 }
 
-/** The name a tool had before the rename, if it changed. Permanent; see oldNameAlias. */
+/** The name a tool had before the rename, if it changed. Permanent; see oldNameAliases. */
 export function previousToolName(name: string): string | undefined {
   return LEGACY_BY_NAME.get(name);
 }
@@ -108,13 +111,14 @@ export function previousToolName(name: string): string | undefined {
  */
 export const OLD_NAME_ALIASES: ReadonlySet<string> = new Set(Object.keys(RENAMED_TOOLS));
 
-/** The old name still callable for this tool during the deprecation, if any. */
-export function oldNameAlias(
+/** The old names still callable for this tool during the deprecation, oldest first. */
+export function oldNameAliases(
   name: string,
   aliases: ReadonlySet<string> = OLD_NAME_ALIASES,
-): string | undefined {
-  const previous = previousToolName(name);
-  return previous !== undefined && aliases.has(previous) ? previous : undefined;
+): string[] {
+  return Object.entries(RENAMED_TOOLS)
+    .filter(([legacy, current]) => current === name && aliases.has(legacy))
+    .map(([legacy]) => legacy);
 }
 
 export function renamedToolNotice(legacy: string, name: string): string {
@@ -129,21 +133,20 @@ export function renamedToolNotice(legacy: string, name: string): string {
 export function withLegacyAppDescriptors(descriptors: Tool[]): Tool[] {
   const current = new Set(descriptors.map((descriptor) => descriptor.name));
   const legacy = descriptors.flatMap((descriptor) => {
-    const name = oldNameAlias(descriptor.name);
     const meta = descriptor._meta ?? {};
     const ui = (meta.ui ?? {}) as { visibility?: unknown };
     const forApp =
       (Array.isArray(ui.visibility) && ui.visibility.includes('app')) ||
       meta['openai/widgetAccessible'] === true;
-    if (!name || !forApp || current.has(name)) return [];
-    return [
-      {
+    if (!forApp) return [];
+    return oldNameAliases(descriptor.name)
+      .filter((name) => !current.has(name))
+      .map((name) => ({
         ...descriptor,
         name,
         description: `Deprecated name of ${descriptor.name}, kept for Sync app widgets. Call ${descriptor.name}.`,
         _meta: { ...meta, ui: { ...ui, visibility: ['app'] } },
-      },
-    ];
+      }));
   });
   return [...descriptors, ...legacy];
 }

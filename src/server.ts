@@ -47,7 +47,7 @@ import {
 } from './spend-confirmation.js';
 import {
   nameTakenByRenamedTool,
-  oldNameAlias,
+  oldNameAliases,
   previousToolName,
   renamedToolNotice,
   withLegacyAppDescriptors,
@@ -196,7 +196,7 @@ export function serverDescription(spendConfirmation = true): string {
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
   'analytics_track-event',
-  'app_open',
+  'sync-app_open',
   'studio-drafts_save',
   'studio-drafts_ack',
   'studio-views_register',
@@ -236,7 +236,7 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'dialogue-previews_get',
   'dialogue-videos_estimate',
   'dialogue-videos_create',
-  'app_open',
+  'sync-app_open',
   'assets_open-upload-widget',
   'assets_upload',
   'lipsync_create',
@@ -445,8 +445,7 @@ export function registerTools(
     server.registerTool(tool.name, config, run);
     // The previous name stays callable, unlisted, and says what the tool is called now.
     // An old name that is now another tool's name (generations_estimate-cost) is that tool.
-    const legacy = oldNameAlias(tool.name);
-    if (legacy && !names.has(legacy))
+    for (const legacy of oldNameAliases(tool.name).filter((name) => !names.has(name)))
       server.registerTool(legacy, config, async (args, ctx) => {
         const result = await run(args, ctx);
         return {

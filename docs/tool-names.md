@@ -24,6 +24,9 @@ are not listed, such as `assets_create`, `projects_get` and `jobs_wait`, kept th
 - `generations_estimate-cost` was the stdio-only `GenerationsController_estimateCost`
   and is now the curated estimate (formerly `generate_estimate-cost`), which takes the
   same input. The stdio-only operation is now `generations_estimate`.
+- `open-sync-app` was first renamed `app_open`, which was live from `b0c91b3`. OpenAI's
+  review flagged that name as unclear, so the tool is now `sync-app_open`, and both old
+  names stay callable as aliases. Analytics keep reporting `open-sync-app`, the original.
 - A raw generated operation never takes a renamed tool's new name. For example, the
   unversioned `StudioViewsController_get` would derive `studio-views_get`
   (`nameTakenByRenamedTool` in `src/tool-names.ts`).
@@ -101,7 +104,8 @@ ChatGPT keeps an old widget, and after a Rescan, remove names from `OLD_NAME_ALI
 | `get-account-usage` | `account_get-usage` | hosted |
 | `send-feedback` | `feedback_send` | hosted |
 | `track-chatgpt-event` | `analytics_track-event` | hosted |
-| `open-sync-app` | `app_open` | hosted |
+| `open-sync-app` | `sync-app_open` | hosted |
+| `app_open` | `sync-app_open` | hosted |
 | `get-studio-view` | `studio-views_get` | hosted |
 | `open-studio-project` | `studio-views_open-project` | hosted |
 | `refresh-studio-project` | `studio-views_refresh-project` | hosted |

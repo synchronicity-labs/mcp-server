@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import type { SyncMcpConfig } from './config.js';
 import { createMcpServerFactory } from './server.js';
+import { renamedToolNotice } from './tool-names.js';
 import { UPLOAD_WIDGET_URI } from './tools/upload-widget.js';
 
 const html = '<!doctype html><html><body>Sync release fixture</body></html>';
@@ -57,7 +58,7 @@ it.each(['chatgpt', 'openai-mcp', 'openai-mcp (Codex)'])(
     await client.connect(clientTransport);
     try {
       const tools = (await client.listTools()).tools;
-      const tool = tools.find((entry) => entry.name === 'app_open');
+      const tool = tools.find((entry) => entry.name === 'sync-app_open');
       expect((await client.listResources()).resources.map((resource) => resource.uri)).toContain(
         `ui://sync/app-${digest}.html`,
       );
@@ -83,9 +84,22 @@ it.each(['chatgpt', 'openai-mcp', 'openai-mcp (Codex)'])(
         'openai/outputTemplate': `ui://sync/app-${digest}.html`,
         'openai/ui': { entrypoints: [{ type: 'global' }, { type: 'thread' }] },
       });
-      expect(await client.callTool({ name: 'app_open', arguments: {} })).toMatchObject({
+      expect(await client.callTool({ name: 'sync-app_open', arguments: {} })).toMatchObject({
         structuredContent: { requested: true, renderStatus: 'awaiting_client' },
       });
+      // Both earlier names stay callable, unlisted, and name the current tool.
+      const names = tools.map((entry) => entry.name);
+      for (const legacy of ['app_open', 'open-sync-app']) {
+        expect(names).not.toContain(legacy);
+        const opened = await client.callTool({ name: legacy, arguments: {} });
+        expect(opened.structuredContent).toEqual({
+          requested: true,
+          renderStatus: 'awaiting_client',
+        });
+        expect((opened.content as { text: string }[]).at(-1)?.text).toBe(
+          renamedToolNotice(legacy, 'sync-app_open'),
+        );
+      }
       const resource = await client.readResource({ uri: `ui://sync/app-${digest}.html` });
       expect(resource.contents).toEqual([
         expect.objectContaining({
@@ -222,9 +236,12 @@ it.each(['claude', 'unknown', 'openai-mcp (Codex).evil'])(
     await server.connect(serverTransport);
     await client.connect(clientTransport);
     try {
-      expect((await client.listTools()).tools.map((entry) => entry.name)).not.toContain('app_open');
+      expect((await client.listTools()).tools.map((entry) => entry.name)).not.toContain(
+        'sync-app_open',
+      );
       expect((await client.listResources()).resources).toEqual([]);
-      expect((await client.callTool({ name: 'app_open', arguments: {} })).isError).toBe(true);
+      for (const tool of ['sync-app_open', 'app_open', 'open-sync-app'])
+        expect((await client.callTool({ name: tool, arguments: {} })).isError, tool).toBe(true);
       await expect(client.readResource({ uri: `ui://sync/app-${digest}.html` })).rejects.toThrow();
     } finally {
       await client.close();
@@ -262,7 +279,7 @@ it.each(['openai-mcp', 'openai-mcp (Codex)'])(
         text: html,
       });
       const tools = await client.listTools();
-      expect(tools.tools.find((t) => t.name === 'app_open')?._meta?.ui).toMatchObject({
+      expect(tools.tools.find((t) => t.name === 'sync-app_open')?._meta?.ui).toMatchObject({
         resourceUri: `ui://sync/app-${newDigest}.html`,
       });
       expect(
@@ -327,7 +344,7 @@ it.each([false, true])(
       await client.connect(ct);
       try {
         const result = await runWithAuth(token, 'chatgpt', () =>
-          client.callTool({ name: 'app_open', arguments: {} }),
+          client.callTool({ name: 'sync-app_open', arguments: {} }),
         );
         if (initialProjects)
           expect(result._meta).toMatchObject({
@@ -401,7 +418,7 @@ it.each(['unavailable', 'timeout'])(
     await server.connect(st);
     await client.connect(ct);
     try {
-      const result = await client.callTool({ name: 'app_open', arguments: {} });
+      const result = await client.callTool({ name: 'sync-app_open', arguments: {} });
       expect(attempted).toBe(true);
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual({

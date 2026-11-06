@@ -104,7 +104,7 @@ async function initialize() {
   assert.equal(initialized.status, 202);
   await initialized.text();
   const tools = await post(sessionId, 'tools/list');
-  assert((await tools.json()).result.tools.some((tool) => tool.name === 'app_open'));
+  assert((await tools.json()).result.tools.some((tool) => tool.name === 'sync-app_open'));
   return sessionId;
 }
 async function readResource(sessionId, digest) {
@@ -137,7 +137,7 @@ try {
       const scheduled = Date.now();
       const fresh = await initialize();
       for (const id of [fresh, reused[iterations % reused.length]]) {
-        const response = await post(id, 'tools/call', { name: 'app_open', arguments: {} });
+        const response = await post(id, 'tools/call', { name: 'sync-app_open', arguments: {} });
         assert.equal(response.status, 200);
         const result = await response.json();
         assert(result.result && !result.result.isError);

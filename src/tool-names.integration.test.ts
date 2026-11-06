@@ -15,7 +15,7 @@ import { currentTools } from './test-fixtures/tool-names.js';
 import {
   currentToolName,
   nameTakenByRenamedTool,
-  oldNameAlias,
+  oldNameAliases,
   previousToolName,
   RENAMED_TOOLS,
   renamedToolNotice,
@@ -183,7 +183,10 @@ describe('the rename table', () => {
   it('uses one <noun>_<verb> scheme with unique new names', () => {
     const next = Object.values(RENAMED_TOOLS);
     for (const name of next) expect(name, name).toMatch(/^[a-z0-9-]+_[a-z0-9-]+$/);
-    expect(new Set(next).size).toBe(next.length);
+    // One tool was renamed twice (open-sync-app, then app_open); every other new name has
+    // exactly one old name.
+    const twice = next.filter((name, index) => next.indexOf(name) !== index);
+    expect(twice).toEqual(['sync-app_open']);
     for (const name of HOSTED_HTTP_TOOL_ALLOWLIST)
       expect(name, name).toMatch(/^[a-z0-9-]+_[a-z0-9-]+$/);
   });
@@ -193,7 +196,11 @@ describe('the rename table', () => {
     expect(currentToolName('jobs_wait')).toBe('jobs_wait');
     expect(previousToolName('dubbing_create')).toBe('create-translate-and-dub');
     expect(previousToolName('jobs_wait')).toBeUndefined();
-    expect(oldNameAlias('dubbing_create')).toBe('create-translate-and-dub');
+    expect(oldNameAliases('dubbing_create')).toEqual(['create-translate-and-dub']);
+    expect(currentToolName('app_open')).toBe('sync-app_open');
+    expect(oldNameAliases('sync-app_open')).toEqual(['open-sync-app', 'app_open']);
+    // Analytics report the original name, which the collector's enum lists.
+    expect(previousToolName('sync-app_open')).toBe('open-sync-app');
     expect(nameTakenByRenamedTool('studio-views_get')).toBe(true);
     expect(nameTakenByRenamedTool('audio-trims_create')).toBe(true);
     // A derived name that is itself renamed is the tool, not a collision.
@@ -203,8 +210,8 @@ describe('the rename table', () => {
 
   it('ends the aliases without undoing the new names', () => {
     const none = new Set<string>();
-    expect(oldNameAlias('assets_list', none)).toBeUndefined();
-    expect(oldNameAlias('lipsync_create', none)).toBeUndefined();
+    expect(oldNameAliases('assets_list', none)).toEqual([]);
+    expect(oldNameAliases('lipsync_create', none)).toEqual([]);
     // Generated names, reservations and analytics read the permanent table, not the aliases.
     expect(operationIdToToolName('AssetsController_getAll')).toBe('assets_list');
     expect(nameTakenByRenamedTool('studio-views_get')).toBe(true);

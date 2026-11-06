@@ -1,7 +1,7 @@
 {
   "name": "@sync.so/mcp-server",
-  "version": "0.2.0",
-  "description": "MCP server for the Sync API — give AI agents the ability to create lipsync videos, manage assets, and more",
+  "version": "0.2.1",
+  "description": "Official sync. labs MCP server: lipsync and dub videos, make photos talk and manage assets from any MCP client",
   "keywords": [
     "ai",
     "lipsync",
@@ -17,11 +17,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/synchronicity-labs/mcp-server.git"
+    "url": "git+https://github.com/synchronicity-labs/mcp-server.git"
   },
   "bin": {
-    "mcp-server": "./dist/cli.js",
-    "sync-mcp": "./dist/cli.js"
+    "mcp-server": "dist/cli.js",
+    "sync-mcp": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -108,5 +108,6 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "packageManager": "pnpm@12.14.0"
+  "packageManager": "pnpm@12.14.0",
+  "mcpName": "io.github.synchronicity-labs/mcp-server"
 }

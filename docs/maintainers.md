@@ -104,7 +104,7 @@ URI. Invalid configured artifacts fail startup rather than silently serving a
 different interface. These checks establish artifact consistency; deployment
 must still obtain the bundle from the approved frontend build.
 
-The `app_open` tool exposes the resource through the standard MCP Apps UI
+The `sync-app_open` tool exposes the resource through the standard MCP Apps UI
 metadata and declares ChatGPT global/sidebar and thread/panel entrypoints.
 Opening it is read-only. Existing uploads and tool-only clients are preserved;
 the new tool and resource are only presented to the ChatGPT client profile.

@@ -3,7 +3,7 @@
   "name": "io.github.synchronicity-labs/mcp-server",
   "title": "sync. labs",
   "description": "Lipsync videos, dub them into other languages, make talking videos and open sync. Studio.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "websiteUrl": "https://sync.so",
   "repository": {
     "url": "https://github.com/synchronicity-labs/mcp-server",
@@ -21,6 +21,30 @@
     {
       "type": "streamable-http",
       "url": "https://mcp.sync.so/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@sync.so/mcp-server",
+      "version": "0.2.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SYNC_API_KEY",
+          "description": "sync. API key from https://sync.so/settings/api-keys. Without one, the server starts a device login on first run.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "SYNC_MCP_TOOLSETS",
+          "description": "Comma-separated toolsets to list: default, lipsync, dubbing, assets, projects, transcription, voices, admin or all. Defaults to the hosted server's tools without deletes or voice cloning.",
+          "isRequired": false
+        }
+      ]
     }
   ]
 }

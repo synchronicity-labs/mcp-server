@@ -109,10 +109,10 @@ export function createOpenSyncAppTool(
   projects?: McpToolDefinition,
 ): McpToolDefinition {
   return {
-    name: 'app_open',
+    name: 'sync-app_open',
     title: 'sync. labs',
     description:
-      'Use this when the user asks to open Sync, upload media in its interface, or visually configure a talking photo, lipsync video, Translate & Dub, or Edit Dialogue workflow. Browse existing projects and choose media before generating. This interface does not provide subtitle-only output, standalone MP3 voiceovers, trimming, or background-music mixing; explain that limitation rather than opening it to fulfill those tasks. Requesting the interface does not start a generation or spend credits. The result only confirms the request; do not claim the interface rendered unless the user confirms it.',
+      'Opens the sync. labs app (sync. Studio) inside ChatGPT: an interactive view where the user uploads or picks media, browses their projects, and sets up a talking photo, lipsync video, Translate & Dub or Edit Dialogue job. Call it when the user asks to open sync. or Studio, or wants to upload files, choose media or configure a job visually rather than in chat. It returns only {requested: true, renderStatus: "awaiting_client"}: opening the app starts no generation and spends no credits, and the result does not confirm that the view rendered, so do not claim it did unless the user says so. The app does not make subtitle-only output, standalone MP3 voiceovers, trims or background-music mixes; explain that instead of opening it for those.',
     inputSchema: {},
     outputSchema: { requested: z.boolean(), renderStatus: z.literal('awaiting_client') },
     annotations: {
