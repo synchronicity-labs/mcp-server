@@ -1,0 +1,51 @@
+name: Request Greptile review
+
+# Greptile reviews a pull request only when someone comments @greptileai, and it
+# approves the head on a 5/5 review, which satisfies the required approval. This
+# asks once per head so review-fix loops need no manual request. Each review is
+# paid, so a burst of pushes waits for the last one, a head that already has a
+# Greptile Review check is skipped, and drafts and forks are never requested.
+"on":
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: greptile-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  request:
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      checks: read
+      pull-requests: write
+    steps:
+      - name: Wait for pushes to settle
+        run: sleep 120
+
+      - name: Request a review of this head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.head.sha')
+          if [ "$head" != "$SHA" ]; then
+            echo "::notice::#$PR moved to $head; that push's run requests its review."
+            exit 0
+          fi
+          reviewed=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs?check_name=Greptile%20Review&per_page=1" \
+            --jq '.total_count')
+          if [ "$reviewed" != 0 ]; then
+            echo "::notice::Greptile already reviewed $SHA."
+            exit 0
+          fi
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body '@greptileai'
