@@ -27,7 +27,7 @@ export function createStudioViewTools(
   http: HttpClient,
 ): McpToolDefinition[] {
   if (!supportsStudioViews(operations)) return [];
-  const viewId = z.uuid();
+  const viewId = z.uuid().describe('The viewId the open Studio published in this chat.');
   const instructions =
     ' First studio-views_get for the exact published viewId, use its expectedRevision and a fresh UUID id; retry an uncertain handoff with the SAME id/body. Do not replace unresolved actions, guess a widget, or overwrite stale edits. On "Studio context is stale", studio-views_get again and retry once with its expectedRevision and a fresh id. On STUDIO_VIEW_NOT_OPEN, Studio is not open in this chat: tell the user to open Studio, then studio-views_get again; do not keep retrying. This never repeats backend creation or paid work. Check the action receipt through studio-views_get: only applied confirms UI display; pending/blocked/failed do not. Draft selection/settings edits use studio-drafts_get and studio-drafts_update.';
   const actions = {

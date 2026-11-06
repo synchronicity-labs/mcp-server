@@ -56,7 +56,10 @@ export function createTranslationTools(
           'Project ID only when explicitly selected by the user, or just created for this request. Otherwise omit it to create a new project. Keep unchanged on retries.',
         ),
       targetLang: z.enum(target.data).describe('Target language from the API-supported list.'),
-      sourceLang: z.enum(source.data).default('auto'),
+      sourceLang: z
+        .enum(source.data)
+        .default('auto')
+        .describe('Spoken language of the source video. Leave as auto to detect it.'),
       model: z.string().trim().min(1).describe('Video lip-sync model returned by models_list.'),
       options: modelOptionsSchema.optional(),
       idempotencyKey: z

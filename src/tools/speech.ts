@@ -10,20 +10,34 @@ export function speechOperations(operations: ParsedOperation[]) {
     (operation) => operation.path === createPath || operation.path === readPath,
   );
 }
-const projectSchema = z.object({ projectId: z.uuid() });
+const projectSchema = z.object({
+  projectId: z
+    .uuid()
+    .describe('Project the speech belongs to, from projects_create or projects_list.'),
+});
 const requestSchema = projectSchema.extend({
   idempotencyKey: z
     .uuid()
     .describe(
       'Persist this request identity before synthesis. Reuse it with the identical script and voice after an uncertain response.',
     ),
-  script: z.string().min(1).max(5000),
+  script: z.string().min(1).max(5000).describe('Text to speak, up to 5,000 characters.'),
   voiceId: z
     .string()
     .min(1)
     .describe('An id returned by voices_list. Restricted voices cannot synthesize.'),
-  stability: z.number().min(0).max(1).optional(),
-  similarityBoost: z.number().min(0).max(1).optional(),
+  stability: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe('Voice consistency from 0 to 1; higher is steadier, lower is more expressive.'),
+  similarityBoost: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe('How closely to match the selected voice, from 0 to 1.'),
 });
 const jobSchema = z.object({
   id: z.uuid(),
@@ -80,7 +94,7 @@ export function createSpeechTools(
       name: 'speech-previews_get-options',
       title: 'Check speech preview availability',
       description:
-        'Read speech-preview availability and the connected organization’s billing mode/free allowance for a Studio quote. Does not synthesize or change billing.',
+        "Check that speech previews are available and return the organization's plan, billing mode and remaining free text-to-speech allowance, so you can tell the user what a preview will cost before speech-previews_create. Does not synthesize or change billing.",
       inputSchema: projectSchema.shape,
       outputSchema: optionsSchema.shape,
       annotations: readHints,
@@ -122,8 +136,10 @@ export function createSpeechTools(
       name: 'speech-previews_get',
       title: 'Check a speech preview',
       description:
-        'Read the same durable speech job until SUCCESS or FAILED. Reads do not synthesize. Requires an accessible project in the connected organization; the audio is attached separately by the app.',
-      inputSchema: projectSchema.extend({ id: z.uuid() }).shape,
+        'Read one speech preview job by id: its status (PENDING, PROCESSING, SUCCESS or FAILED), and the audio url and duration once it succeeds, or its error. Call it again while it is running; never create another preview. Reads do not synthesize. Pass the projectId used to create it.',
+      inputSchema: projectSchema.extend({
+        id: z.uuid().describe('Speech preview id from speech-previews_create.'),
+      }).shape,
       outputSchema: jobSchema.shape,
       annotations: readHints,
       handler: async (args, context) => {

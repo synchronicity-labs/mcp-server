@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-const workflow = z.enum(['lipsync', 'image_to_video', 'translate_and_dub', 'edit_dialogue']);
+const workflow = z
+  .enum(['lipsync', 'image_to_video', 'translate_and_dub', 'edit_dialogue'])
+  .describe('Studio workflow to show the project in.');
+const projectId = z.uuid().describe('Project id from projects_list or projects_create.');
+const generationId = z.uuid().describe('Id of an existing generation in that project.');
 export const StudioViewContextSchema = z.strictObject({
   projectId: z.uuid().nullable(),
   draftId: z.uuid().nullable(),
@@ -14,22 +18,20 @@ export const StudioViewContextSchema = z.strictObject({
 export const StudioViewCommandSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('open-project'),
-    projectId: z.uuid(),
+    projectId,
     workflow: workflow.optional(),
   }),
-  z.strictObject({ type: z.literal('refresh-project'), projectId: z.uuid() }),
-  z.strictObject({ type: z.literal('refresh-assets'), projectId: z.uuid() }),
-  z.strictObject({
-    type: z.literal('open-generation'),
-    projectId: z.uuid(),
-    generationId: z.uuid(),
-  }),
+  z.strictObject({ type: z.literal('refresh-project'), projectId }),
+  z.strictObject({ type: z.literal('refresh-assets'), projectId }),
+  z.strictObject({ type: z.literal('open-generation'), projectId, generationId }),
   z.strictObject({
     type: z.literal('continue-generation'),
-    projectId: z.uuid(),
-    generationId: z.uuid(),
+    projectId,
+    generationId,
     workflow,
-    seedSource: z.enum(['source-input', 'output']),
+    seedSource: z
+      .enum(['source-input', 'output'])
+      .describe("Start the new draft from the generation's source inputs or from its output."),
   }),
 ]);
 export const StudioViewSchema = z.object({
@@ -55,8 +57,12 @@ export const RegisterStudioViewSchema = z.strictObject({
   context: StudioViewContextSchema,
 });
 export const RequestStudioViewActionSchema = z.strictObject({
-  id: z.uuid(),
-  expectedRevision: z.number().int().positive(),
+  id: z.uuid().describe('A new UUID for this action. Reuse it only to retry an uncertain handoff.'),
+  expectedRevision: z
+    .number()
+    .int()
+    .positive()
+    .describe('The view revision from studio-views_get.'),
   command: StudioViewCommandSchema,
 });
 export const AcknowledgeStudioViewSchema = z.strictObject({

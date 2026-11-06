@@ -44,7 +44,10 @@ const totals = z.object({
     ]),
   ),
 });
-const rename = z.object({ projectId: z.uuid(), name: z.string().trim().min(1).max(255) });
+const rename = z.object({
+  projectId: z.uuid().describe('Project to rename, from projects_list or projects_create.'),
+  name: z.string().trim().min(1).max(255).describe('New project name, up to 255 characters.'),
+});
 const project = z.object({ id: z.uuid(), name: z.string() });
 
 export function createAccountManagementTools(http: HttpClient): McpToolDefinition[] {

@@ -89,12 +89,17 @@ const generation = z.object({
 });
 
 export function createGenerationContinuationTool(http: HttpClient): McpToolDefinition {
-  const input = z.object({ projectId: z.uuid(), id: z.uuid() }).strict();
+  const input = z
+    .object({
+      projectId: z.uuid().describe('Project the generation belongs to.'),
+      id: z.uuid().describe('Id of the existing generation to continue from.'),
+    })
+    .strict();
   return {
     name: 'generations_get-continuation',
     title: 'Read generation continuation inputs',
     description:
-      'Read one accessible generation and its original inputs through the same Studio API. Rechecks project and referenced asset access. Does not create a draft, asset, transcription, preview or generation. Use the shared Studio continuation policy to choose source versus completed output.',
+      'Read one generation and the inputs it was made from (workflow, model, options, media inputs, segments, speakers and output url), to start a follow-up generation from it, such as redoing it with other audio or dubbing its output. Use generations_get for status and output only. Rechecks project and referenced asset access. Does not create a draft, asset, transcription, preview or generation.',
     inputSchema: input.shape,
     outputSchema: { submissionContextVersion: z.literal(1), generation },
     annotations: {

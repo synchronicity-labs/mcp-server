@@ -168,7 +168,10 @@ const getOutput = {
 
 const listInput = z
   .object({
-    status: z.enum(LIST_STATUSES).optional(),
+    status: z
+      .enum(LIST_STATUSES)
+      .optional()
+      .describe('Only batches in this status, such as PROCESSING for batches still running.'),
     createdAfter: z.string().optional().describe('ISO 8601 date-time.'),
     createdBefore: z.string().optional().describe('ISO 8601 date-time.'),
   })
