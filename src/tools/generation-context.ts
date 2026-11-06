@@ -4,10 +4,15 @@ import type { HttpClient } from '../http-client.js';
 /** Optional for released clients: absence must preserve the original fingerprint. */
 export const generationContextSchema = z
   .object({
-    workflow: z.enum(['lipsync', 'translate_and_dub', 'image_to_video', 'edit_dialogue']),
-    parentGenerationId: z.uuid(),
+    workflow: z
+      .enum(['lipsync', 'translate_and_dub', 'image_to_video', 'edit_dialogue'])
+      .describe("The parent generation's workflow, from generations_get-continuation."),
+    parentGenerationId: z.uuid().describe('Id of the existing generation this continues.'),
   })
-  .strict();
+  .strict()
+  .describe(
+    'Only when the user explicitly continues an existing generation in this project: the parent generation and its workflow.',
+  );
 
 export async function generationContextHeaders(
   http: HttpClient,

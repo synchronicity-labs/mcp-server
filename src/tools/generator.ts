@@ -102,7 +102,7 @@ function generateTool(operation: ParsedOperation, httpClient: HttpClient): McpTo
   const override = getOverride(name);
   const description = override?.description ?? truncate(operation.summary, 200);
 
-  const inputSchema = buildInputSchema(operation);
+  const inputSchema = buildInputSchema(operation, override?.params);
   const admission = admissionKey(operation);
   if (admission) inputSchema.idempotencyKey = admission.schema;
   const estimatesCost = ['generations_estimate-cost', 'generations_estimate'].includes(name);
@@ -215,12 +215,18 @@ function truncate(str: string, maxLen: number): string {
   return `${str.slice(0, maxLen - 3)}...`;
 }
 
-function buildInputSchema(operation: ParsedOperation): Record<string, z.ZodType> {
+function buildInputSchema(
+  operation: ParsedOperation,
+  params: Record<string, string> = {},
+): Record<string, z.ZodType> {
   const shape: Record<string, z.ZodType> = {};
+  // Written descriptions replace the spec's; generic list inputs fall back to shared text.
+  const describe = (name: string, fromSpec?: string) =>
+    params[name] ?? fromSpec ?? COMMON_PARAM_DESCRIPTIONS[name];
 
   for (const param of operation.parameters) {
     if (param.in === 'header') continue;
-    const zodType = jsonSchemaToZod(param.schema, param.description);
+    const zodType = jsonSchemaToZod(param.schema, describe(param.name, param.description));
     shape[param.name] = param.required ? zodType : zodType.optional();
   }
 
@@ -232,7 +238,10 @@ function buildInputSchema(operation: ParsedOperation): Record<string, z.ZodType>
       const properties = sub.properties as Record<string, JsonSchema>;
       const required = (sub.required as string[]) ?? [];
       for (const [propName, propSchema] of Object.entries(properties)) {
-        const zodType = jsonSchemaToZod(propSchema, propSchema.description as string | undefined);
+        const zodType = jsonSchemaToZod(
+          propSchema,
+          describe(propName, propSchema.description as string | undefined),
+        );
         shape[propName] = required.includes(propName) ? zodType : zodType.optional();
       }
     }
@@ -240,6 +249,12 @@ function buildInputSchema(operation: ParsedOperation): Record<string, z.ZodType>
 
   return shape;
 }
+
+const COMMON_PARAM_DESCRIPTIONS: Record<string, string> = {
+  limit: 'Maximum number of results to return. Keep it small and page with cursor.',
+  cursor: "The previous page's nextCursor, to read the next page. Omit for the first page.",
+  searchQuery: 'Text to match against names.',
+};
 
 function flattenComposedSchema(schema: JsonSchema): JsonSchema[] {
   const results: JsonSchema[] = [];
@@ -267,14 +282,16 @@ function jsonSchemaToZod(schema: JsonSchema, description?: string): z.ZodType {
     zodType = z.boolean();
   } else if (type === 'array') {
     const items = schema.items as JsonSchema | undefined;
-    zodType = z.array(items ? jsonSchemaToZod(items) : z.unknown());
+    zodType = z.array(
+      items ? jsonSchemaToZod(items, items.description as string | undefined) : z.unknown(),
+    );
   } else if (type === 'object') {
     const properties = schema.properties as Record<string, JsonSchema> | undefined;
     if (properties) {
       const required = (schema.required as string[]) ?? [];
       const shape: Record<string, z.ZodType> = {};
       for (const [propName, propSchema] of Object.entries(properties)) {
-        const innerType = jsonSchemaToZod(propSchema);
+        const innerType = jsonSchemaToZod(propSchema, propSchema.description as string | undefined);
         shape[propName] = required.includes(propName) ? innerType : innerType.optional();
       }
       zodType = z.object(shape);
