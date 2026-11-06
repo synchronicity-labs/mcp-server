@@ -9,6 +9,7 @@ import {
   getSessionRuntimeConfig,
   isAllowedMcpOrigin,
   listenWithCleanup,
+  rpcLogDetails,
   runSessionSweepSafely,
   sanitizeDiagnosticUrl,
   waitForHttpServerStartup,
@@ -281,5 +282,35 @@ describe('MCP heap admission', () => {
       readHeap: () => ({ used_heap_size: 61, heap_size_limit: 100 }),
     });
     expect(admit()).toBe(false);
+  });
+});
+
+describe('request log details', () => {
+  it('names the tool a call runs, or a placeholder for an unexpected name', () => {
+    expect(rpcLogDetails('tools/call', { name: 'generations_get' })).toEqual({
+      tool: 'generations_get',
+    });
+    expect(rpcLogDetails('tools/call', { name: 'drop table; --' })).toEqual({
+      tool: '<other tool>',
+    });
+    expect(rpcLogDetails('tools/call', undefined)).toEqual({ tool: '<other tool>' });
+  });
+
+  it('names a Sync UI resource a client reads, and nothing else', () => {
+    expect(rpcLogDetails('resources/read', { uri: 'ui://sync/generation-status-v1.html' })).toEqual(
+      { resource: 'ui://sync/generation-status-v1.html' },
+    );
+    for (const uri of [
+      'https://example.com/a?token=secret',
+      'ui://sync/../../etc/passwd',
+      'file:///Users/someone/video.mp4',
+      42,
+    ])
+      expect(rpcLogDetails('resources/read', { uri })).toEqual({ resource: '<other resource>' });
+  });
+
+  it('adds nothing for other methods', () => {
+    expect(rpcLogDetails('tools/list', {})).toEqual({});
+    expect(rpcLogDetails('initialize', { clientInfo: { name: 'secret' } })).toEqual({});
   });
 });
