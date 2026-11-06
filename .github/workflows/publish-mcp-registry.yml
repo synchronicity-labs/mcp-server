@@ -8,10 +8,11 @@ name: Publish to the MCP Registry
 # (scripts/check-server-json.mjs). A run for a version the registry already has
 # does nothing.
 #
-# The listing is remote only: it points at https://mcp.sync.so/mcp, which is
-# live before this runs and stays at the same URL across deploys, so it does not
-# wait for the deploy. A future `packages` entry for npm must publish after
-# publish.yml, because the registry checks that the npm version exists.
+# The listing has the hosted server, https://mcp.sync.so/mcp, which is live
+# before this runs and stays at the same URL across deploys, and the npm package.
+# The registry checks that the npm version exists and that its package.json
+# names this server in mcpName, so this waits for publish.yml, which runs on the
+# same push, to put the version on npm.
 #
 # Authenticates with GitHub OIDC, so there is no secret: the registry grants
 # workflows in synchronicity-labs repositories the io.github.synchronicity-labs/*
@@ -34,7 +35,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: read
       # Exchanged for a registry token by `mcp-publisher login github-oidc`.
@@ -71,6 +72,22 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Wait for the npm packages to be published
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          jq -r '.packages[]? | select(.registryType == "npm") | "\(.identifier)/\(.version)"' server.json |
+            while read -r package; do
+              url="https://registry.npmjs.org/${package/\//%2f}"
+              for _ in $(seq 1 60); do
+                status=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-all-errors "$url")
+                [ "$status" = 200 ] && continue 2
+                [ "$status" = 404 ] || { echo "::error::npm returned HTTP $status for $package."; exit 1; }
+                sleep 15
+              done
+              echo "::error::$package is not on npm after 15 minutes. Check the Publish to npm run, then rerun this one."
+              exit 1
+            done
 
       - name: Download mcp-publisher
         if: steps.version.outputs.publish == 'true'
