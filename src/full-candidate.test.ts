@@ -379,7 +379,10 @@ it('preserves profiles, authenticated writes and signed results across concurren
       expect(tools.some((tool) => tool.name === 'assets_list-creators')).toBe(index === 0);
       const create = tools.find((tool) => tool.name === 'lipsync_create')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
-      expect((await client.listResources()).resources.length > 0).toBe(index === 0);
+      const resources = (await client.listResources()).resources.map((resource) => resource.name);
+      // Claude renders the generation status card, and only that card.
+      expect(resources.includes('sync-generation-status')).toBe(index < 2);
+      expect(resources.some((entry) => entry !== 'sync-generation-status')).toBe(index === 0);
       expect(
         JSON.stringify(await client.callTool({ name: 'voices_list', arguments: {} })),
       ).toContain('fixture-voice');
@@ -397,12 +400,7 @@ it('preserves profiles, authenticated writes and signed results across concurren
       expect(posted?.body.projectId).toBe(
         `project:${['ChatGPT generations', 'Claude generations', 'Sync generations'][index]}`,
       );
-      const pending = await client.callTool({
-        name: 'generations_get',
-        arguments: { id: 'generation', wait: true },
-      });
-      expect(pending.structuredContent).toMatchObject({ id: 'generation', status: 'PENDING' });
-      expect(pending.structuredContent).not.toHaveProperty('outputMediaUrl');
+      // One wait: true call keeps reading on the server past the PENDING read.
       const result = await client.callTool({
         name: 'generations_get',
         arguments: { id: 'generation', wait: true },

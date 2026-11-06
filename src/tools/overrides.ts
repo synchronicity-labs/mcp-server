@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from '../asset-thumbnail.js';
+import { WAIT_DESCRIPTION } from './job-wait.js';
 import { generationDtoOutputSchema, generationOutputSchema } from './output-schemas.js';
 
 type ToolOverride = {
@@ -231,9 +232,14 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   generations_get: {
     title: 'Get a generation',
     description:
-      'Get a generation by id. Pass `wait: true` and omit `timeout` to use the API default. If still pending, poll the same generation id again; never resubmit the generation. When status is COMPLETED, copy the exact `structuredContent.outputMediaUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited. `outputUrl` is a deprecated alias with the same value.',
+      'Get a generation by id. Pass `wait: true` and omit `timeout` to wait on the server for up to about 50 seconds. If still pending, poll the same generation id again; never resubmit the generation. When status is COMPLETED, copy the exact `structuredContent.outputMediaUrl` string verbatim; signed URLs must not be reconstructed, shortened, or edited. `outputUrl` is a deprecated alias with the same value.',
     outputSchema: generationOutputSchema,
-    params: { id: GENERATION_ID },
+    params: {
+      id: GENERATION_ID,
+      wait: WAIT_DESCRIPTION,
+      timeout:
+        'Seconds each read holds (1-10). Leave it out; wait: true reads for about 50 seconds.',
+    },
   },
   generations_list: {
     title: 'List generations',

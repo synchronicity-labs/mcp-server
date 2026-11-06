@@ -12,12 +12,9 @@ export const WAIT_BUDGET_MS = 50_000;
 // Back off 1, 2, 4 then every 5 seconds, so quick jobs return quickly.
 const INTERVALS_MS = [1_000, 2_000, 4_000, 5_000];
 
-export const waitInput = z
-  .boolean()
-  .optional()
-  .describe(
-    'Wait on the server until the job finishes or about 50 seconds pass, then return its latest state. If it is still running, call again with wait: true instead of sleeping.',
-  );
+export const WAIT_DESCRIPTION =
+  'Wait on the server until the job finishes or about 50 seconds pass, then return its latest state. If it is still running, call again with wait: true instead of sleeping.';
+export const waitInput = z.boolean().optional().describe(WAIT_DESCRIPTION);
 
 type Notify = (notification: {
   method: 'notifications/progress';

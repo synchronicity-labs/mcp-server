@@ -105,6 +105,27 @@ function withJobWait(tool: JsonTool, label: string): JsonTool {
   };
 }
 
+/**
+ * The API holds one generation read for at most 10 seconds (its timeout input, 1-10,
+ * default 5), so waiting out an 11-minute dub took about 90 calls, more than a chat turn
+ * allows. With wait: true, keep reading on the server like jobs_wait: each read still
+ * long-polls the API, and the call returns once the generation settles or about 50
+ * seconds pass. The generated input is unchanged, so every earlier call still works.
+ */
+function withGenerationWait(tool: JsonTool): JsonTool {
+  const handler = tool.handler;
+  return {
+    ...tool,
+    handler: async (args, context) => {
+      if (args.wait !== true) return handler(args, context);
+      const read = (signal = context?.signal) => handler(args, { ...context, signal });
+      return pollUntil(read, jobSettled, context, {
+        describe: (job) => `generation ${String(rawStatus(job) ?? 'pending').toLowerCase()}`,
+      });
+    },
+  };
+}
+
 /** One import attempt: the saved asset, or the 409 that says it is still downloading. */
 type ImportAttempt = { asset: unknown } | { pending: ApiRequestError };
 
@@ -166,5 +187,7 @@ export function adaptGeneratedTool(
   if (operation.method === 'get' && operation.path === '/v2/transcriptions/{id}/speaker-analysis')
     return withJobWait(tool, 'speaker analysis');
   if (operation.method === 'post' && operation.path === '/v2/assets') return withImportWait(tool);
+  if (operation.method === 'get' && operation.path === '/v2/generate/{id}')
+    return withGenerationWait(tool);
   return tool;
 }
