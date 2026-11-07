@@ -15,6 +15,8 @@ import { type JobInput, type JobState, jobReaders, jobSettled, jobStateShape } f
 export const MAX_JOBS = 50;
 // Parallel reads per call, so a full set does not burst 50 requests at the API at once.
 const READS_IN_FLIGHT = 8;
+// Never read a set again sooner than this, even when every job asks for no pause.
+const MIN_PAUSE_MS = 1_000;
 
 type Entry = JobState | (JobInput & { error: { message: string; status?: number; code?: string } });
 
@@ -148,16 +150,38 @@ export function createJobsGetManyTool(tools: McpToolDefinition[]): McpToolDefini
     }
   };
   // Jobs already settled keep their last state; only running ones are read again.
+  // A job is read again only once it is due: settled jobs never, and a job whose read asked
+  // for a pause (an import's retryAfterMs) not before that pause ends. Others follow the
+  // shared backoff.
   const readAll = (
     jobs: JobInput[],
     previous: Entry[] | undefined,
+    dueAt: number[],
     context: ToolRequestContext | undefined,
     signal: AbortSignal | undefined,
   ) =>
     mapLimited(jobs, READS_IN_FLIGHT, async (entry, index) => {
       const last = previous?.[index];
-      return last && settled(last) ? last : readOne(entry, context, signal);
+      if (last && (settled(last) || Date.now() < (dueAt[index] ?? 0))) return last;
+      const next = await readOne(entry, context, signal);
+      dueAt[index] = Date.now() + (isRead(next) ? (next.retryAfterMs ?? 0) : 0);
+      return next;
     });
+
+  /**
+   * The pause before the next round: the shared backoff while any running job has no pause
+   * of its own, otherwise until the first such pause ends.
+   */
+  const pauseFor = (entries: Entry[], dueAt: number[]): number | undefined => {
+    const waits = entries.flatMap((entry) =>
+      settled(entry) ? [] : [isRead(entry) ? entry.retryAfterMs : undefined],
+    );
+    if (waits.length === 0 || waits.some((wait) => wait === undefined)) return undefined;
+    const due = Math.min(
+      ...entries.flatMap((entry, index) => (settled(entry) ? [] : [dueAt[index] ?? 0])),
+    );
+    return Math.max(due - Date.now(), MIN_PAUSE_MS);
+  };
 
   return [
     {
@@ -190,14 +214,16 @@ export function createJobsGetManyTool(tools: McpToolDefinition[]): McpToolDefini
         const { jobs: parsed, wait } = input.parse(args);
         const jobs = parsed as JobInput[];
         let latest: Entry[] | undefined;
+        const dueAt: number[] = [];
         const read = async (signal?: AbortSignal) =>
-          (latest = await readAll(jobs, latest, context, signal));
+          (latest = await readAll(jobs, latest, dueAt, context, signal));
         const entries = wait
           ? await pollUntil(read, (current) => current.every(settled), context, {
               describe: (current) => {
                 const count = counts(current);
                 return `${count.total - count.running} of ${count.total} jobs final`;
               },
+              delayMs: (current) => pauseFor(current, dueAt),
             })
           : await read(context?.signal);
         return { jobs: entries, counts: counts(entries) };

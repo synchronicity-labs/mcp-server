@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ApiRequestError } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
 import { createJobsGetManyTool } from './jobs-get-many.js';
 
@@ -61,4 +62,35 @@ describe('jobs_get-many', () => {
     expect(generations.handler.mock.calls.map(([args]) => args.id)).toEqual(['a', 'b', 'b']);
     expect(progress).toHaveBeenCalledWith(1, '3 of 4 jobs final');
   });
+
+  it('waits out each job’s own retryAfterMs, reading the others on the shared backoff', async () => {
+    const generations = reader('generations_get', {
+      g: ['PROCESSING', 'PROCESSING', 'COMPLETED'],
+    });
+    const importReads: number[] = [];
+    const assets = {
+      name: 'assets_create',
+      description: 'assets_create',
+      inputSchema: {},
+      handler: vi.fn(async () => {
+        importReads.push(Date.now());
+        if (importReads.length === 1)
+          throw new ApiRequestError('importing', 409, 'import_in_progress', 1_500);
+        return { id: 'asset-1', type: 'VIDEO' };
+      }),
+    } as McpToolDefinition;
+    const [tool] = createJobsGetManyTool([generations, assets]);
+    const result = (await tool!.handler({
+      wait: true,
+      jobs: [
+        { kind: 'generation', id: 'g' },
+        { kind: 'import', id: 'https://youtu.be/x' },
+      ],
+    })) as { jobs: { status?: string }[] };
+    expect(result.jobs.map((job) => job.status)).toEqual(['COMPLETED', 'COMPLETED']);
+    // The generation was read on the 1 s backoff; the import only after its 1.5 s pause.
+    expect(generations.handler).toHaveBeenCalledTimes(3);
+    expect(importReads).toHaveLength(2);
+    expect(importReads[1]! - importReads[0]!).toBeGreaterThanOrEqual(1_500);
+  }, 10_000);
 });
