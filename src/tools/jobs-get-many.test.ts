@@ -93,4 +93,31 @@ describe('jobs_get-many', () => {
     expect(importReads).toHaveLength(2);
     expect(importReads[1]! - importReads[0]!).toBeGreaterThanOrEqual(1_500);
   }, 10_000);
+
+  it('bounds the first round of reads too, returning the jobs already read', async () => {
+    const generations = reader('generations_get', { a: ['COMPLETED'] });
+    const slow = vi.fn(
+      async (_args: Record<string, unknown>, context?: { signal?: AbortSignal }) =>
+        new Promise<never>((_resolve, reject) =>
+          context?.signal?.addEventListener('abort', () => reject(context.signal!.reason), {
+            once: true,
+          }),
+        ),
+    );
+    const speech = { ...reader('speech-previews_get', {}), handler: slow };
+    const [tool] = createJobsGetManyTool([generations, speech], { budgetMs: 200 });
+    const began = Date.now();
+    const result = (await tool!.handler(
+      {
+        jobs: [
+          { kind: 'generation', id: 'a' },
+          { kind: 'speech_preview', id: 's', projectId: 'p-1' },
+        ],
+      },
+      {},
+    )) as { jobs: { status?: string; error?: { code?: string } }[] };
+    expect(Date.now() - began).toBeLessThan(1_000);
+    expect(result.jobs[0]!.status).toBe('COMPLETED');
+    expect(result.jobs[1]!.error).toMatchObject({ code: 'read_timeout' });
+  });
 });

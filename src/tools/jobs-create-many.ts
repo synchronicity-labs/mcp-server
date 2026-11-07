@@ -92,10 +92,16 @@ function itemError(error: unknown): ItemError {
   return { message: error instanceof Error ? error.message : String(error) };
 }
 
-/** A server error or a lost connection: the API may have admitted the job anyway. */
+/**
+ * A server error, a lost connection or an aborted request: the API may have admitted the job
+ * anyway. fetch reports network failures as TypeError whatever the message ("fetch failed"
+ * before a reply, "terminated" when the reply body breaks off), and aborts and timeouts as
+ * AbortError or TimeoutError.
+ */
 function outcomeUnknown(error: unknown): boolean {
   if (error instanceof ApiRequestError) return error.status >= 500 || error.status === 408;
-  return error instanceof TypeError && error.message === 'fetch failed';
+  if (error instanceof TypeError) return true;
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
 }
 
 function failure(error: unknown): ItemError {
@@ -274,7 +280,7 @@ export function createJobsCreateManyTool(
         .literal(true)
         .optional()
         .describe(
-          'The job may have started (no answer before the time limit, or a server error). The item is in remaining; resending it with the same idempotencyKey is safe.',
+          'The job may have started (no answer before the time limit, a lost connection or a server error). The item is in remaining; resending it with the same idempotencyKey is safe.',
         ),
     })
     .describe('Why the item failed, or the last refusal it waited on.');
@@ -293,7 +299,7 @@ export function createJobsCreateManyTool(
     'This is a paid action: every item is billed as its own job. Before calling, estimate each distinct configuration with the matching estimate tool, tell the user the item count and the estimated total, and wait for one confirmation of the whole set. ' +
     'Items without projectId each get a new project; to keep the set together, create one project with projects_create and pass its projectId with projectIntent=explicit in every item. ' +
     'It keeps at most the account’s concurrent generation limit in flight and waits out capacity refusals by resending the same keyed request. It returns within about 50 seconds and never waits for the jobs to finish. ' +
-    'Each item comes back started (with kind and id), failed (with error) or not_started (the account stayed busy). A request still unanswered at the time limit, or answered with a server error, comes back failed with error.outcomeUnknown: the job may have started. ' +
+    'Each item comes back started (with kind and id), failed (with error) or not_started (the account stayed busy). A request still unanswered at the time limit, cut off by a lost connection, or answered with a server error, comes back failed with error.outcomeUnknown: the job may have started. ' +
     'Pass jobs to jobs_get-many to follow the started ones. When remaining is present (items not started or with an unknown outcome), call again later with remaining as it is: every item keeps its derived keys, so a resend never starts a job twice.';
 
   return [

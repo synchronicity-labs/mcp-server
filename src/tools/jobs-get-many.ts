@@ -3,7 +3,7 @@ import { ApiRequestError } from '../http-client.js';
 import { currentOrganizationSession, runInOrganization } from '../organization-selection.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import { isTerminal, JOB_KINDS, PREVIEW_JOB_KINDS } from './job-status.js';
-import { pollUntil } from './job-wait.js';
+import { pollUntil, WAIT_BUDGET_MS } from './job-wait.js';
 import { type JobInput, type JobState, jobReaders, jobSettled, jobStateShape } from './jobs.js';
 
 /**
@@ -63,7 +63,10 @@ function counts(entries: Entry[]) {
   return count;
 }
 
-export function createJobsGetManyTool(tools: McpToolDefinition[]): McpToolDefinition[] {
+export function createJobsGetManyTool(
+  tools: McpToolDefinition[],
+  { budgetMs = WAIT_BUDGET_MS }: { budgetMs?: number } = {},
+): McpToolDefinition[] {
   const readers = jobReaders(tools, [...JOB_KINDS, ...PREVIEW_JOB_KINDS]);
   if (!readers) return [];
   const has = (kind: string) => (readers.kinds as string[]).includes(kind);
@@ -126,6 +129,10 @@ export function createJobsGetManyTool(tools: McpToolDefinition[]): McpToolDefini
     })
     .strict();
   const state = z.object(jobStateShape(readers.kinds));
+  const NOT_READ_IN_TIME = {
+    message: 'Not read before the time limit. Read it again; it may still be running.',
+    code: 'read_timeout',
+  };
   const failure = z.object({
     kind: z.enum(readers.kinds),
     id: z.string(),
@@ -134,11 +141,19 @@ export function createJobsGetManyTool(tools: McpToolDefinition[]): McpToolDefini
       .describe('Why this job could not be read; the other jobs are unaffected.'),
   });
 
-  const readOne = async (entry: JobInput, context?: ToolRequestContext, signal?: AbortSignal) => {
+  const readOne = async (
+    entry: JobInput,
+    last: Entry | undefined,
+    context: ToolRequestContext | undefined,
+    signal: AbortSignal,
+  ) => {
     try {
       return await inCreatingOrganization(entry, () => readers.read(entry, context, signal));
     } catch (error) {
-      signal?.throwIfAborted();
+      context?.signal?.throwIfAborted();
+      // The call's time limit cut this read short: keep what was read before, so the jobs
+      // already read in this round are still returned.
+      if (signal.aborted) return last ?? { ...entry, error: NOT_READ_IN_TIME };
       const api = error instanceof ApiRequestError ? error : undefined;
       return {
         ...entry,
@@ -158,12 +173,12 @@ export function createJobsGetManyTool(tools: McpToolDefinition[]): McpToolDefini
     previous: Entry[] | undefined,
     dueAt: number[],
     context: ToolRequestContext | undefined,
-    signal: AbortSignal | undefined,
+    signal: AbortSignal,
   ) =>
     mapLimited(jobs, READS_IN_FLIGHT, async (entry, index) => {
       const last = previous?.[index];
       if (last && (settled(last) || Date.now() < (dueAt[index] ?? 0))) return last;
-      const next = await readOne(entry, context, signal);
+      const next = await readOne(entry, last, context, signal);
       dueAt[index] = Date.now() + (isRead(next) ? (next.retryAfterMs ?? 0) : 0);
       return next;
     });
@@ -215,10 +230,19 @@ export function createJobsGetManyTool(tools: McpToolDefinition[]): McpToolDefini
         const jobs = parsed as JobInput[];
         let latest: Entry[] | undefined;
         const dueAt: number[] = [];
+        // One limit for the whole call, the first round of reads included.
+        const budget = AbortSignal.timeout(budgetMs);
         const read = async (signal?: AbortSignal) =>
-          (latest = await readAll(jobs, latest, dueAt, context, signal));
+          (latest = await readAll(
+            jobs,
+            latest,
+            dueAt,
+            context,
+            signal ? AbortSignal.any([signal, budget]) : budget,
+          ));
         const entries = wait
           ? await pollUntil(read, (current) => current.every(settled), context, {
+              budgetMs,
               describe: (current) => {
                 const count = counts(current);
                 return `${count.total - count.running} of ${count.total} jobs final`;

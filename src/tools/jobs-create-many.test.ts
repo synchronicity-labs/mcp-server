@@ -315,4 +315,19 @@ describe('jobs_create-many', () => {
     expect(result.summary).toMatchObject({ notStarted: 2 });
     expect(callTool).not.toHaveBeenCalled();
   });
+
+  it('treats a reply cut off mid-body as an unknown outcome, not a refusal', async () => {
+    const { run } = setup(
+      async (args) => {
+        if (args.targetLang === 'fr') throw new TypeError('terminated');
+        return started(args);
+      },
+      { concurrency: 2 },
+    );
+    const list = items('es', 'fr');
+    const result = await run({ items: list });
+    expect(result.items.map((item) => item.status)).toEqual(['started', 'failed']);
+    expect(result.items[1]!.error).toMatchObject({ outcomeUnknown: true });
+    expect(result.remaining?.items).toEqual(list.slice(1));
+  });
 });
