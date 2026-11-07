@@ -258,12 +258,21 @@ describe('SERVER_INSTRUCTIONS', () => {
   });
 
   it('keeps ChatGPT and Studio guidance out of model-only clients', () => {
-    expect(serverInstructions(resolveClientProfile('openai-mcp'))).toBe(SERVER_INSTRUCTIONS);
+    expect(serverInstructions(resolveClientProfile('openai-mcp (codex)'))).toBe(
+      SERVER_INSTRUCTIONS,
+    );
     const modelOnly = serverInstructions(resolveClientProfile('claude-code'));
     expect(modelOnly).not.toContain('When Studio publishes');
     expect(modelOnly).not.toContain('In ChatGPT');
     expect(modelOnly).toContain('exactly one visual input');
     expect(modelOnly).toContain('assets_create-upload-url');
+  });
+
+  it('mentions the jobs_*-many tools only to clients that list them', () => {
+    const chatgpt = serverInstructions(resolveClientProfile('openai-mcp'));
+    expect(chatgpt).not.toContain('jobs_create-many');
+    expect(chatgpt).toContain('When Studio publishes');
+    expect(serverInstructions(resolveClientProfile('claude-code'))).toContain('jobs_create-many');
   });
 });
 

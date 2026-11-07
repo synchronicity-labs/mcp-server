@@ -62,7 +62,7 @@ const createInput = z
       .array(item)
       .min(
         MIN_ITEMS,
-        `A batch needs at least ${MIN_ITEMS} items; create fewer generations one at a time.`,
+        `A batch needs at least ${MIN_ITEMS} items; start fewer generations with jobs_create-many.`,
       )
       .describe(
         `The generations, in order; at least ${MIN_ITEMS}. Plans allow up to 500 per batch by default, and the whole batch must fit in 5 MB as JSONL.`,
@@ -249,7 +249,7 @@ function planStep(requiredPlan: string | undefined): string {
       : requiredPlan
         ? ` It needs the ${requiredPlan} plan or above.`
         : '';
-  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, create the generations one at a time with lipsync_create or dubbing_create. Creating the batch again fails the same way until the plan changes.`;
+  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, start the generations with jobs_create-many when available, or one at a time with lipsync_create or dubbing_create. Creating the batch again fails the same way until the plan changes.`;
 }
 
 /** Tell the agent what changes the outcome; API lines are 1-based item positions. */
@@ -305,7 +305,7 @@ export function createBatchTools(
     {
       name: 'batches_create',
       title: 'Create a batch of generations',
-      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Use it for ${MIN_ITEMS} or more generations that do not depend on each other; for fewer, or when one result feeds the next, use lipsync_create or dubbing_create per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generations_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Leave payload.projectId out for new work; a payload with projectId needs projectIntent=explicit, which only an explicit user selection or a project just created for this request allows. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
+      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Batch is a separate queued pipeline, built for large runs (${MIN_ITEMS} to 500) on Scale plans and above that can wait hours; below Scale every row still takes a concurrent generation slot. For 2 or more independent jobs that should start now, on any plan, use jobs_create-many when available; when one result feeds the next, call lipsync_create or dubbing_create per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generations_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Leave payload.projectId out for new work; a payload with projectId needs projectIntent=explicit, which only an explicit user selection or a project just created for this request allows. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
       inputSchema: createInput.shape,
       outputSchema: createOutput,
       annotations: {

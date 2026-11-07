@@ -25,6 +25,10 @@ export const JOB_KINDS = [
 ] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
+// Read only by jobs_get-many, so jobs_get and jobs_wait keep their published kind list.
+export const PREVIEW_JOB_KINDS = ['dialogue_preview', 'speech_preview'] as const;
+export type AnyJobKind = JobKind | (typeof PREVIEW_JOB_KINDS)[number];
+
 const TERMINAL = new Set<JobStatus>(['COMPLETED', 'FAILED', 'REJECTED', 'CANCELED']);
 
 export function isTerminal(status: JobStatus): boolean {
@@ -41,6 +45,9 @@ const ALIASES: Record<string, JobStatus> = {
   JOBS_CREATED: 'PROCESSING',
   FINISHING: 'PROCESSING',
   CANCELLED: 'CANCELED',
+  // Speech previews finish as SUCCESS; an Edit Dialogue preview can finish with some edits failed.
+  SUCCESS: 'COMPLETED',
+  COMPLETED_PARTIAL: 'COMPLETED',
   // Speaker analysis that cannot run for this source (no faces, too long, audio only).
   UNAVAILABLE: 'FAILED',
 };

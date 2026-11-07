@@ -99,9 +99,10 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   clients.push(client);
   await client.connect(clientTransport);
   const tools = currentTools((await client.listTools()).tools);
-  // Every registered tool but lipsync_create-timeline and the feature-gated scenes_detect and
-  // stems_separate, kept out of the ChatGPT app listing.
-  expect(tools).toHaveLength(factory.toolCount - 3);
+  // Every registered tool but lipsync_create-timeline, the feature-gated scenes_detect and
+  // stems_separate, and jobs_create-many, kept out of the ChatGPT app listing. Without
+  // generations_get in this spec there is no jobs_get-many.
+  expect(tools).toHaveLength(factory.toolCount - 4);
   expect(tools.some((tool) => tool.name === 'generations_create')).toBe(false);
   const options = await client.callTool({ name: 'dubbing_get-options', arguments: {} });
   expect(options.structuredContent).toEqual({

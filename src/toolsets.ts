@@ -22,6 +22,9 @@ type Category = Exclude<Toolset, 'default' | 'all'>;
 const CORE = new Set([
   'jobs_get',
   'jobs_wait',
+  'jobs_get-many',
+  // Offered only when a create tool it runs is listed too.
+  'jobs_create-many',
   'account_get-context',
   'organizations_list',
   'organizations_select',
@@ -123,7 +126,7 @@ export function toolCategory(name: string): Category | undefined {
 
 /**
  * The default: what the hosted server lists, without admin tools, plus what the curated
- * workflows need there: jobs_get and jobs_wait, and the transcription tools whose speaker
+ * workflows need there: the jobs_* tools, and the transcription tools whose speaker
  * face tracks become lipsync_create-timeline clips.
  */
 function inDefaultToolset(name: string, hostedTools: ReadonlySet<string>): boolean {
