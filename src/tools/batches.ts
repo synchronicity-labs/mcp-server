@@ -249,7 +249,7 @@ function planStep(requiredPlan: string | undefined): string {
       : requiredPlan
         ? ` It needs the ${requiredPlan} plan or above.`
         : '';
-  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, create the generations one at a time with lipsync_create or dubbing_create. Creating the batch again fails the same way until the plan changes.`;
+  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, start the generations with jobs_create-many when available, or one at a time with lipsync_create or dubbing_create. Creating the batch again fails the same way until the plan changes.`;
 }
 
 /** Tell the agent what changes the outcome; API lines are 1-based item positions. */

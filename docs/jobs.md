@@ -77,7 +77,7 @@ same rules to decide when to stop.
 
 ## Many jobs at once
 
-`jobs_create-many` starts 2 to 50 independent jobs by running one create tool once per
+`jobs_create-many` starts up to 50 independent jobs by running one create tool once per
 item, and `jobs_get-many` reads up to 50 jobs of any kind at once. They are for requests
 such as "lip-sync this video to these 7 audios", "translate this video into 7 languages"
 (one `dubbing_create` item per language) or "one Edit Dialogue variant per name" (one
@@ -93,19 +93,24 @@ with large runs (20 to 500 generations) that can wait hours in the batch queue.
 
 Input: `{tool, idempotencyKey, items}`.
 
-- `tool` is one of the create tools this connection lists: `lipsync_create`,
-  `lipsync_create-timeline`, `dubbing_create`, `dialogue-videos_create`,
-  `dialogue-previews_create`, `speech-previews_create`, `translation-previews_create`, and
-  locally `generations_create`. Any other name is refused by the input schema, which lists
+- `tool` is one of the create tools this connection lists whose requests carry an
+  `Idempotency-Key`: `lipsync_create`, `lipsync_create-timeline`, `dubbing_create`,
+  `dialogue-videos_create`, `speech-previews_create`, `translation-previews_create`,
+  `dialogue-previews_create` only when the API takes a key for previews (what
+  `dialogue_get-options` reports as `keyedPreview`), and locally `generations_create` when
+  its operation takes one. An unkeyed create could bill twice when an uncertain item is
+  resent, so it cannot run here. Any other name is refused by the input schema, which lists
   the allowed ones.
-- `items` are that tool's own arguments, one object per job. Every item is validated
-  against the tool's schema before anything starts, and a repeated item is refused, so a
-  typo never leaves half a set started.
+- `items` are that tool's own arguments, one object per job, up to 50. A new set has 2 or
+  more; a single item is accepted so the last item of `remaining` can be sent again. Every
+  item is validated against the tool's schema before anything starts, and a repeated item
+  is refused, so a typo never leaves half a set started.
 - `idempotencyKey` is a fresh UUID for the approved set. An item without its own
   `idempotencyKey` gets one derived from the set key, the tool and the item's other
-  arguments; an item without `projectId` gets a derived `projectCreationKey` the same way.
-  Calling again with the same set key and the same items therefore resends the same keyed
-  requests and the same new projects, which the API replays instead of creating again.
+  arguments, never its position; an item without `projectId` gets a derived
+  `projectCreationKey` the same way. Calling again with the same set key and any subset of
+  the same items, such as `remaining`, therefore resends the same keyed requests and the
+  same new projects, which the API replays instead of creating again.
 
 Each item runs through the same server path as a direct call (`callTool` in
 `src/server.ts`), so the project-intent guard, the per-call `organizationId`, upload
@@ -125,15 +130,18 @@ Scheduling:
   refusals come before the API admits anything, so resending never duplicates a job.
 - A 401 or 402 stops new items from starting, since every other item would be refused the
   same way. Any other error fails only its own item.
-- No new attempt starts after 40 seconds, and requests in flight are never abandoned, so
-  the call returns within about 50 seconds. It never waits for the jobs themselves.
+- One 50-second deadline starts before the account lookup and bounds the whole call. No
+  attempt starts in its last 10 seconds, and every request carries a signal that aborts at
+  the deadline (or when the client cancels). A request cut off that way, or answered with a
+  5xx or a lost connection, may have created its job, so that item is reported `failed`
+  with `error.outcomeUnknown: true`, never `not_started`. It never waits for the jobs.
 
 Output: `{tool, summary, items, jobs, remaining?, nextStep}`. `items` has one
 `{index, status, kind?, id?, error?}` per input item, in order, with `status` one of
 `started`, `failed` or `not_started`. `jobs` lists the started ones as `{kind, id,
-projectId?, videoAssetId?}`, ready to pass to `jobs_get-many`. When some items could not
-start because the account stayed at its limit, `remaining` holds `{tool, idempotencyKey,
-items}` to send again later, unchanged. Progress notifications report how many items have
+projectId?, videoAssetId?}`, ready to pass to `jobs_get-many`. `remaining` holds `{tool,
+idempotencyKey, items}` for the items not started and those failed with an unknown outcome,
+to send again later unchanged; their keys make a resend replay a job that did start. Progress notifications report how many items have
 started.
 
 ### `jobs_get-many`
@@ -143,7 +151,9 @@ It reads each job through the same per-kind reader as `jobs_get`, eight at a tim
 returns `{jobs, counts}`: each job's unified state in input order, or `{kind, id, error}`
 for one that could not be read, and counts of `running`, `completed`, `failed` (also
 REJECTED and CANCELED) and `unreadable` jobs. With `wait: true` it waits like `jobs_wait`,
-up to about 50 seconds, reading again only the jobs still running.
+up to about 50 seconds, reading again only the jobs still running. A job whose read asks
+for a pause (an import's `retryAfterMs`) is not read again before that pause ends; the
+others follow `jobs_wait`'s backoff.
 
 Besides the kinds above it reads `dialogue_preview` (needs `projectId` and `videoAssetId`)
 and `speech_preview` (needs `projectId`), so every job `jobs_create-many` starts can be

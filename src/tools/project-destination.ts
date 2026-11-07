@@ -11,7 +11,11 @@ export const newProjectFields = {
     ),
 };
 
-/** A version 8 UUID from the SHA-256 of the parts, each separated by a NUL byte. */
+/**
+ * A deterministic version 8 UUID from the SHA-256 of the parts, each separated by a NUL
+ * byte: an idempotent id for a retry to find again, not a password hash. Callers pass only
+ * caller-chosen keys and identifiers, never credentials or tokens.
+ */
 export function hashUuid(...parts: string[]): string {
   const bytes = createHash('sha256').update(parts.join('\0')).digest();
   bytes[6] = (bytes[6]! & 0x0f) | 0x80;

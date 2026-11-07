@@ -161,7 +161,7 @@ The hosted server exposes a curated set of tools to every client:
 
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
-² Not in the ChatGPT app listing yet. `jobs_create-many` starts 2 to 50 independent jobs
+² Not in the ChatGPT app listing yet. `jobs_create-many` starts up to 50 independent jobs
 at once, such as one video dubbed into several languages, by running one create tool
 (`lipsync_create`, `dubbing_create`, `dialogue-videos_create` and others) once per item,
 with the same API, limits and billing as single calls on any plan; `jobs_get-many` follows

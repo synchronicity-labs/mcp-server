@@ -55,25 +55,36 @@ export function checkItems(target: McpToolDefinition, items: Record<string, unkn
   return parsed;
 }
 
+/** Which keys the create tool takes, read once from its input schema. */
+export type KeyFields = { idempotencyKey: boolean; projectCreationKey: boolean };
+
+export function keyFields(target: McpToolDefinition): KeyFields {
+  return {
+    idempotencyKey: 'idempotencyKey' in target.inputSchema,
+    projectCreationKey: 'projectCreationKey' in target.inputSchema,
+  };
+}
+
 /**
- * Fills the item's missing keys from the set key and the item itself, so calling again with
- * the same set key and item resends the same request, never a second job.
+ * Fills the item's missing keys from the set key, the tool name and the item's other
+ * arguments, never its position, so the same item sent again (alone, or in `remaining`)
+ * gets the same keys and resends the same request, never a second job. Only those
+ * caller-supplied, non-secret strings are hashed.
  */
 export function withKeys(
-  target: McpToolDefinition,
+  tool: string,
+  takes: KeyFields,
   setKey: string,
   item: Record<string, unknown>,
-  keyedPreview: boolean,
 ): Record<string, unknown> {
   const identity = canonical(withoutKeys(item));
   const derive = (field: string) =>
-    hashUuid('sync:mcp:jobs-many:v1', setKey.toLowerCase(), target.name, field, identity);
+    hashUuid('sync:mcp:jobs-many:v1', setKey.toLowerCase(), tool, field, identity);
   const keys: Record<string, string> = {};
-  // Edit Dialogue previews accept a key only on APIs that support keyed previews.
-  if ('idempotencyKey' in target.inputSchema && item.idempotencyKey === undefined && keyedPreview)
+  if (takes.idempotencyKey && item.idempotencyKey === undefined)
     keys.idempotencyKey = derive('idempotencyKey');
   if (
-    'projectCreationKey' in target.inputSchema &&
+    takes.projectCreationKey &&
     item.projectCreationKey === undefined &&
     item.projectId === undefined
   )

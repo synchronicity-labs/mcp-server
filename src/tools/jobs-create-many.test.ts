@@ -10,7 +10,7 @@ type Result = {
   summary: Record<string, number>;
   items: { index: number; status: string; id?: string; error?: Record<string, unknown> }[];
   jobs: { kind: string; id: string }[];
-  remaining?: unknown;
+  remaining?: { tool: string; idempotencyKey: string; items: Record<string, unknown>[] };
   nextStep: string;
 };
 const setKey = '6f1f8c63-41a4-4f55-9d4e-2f7c1f7b1f10';
@@ -35,34 +35,56 @@ const items = (...langs: string[]) =>
 const busy = (ms: number) =>
   new ApiRequestError('API request failed: 429', 429, 'concurrency_limit_reached', ms);
 
+type Respond = (
+  args: Record<string, unknown>,
+  attempt: number,
+  signal: AbortSignal | undefined,
+) => Promise<unknown>;
+
+/** Settles only when the signal aborts, like a request the API never answers. */
+const hang = (signal: AbortSignal | undefined) =>
+  new Promise<never>((_resolve, reject) =>
+    signal?.addEventListener('abort', () => reject(signal.reason), { once: true }),
+  );
+
 function setup(
-  respond: (args: Record<string, unknown>, attempt: number) => Promise<unknown>,
-  options: { concurrency?: number; launchWindowMs?: number } = {},
+  respond: Respond,
+  options: {
+    concurrency?: number;
+    budgetMs?: number;
+    requestMs?: number;
+    account?: (signal?: AbortSignal) => Promise<unknown>;
+  } = {},
 ) {
   const http: HttpClient = {
-    request: vi.fn(async () =>
-      options.concurrency === undefined
-        ? {}
-        : { limits: { concurrency: options.concurrency, maxOutputDurationSeconds: 60 } },
+    request: vi.fn(async (_method, _path, request) =>
+      options.account
+        ? options.account(request?.signal)
+        : options.concurrency === undefined
+          ? {}
+          : { limits: { concurrency: options.concurrency, maxOutputDurationSeconds: 60 } },
     ),
   };
-  const [tool] = createJobsCreateManyTool([dubbing], [dubbing], http, {
-    launchWindowMs: options.launchWindowMs ?? 5_000,
+  const [tool] = createJobsCreateManyTool([dubbing], http, {
+    budgetMs: options.budgetMs ?? 5_000,
+    requestMs: options.requestMs ?? 0,
   });
   const attempts = new Map<string, number>();
   let inFlight = 0;
   let maxInFlight = 0;
-  const callTool = vi.fn(async (_name: string, args: Record<string, unknown>) => {
-    const attempt = (attempts.get(String(args.targetLang)) ?? 0) + 1;
-    attempts.set(String(args.targetLang), attempt);
-    inFlight += 1;
-    maxInFlight = Math.max(maxInFlight, inFlight);
-    try {
-      return await respond(args, attempt);
-    } finally {
-      inFlight -= 1;
-    }
-  });
+  const callTool = vi.fn(
+    async (_name: string, args: Record<string, unknown>, nested: { signal?: AbortSignal }) => {
+      const attempt = (attempts.get(String(args.targetLang)) ?? 0) + 1;
+      attempts.set(String(args.targetLang), attempt);
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      try {
+        return await respond(args, attempt, nested.signal);
+      } finally {
+        inFlight -= 1;
+      }
+    },
+  );
   const progress = vi.fn(async (_progress: number, _message?: string) => {});
   const run = (args: Record<string, unknown>) =>
     tool!.handler({ tool: 'dubbing_create', idempotencyKey: setKey, ...args }, {
@@ -78,11 +100,22 @@ const started = async (args: Record<string, unknown>) => {
 };
 
 describe('jobs_create-many', () => {
-  it('offers only the create tools this connection lists', () => {
+  it('offers only listed create tools whose requests carry a key', () => {
     const http = { request: vi.fn() };
-    expect(createJobsCreateManyTool([], [dubbing], http)).toEqual([]);
-    const [tool] = createJobsCreateManyTool([dubbing], [dubbing], http);
-    expect((tool!.inputSchema.tool as z.ZodEnum).options).toEqual(['dubbing_create']);
+    expect(createJobsCreateManyTool([], http)).toEqual([]);
+    const preview = { ...dubbing, name: 'dialogue-previews_create' };
+    // A generated create without an admission key could bill twice on a resend.
+    const unkeyed = { ...dubbing, name: 'generations_create', inputSchema: { model: z.string() } };
+    const offered = (keyedDialoguePreviews?: boolean) => {
+      const [tool] = createJobsCreateManyTool([dubbing, preview, unkeyed], http, {
+        keyedDialoguePreviews,
+      });
+      return (tool!.inputSchema.tool as z.ZodEnum).options;
+    };
+    expect(offered()).toEqual(['dubbing_create']);
+    expect(offered(false)).toEqual(['dubbing_create']);
+    expect(offered(true)).toEqual(['dubbing_create', 'dialogue-previews_create']);
+    const [tool] = createJobsCreateManyTool([dubbing], http);
     expect(tool!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
@@ -122,7 +155,7 @@ describe('jobs_create-many', () => {
         if (args.targetLang === 'es') return started(args);
         throw busy(60_000);
       },
-      { concurrency: 2, launchWindowMs: 200 },
+      { concurrency: 2, budgetMs: 400, requestMs: 200 },
     );
     const began = Date.now();
     const list = items('es', 'fr', 'ja', 'de');
@@ -187,7 +220,7 @@ describe('jobs_create-many', () => {
     ).rejects.toThrow(
       /Nothing was started\. items\[2\]\.targetLang: .*; items\[3\] repeats items\[0\]/,
     );
-    await expect(run({ items: items('es') })).rejects.toThrow('at least 2 items');
+    await expect(run({ items: [] })).rejects.toThrow('at least one item');
     expect(callTool).not.toHaveBeenCalled();
   });
 
@@ -220,5 +253,66 @@ describe('jobs_create-many', () => {
     );
     expect(other).toMatchObject({ summary: { started: 3 } });
     expect(sent('es')[2]!.idempotencyKey).not.toBe(first!.idempotencyKey);
+  });
+
+  it('resumes from remaining, down to a single item, with the keys of the original call', async () => {
+    const { run, callTool } = setup(
+      async (args, attempt) => {
+        if (args.targetLang === 'fr' && attempt === 1) throw busy(60_000);
+        return started(args);
+      },
+      { concurrency: 1, budgetMs: 400, requestMs: 200 },
+    );
+    const first = await run({ items: items('es', 'fr', 'ja') });
+    expect(first.summary).toMatchObject({ started: 1, notStarted: 2 });
+    const second = await run(first.remaining!);
+    expect(second.summary).toMatchObject({ total: 2, started: 2 });
+    // The last item alone is accepted too.
+    const third = await run({ ...first.remaining!, items: [first.remaining!.items[1]!] });
+    expect(third.summary).toEqual({ total: 1, started: 1, failed: 0, notStarted: 0 });
+    const keys = (lang: string) =>
+      callTool.mock.calls
+        .filter(([, args]) => args.targetLang === lang)
+        .map(([, args]) => [args.idempotencyKey, args.projectCreationKey]);
+    // fr's refused attempt in the first call and its start in the second share keys.
+    expect(keys('fr')).toHaveLength(2);
+    expect(new Set(keys('fr').map((pair) => pair.join()))).toHaveLength(1);
+    expect(keys('ja')).toHaveLength(2);
+    expect(new Set(keys('ja').map((pair) => pair.join()))).toHaveLength(1);
+    expect(keys('ja')[0]).not.toEqual(keys('fr')[0]);
+  });
+
+  it('reports a request cut off at the deadline as failed with an unknown outcome', async () => {
+    const { run } = setup(
+      async (args, _attempt, signal) => {
+        if (args.targetLang === 'fr') return hang(signal);
+        if (args.targetLang === 'ja')
+          throw new ApiRequestError('Outcome unknown', 503, 'IDEMPOTENCY_OUTCOME_UNKNOWN');
+        return started(args);
+      },
+      { concurrency: 3, budgetMs: 300, requestMs: 100 },
+    );
+    const began = Date.now();
+    const list = items('es', 'fr', 'ja');
+    const result = await run({ items: list });
+    expect(Date.now() - began).toBeLessThan(1_000);
+    expect(result.items.map((item) => item.status)).toEqual(['started', 'failed', 'failed']);
+    expect(result.items[1]!.error).toMatchObject({ code: 'outcome_unknown', outcomeUnknown: true });
+    expect(result.items[2]!.error).toMatchObject({ status: 503, outcomeUnknown: true });
+    expect(result.remaining?.items).toEqual(list.slice(1));
+    expect(result.nextStep).toContain('outcomeUnknown may have started');
+  });
+
+  it('counts the account lookup against the same deadline', async () => {
+    const { run, callTool } = setup(started, {
+      budgetMs: 300,
+      requestMs: 100,
+      account: hang,
+    });
+    const began = Date.now();
+    const result = await run({ items: items('es', 'fr') });
+    expect(Date.now() - began).toBeLessThan(1_000);
+    expect(result.summary).toMatchObject({ notStarted: 2 });
+    expect(callTool).not.toHaveBeenCalled();
   });
 });

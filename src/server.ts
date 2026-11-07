@@ -61,7 +61,11 @@ import { createAssetAnalysisTools } from './tools/asset-analysis.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { BATCH_TOOLS, createBatchTools, isBatchOperation } from './tools/batches.js';
-import { createDialogueTools, dialogueOperations } from './tools/dialogue.js';
+import {
+  createDialogueTools,
+  dialogueOperations,
+  keyedDialoguePreviews,
+} from './tools/dialogue.js';
 import { createFeedbackTools, FEEDBACK_INSTRUCTIONS, feedbackOperation } from './tools/feedback.js';
 import { adaptGeneratedTool } from './tools/generated-adapters.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
@@ -855,9 +859,12 @@ function createTools(
   const tools = [...adapted, ...createJobTools(adapted), ...createJobsGetManyTool(adapted)].filter(
     listed,
   );
-  return [...tools, ...createJobsCreateManyTool(tools, adapted, httpClient).map(spend)].filter(
-    listed,
-  );
+  return [
+    ...tools,
+    ...createJobsCreateManyTool(tools, httpClient, {
+      keyedDialoguePreviews: keyedDialoguePreviews(operations),
+    }).map(spend),
+  ].filter(listed);
 }
 
 function createProfiledServer(

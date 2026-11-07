@@ -3,7 +3,7 @@ import { ApiRequestError, type HttpClient } from '../http-client.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import type { AnyJobKind } from './job-status.js';
 import { sleep, WAIT_BUDGET_MS } from './job-wait.js';
-import { checkItems, created, isRecord, withKeys } from './jobs-create-many-items.js';
+import { checkItems, created, keyFields, withKeys } from './jobs-create-many-items.js';
 import { MAX_JOBS } from './jobs-get-many.js';
 import { parseAccountOverview } from './organizations.js';
 
@@ -12,11 +12,12 @@ import { parseAccountOverview } from './organizations.js';
  * through the same path, limits and billing as separate calls. Each item runs through
  * context.callTool, so the server applies every check a direct call gets. It keeps at most
  * the account's concurrent generation limit in flight, waits out capacity refusals and
- * resends the same keyed request, and returns once every item was started or given up on,
- * within the wait budget, never waiting for the jobs themselves to finish.
+ * resends the same keyed request. One deadline bounds the whole call, so it returns within
+ * the wait budget and never waits for the jobs themselves to finish.
  */
 
-const MIN_ITEMS = 2;
+// Two or more for a new set; one is for sending the last remaining item again.
+const MIN_ITEMS = 1;
 // More than this many requests in flight only queues uploads in one server process.
 const MAX_IN_FLIGHT = 10;
 // When the plan's limit cannot be read, start slowly; capacity refusals cover the rest.
@@ -26,8 +27,8 @@ const BUSY_RETRY_MS = 20_000;
 const PREPARING_RETRY_MS = 2_000;
 // Never resend sooner than this, even when the API says Retry-After: 0.
 const MIN_RETRY_MS = 1_000;
-// No new attempt starts after this, so a request started late still returns in the budget.
-const LAUNCH_WINDOW_MS = WAIT_BUDGET_MS - 10_000;
+// No attempt starts in the budget's last REQUEST_MS: time for a request to be answered.
+const REQUEST_MS = 10_000;
 
 type CreateSpec = { kind: AnyJobKind; reads?: ('projectId' | 'videoAssetId')[] };
 
@@ -52,6 +53,8 @@ type ItemError = {
   code?: string;
   retryAfterMs?: number;
   generationId?: string;
+  /** The request may have created the job; resending it with its key is safe. */
+  outcomeUnknown?: true;
 };
 type Job = { kind: AnyJobKind; id: string; projectId?: string; videoAssetId?: string };
 type Started = { kind: AnyJobKind; id?: string; job?: Job };
@@ -61,7 +64,20 @@ type Outcome = { index: number } & (
   | { status: 'not_started'; error?: ItemError }
 );
 
-export type CreateManyOptions = { launchWindowMs?: number };
+export type CreateManyOptions = {
+  /** Whether dialogue-previews_create takes a key; an unkeyed preview cannot run here. */
+  keyedDialoguePreviews?: boolean;
+  /** The whole call's budget, and how much of its end no attempt may start in. */
+  budgetMs?: number;
+  requestMs?: number;
+};
+
+const TIMED_OUT: ItemError = {
+  message:
+    'No answer before the time limit, so this job may have started. Send this item again with the same idempotencyKey; its key makes that safe.',
+  code: 'outcome_unknown',
+  outcomeUnknown: true,
+};
 
 function itemError(error: unknown): ItemError {
   if (error instanceof ApiRequestError)
@@ -74,6 +90,16 @@ function itemError(error: unknown): ItemError {
     };
   if (error instanceof z.ZodError) return { message: z.prettifyError(error) };
   return { message: error instanceof Error ? error.message : String(error) };
+}
+
+/** A server error or a lost connection: the API may have admitted the job anyway. */
+function outcomeUnknown(error: unknown): boolean {
+  if (error instanceof ApiRequestError) return error.status >= 500 || error.status === 408;
+  return error instanceof TypeError && error.message === 'fetch failed';
+}
+
+function failure(error: unknown): ItemError {
+  return outcomeUnknown(error) ? { ...itemError(error), outcomeUnknown: true } : itemError(error);
 }
 
 /**
@@ -97,50 +123,65 @@ function retryAfter(error: unknown): { ms: number; accountBusy: boolean } | unde
 const stopsTheSet = (error: unknown) =>
   error instanceof ApiRequestError && (error.status === 401 || error.status === 402);
 
-async function inFlightLimit(http: HttpClient, items: number, signal?: AbortSignal) {
+async function inFlightLimit(
+  http: HttpClient,
+  items: number,
+  signal: AbortSignal,
+  caller: AbortSignal | undefined,
+) {
   let concurrency: number | undefined;
   try {
     concurrency = parseAccountOverview(await http.request('get', '/v2/account', { signal })).limits
       ?.concurrency;
   } catch {
-    signal?.throwIfAborted();
+    caller?.throwIfAborted();
   }
   const limit = concurrency === undefined ? UNKNOWN_IN_FLIGHT : Math.max(1, concurrency);
   return Math.min(limit, MAX_IN_FLIGHT, items);
 }
 
+const resendable = (outcome: Outcome) =>
+  outcome.status === 'not_started' ||
+  (outcome.status === 'failed' && outcome.error.outcomeUnknown === true);
+
 function nextStep(outcomes: Outcome[], halted: unknown): string {
-  const count = (status: Outcome['status']) => outcomes.filter((o) => o.status === status).length;
+  const count = (test: (outcome: Outcome) => boolean) => outcomes.filter(test).length;
   const steps: string[] = [];
-  if (count('started') > 0)
+  if (count((outcome) => outcome.status === 'started') > 0)
     steps.push(
       'Follow the started jobs with jobs_get-many, passing jobs (wait: true to wait on the server); never start them again.',
     );
-  if (count('not_started') > 0)
+  if (count((outcome) => outcome.status === 'not_started') > 0)
     steps.push(
       halted
         ? `Stopped after ${itemError(halted).message}; fix that, then call jobs_create-many again with remaining.`
-        : 'The account stayed at its concurrent generation limit, so remaining items were not started. Once jobs_get-many shows running jobs finishing, call jobs_create-many again with remaining (the same tool, idempotencyKey and items); keys make that safe.',
+        : 'The account stayed at its concurrent generation limit, so some items were not started. Once jobs_get-many shows running jobs finishing, call jobs_create-many again with remaining (the same tool, idempotencyKey and items).',
     );
-  if (count('failed') > 0)
+  if (count((outcome) => outcome.status === 'failed' && outcome.error.outcomeUnknown === true) > 0)
     steps.push(
-      'A failed item with a 5xx or no status may still have started: send that item again with the same idempotencyKey, which never creates it twice. Fix other failed items before sending them again.',
+      'Items failed with outcomeUnknown may have started. They are in remaining: send remaining again with the same tool and idempotencyKey, and each keeps its key, so the API returns a job it already started instead of starting a second one.',
+    );
+  if (count((outcome) => outcome.status === 'failed' && !outcome.error.outcomeUnknown) > 0)
+    steps.push(
+      'Other failed items were refused: fix what their error names before sending them again.',
     );
   return steps.join(' ');
 }
 
 type Run = {
-  call: (index: number) => Promise<Started>;
+  call: (index: number, signal: AbortSignal) => Promise<Started>;
   limit: number;
   items: number;
-  options: Required<CreateManyOptions>;
-  signal?: AbortSignal;
+  /** No attempt starts after this. */
+  launchBy: number;
+  /** Aborts at the deadline or when the caller cancels. */
+  signal: AbortSignal;
+  caller?: AbortSignal;
   progress: (outcomes: Outcome[], waiting: boolean) => Promise<void>;
 };
 
 /** Runs the items with at most `limit` in flight; returns each outcome and any stop. */
-async function runItems({ call, limit, items, options, signal, progress }: Run) {
-  const launchBy = Date.now() + options.launchWindowMs;
+async function runItems({ call, limit, items, launchBy, signal, caller, progress }: Run) {
   const outcomes: Outcome[] = [];
   // Shared by every worker: when the account has capacity again, and what stopped the set.
   const shared: { busyUntil: number; halted?: unknown; next: number } = { busyUntil: 0, next: 0 };
@@ -149,22 +190,25 @@ async function runItems({ call, limit, items, options, signal, progress }: Run) 
     let readyAt = 0;
     let waitedOn: ItemError | undefined;
     for (;;) {
-      const at = Math.max(shared.busyUntil, readyAt);
+      const at = Math.max(shared.busyUntil, readyAt, Date.now());
       if (shared.halted || at > launchBy)
         return { index, status: 'not_started', ...(waitedOn ? { error: waitedOn } : {}) };
       if (at > Date.now()) {
         await progress(outcomes, true);
-        await sleep(at - Date.now(), signal);
+        // Ends before launchBy, so before the deadline; only the caller can cut it short.
+        await sleep(at - Date.now(), caller);
         continue;
       }
       try {
-        return { index, status: 'started', ...(await call(index)) };
+        return { index, status: 'started', ...(await call(index, signal)) };
       } catch (error) {
-        signal?.throwIfAborted();
+        caller?.throwIfAborted();
+        // Cut off at the deadline mid-request: the API may have admitted it.
+        if (signal.aborted) return { index, status: 'failed', error: TIMED_OUT };
         const wait = retryAfter(error);
         if (!wait) {
           if (stopsTheSet(error)) shared.halted ??= error;
-          return { index, status: 'failed', error: itemError(error) };
+          return { index, status: 'failed', error: failure(error) };
         }
         waitedOn = itemError(error);
         if (wait.accountBusy) shared.busyUntil = Math.max(shared.busyUntil, Date.now() + wait.ms);
@@ -186,15 +230,20 @@ async function runItems({ call, limit, items, options, signal, progress }: Run) 
 
 export function createJobsCreateManyTool(
   listed: McpToolDefinition[],
-  all: McpToolDefinition[],
   http: HttpClient,
-  overrides: CreateManyOptions = {},
+  options: CreateManyOptions = {},
 ): McpToolDefinition[] {
-  const targets = listed.filter((tool) => tool.name in CREATE_TOOLS);
+  const { budgetMs = WAIT_BUDGET_MS, requestMs = REQUEST_MS } = options;
+  // Only tools whose creates take a key: a resend after an uncertain answer must never bill
+  // twice. Edit Dialogue previews take one only on APIs that support keyed previews.
+  const targets = listed.filter(
+    (tool) =>
+      tool.name in CREATE_TOOLS &&
+      keyFields(tool).idempotencyKey &&
+      (tool.name !== 'dialogue-previews_create' || options.keyedDialoguePreviews === true),
+  );
   if (targets.length === 0) return [];
   const names = targets.map((tool) => tool.name) as [string, ...string[]];
-  const runOptions = { launchWindowMs: LAUNCH_WINDOW_MS, ...overrides };
-  const dialogueOptions = all.find((tool) => tool.name === 'dialogue_get-options');
   const input = z
     .object({
       tool: z
@@ -207,10 +256,10 @@ export function createJobsCreateManyTool(
         ),
       items: z
         .array(z.record(z.string(), z.unknown()))
-        .min(MIN_ITEMS, `Pass at least ${MIN_ITEMS} items; for one job, call the tool itself.`)
+        .min(MIN_ITEMS, 'Pass at least one item.')
         .max(MAX_JOBS, `Pass at most ${MAX_JOBS} items; split a larger set into several calls.`)
         .describe(
-          `${MIN_ITEMS} to ${MAX_JOBS} items, each exactly the arguments tool takes on its own, such as one dubbing_create input per target language. Items must differ.`,
+          `Up to ${MAX_JOBS} items, each exactly the arguments tool takes on its own, such as one dubbing_create input per target language. Items must differ. A new set has 2 or more; a single item is for sending remaining again.`,
         ),
     })
     .strict();
@@ -221,6 +270,12 @@ export function createJobsCreateManyTool(
       code: z.string().optional(),
       retryAfterMs: z.number().optional(),
       generationId: z.string().optional(),
+      outcomeUnknown: z
+        .literal(true)
+        .optional()
+        .describe(
+          'The job may have started (no answer before the time limit, or a server error). The item is in remaining; resending it with the same idempotencyKey is safe.',
+        ),
     })
     .describe('Why the item failed, or the last refusal it waited on.');
   const job = z.object({
@@ -231,14 +286,15 @@ export function createJobsCreateManyTool(
   });
 
   const description =
-    `Start ${MIN_ITEMS} to ${MAX_JOBS} independent Sync jobs at once by running one create tool once per item: ${names.join(', ')}. ` +
+    `Start up to ${MAX_JOBS} independent Sync jobs at once by running one create tool once per item: ${names.join(', ')}. ` +
     'Use it whenever the user wants 2 or more jobs that do not depend on each other, such as one video lip-synced to several audios, one video dubbed into several languages (one dubbing_create item per language, when available), or one Edit Dialogue preview, then one video, per variant. ' +
     'It works on every plan and uses the same API, limits and billing as calling the tool once per item; it is not the batch API. ' +
     'Each item is that tool’s own arguments and is checked as a direct call would be; nothing starts if any item is invalid or repeats another. ' +
     'This is a paid action: every item is billed as its own job. Before calling, estimate each distinct configuration with the matching estimate tool, tell the user the item count and the estimated total, and wait for one confirmation of the whole set. ' +
     'Items without projectId each get a new project; to keep the set together, create one project with projects_create and pass its projectId with projectIntent=explicit in every item. ' +
-    'It keeps at most the account’s concurrent generation limit in flight and waits out capacity refusals, resending the same keyed request, then returns within about 50 seconds without waiting for the jobs to finish. ' +
-    'Each item comes back started (with kind and id), failed (with error) or not_started (the account stayed busy). Pass jobs to jobs_get-many to follow them; when remaining is present, call again later with remaining, which reuses the same keys and so never starts a job twice.';
+    'It keeps at most the account’s concurrent generation limit in flight and waits out capacity refusals by resending the same keyed request. It returns within about 50 seconds and never waits for the jobs to finish. ' +
+    'Each item comes back started (with kind and id), failed (with error) or not_started (the account stayed busy). A request still unanswered at the time limit, or answered with a server error, comes back failed with error.outcomeUnknown: the job may have started. ' +
+    'Pass jobs to jobs_get-many to follow the started ones. When remaining is present (items not started or with an unknown outcome), call again later with remaining as it is: every item keeps its derived keys, so a resend never starts a job twice.';
 
   return [
     {
@@ -275,7 +331,9 @@ export function createJobsCreateManyTool(
             items: z.array(z.record(z.string(), z.unknown())),
           })
           .optional()
-          .describe('The items not started, as passed; send them again later as they are.'),
+          .describe(
+            'Items to send again later as they are: those not started and those failed with outcomeUnknown.',
+          ),
         nextStep: z.string().describe('What to do next.'),
       },
       annotations: {
@@ -285,24 +343,26 @@ export function createJobsCreateManyTool(
         openWorldHint: true,
       },
       handler: async (args, context?: ToolRequestContext) => {
+        // One deadline for the whole call, from before the account lookup.
+        const caller = context?.signal;
+        const deadline = AbortSignal.timeout(budgetMs);
+        const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
+        const launchBy = Date.now() + budgetMs - requestMs;
         const request = input.parse(args);
         const callTool = context?.callTool;
         if (!callTool) throw new Error('jobs_create-many runs only inside a Sync MCP session.');
         const target = targets.find((candidate) => candidate.name === request.tool)!;
         const spec = CREATE_TOOLS[request.tool]!;
-        const signal = context?.signal;
-        const preview = request.tool === 'dialogue-previews_create';
-        const options = preview ? await dialogueOptions?.handler({}, context) : undefined;
-        const keyedPreview = !preview || (isRecord(options) && options.keyedPreview === true);
+        const takes = keyFields(target);
         // Keys first, so a tool that requires one accepts the item as the agent sent it.
         const calls = checkItems(
           target,
-          request.items.map((item) => withKeys(target, request.idempotencyKey, item, keyedPreview)),
+          request.items.map((item) => withKeys(request.tool, takes, request.idempotencyKey, item)),
         );
-        const limit = await inFlightLimit(http, calls.length, signal);
-        const call = async (index: number) => {
+        const limit = await inFlightLimit(http, calls.length, signal, caller);
+        const call = async (index: number, itemSignal: AbortSignal) => {
           const item = calls[index]!;
-          const result = created(await callTool(request.tool, item, { signal }));
+          const result = created(await callTool(request.tool, item, { signal: itemSignal }));
           const id = typeof result.id === 'string' ? result.id : undefined;
           const reads = Object.fromEntries(
             (spec.reads ?? []).flatMap((field) =>
@@ -323,11 +383,13 @@ export function createJobsCreateManyTool(
           call,
           limit,
           items: calls.length,
-          options: runOptions,
+          launchBy,
           signal,
+          caller,
           progress,
         });
         const notStarted = outcomes.filter((outcome) => outcome.status === 'not_started');
+        const again = outcomes.filter(resendable);
         return {
           tool: request.tool,
           summary: {
@@ -343,12 +405,12 @@ export function createJobsCreateManyTool(
           jobs: outcomes.flatMap((outcome) =>
             outcome.status === 'started' && outcome.job ? [outcome.job] : [],
           ),
-          ...(notStarted.length > 0
+          ...(again.length > 0
             ? {
                 remaining: {
                   tool: request.tool,
                   idempotencyKey: request.idempotencyKey,
-                  items: notStarted.map((outcome) => request.items[outcome.index]!),
+                  items: again.map((outcome) => request.items[outcome.index]!),
                 },
               }
             : {}),

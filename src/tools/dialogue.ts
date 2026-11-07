@@ -27,6 +27,19 @@ export function dialogueOperations(operations: ParsedOperation[]) {
 }
 const object = z.record(z.string(), z.unknown());
 
+/** Whether POST /v2/dialogue-edits takes an Idempotency-Key, so a preview retry is safe. */
+export function keyedDialoguePreviews(operations: ParsedOperation[]): boolean {
+  return operations.some(
+    (operation) =>
+      operation.path === paths[2] &&
+      operation.method === 'post' &&
+      operation.parameters.some(
+        (parameter) =>
+          parameter.in === 'header' && parameter.name.toLowerCase() === 'idempotency-key',
+      ),
+  );
+}
+
 /** transcriptionJobId is the API's name; transcriptionId is the older MCP name. */
 function transcriptionJobId(args: Record<string, unknown>): unknown {
   const { transcriptionJobId: id, transcriptionId: alias } = args;
@@ -52,15 +65,7 @@ export function createDialogueTools(
   if (!transcribe || !readTranscript || !preview || !readPreview || !preview.inputSchema.edits)
     return [];
 
-  const keyedPreview = selected.some(
-    (operation) =>
-      operation.path === paths[2] &&
-      operation.method === 'post' &&
-      operation.parameters.some(
-        (parameter) =>
-          parameter.in === 'header' && parameter.name.toLowerCase() === 'idempotency-key',
-      ),
-  );
+  const keyedPreview = keyedDialoguePreviews(selected);
 
   async function source(args: Record<string, unknown>, signal?: AbortSignal) {
     signal?.throwIfAborted();
