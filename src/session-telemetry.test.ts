@@ -50,3 +50,15 @@ it('bounds client metadata and changes pseudonyms across process lifetimes and t
     protocol: 'unknown',
   });
 });
+
+it.each([
+  ['codex-mcp-client', 'codex-mcp-client', 'generic'],
+  ['cursor-vscode', 'cursor-vscode', 'generic'],
+  ['Anthropic/ClaudeAI', 'anthropic/claudeai', 'claude'],
+])('names known client %s in closed-session telemetry', (name, client, profile) => {
+  const emit = vi.fn();
+  const telemetry = new SessionTelemetry(emit);
+  telemetry.start('session', name, '2025-06-18');
+  telemetry.close('session', 'closed');
+  expect(emit.mock.calls[0]?.[1]).toMatchObject({ clientName: client, clientProfile: profile });
+});

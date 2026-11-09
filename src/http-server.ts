@@ -261,6 +261,28 @@ export function isAllowedMcpOrigin(origin: string | undefined): boolean {
   }
 }
 
+/**
+ * What one request names, for its mcp_rpc_request log line: the tool a tools/call runs,
+ * and the resource a resources/read loads, so a widget such as the generation status card
+ * shows up when a client renders it. Only names of the expected shape are logged; anything
+ * else, which a client controls, is logged as a placeholder.
+ */
+export function rpcLogDetails(method: string, params: unknown): Record<string, string> {
+  const { name, uri } = asRecord(params);
+  if (method === 'tools/call')
+    return {
+      tool: typeof name === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(name) ? name : '<other tool>',
+    };
+  if (method === 'resources/read')
+    return {
+      resource:
+        typeof uri === 'string' && /^ui:\/\/sync\/[a-zA-Z0-9._-]{1,120}$/.test(uri)
+          ? uri
+          : '<other resource>',
+    };
+  return {};
+}
+
 /** A hosted session's usage recorder; it records initialization once the reply succeeded. */
 function startUsageTelemetry(
   queue: TelemetryQueue | undefined,
@@ -809,19 +831,11 @@ export async function startHttpServer(
       }
       for (const rpcBody of rpcMessages) {
         if (typeof rpcBody.method !== 'string') continue;
-        const rpcParams = asRecord(rpcBody.params);
         logEvent('mcp_rpc_request', {
           requestId: res.locals.requestId,
           method: rpcBody.method.slice(0, 80),
           ...correlation,
-          ...(rpcBody.method === 'tools/call'
-            ? {
-                tool:
-                  typeof rpcParams.name === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(rpcParams.name)
-                    ? rpcParams.name
-                    : '<other tool>',
-              }
-            : {}),
+          ...rpcLogDetails(rpcBody.method, rpcBody.params),
         });
       }
       await runWithAuth(

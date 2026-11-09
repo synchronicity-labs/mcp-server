@@ -11,6 +11,9 @@ const CLIENTS = new Set([
   'claude-ai',
   'claude-code',
   'anthropic/claudeai',
+  // Codex with Sync in its own mcp_servers config, not through the ChatGPT connector.
+  'codex-mcp-client',
+  'cursor-vscode',
   'hermes-agent',
   'mcp',
 ]);
