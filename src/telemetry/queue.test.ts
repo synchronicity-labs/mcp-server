@@ -58,9 +58,9 @@ describe('TelemetryQueue', () => {
     expect(queue.stats()).toMatchObject({ inFlight: 1, pending: 1 });
     release();
     await settle();
-    queue.flush();
-    await settle();
+    // The finished send resumed the blocked batch without waiting for the timer.
     expect(batches).toEqual([1, 1]);
+    expect(queue.stats()).toMatchObject({ pending: 0 });
   });
 
   it('sends outside the recording request’s async context', async () => {

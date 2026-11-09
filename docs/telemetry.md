@@ -111,7 +111,7 @@ declares becomes one entry:
 | One of a fixed list (model, mode, workflow) | The value |
 | Boolean or number | The value |
 | Language code (fields named like `language`) | The code, such as `es` or `pt-BR`; a list of codes is joined, such as `es,fr` |
-| `model`, `provider`, `voiceId`, `format`, `contentType`, `status`, `tool`, `errorCode` | The value when it is one token without spaces, such as `lipsync-2-pro` |
+| `model`, `provider`, `voiceId`, `format`, `contentType`, `status`, `tool`, `errorCode` | The value when it is one token, such as `lipsync-2-pro` or `video/mp4` |
 | UUID | `uuid` |
 | URL | `url:` and a host class: `youtube`, `tiktok`, `instagram`, `x`, `facebook`, `vimeo`, `google_drive`, `dropbox`, `sync`, `openai_file`, `s3`, `gcs` or `other` |
 | Local file path | `path` |
@@ -119,7 +119,10 @@ declares becomes one entry:
 | List | `array:` and its length |
 | Object | `object` |
 
-Fields the tool does not declare are not recorded. Hosts other than the listed ones
+A recorded value must be one token of at most 64 characters, with no spaces, URL scheme,
+`@` or file extension (dots only before a digit, as in a version). Anything else is recorded
+by its kind, and the API refuses a batch that breaks this. Fields the tool does not declare
+are not recorded. Hosts other than the listed ones
 become `other`, so a customer's own domain never appears.
 
 ## Delivery

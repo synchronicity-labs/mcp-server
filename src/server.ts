@@ -30,7 +30,7 @@ import {
   withStatusCardTool,
 } from './generation-status.js';
 import { ApiRequestError, cameFromApi, createHttpClient } from './http-client.js';
-import { errorSummary } from './log-redaction.js';
+import { errorFields } from './log-redaction.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import {
@@ -545,8 +545,8 @@ export function logToolError(profile: () => string): (tool: string, error: unkno
         status: api?.status,
         code: api?.code,
         source: cameFromApi(error) ? 'api' : 'mcp',
-        // Never the raw message: it quotes arguments and the API's own error text.
-        message: errorSummary(error),
+        // Never a message: both ours and the API's quote what the caller sent.
+        ...errorFields(error),
       })}\n`,
     );
   };

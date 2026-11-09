@@ -5,7 +5,11 @@ import { ApiRequestError, cameFromApi } from '../http-client.js';
 export type Facet = string | number | boolean;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SAFE_VALUE = /^[A-Za-z0-9 ._:+/(),-]{1,64}$/;
+// The shape the API accepts for a recorded value (sync-api-v2 mcp-analytics.ts): one
+// token with no spaces, URL scheme, @ or file extension; dots only before a digit, as in
+// a version. A value that does not fit is recorded by its kind instead.
+const FACET_VALUE = /^(?!.*:\/)[A-Za-z0-9][A-Za-z0-9_:/+-]*(?:\.[0-9][A-Za-z0-9_-]*)*$/;
+export const isFacetValue = (value: string) => value.length <= 64 && FACET_VALUE.test(value);
 const LANGUAGE_FIELD = /(language|locale|lang)s?$/i;
 const LANGUAGE_CODE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/i;
 const LOCAL_PATH = /^(\/|~\/|\.\.?\/|[A-Za-z]:[\\/]|\\\\)/;
@@ -21,7 +25,6 @@ const IDENTIFIER_FIELDS = new Set([
   'tool',
   'errorCode',
 ]);
-const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/;
 const MAX_FIELDS = 40;
 
 // Public platforms only: any other host, a customer's own domain included, is "other".
@@ -102,13 +105,13 @@ function closedSet(schema: z.ZodType): ReadonlySet<string> | null {
 }
 
 function stringFacet(key: string, value: string, schema: z.ZodType | undefined): Facet {
-  if (schema && closedSet(schema)?.has(value)) return SAFE_VALUE.test(value) ? value : 'enum';
+  if (schema && closedSet(schema)?.has(value)) return isFacetValue(value) ? value : 'enum';
   if (UUID.test(value)) return 'uuid';
   const url = urlClass(value);
   if (url) return url;
   if (LOCAL_PATH.test(value)) return 'path';
   if (LANGUAGE_FIELD.test(key) && LANGUAGE_CODE.test(value)) return value;
-  if (IDENTIFIER_FIELDS.has(key) && IDENTIFIER.test(value)) return value;
+  if (IDENTIFIER_FIELDS.has(key) && isFacetValue(value)) return value;
   return textBucket(value.length);
 }
 
