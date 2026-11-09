@@ -14,6 +14,11 @@ const PROTOCOL = /^\d{4}-\d{2}-\d{2}$/;
 const REVISION_FORMAT = /^[0-9a-f]{7,40}$/;
 const CAPABILITIES = ['sampling', 'elicitation', 'roots', 'tasks'] as const;
 const STDIO_OWNER = 'stdio';
+// The API refuses a whole batch over any out-of-range number, so cap them here.
+const MAX_GAP_MS = 7 * 24 * 3_600_000;
+const MAX_LATENCY_MS = 3_600_000;
+const MAX_COUNT = 100_000;
+const capped = (value: number, max: number) => Math.min(Math.max(0, Math.round(value)), max);
 
 export function telemetryClientName(name: string | undefined): string | undefined {
   const normalized = name?.trim().toLowerCase();
@@ -190,7 +195,7 @@ export class TelemetrySession {
           ...(outcome.outcome === 'invalid_arguments' && {
             invalid_fields: invalidFields(context.shape, context.args),
           }),
-          latency_ms: Math.round(performance.now() - started),
+          latency_ms: capped(performance.now() - started, MAX_LATENCY_MS),
           ...(failure === undefined && resultFacets(context.tool, result)),
         });
       } catch {
@@ -203,11 +208,11 @@ export class TelemetrySession {
     const at = performance.now();
     this.#callIndex += 1;
     const sequence = {
-      call_index: this.#callIndex,
+      call_index: capped(this.#callIndex, MAX_COUNT),
       ...(this.#previousTool && { previous_tool: this.#previousTool }),
-      ms_since_session_start: Math.round(at - this.#started),
+      ms_since_session_start: capped(at - this.#started, MAX_GAP_MS),
       ...(this.#previousCallAt !== undefined && {
-        ms_since_previous_call: Math.round(at - this.#previousCallAt),
+        ms_since_previous_call: capped(at - this.#previousCallAt, MAX_GAP_MS),
       }),
     };
     this.#previousTool = tool;

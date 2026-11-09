@@ -218,7 +218,7 @@ export function resultFacets(tool: string, result: unknown): Record<string, stri
     ...(batchId && { batch_id: batchId }),
     ...(projectId && { project_id: projectId }),
     ...(status && { result_status: status }),
-    ...(list && { result_count: list.length }),
+    ...(list && { result_count: Math.min(list.length, 100_000) }),
   };
 }
 
