@@ -42,6 +42,7 @@ import { REVISION } from './revision.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
 import { SessionRegistry, sessionOwner } from './session-registry.js';
 import { SessionTelemetry } from './session-telemetry.js';
+import { type TelemetryQueue, TelemetrySession } from './telemetry/index.js';
 import { uploadRuntime } from './upload-runtime.js';
 
 export {
@@ -260,6 +261,29 @@ export function isAllowedMcpOrigin(origin: string | undefined): boolean {
   }
 }
 
+/** A hosted session's usage recorder; it records initialization once the reply succeeded. */
+function startUsageTelemetry(
+  queue: TelemetryQueue | undefined,
+  params: {
+    clientInfo: { name: string; version?: string };
+    protocolVersion?: string;
+    capabilities?: unknown;
+  },
+) {
+  if (!queue) return { session: undefined, record: () => {} };
+  const session = new TelemetrySession(queue, 'http');
+  session.setClient(params.clientInfo.name, params.clientInfo.version);
+  return {
+    session,
+    record: (ownerKey: string, token: string) =>
+      session.initialized(
+        { protocolVersion: params.protocolVersion, capabilities: params.capabilities },
+        ownerKey,
+        token,
+      ),
+  };
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
@@ -284,8 +308,13 @@ export function createHttpMcpTransport(
 
 export async function startHttpServer(
   serverFactory: {
-    createServer: (clientName?: string, handshakeClientName?: string) => McpServer;
+    createServer: (
+      clientName?: string,
+      handshakeClientName?: string,
+      telemetry?: TelemetrySession,
+    ) => McpServer;
     toolCount: number;
+    telemetry?: TelemetryQueue;
   },
   config: SyncMcpConfig,
 ): Promise<void> {
@@ -620,6 +649,7 @@ export async function startHttpServer(
       sessions: sessions.stats(),
       requests: requestMetrics.snapshot(),
       uploads: uploadRuntime.snapshot(),
+      ...(serverFactory.telemetry && { telemetry: serverFactory.telemetry.stats() }),
       memory: {
         rssBytes: memory.rss,
         heapUsedBytes: memory.heapUsed,
@@ -684,6 +714,9 @@ export async function startHttpServer(
     let reservation: ReturnType<typeof sessions.reserve>;
     let lease: ReturnType<typeof sessions.acquire>;
     let initializedSessionId: string | undefined;
+    let recordInitialization: (ownerKey: string, token: string) => void = () => {};
+    // Verified user, OAuth client and organization: the session's owner for telemetry too.
+    const ownerKey = JSON.stringify([owner.sub, owner.clientId, owner.organizationId]);
     try {
       const suppliedId = req.headers['mcp-session-id'];
       if (suppliedId !== undefined && typeof suppliedId !== 'string') {
@@ -720,9 +753,12 @@ export async function startHttpServer(
         const id = randomUUID();
         sessionId = id;
         initializedSessionId = id;
+        const usage = startUsageTelemetry(serverFactory.telemetry, init.data.params);
+        recordInitialization = usage.record;
         session = new HttpSession(
           init.data.params.clientInfo.name.slice(0, 160),
-          serverFactory.createServer,
+          (clientName, handshakeClientName) =>
+            serverFactory.createServer(clientName, handshakeClientName, usage.session),
           (version) => sessionTelemetry.protocol(id, version),
           (details) =>
             logEvent('mcp_rpc_error', {
@@ -792,10 +828,11 @@ export async function startHttpServer(
         token,
         session.clientName,
         () => session.handleRequest(req, res, !!initializedSessionId),
-        JSON.stringify([owner.sub, owner.clientId, owner.organizationId]),
+        ownerKey,
       );
       if (initializedSessionId && res.statusCode >= 400)
         await sessions.remove(initializedSessionId, 'initialization_failed');
+      else recordInitialization(ownerKey, token);
     } catch (error) {
       if (initializedSessionId)
         await sessions.remove(initializedSessionId, 'initialization_failed');
@@ -887,6 +924,8 @@ export async function startHttpServer(
     if (runtimeStats.pending > 0 || runtimeStats.inFlight > 0) {
       logEvent('shutdown_grace_expired', { sessions: runtimeStats });
     }
+    // Hand the drained requests' events to the API; the deploy does not wait for it.
+    serverFactory.telemetry?.flush();
 
     // Freeze reservations before taking final snapshots so late initialization cannot escape cleanup.
     sessions.stopAccepting();

@@ -29,7 +29,8 @@ import {
   withGenerationStatusCard,
   withStatusCardTool,
 } from './generation-status.js';
-import { ApiRequestError, createHttpClient } from './http-client.js';
+import { ApiRequestError, cameFromApi, createHttpClient } from './http-client.js';
+import { errorFields } from './log-redaction.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
 import {
@@ -47,6 +48,13 @@ import {
   UNATTENDED_INSTRUCTIONS_PREFIX,
   withoutSpendConfirmation,
 } from './spend-confirmation.js';
+import {
+  createTelemetryQueue,
+  isMcpEventsOperation,
+  type TelemetryQueue,
+  TelemetrySession,
+} from './telemetry/index.js';
+import { observeRejectedCalls, trackToolCall } from './telemetry/tool-calls.js';
 import {
   nameTakenByRenamedTool,
   oldNameAliases,
@@ -453,11 +461,13 @@ export function registerTools(
     const run = async (
       args: Record<string, unknown> | undefined,
       ctx: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
+      calledAs?: string,
     ): Promise<CallToolResult> => {
       // Tools take the request's signal and _meta, not the SDK handler context.
       const context = {
         signal: ctx.mcpReq.signal,
         _meta: ctx.mcpReq._meta,
+        ...(calledAs && { calledAs }),
         progress: progressSender(ctx.mcpReq._meta?.progressToken, (notification) =>
           ctx.mcpReq.notify(notification),
         ),
@@ -480,7 +490,7 @@ export function registerTools(
     // An old name that is now another tool's name (generations_estimate-cost) is that tool.
     for (const legacy of oldNameAliases(tool.name).filter((name) => !names.has(name)))
       server.registerTool(legacy, config, async (args, ctx) => {
-        const result = await run(args, ctx);
+        const result = await run(args, ctx, legacy);
         return {
           ...result,
           content: [
@@ -490,6 +500,15 @@ export function registerTools(
         };
       });
   }
+}
+
+/** Each tool under its name and the old names it still answers to. */
+function toolsByCallableName(tools: McpToolDefinition[]): Map<string, McpToolDefinition> {
+  const byName = new Map(tools.map((tool) => [tool.name, tool]));
+  for (const tool of tools)
+    for (const legacy of oldNameAliases(tool.name))
+      if (!byName.has(legacy)) byName.set(legacy, tool);
+  return byName;
 }
 
 // Agents resend a rejected request every few seconds unless told what changes the outcome.
@@ -525,7 +544,9 @@ export function logToolError(profile: () => string): (tool: string, error: unkno
         profile: profile(),
         status: api?.status,
         code: api?.code,
-        message: (error instanceof Error ? error.message : String(error)).slice(0, 300),
+        source: cameFromApi(error) ? 'api' : 'mcp',
+        // Never a message: both ours and the API's quote what the caller sent.
+        ...errorFields(error),
       })}\n`,
     );
   };
@@ -774,6 +795,7 @@ function createTools(
   const generatedOperations = operations.filter(
     (operation) =>
       operation.operationId !== 'analytics_captureChatgptEvent' &&
+      !isMcpEventsOperation(operation) &&
       !feedbackOperation(operation) &&
       translationPreviewOperations([operation]).length === 0 &&
       !operation.path.startsWith('/v2/audio-trims') &&
@@ -882,6 +904,7 @@ function createProfiledServer(
   // response carries the instructions, so they follow the announced client.
   handshakeClientName?: string,
   updateCheck?: UpdateCheck,
+  telemetry?: TelemetrySession,
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined = httpClientName;
@@ -926,53 +949,62 @@ function createProfiledServer(
     (tool) =>
       ({
         ...tool,
-        handler: async (...parameters: Parameters<typeof tool.handler>) => {
-          const [args] = parameters;
-          if (!profile) throw new Error('Complete MCP initialization before calling tools.');
-          if (isAppOnlyTool(tool) && !profile.supportsAppUi)
-            throw new Error('Open the Sync app in ChatGPT, or use the Sync tools in this client.');
-          if (
-            !profile.supportsUploads &&
-            (['assets_upload', 'assets_open-upload-widget'].includes(tool.name) ||
-              (tool.name === 'lipsync_create' &&
-                ['video', 'image', 'audio'].some((key) => args[key] !== undefined)))
-          ) {
-            throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
-          }
-          const activeProfile = profile;
-          const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
-          const execute = () =>
-            trackToolExecution(
-              // The analytics collector still names tools as they were before the rename.
-              previousToolName(tool.name) ?? tool.name,
-              args,
-              parameters[1]?._meta,
-              activeProfile.name,
-              httpClient,
-              (businessArgs) =>
-                tool.handler(businessArgs, {
-                  ...parameters[1],
-                  clientProfile: activeProfile,
-                  clientName,
-                  callTool,
-                  // Only stdio holds a connection that can carry an unrelated notification.
-                  ...(config.transport === 'stdio'
-                    ? {
-                        toolListChanged: () =>
-                          void server.server.sendToolListChanged().catch(() => {}),
-                      }
-                    : {}),
-                }),
-              analytics,
-            );
-          // Each call keeps the organization it started in, even if the session switches.
-          const organization = organizationForCall(tool, args, organizationSession);
-          return runInOrganizationSession(organizationSession, () =>
-            runInOrganization(organization, execute),
-          );
-        },
+        handler: async (...parameters: Parameters<typeof tool.handler>) =>
+          telemetry
+            ? trackToolCall(telemetry, tool, parameters[0], parameters[1], () =>
+                runSessionTool(tool, parameters),
+              )
+            : runSessionTool(tool, parameters),
       }) as McpToolDefinition,
   );
+  // One client or nested call: the session's checks, then the tool in its organization.
+  async function runSessionTool(
+    tool: McpToolDefinition,
+    parameters: Parameters<McpToolDefinition['handler']>,
+  ): Promise<unknown> {
+    const [args] = parameters;
+    if (!profile) throw new Error('Complete MCP initialization before calling tools.');
+    if (isAppOnlyTool(tool) && !profile.supportsAppUi)
+      throw new Error('Open the Sync app in ChatGPT, or use the Sync tools in this client.');
+    if (
+      !profile.supportsUploads &&
+      (['assets_upload', 'assets_open-upload-widget'].includes(tool.name) ||
+        (tool.name === 'lipsync_create' &&
+          ['video', 'image', 'audio'].some((key) => args[key] !== undefined)))
+    ) {
+      throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
+    }
+    const activeProfile = profile;
+    const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
+    const execute = () =>
+      trackToolExecution(
+        // The analytics collector still names tools as they were before the rename.
+        previousToolName(tool.name) ?? tool.name,
+        args,
+        parameters[1]?._meta,
+        activeProfile.name,
+        httpClient,
+        (businessArgs) =>
+          tool.handler(businessArgs, {
+            ...parameters[1],
+            clientProfile: activeProfile,
+            clientName,
+            callTool,
+            // Only stdio holds a connection that can carry an unrelated notification.
+            ...(config.transport === 'stdio'
+              ? {
+                  toolListChanged: () => void server.server.sendToolListChanged().catch(() => {}),
+                }
+              : {}),
+          }),
+        analytics,
+      );
+    // Each call keeps the organization it started in, even if the session switches.
+    const organization = organizationForCall(tool, args, organizationSession);
+    return runInOrganizationSession(organizationSession, () =>
+      runInOrganization(organization, execute),
+    );
+  }
   for (const tool of sessionTools) handlers.set(tool.name, tool.handler);
   registerTools(
     server,
@@ -982,6 +1014,7 @@ function createProfiledServer(
     config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,
     config.transport === 'stdio' && updateCheck ? withUpdateNotice(updateCheck) : undefined,
   );
+  observeRejectedCalls(server, telemetry, () => toolsByCallableName(sessionTools));
   const resources: Resource[] = [];
   resources.push({
     name: 'sync-generation-status',
@@ -1166,7 +1199,13 @@ export async function createSyncMcpServer(
   const authHeaders = config.transport === 'http' ? {} : await resolveAuth(config, log);
   const operations = parseSpec(await fetchSpec(config.baseUrl));
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
-  return createProfiledServer(
+  const queue = createTelemetryQueue(
+    config.telemetry !== false,
+    operations,
+    createHttpClient(config.baseUrl, authHeaders),
+  );
+  const telemetry = queue && new TelemetrySession(queue, 'stdio');
+  const server = createProfiledServer(
     config,
     operations,
     authHeaders,
@@ -1176,18 +1215,54 @@ export async function createSyncMcpServer(
     undefined,
     undefined,
     options.updateCheck,
+    telemetry,
   );
+  if (queue && telemetry) recordStdioSession(server, config, queue, telemetry);
+  return server;
+}
+
+/** stdio has one session per process: it starts at initialization and ends at close. */
+function recordStdioSession(
+  server: McpServer,
+  config: SyncMcpConfig,
+  queue: TelemetryQueue,
+  telemetry: TelemetrySession,
+): void {
+  const onInitialized = server.server.oninitialized;
+  server.server.oninitialized = () => {
+    onInitialized?.();
+    const client = server.server.getClientVersion();
+    telemetry.setClient(client?.name, client?.version);
+    telemetry.initialized({
+      protocolVersion: server.server.getNegotiatedProtocolVersion(),
+      capabilities: server.server.getClientCapabilities(),
+      toolsets: config.toolsets,
+      spendConfirmation: config.spendConfirmation,
+    });
+  };
+  const onClose = server.server.onclose;
+  server.server.onclose = () => {
+    onClose?.();
+    queue.flush();
+  };
 }
 
 export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
-  createServer: (clientName?: string, handshakeClientName?: string) => McpServer;
+  createServer: (
+    clientName?: string,
+    handshakeClientName?: string,
+    telemetry?: TelemetrySession,
+  ) => McpServer;
   toolCount: number;
+  /** Undefined when telemetry is off or the API does not collect MCP events yet. */
+  telemetry?: TelemetryQueue;
 }> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
   // Filter and build schemas once. Session profiles and SDK transports stay local.
   const operations = parseSpec(await fetchSpec(config.baseUrl)).filter(
     (operation) =>
       operation.operationId === 'analytics_captureChatgptEvent' ||
+      isMcpEventsOperation(operation) ||
       feedbackOperation(operation) ||
       // Read for its published segment limit; raw generation stays unhosted.
       (operation.method === 'post' && operation.path === '/v2/generate') ||
@@ -1219,7 +1294,12 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
     toolCount: new Set(tools.map((tool) => tool.name)).size,
-    createServer: (clientName, handshakeClientName) =>
+    telemetry: createTelemetryQueue(
+      config.telemetry !== false,
+      operations,
+      createHttpClient(config.baseUrl),
+    ),
+    createServer: (clientName, handshakeClientName, telemetry) =>
       createProfiledServer(
         config,
         operations,
@@ -1229,6 +1309,8 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
         sharedCatalog,
         clientName,
         handshakeClientName,
+        undefined,
+        telemetry,
       ),
   };
 }

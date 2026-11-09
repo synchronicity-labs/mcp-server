@@ -117,6 +117,21 @@ the first tool result of the session tell the agent to ask you to restart with
 To turn it off, set `SYNC_MCP_UPDATE_CHECK=off` or pass `--no-update-check`. It is
 also skipped when `CI` is set, and the hosted server never checks.
 
+#### Usage telemetry
+
+The server tells sync. when a session starts and, for each tool call, which tool ran,
+whether it worked and how long it took, so we can see which tools people rely on and
+where agents get stuck. It sends these to the sync. API you already use, signed with
+your own API key or login, a few seconds apart and never in the way of a call.
+
+It records the shape of a call, never its content: a model or language you chose, but
+only the length of a script, and only the kind of a link (YouTube, Sync storage or
+`other`), never the link. It never sends prompts, scripts, file names, URLs, media,
+error messages or your key. [docs/telemetry.md](docs/telemetry.md) lists every field.
+
+To turn it off, set `SYNC_MCP_TELEMETRY=off` or `DO_NOT_TRACK=1`, or pass
+`--no-telemetry`.
+
 ## What to ask
 
 Paste prompts like these into your agent. Asset IDs come from your sync. library.

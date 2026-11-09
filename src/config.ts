@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { resolveChatgptRelease } from './chatgpt-release.js';
 import { parseSpendConfirmation } from './spend-confirmation.js';
+import { resolveTelemetry } from './telemetry/index.js';
 import { parseToolsets, type Toolset } from './toolsets.js';
 import { parseUpdateCheck } from './update-check.js';
 
@@ -16,6 +17,8 @@ export type SyncMcpConfig = {
   updateCheck?: boolean;
   /** stdio only: which tools to list; undefined lists the default set. See toolsets.ts. */
   toolsets?: Toolset[];
+  /** False sends no usage events; see docs/telemetry.md. */
+  telemetry?: boolean;
   chatgptApp?: {
     directory: string;
     previousDirectories?: string[];
@@ -82,6 +85,7 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
     updateCheck:
       overrides.updateCheck ?? parseUpdateCheck(process.env.SYNC_MCP_UPDATE_CHECK) ?? true,
     toolsets: overrides.toolsets ?? parseToolsets(process.env.SYNC_MCP_TOOLSETS),
+    telemetry: resolveTelemetry(overrides.telemetry, process.env),
     chatgptApp:
       overrides.chatgptApp ??
       (release
