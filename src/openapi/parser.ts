@@ -1,6 +1,8 @@
 import { MCP_EVENTS_OPERATION_ID, MCP_EVENTS_PATH } from '../telemetry/index.js';
-import { FEEDBACK_OPERATION_ID } from '../tools/feedback.js';
 import type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from './types.js';
+
+/** POST /v2/feedback, read by feedback_send (tools/feedback.ts). */
+export const FEEDBACK_OPERATION_ID = 'agentFeedback_submit';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
