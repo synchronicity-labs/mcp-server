@@ -20,7 +20,9 @@ contract. Two things still need a small, isolated context:
 
 The retained context therefore contains a bounded client name, ownership claims,
 initialization flag and **only currently running** request instances. It contains
-no token, tool arguments, responses, widget HTML or idle SDK graph. Every request
+no token, tool arguments, responses, widget HTML or idle SDK graph. Usage telemetry
+keeps a call counter and the previous tool's name per session; its queue holds the
+token of a pending batch until it is sent, normally within two seconds (docs/telemetry.md). Every request
 still passes bearer verification; token refresh does not change ownership. Every
 initialization gets its own random ID, never one shared session per user.
 

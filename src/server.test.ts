@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { resolveClientProfile } from './client-profile.js';
 import { ApiRequestError } from './http-client.js';
 import {
@@ -97,8 +98,39 @@ describe('createToolErrorResult', () => {
         profile: 'chatgpt',
         status: 429,
         code: 'concurrency_limit_reached',
-        message: 'limit',
+        source: 'mcp',
+        errorName: 'ApiRequestError',
       });
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it.each([
+    'The uploaded video isn\'t a fetchable URL (received "abc"private words").',
+    'Could not fetch media from private-host.internal: connection refused',
+  ])('logs no message text from a failed call: %s', (message) => {
+    const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    try {
+      logToolError(() => 'claude')('lipsync_create', new Error(message));
+      const raw = String(write.mock.calls[0]?.[0]);
+      expect(JSON.parse(raw)).toMatchObject({ tool: 'lipsync_create', errorName: 'Error' });
+      expect(raw).not.toMatch(/private|abc|fetchable/);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it('logs the fields of a validation error, not the values', () => {
+    const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    try {
+      const error = z
+        .object({ items: z.array(z.object({ url: z.url() })) })
+        .safeParse({ items: [{ url: 'secret words' }] }).error;
+      logToolError(() => 'claude')('jobs_create-many', error);
+      const raw = String(write.mock.calls[0]?.[0]);
+      expect(JSON.parse(raw)).toMatchObject({ errorName: 'ZodError', fields: ['items.[].url'] });
+      expect(raw).not.toContain('secret');
     } finally {
       write.mockRestore();
     }
@@ -258,12 +290,21 @@ describe('SERVER_INSTRUCTIONS', () => {
   });
 
   it('keeps ChatGPT and Studio guidance out of model-only clients', () => {
-    expect(serverInstructions(resolveClientProfile('openai-mcp'))).toBe(SERVER_INSTRUCTIONS);
+    expect(serverInstructions(resolveClientProfile('openai-mcp (codex)'))).toBe(
+      SERVER_INSTRUCTIONS,
+    );
     const modelOnly = serverInstructions(resolveClientProfile('claude-code'));
     expect(modelOnly).not.toContain('When Studio publishes');
     expect(modelOnly).not.toContain('In ChatGPT');
     expect(modelOnly).toContain('exactly one visual input');
     expect(modelOnly).toContain('assets_create-upload-url');
+  });
+
+  it('mentions the jobs_*-many tools only to clients that list them', () => {
+    const chatgpt = serverInstructions(resolveClientProfile('openai-mcp'));
+    expect(chatgpt).not.toContain('jobs_create-many');
+    expect(chatgpt).toContain('When Studio publishes');
+    expect(serverInstructions(resolveClientProfile('claude-code'))).toContain('jobs_create-many');
   });
 });
 

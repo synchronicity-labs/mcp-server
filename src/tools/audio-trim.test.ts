@@ -129,7 +129,7 @@ describe('audio preparation tools', () => {
     expect(schema.properties.assetId?.deprecated).toBeUndefined();
     expect(schema.properties.audioAssetId?.deprecated).toBe(true);
     expect(trim!.description).toContain(
-      'audio asset, passed as assetId, as a new reusable asset. Explain and confirm',
+      'Pass assetId, not its deprecated alias audioAssetId; the call fails when neither is given',
     );
     for (const source of [{ assetId: id }, { audioAssetId: id }, { assetId: id, audioAssetId: id }])
       await trim!.handler({ ...source, durationSeconds: 15, idempotencyKey: id });

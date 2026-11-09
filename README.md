@@ -117,6 +117,21 @@ the first tool result of the session tell the agent to ask you to restart with
 To turn it off, set `SYNC_MCP_UPDATE_CHECK=off` or pass `--no-update-check`. It is
 also skipped when `CI` is set, and the hosted server never checks.
 
+#### Usage telemetry
+
+The server tells sync. when a session starts and, for each tool call, which tool ran,
+whether it worked and how long it took, so we can see which tools people rely on and
+where agents get stuck. It sends these to the sync. API you already use, signed with
+your own API key or login, a few seconds apart and never in the way of a call.
+
+It records the shape of a call, never its content: a model or language you chose, but
+only the length of a script, and only the kind of a link (YouTube, Sync storage or
+`other`), never the link. It never sends prompts, scripts, file names, URLs, media,
+error messages or your key. [docs/telemetry.md](docs/telemetry.md) lists every field.
+
+To turn it off, set `SYNC_MCP_TELEMETRY=off` or `DO_NOT_TRACK=1`, or pass
+`--no-telemetry`.
+
 ## What to ask
 
 Paste prompts like these into your agent. Asset IDs come from your sync. library.
@@ -155,15 +170,20 @@ The hosted server exposes a curated set of tools to every client:
 | Edit Dialogue | `dialogue_get-options`, `dialogue_upload-source`, `dialogue-transcriptions_create`, `dialogue-transcriptions_get`, `dialogue-previews_create`, `dialogue-previews_get`, `dialogue-videos_estimate`, `dialogue-videos_create` |
 | Assets | `assets_create`, `assets_create-upload-url`, `assets_get`, `assets_list`, `assets_count`, `assets_get-download-url`, `assets_update`, `assets_delete`, `assets_get-playback-metadata`, `audio-trims_get`, `audio-trims_create` |
 | Projects | `projects_create`, `projects_get`, `projects_list`, `projects_list-generations`, `projects_rename` |
+| Many jobs | `jobs_create-many`², `jobs_get-many`² |
 | Batches | `batches_create`², `batches_get`², `batches_list`² |
 | Account | `account_get-context`, `account_get-usage`, `organizations_list`, `organizations_select` |
 
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
-² Not in the ChatGPT app listing yet. A batch runs 20 or more independent generations
-(500 per batch by default), such as one campaign video localized into many languages.
-Where the account's plan doesn't include batch, the API answers 402 with `requiredPlan`
-and `billingUrl`, which the tools pass on.
+² Not in the ChatGPT app listing yet. `jobs_create-many` starts up to 50 independent jobs
+at once, such as one video dubbed into several languages, by running one create tool
+(`lipsync_create`, `dubbing_create`, `dialogue-videos_create` and others) once per item,
+with the same API, limits and billing as single calls on any plan; `jobs_get-many` follows
+the set. See [Jobs](docs/jobs.md#many-jobs-at-once). A batch is the API's separate queued
+pipeline for large runs (20 to 500 generations) on Scale plans and above that can wait
+hours. Where the account's plan doesn't include batch, the API answers 402 with
+`requiredPlan` and `billingUrl`, which the tools pass on.
 
 Organizations with the matching feature also get `scenes_detect` (camera cuts in a
 video) and `stems_separate` (vocals and background audio), outside the ChatGPT
@@ -180,7 +200,7 @@ tools, and their calls to them are refused.
 The local stdio server can also offer a tool for every other public API operation in
 the [OpenAPI spec](https://api.sync.so/api-json), 65+ in all. By default it lists the
 hosted set above, without its admin tools (`assets_delete` and `voices_clone`),
-plus `jobs_get` and `jobs_wait` and the `transcriptions_*` tools, whose speaker face
+plus `jobs_get`, `jobs_wait` and the `transcriptions_*` tools, whose speaker face
 tracks feed `lipsync_create-timeline` clips.
 
 To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separated list:
@@ -197,9 +217,10 @@ To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separate
 | `admin` | Every delete (`assets_delete`, `projects_delete`, `generations_delete`, `voices_delete`) and `voices_clone` |
 | `all` | Every tool, as before this option existed |
 
-Job, account and generation reads (`jobs_get`, `jobs_wait`, `generations_get`,
-`account_get-context`, `organizations_list`, `organizations_select` and similar) come with
-every selection. Naming toolsets replaces
+Job, account and generation reads (`jobs_get`, `jobs_wait`, `jobs_get-many`,
+`generations_get`, `account_get-context`, `organizations_list`, `organizations_select` and
+similar) come with every selection, as does `jobs_create-many` whenever a create tool it
+runs is listed. Naming toolsets replaces
 the default rather than adding to it. To get every tool back:
 
 ```bash
@@ -253,7 +274,8 @@ progress notifications when the client sends a `progressToken`): `generations_ge
 through `assets_create`. On the local server, `jobs_wait` and `jobs_get` do the same for
 every kind of job (generation, transcription, speaker analysis, translation preview,
 import) with one input, `{kind, id, projectId?}`, and one result shape and status set;
-see [Jobs](docs/jobs.md).
+see [Jobs](docs/jobs.md). `jobs_get-many` reads up to 50 jobs that way at once, on both
+servers.
 
 When the API offers it, `feedback_send` lets agents report confusing errors, wrong results
 and missing capabilities to the Sync team.

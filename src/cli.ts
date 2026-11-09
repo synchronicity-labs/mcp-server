@@ -32,6 +32,7 @@ function parseArgs(args: string[]): Partial<{
   port: number;
   spendConfirmation: boolean;
   updateCheck: boolean;
+  telemetry: boolean;
   toolsets: Toolset[];
 }> {
   const result: Record<string, unknown> = {};
@@ -56,6 +57,8 @@ function parseArgs(args: string[]): Partial<{
       result.spendConfirmation = false;
     } else if (arg === '--no-update-check') {
       result.updateCheck = false;
+    } else if (arg === '--no-telemetry') {
+      result.telemetry = false;
     } else if (arg === '--toolsets' && next) {
       result.toolsets = parseToolsets(next);
       i++;
@@ -81,6 +84,8 @@ Options:
                       instructions (or set SYNC_MCP_SPEND_CONFIRMATION=off)
   --no-update-check   Skip the daily npm check for a newer version (or set
                       SYNC_MCP_UPDATE_CHECK=off; skipped when CI is set)
+  --no-telemetry      Send no usage events to sync. (or set SYNC_MCP_TELEMETRY=off
+                      or DO_NOT_TRACK=1); see README › Usage telemetry
   --toolsets <list>   stdio only: comma-separated tools to list (or set SYNC_MCP_TOOLSETS):
                       default, lipsync, dubbing, assets, projects, transcription,
                       voices, admin or all (default: the hosted set without admin)

@@ -62,7 +62,7 @@ const createInput = z
       .array(item)
       .min(
         MIN_ITEMS,
-        `A batch needs at least ${MIN_ITEMS} items; create fewer generations one at a time.`,
+        `A batch needs at least ${MIN_ITEMS} items; start fewer generations with jobs_create-many.`,
       )
       .describe(
         `The generations, in order; at least ${MIN_ITEMS}. Plans allow up to 500 per batch by default, and the whole batch must fit in 5 MB as JSONL.`,
@@ -144,7 +144,9 @@ const createOutput = {
 const getInput = z
   .object({
     id: z.string().trim().min(1).describe('The batch id batches_create or batches_list returned.'),
-    wait: waitInput,
+    wait: waitInput.describe(
+      "Poll until the batch is COMPLETED or FAILED or about 50 seconds pass, then return its latest state; reading a finished batch's result file can take up to 30 seconds more. If it is still running, call again with wait: true instead of sleeping.",
+    ),
     results: z
       .enum(['all', 'failed', 'none'])
       .optional()
@@ -171,9 +173,21 @@ const listInput = z
     status: z
       .enum(LIST_STATUSES)
       .optional()
-      .describe('Only batches in this status, such as PROCESSING for batches still running.'),
-    createdAfter: z.string().optional().describe('ISO 8601 date-time.'),
-    createdBefore: z.string().optional().describe('ISO 8601 date-time.'),
+      .describe(
+        'Only batches in this status. PENDING, JOBS_CREATED and PROCESSING all mean still running; COMPLETED and FAILED mean done.',
+      ),
+    createdAfter: z
+      .string()
+      .optional()
+      .describe(
+        'Only batches created after this ISO 8601 date-time, such as 2026-11-06T00:00:00Z. Set it just before an uncertain batches_create to spot that batch.',
+      ),
+    createdBefore: z
+      .string()
+      .optional()
+      .describe(
+        'Only batches created before this ISO 8601 date-time, such as 2026-11-07T00:00:00Z.',
+      ),
   })
   .strict();
 
@@ -235,7 +249,7 @@ function planStep(requiredPlan: string | undefined): string {
       : requiredPlan
         ? ` It needs the ${requiredPlan} plan or above.`
         : '';
-  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, create the generations one at a time with lipsync_create or dubbing_create. Creating the batch again fails the same way until the plan changes.`;
+  return `Batch is not on this account’s plan.${plan} Tell the user, with billingUrl when present, where a person can change the plan. Meanwhile, start the generations with jobs_create-many when available, or one at a time with lipsync_create or dubbing_create. Creating the batch again fails the same way until the plan changes.`;
 }
 
 /** Tell the agent what changes the outcome; API lines are 1-based item positions. */
@@ -291,7 +305,7 @@ export function createBatchTools(
     {
       name: 'batches_create',
       title: 'Create a batch of generations',
-      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Use it for ${MIN_ITEMS} or more generations that do not depend on each other; for fewer, or when one result feeds the next, use lipsync_create or dubbing_create per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generations_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Leave payload.projectId out for new work; a payload with projectId needs projectIntent=explicit, which only an explicit user selection or a project just created for this request allows. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
+      description: `Submit many independent lipsync generations at once as one Sync batch, such as localizing one campaign video into many languages or syncing many videos to their own audio. Each item is one /v2/generate body; Sync queues them, so they skip the per-generation concurrency limit, and results can take up to a day. Batch is a separate queued pipeline, built for large runs (${MIN_ITEMS} to 500) on Scale plans and above that can wait hours; below Scale every row still takes a concurrent generation slot. For 2 or more independent jobs that should start now, on any plan, use jobs_create-many when available; when one result feeds the next, call lipsync_create or dubbing_create per video. Call with dryRun: true first to have the API check every item without creating anything. This is a paid action: every item is billed as its own generation. Before creating, estimate a representative item with generations_estimate-cost, tell the user the item count and the estimated total, and wait for their confirmation. Not idempotent: each call creates a new batch, so after an uncertain response check batches_list before creating again. Leave payload.projectId out for new work; a payload with projectId needs projectIntent=explicit, which only an explicit user selection or a project just created for this request allows. Batch may not be on every plan: a 402 names requiredPlan and billingUrl. Returns the batch id and each item's requestId; then call batches_get with wait: true.`,
       inputSchema: createInput.shape,
       outputSchema: createOutput,
       annotations: {
@@ -324,7 +338,7 @@ export function createBatchTools(
       name: 'batches_get',
       title: 'Read a batch',
       description:
-        'Read a Sync batch: status, metrics (total, succeeded, failed, pending) and outputUrl. Once it is COMPLETED or FAILED, results lists each item by requestId with its generation status, generationId, outputMediaUrl or error. With wait: true it waits on the server for up to about 50 seconds and sends progress notifications; batches can take hours, so call again while it runs and never create the batch again.',
+        "Read one sync. batch by id: its status, metrics and outputUrl, and once it is COMPLETED or FAILED, one results row per item (requestId, generation status, generationId, and outputMediaUrl or error). Use it to follow a batch you created; to find a batch id or check which batches are running use batches_list, and for one item's full generation details pass its generationId to generations_get.\n\nWith wait: true it polls for up to about 50 seconds until the batch finishes, sending progress notifications when the client asks for them. Reading a finished batch's result file can add up to 30 seconds more. Batches can take hours, so call again while it runs and never create the batch again.\n\nresults: failed keeps only FAILED or REJECTED rows, and none skips reading the file. If the file cannot be read (for example too large or too slow), resultsError says why and the batch fields are still current; download outputUrl or find the generations with generations_list instead.",
       inputSchema: getInput.shape,
       outputSchema: getOutput,
       annotations: {
@@ -339,7 +353,7 @@ export function createBatchTools(
       name: 'batches_list',
       title: 'List batches',
       description:
-        'List this account’s Sync batches with their status and metrics, optionally by status or creation time. Use it to find a batch id, to check for a batch just created after an uncertain batches_create response, or to see which batches are still running. For the per-item results of one batch use batches_get.',
+        "List the batches in this session's organization, each with its id, status, metrics and outputUrl. Use it to find a batch id, to check whether a batch exists after an uncertain batches_create response before creating it again, or, when batches_create reports concurrency_limit_reached, to see which batches still run. For one batch's per-item results use batches_get; for single generations use generations_list.\n\nIt never reads another organization: for a batch created with another organizationId, switch there with organizations_select first. It takes no paging or limit parameters and returns the list the API sends. status matches one value per call, so omit it to see running and finished batches together; createdAfter and createdBefore together bound a time window.",
       inputSchema: listInput.shape,
       outputSchema: { batches: z.array(z.looseObject(batchFields)) },
       annotations: {

@@ -4,6 +4,7 @@ import { batchProgress } from './batches.js';
 import { attemptImport, importWaitOptions } from './generated-adapters.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import {
+  type AnyJobKind,
   importErrorStatus,
   isTerminal,
   JOB_KINDS,
@@ -22,9 +23,15 @@ import { pollUntil } from './job-wait.js';
  */
 
 type JsonTool = Exclude<McpToolDefinition, { resultFormat: 'mcp' }>;
-type JobInput = { kind: JobKind; id: string; projectId?: string; projectIntent?: 'explicit' };
-type JobState = {
-  kind: JobKind;
+export type JobInput = {
+  kind: AnyJobKind;
+  id: string;
+  projectId?: string;
+  projectIntent?: 'explicit';
+  videoAssetId?: string;
+};
+export type JobState = {
+  kind: AnyJobKind;
   id: string;
   status: JobStatus;
   progress?: number;
@@ -75,11 +82,11 @@ const readJob =
     return { status: jobStatus(payload), result: project(tool, payload) };
   };
 
-const KINDS: Record<JobKind, KindSpec> = {
+const KINDS: Record<AnyJobKind, KindSpec> = {
   generation: {
     tool: 'generations_get',
     label: 'generation',
-    id: 'the generation id a create tool returned (lipsync_create, dubbing_create, lipsync_create-timeline, dialogue-videos_create)',
+    id: 'the id from lipsync_create, dubbing_create, lipsync_create-timeline or dialogue-videos_create',
     read: async (tool, input, context, signal) => {
       // include=progress adds the worker's percent; the API's own long-poll would drop it.
       const progressQuery = 'include' in tool.inputSchema ? { include: 'progress' } : {};
@@ -106,7 +113,7 @@ const KINDS: Record<JobKind, KindSpec> = {
   transcription: {
     tool: 'transcriptions_get',
     label: 'transcription',
-    id: 'the transcription id (transcriptions_create or dialogue-transcriptions_create)',
+    id: 'the id from transcriptions_create or dialogue-transcriptions_create',
     read: readJob((input) => ({ id: input.id })),
   },
   speaker_analysis: {
@@ -118,7 +125,7 @@ const KINDS: Record<JobKind, KindSpec> = {
   translation_preview: {
     tool: 'translation-previews_get',
     label: 'translation',
-    id: 'the translation-previews_create id, with its projectId',
+    id: 'the translation-previews_create id, plus its projectId',
     read: readJob((input) => {
       if (!input.projectId) throw new Error('Pass the projectId of the translation preview.');
       return { projectId: input.projectId, id: input.id };
@@ -127,7 +134,7 @@ const KINDS: Record<JobKind, KindSpec> = {
   import: {
     tool: 'assets_create',
     label: 'import',
-    id: 'the social video link passed to assets_create, with the same projectId (and projectIntent, if that call needed it)',
+    id: 'the social video link passed to assets_create, plus the same projectId (and projectIntent if that call needed it)',
     read: async (tool, input, context, signal) => {
       // Reading an import repeats the identical request; the API reuses the running import.
       const args = {
@@ -159,7 +166,7 @@ const KINDS: Record<JobKind, KindSpec> = {
   batch: {
     tool: 'batches_get',
     label: 'batch',
-    id: 'the batch id batches_create returned',
+    id: 'the batches_create id',
     read: async (tool, input, context, signal) => {
       const payload = await tool.handler({ id: input.id }, { ...context, signal });
       const status = jobStatus(payload);
@@ -171,35 +178,69 @@ const KINDS: Record<JobKind, KindSpec> = {
       };
     },
   },
+  dialogue_preview: {
+    tool: 'dialogue-previews_get',
+    label: 'dialogue preview',
+    id: 'the dialogue-previews_create id, plus its projectId and videoAssetId',
+    read: readJob((input) => {
+      if (!input.projectId || !input.videoAssetId)
+        throw new Error('Pass the projectId and videoAssetId of the dialogue preview.');
+      return { projectId: input.projectId, videoAssetId: input.videoAssetId, id: input.id };
+    }),
+  },
+  speech_preview: {
+    tool: 'speech-previews_get',
+    label: 'speech preview',
+    id: 'the speech-previews_create id, plus its projectId',
+    read: readJob((input) => {
+      if (!input.projectId) throw new Error('Pass the projectId of the speech preview.');
+      return { projectId: input.projectId, id: input.id };
+    }),
+  },
 };
 
-const STATUS_HELP =
-  'status is one of PENDING, PROCESSING (still running: call jobs_wait again with the same input; never create the job again), COMPLETED, FAILED, REJECTED (the API refused it, such as an import limit or a moderation rejection) or CANCELED. result is what the kind’s own read tool returns, with its original status; a COMPLETED import’s result is the saved asset, whose id is the asset id. A finished batch’s result.results lists each item’s generation status and output. A translation_preview whose result.recoveryRequired is true has uncertain provider acceptance: do not create another job.';
+/** Whether waiting longer can change this job: final, or a translation needing recovery. */
+export function jobSettled(job: JobState): boolean {
+  return isTerminal(job.status) || job.result.recoveryRequired === true;
+}
 
-export function createJobTools(tools: McpToolDefinition[]): McpToolDefinition[] {
-  const available = JOB_KINDS.flatMap((kind) => {
+/** The kinds this server can read, and one read that goes through the kind's own tool. */
+export type JobReaders = {
+  kinds: [AnyJobKind, ...AnyJobKind[]];
+  /** "Ids by kind" for descriptions: where each kind's id comes from. */
+  ids: string;
+  read: (job: JobInput, context?: ToolRequestContext, signal?: AbortSignal) => Promise<JobState>;
+};
+
+export function jobReaders(
+  tools: McpToolDefinition[],
+  wanted: readonly AnyJobKind[],
+): JobReaders | undefined {
+  const available = wanted.flatMap((kind) => {
     const tool = tools.find((candidate) => candidate.name === KINDS[kind].tool);
     return tool && tool.resultFormat !== 'mcp' ? [{ kind, tool, spec: KINDS[kind] }] : [];
   });
-  if (available.length === 0) return [];
-  const kinds = available.map((entry) => entry.kind) as [JobKind, ...JobKind[]];
-  const input = z
-    .object({
-      kind: z.enum(kinds).describe('Which kind of job id is.'),
-      id: z.string().trim().min(1).describe('The job to read; see the tool description per kind.'),
-      projectId: z
-        .string()
-        .optional()
-        .describe(
-          'Required for translation_preview; for import, the project passed to assets_create.',
-        ),
-      projectIntent: z
-        .literal('explicit')
-        .optional()
-        .describe('import only: pass it when the assets_create call for this link needed it.'),
-    })
-    .strict();
-  const output = {
+  if (available.length === 0) return undefined;
+  return {
+    kinds: available.map((entry) => entry.kind) as [AnyJobKind, ...AnyJobKind[]],
+    ids: `Ids by kind:\n${available.map(({ kind, spec }) => `- ${kind}: ${spec.id}`).join('\n')}`,
+    read: async (job, context, signal = context?.signal) => {
+      const entry = available.find((candidate) => candidate.kind === job.kind);
+      if (!entry) throw new Error(`This server cannot read ${job.kind} jobs.`);
+      const reading = await entry.spec.read(entry.tool as JsonTool, job, context, signal);
+      return { kind: job.kind, id: job.id, ...reading };
+    },
+  };
+}
+
+/** The progress message for one job. */
+export function describeJob(job: JobState): string {
+  return `${KINDS[job.kind].label} ${job.status.toLowerCase()}${job.progress === undefined ? '' : ` ${Math.round(job.progress)}%`}`;
+}
+
+/** The unified fields of a job state, shared by jobs_get and jobs_get-many. */
+export function jobStateShape(kinds: [AnyJobKind, ...AnyJobKind[]]) {
+  return {
     kind: z.enum(kinds),
     id: z.string(),
     status: z.enum(JOB_STATUSES).describe('The unified status; see the tool description.'),
@@ -221,17 +262,53 @@ export function createJobTools(tools: McpToolDefinition[]): McpToolDefinition[] 
       .record(z.string(), z.unknown())
       .describe('The job as the kind’s own read tool returns it.'),
   };
-  const ids = available.map(({ kind, spec }) => `${kind}: ${spec.id}`).join('; ');
+}
+
+const COUNT_WORDS = ['one', 'two', 'three', 'four', 'five', 'six'];
+
+const GET_TAIL =
+  "PENDING and PROCESSING mean still running: never create the job again. COMPLETED, FAILED, REJECTED (the API refused it, such as an import limit or a moderation rejection) and CANCELED are final. result is the job as the kind's own read tool returns it, with its original status; a COMPLETED import's result is the saved asset, whose id is the asset id, and a finished batch's result.results lists each item's generation status and output. A translation_preview with result.recoveryRequired true has uncertain provider acceptance: do not create another job. Reading an import resends the identical assets_create request, which returns the running import or its saved asset and starts the import if none exists; that is why this is not read-only. An unknown id, an auth failure or a translation_preview without projectId returns a tool error, not a status.";
+
+const WAIT_INTRO =
+  'Wait on the server, for up to about 50 seconds, until any job reaches a final status, then return its latest state in the same shape as jobs_get. Use it after a create tool returns an id, instead of sleeping or calling jobs_get in a loop; if the job is still PENDING or PROCESSING when it returns, call jobs_wait again with the same input. For one check without waiting use jobs_get. It also returns early on result.recoveryRequired and sends progress notifications when the call has a progressToken.';
+
+const WAIT_TAIL =
+  "Statuses:\n- PENDING, PROCESSING: still running. Never create the job again.\n- COMPLETED, FAILED, REJECTED (the API refused it, such as an import limit or a moderation rejection), CANCELED: final. A speaker analysis that is unavailable reads as FAILED.\nResults:\n- result keeps the kind's original status. A COMPLETED import's result is the saved asset, whose id is the asset id; a finished batch's result.results lists each item's generation status and output.\n- A translation_preview with result.recoveryRequired true has uncertain provider acceptance: do not create another job.\nNot read-only: an import read repeats the identical assets_create request, so it returns the running import or the saved asset, and starts the import for a link never imported (a non-social media URL is saved as a new VIDEO asset).\nErrors: an API failure that is not a job status, such as an unknown generation or transcription id or an auth failure, returns {error}; a translation_preview without projectId fails with a plain error message.";
+
+export function createJobTools(tools: McpToolDefinition[]): McpToolDefinition[] {
+  const readers = jobReaders(tools, JOB_KINDS);
+  if (!readers) return [];
+  const kinds = readers.kinds as [JobKind, ...JobKind[]];
+  const input = z
+    .object({
+      kind: z.enum(kinds).describe('Which kind of job id is.'),
+      id: z
+        .string()
+        .trim()
+        .min(1)
+        .describe(
+          'The job id for the chosen kind, as listed in the tool description; for import it is the social video link itself.',
+        ),
+      projectId: z
+        .string()
+        .optional()
+        .describe(
+          'Required for translation_preview; for import, the project passed to assets_create.',
+        ),
+      projectIntent: z
+        .literal('explicit')
+        .optional()
+        .describe('import only: pass it when the assets_create call for this link needed it.'),
+    })
+    .strict();
+  const output = jobStateShape(kinds);
+  const { ids } = readers;
+  const count = COUNT_WORDS[kinds.length - 1];
   const read = async (
     args: Record<string, unknown>,
     context?: ToolRequestContext,
-    signal = context?.signal,
-  ) => {
-    const job = input.parse(args);
-    const entry = available.find((candidate) => candidate.kind === job.kind)!;
-    const reading = await entry.spec.read(entry.tool as JsonTool, job, context, signal);
-    return { kind: job.kind, id: job.id, ...reading } satisfies JobState;
-  };
+    signal?: AbortSignal,
+  ) => readers.read(input.parse(args), context, signal);
   // An import can start the download it reads, so neither tool is read-only.
   const annotations = {
     readOnlyHint: false,
@@ -243,7 +320,7 @@ export function createJobTools(tools: McpToolDefinition[]): McpToolDefinition[] 
     {
       name: 'jobs_get',
       title: 'Read any Sync job',
-      description: `Read the current state of any Sync job once, by kind and id (${ids}). Returns {kind, id, status, progress?, estimatedFinishAt?, retryAfterMs?, result}. ${STATUS_HELP} To wait for a running job, use jobs_wait instead of calling this in a loop.`,
+      description: `Read any sync. job once, by kind and id, with one status vocabulary for all ${count} kinds. Use it to check a job without waiting or to track jobs of different kinds the same way. Not for waiting: use jobs_wait instead of calling this in a loop. For a kind's extra read options, such as generations_get include or batches_get results, call that tool directly.\n${ids}\n${GET_TAIL}`,
       inputSchema: input.shape,
       outputSchema: output,
       annotations,
@@ -252,23 +329,15 @@ export function createJobTools(tools: McpToolDefinition[]): McpToolDefinition[] 
     {
       name: 'jobs_wait',
       title: 'Wait for any Sync job',
-      description: `Wait on the server for any Sync job to finish, by kind and id (${ids}). Holds for up to about 50 seconds, sending progress notifications when the client asks for them, then returns the latest {kind, id, status, progress?, estimatedFinishAt?, retryAfterMs?, result}. ${STATUS_HELP}`,
+      description: `${WAIT_INTRO}\n${ids}\n${WAIT_TAIL}`,
       inputSchema: input.shape,
       outputSchema: output,
       annotations,
-      handler: async (args, context) => {
-        const label = KINDS[input.parse(args).kind].label;
-        return pollUntil(
-          (signal) => read(args, context, signal),
-          (job) => isTerminal(job.status) || job.result.recoveryRequired === true,
-          context,
-          {
-            describe: (job) =>
-              `${label} ${job.status.toLowerCase()}${job.progress === undefined ? '' : ` ${Math.round(job.progress)}%`}`,
-            delayMs: (job) => job.retryAfterMs,
-          },
-        );
-      },
+      handler: async (args, context) =>
+        pollUntil((signal) => read(args, context, signal), jobSettled, context, {
+          describe: describeJob,
+          delayMs: (job) => job.retryAfterMs,
+        }),
     },
   ];
 }

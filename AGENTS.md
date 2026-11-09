@@ -26,6 +26,7 @@ published version, so bump both versions in any PR that edits `server.json`.
 | `src/tools/` | Hand-written tools; `generator.ts` turns public OpenAPI operations into generated tools |
 | `src/openapi/` | Fetches and parses `api.sync.so/api-json` at startup |
 | `src/http-server.ts`, `src/http-session.ts`, `src/session-registry.ts` | Express app, OAuth proxy routes, `/mcp`, `/health`, request-scoped MCP sessions |
+| `src/telemetry/` | Usage events per session start and tool call, batched to `POST /v2/analytics/mcp-events`; see `docs/telemetry.md` |
 | `src/rate-limits.ts` | Request limits per verified user and OAuth client, plus per-address limits on rejected credentials |
 | `src/auth/` | OAuth proxy provider (SDK `server-legacy`), bearer verification, device auth for stdio |
 | `src/chatgpt-app.ts`, `deploy/chatgpt/` | Immutable ChatGPT UI releases built from sync-api-v2 `apps/chatgpt`; see `docs/chatgpt-release.md` |

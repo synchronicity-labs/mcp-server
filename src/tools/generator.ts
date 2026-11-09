@@ -26,10 +26,20 @@ export type ToolRequestContext = {
   clientProfile?: ClientProfile;
   // The client's self-reported handshake name, for attribution only.
   clientName?: string;
+  // The renamed tool's old name, when the client called it by that name.
+  calledAs?: string;
+  // The session's usage-telemetry id, so a report can name the calls that led to it.
+  telemetrySessionId?: string;
   // Sends notifications/progress when the caller passed a progressToken; a no-op otherwise.
   progress?: (progress: number, message?: string) => Promise<void>;
   // Sends notifications/tools/list_changed where the session can deliver it; absent otherwise.
   toolListChanged?: () => void;
+  // Runs another listed tool on this connection exactly as a client call would, checks included.
+  callTool?: (
+    name: string,
+    args: Record<string, unknown>,
+    context: { signal?: AbortSignal },
+  ) => Promise<unknown>;
 };
 
 type JsonMcpToolDefinition = McpToolBaseDefinition & {

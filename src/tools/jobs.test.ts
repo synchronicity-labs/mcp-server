@@ -62,7 +62,7 @@ describe('jobs_get and jobs_wait', () => {
     const { get } = jobs([tool('generations_get', [{}]), tool('assets_create', [{}])]);
     expect(get?.name).toBe('jobs_get');
     expect((get!.inputSchema.kind as z.ZodEnum).options).toEqual(['generation', 'import']);
-    expect(get!.description).toContain('generation: the generation id');
+    expect(get!.description).toContain('- generation: the id from lipsync_create');
     expect(get!.description).not.toContain('speaker_analysis');
     expect(get!.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true });
   });

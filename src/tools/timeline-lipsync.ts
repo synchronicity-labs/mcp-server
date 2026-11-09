@@ -148,7 +148,7 @@ const keptInput = input.extend({
     .min(1)
     .max(200)
     .describe(
-      'Clips placed on the video, in any order, without overlapping. Parts no clip covers keep their original picture and sound; clips with lipsync: false keep their picture but play outputAudio.',
+      'Clips placed on the video, in any order, without overlapping. Parts no clip covers keep their original picture, and their original sound unless outputAudio plays; clips with lipsync: false keep their picture but play outputAudio.',
     ),
   outputAudio: outputAudio.optional(),
 });
@@ -337,11 +337,18 @@ export function createTimelineLipsyncTool(
   return {
     name: 'lipsync_create-timeline',
     title: 'Create timeline lipsync',
-    description:
-      'Lipsync one video with several audio clips placed at given times, like a Studio timeline. Each clip names a Sync audio asset or audio URL, the seconds (or frames) of the video it covers, and optionally the part of the audio file it plays, its sync mode and the face it lipsyncs. Parts of the video no clip covers keep their original picture and sound, so leave a gap wherever the user wants no lipsync. For one audio across the whole video, use lipsync_create. Defaults to sync-3 and, unless projectId names a project the user picked, a new project; a keyed request without projectId needs a fresh projectCreationKey. Estimate and confirm before creating; this starts an asynchronous generation and returns its id. Poll it with generations_get and wait: true. Clips are checked before anything is created, and errors name the clip index.' +
-      (features.keptClips
-        ? ' To dub a whole video while lipsyncing only some shots, pass the full dubbed track as outputAudio, lipsync the speaking shots with clips that play their part of it, and add clips with lipsync: false for the rest; the result plays the dub continuously with no cuts.'
-        : ''),
+    description: [
+      'Lipsync one saved video with several audio clips, each on its own stretch of the video like a Studio timeline: to lipsync only some ranges, or to switch audio or speaker between shots. For one audio across the whole video use lipsync_create; to translate and dub a whole video use dubbing_create when available.',
+      `Each lipsynced clip takes exactly one of audioAssetId or audioUrl, a span in seconds or in frames (not a mix), and optionally audioStartTime and audioEndTime to play part of that audio. Clips may come in any order but must not overlap; parts no clip covers keep their original picture and${features.keptClips ? ', unless outputAudio plays,' : ''} their original sound. Frame spans need the video's fps: read it from assets_get-playback-metadata when it returns one (signed-in users only) and never guess it; otherwise use seconds. Get speaker.faceTrackUrl from transcriptions_slice-speaker-face-track when available.`,
+      ...(features.keptClips
+        ? [
+            'To lipsync only the speaking shots of a dub, pass the full dubbed track as outputAudio, give speaking shots clips that play their part of it, and mark the other shots lipsync: false. outputAudio replaces the sound of the whole output; if it is omitted while a clip sets lipsync: false, the one audio the other clips share plays instead, so pass it whenever they use several.',
+          ]
+        : []),
+      'Before anything is created, the tool validates the input (options included), spans, audio ranges and overlaps, and per-clip errors name the clip index. Overlaps are compared only within one unit, so use one unit for every clip. Problems only the API detects, such as an unknown audio asset or a speaker point off the face, surface after a new project may already exist.',
+      'Paid generation, sync-3 unless model is set. Estimate and confirm before creating; this starts an asynchronous generation and returns its id and status. Poll that id with generations_get and wait: true.',
+      'Without projectId it first creates a NEW project, named projectName or a default; default new work to that. Pass projectId with projectIntent=explicit only when the user explicitly asks to work in that project, selects it in the interface, or it was just created for this request; a matching workflow or name or an open editor is never permission to modify it. Send a fresh idempotencyKey, plus a fresh projectCreationKey when there is no projectId, and after a lost or uncertain response retry only with identical arguments and the same keys. Never resend a request that had no idempotencyKey: it can start a second paid generation.',
+    ].join('\n\n'),
     inputSchema: schema.shape,
     outputSchema: generationOutputSchema,
     annotations: {

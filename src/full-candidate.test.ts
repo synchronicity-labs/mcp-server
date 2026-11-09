@@ -375,7 +375,8 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = currentTools((await client.listTools()).tools);
-      expect(tools).toHaveLength(index === 0 ? 24 : 21);
+      // jobs_create-many and jobs_get-many stay out of the ChatGPT app listing.
+      expect(tools).toHaveLength(index === 0 ? 24 : 23);
       expect(tools.some((tool) => tool.name === 'assets_list-creators')).toBe(index === 0);
       const create = tools.find((tool) => tool.name === 'lipsync_create')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
