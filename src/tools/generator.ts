@@ -28,6 +28,8 @@ export type ToolRequestContext = {
   clientName?: string;
   // The renamed tool's old name, when the client called it by that name.
   calledAs?: string;
+  // The session's usage-telemetry id, so a report can name the calls that led to it.
+  telemetrySessionId?: string;
   // Sends notifications/progress when the caller passed a progressToken; a no-op otherwise.
   progress?: (progress: number, message?: string) => Promise<void>;
   // Sends notifications/tools/list_changed where the session can deliver it; absent otherwise.

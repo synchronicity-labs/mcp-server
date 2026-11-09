@@ -219,7 +219,7 @@ export function serverInstructions(
       : profile.supportsAppUi
         ? SERVER_INSTRUCTIONS
         : MODEL_ONLY_INSTRUCTIONS) +
-    (feedback && profile.name !== 'chatgpt' ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '') +
+    (feedback ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '') +
     (toolsetNote ? ` ${toolsetNote}` : '') +
     (update ? ` ${updateInstruction(update)}` : '');
   return spendConfirmation
@@ -689,8 +689,6 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   if (tool.name === 'lipsync_create-from-assets') return profile.supportsAppUi;
   // Kept out of the reviewed ChatGPT app listing; its embedded Studio has no timeline.
   if (tool.name === 'lipsync_create-timeline') return profile.name !== 'chatgpt';
-  // Agents report friction; the reviewed ChatGPT app listing keeps its tool set.
-  if (tool.name === 'feedback_send') return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet.
   if ([...BATCH_TOOLS, ...JOB_SET_TOOLS].includes(tool.name)) return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet; other profiles list them per account.
@@ -990,6 +988,7 @@ function createProfiledServer(
             clientProfile: activeProfile,
             clientName,
             callTool,
+            ...(telemetry && { telemetrySessionId: telemetry.id }),
             // Only stdio holds a connection that can carry an unrelated notification.
             ...(config.transport === 'stdio'
               ? {
