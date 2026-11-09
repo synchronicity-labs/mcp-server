@@ -84,6 +84,21 @@ describe('argument facets', () => {
     });
   });
 
+  it('records no closed-set or identifier value that could be content', () => {
+    const open = { model: z.string(), format: z.string(), kind: z.enum(['Studio Pro', 'a b']) };
+    expect(
+      argumentFacets(open, {
+        model: 'https://private.example/video.mp4',
+        format: 'interview.mov',
+        kind: 'Studio Pro',
+      }),
+    ).toEqual({ model: 'url:other', format: 'text:1-20', kind: 'enum' });
+    expect(argumentFacets(open, { model: 'lipsync-1.9.0-beta', format: 'video/mp4' })).toEqual({
+      model: 'lipsync-1.9.0-beta',
+      format: 'video/mp4',
+    });
+  });
+
   it('names the declared fields that failed validation', () => {
     expect(invalidFields(shape, { model: 'nope', videoAssetId: 'x', extra: 1 }).sort()).toEqual([
       'model',

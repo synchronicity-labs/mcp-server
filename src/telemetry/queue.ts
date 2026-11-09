@@ -30,6 +30,8 @@ export class TelemetryQueue {
   #size = 0;
   #inFlight = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
+  // Set when a flush found every send slot busy, so the next finished send resumes it.
+  #blocked = false;
 
   constructor(
     private readonly send: TelemetrySend,
@@ -77,7 +79,11 @@ export class TelemetryQueue {
 
   #flushOwner(owner: string): void {
     const bucket = this.#buckets.get(owner);
-    if (!bucket || this.#inFlight >= this.limits.maxInFlight) return;
+    if (!bucket) return;
+    if (this.#inFlight >= this.limits.maxInFlight) {
+      this.#blocked = true;
+      return;
+    }
     const batch = bucket.events.splice(0, this.limits.batchSize);
     const { token } = bucket;
     if (bucket.events.length === 0) this.#buckets.delete(owner);
@@ -97,6 +103,10 @@ export class TelemetryQueue {
         )
         .finally(() => {
           this.#inFlight -= 1;
+          if (this.#blocked) {
+            this.#blocked = false;
+            this.flush();
+          }
         }),
     );
   }

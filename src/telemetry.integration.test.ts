@@ -154,7 +154,9 @@ const ALLOWED: Record<string, readonly string[]> = {
     'country',
   ],
 };
-const ARG_VALUE = /^[A-Za-z0-9 ._:+/(),-]{1,64}$/;
+// The API's facet shapes (sync-api-v2 packages/validators/src/mcp-analytics.ts).
+const ARG_VALUE =
+  /^(?!.*:\/)[A-Za-z0-9][A-Za-z0-9_:/+-]{0,63}(?:\.[0-9][A-Za-z0-9_-]*)*$|^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?(?:,[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)+$/;
 
 function expectContract(all: Event[]) {
   for (const { event, event_id, timestamp, properties } of all) {

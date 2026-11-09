@@ -1,38 +1,32 @@
 import { z } from 'zod';
-import { ApiRequestError, cameFromApi } from './http-client.js';
-
-const MAX_LENGTH = 300;
-
-// What a tool's own error can carry from the call: quoted values, links, ids, paths,
-// addresses and long numbers. The rest of these messages is fixed wording.
-const REDACTIONS: [RegExp, string][] = [
-  [/"[^"]*"|'[^']*'|“[^”]*”|‘[^’]*’|`[^`]*`/g, '"…"'],
-  [/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '<url>'],
-  [/\bdata:[^\s,]*,\S*/gi, '<url>'],
-  [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '<id>'],
-  [/[^\s@]+@[^\s@]+\.[^\s@]+/g, '<email>'],
-  [/(?:~|\.{1,2})?\/(?:[^\s/]+\/)+[^\s/]*|\b[A-Za-z]:\\\S+/g, '<path>'],
-  [/\d{4,}/g, '<n>'],
-];
-
-export function redactText(text: string): string {
-  let redacted = text;
-  for (const [pattern, replacement] of REDACTIONS)
-    redacted = redacted.replace(pattern, replacement);
-  return redacted.slice(0, MAX_LENGTH);
-}
+import { ApiRequestError } from './http-client.js';
 
 /**
- * Why a call failed, for logs, without what the caller sent. API errors carry only
- * their status and code: the API logs its own message. Validation errors name the
- * failing fields. This server's other errors keep their wording with values removed.
+ * Why a call failed, for logs, from fixed fields only. Error messages are never
+ * logged: this server's messages and the API's both embed what the caller sent
+ * (quoted values, hosts, file names), and no pattern removes all of it. The API
+ * keeps its own messages in BetterStack (docs/tool-failures.md).
  */
-export function errorSummary(error: unknown): string | undefined {
-  if (error instanceof ApiRequestError && cameFromApi(error)) return undefined;
+export function errorFields(error: unknown): {
+  errorName: string;
+  fields?: string[];
+} {
   if (error instanceof z.ZodError)
-    return error.issues
-      .map((issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.code}`)
-      .join('; ')
-      .slice(0, MAX_LENGTH);
-  return redactText(error instanceof Error ? error.message : String(error));
+    return {
+      errorName: 'ZodError',
+      fields: [
+        ...new Set(
+          error.issues.map((issue) =>
+            issue.path.length > 0
+              ? issue.path.map((part) => (typeof part === 'number' ? '[]' : String(part))).join('.')
+              : '(root)',
+          ),
+        ),
+      ]
+        .filter((field) => /^[A-Za-z0-9_.[\]()]{1,80}$/.test(field))
+        .slice(0, 20),
+    };
+  if (error instanceof ApiRequestError) return { errorName: 'ApiRequestError' };
+  const name = error instanceof Error ? error.name : typeof error;
+  return { errorName: /^[A-Za-z]{1,40}$/.test(name) ? name : 'Error' };
 }
