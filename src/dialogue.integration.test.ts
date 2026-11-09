@@ -18,7 +18,7 @@ import { routeUploadSourceToFixture } from './test-fixtures/upload-source.js';
 
 afterEach(closeDialogueFixtures);
 it.each([false, true])(
-  'advertises account-scoped dialogue writes with keyedPreview=%s',
+  'advertises open-world dialogue writes with account-scoped inputs and keyedPreview=%s',
   async (keyedPreview) => {
     const { client } = await fixture({ keyedPreview });
     const tools = (await client.listTools()).tools;
@@ -29,7 +29,7 @@ it.each([false, true])(
         readOnlyHint: false,
         destructiveHint: true,
         idempotentHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
       });
       expect(tool?._meta?.['openai/widgetAccessible']).toBe(true);
       expect(tool?._meta?.ui).toMatchObject({ visibility: ['model', 'app'] });
