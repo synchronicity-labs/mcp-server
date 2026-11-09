@@ -97,8 +97,27 @@ describe('createToolErrorResult', () => {
         profile: 'chatgpt',
         status: 429,
         code: 'concurrency_limit_reached',
+        source: 'mcp',
         message: 'limit',
       });
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it('logs no argument values from a failed call', () => {
+    const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    try {
+      logToolError(() => 'claude')(
+        'lipsync_create',
+        new Error(
+          'The uploaded video isn\'t a fetchable URL (received "make Jane say 4242"). See https://x.example/a?t=1, /Users/jane/a.mov, jane@example.com and 0b6c6a1e-3c5e-4a51-9f0e-4b7c2b1d9a10.',
+        ),
+      );
+      const line = JSON.parse(String(write.mock.calls[0]?.[0]));
+      expect(line.message).toBe(
+        'The uploaded video isn\'t a fetchable URL (received "…"). See <url> <path> <email> and <id>.',
+      );
     } finally {
       write.mockRestore();
     }

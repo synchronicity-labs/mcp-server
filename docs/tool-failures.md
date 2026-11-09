@@ -2,10 +2,10 @@
 
 There are two places to look:
 
-1. **Failures inside the MCP server.** Its own checks reject the call before anything reaches the API, for example a missing `projectIntent` or a file passed where a URL belongs. The hosted server writes one stdout line per failed call with `event: "mcp_tool_error"`, `tool`, `profile` and `message`. When the API answered, the line also has its `status` and `code`. Read these lines in the Porter logs for `mcp-server`.
+1. **Failures inside the MCP server.** Its own checks reject the call before anything reaches the API, for example a missing `projectIntent` or a file passed where a URL belongs. The hosted server writes one stdout line per failed call with `event: "mcp_tool_error"`, `tool`, `profile`, `source` (`mcp` or `api`) and `message`. When the API answered, the line also has its `status` and `code` and no `message`: the API's own text can quote what the user sent, and BetterStack keeps it (below). For this server's checks, `message` keeps the wording with quoted values, links, ids, paths, emails and long numbers replaced, and validation errors list the failing fields. Read these lines in the Porter logs for `mcp-server`.
 2. **Failures in the API.** The API rejects the request, for example over a plan limit, a concurrency limit or invalid input. Every API response is logged in BetterStack source `[Prod] Sync API V2` (region eu) as an `api_response` line. Responses of 400 and above carry `errorCode` and `errorMessage`.
 
-PostHog event `chatgpt_tool_called` counts successes and errors per tool. It records no reason, so use it to measure the failure rate and the two sources above to find out why.
+PostHog event `mcp_tool_called` counts every call per tool and client with its `outcome`, `error_status` and `error_code` (see `docs/telemetry.md`); `chatgpt_tool_called` covers the ChatGPT app's own tools. Use them to measure failure rates and the two sources above to find out why.
 
 ## API failures from hosted MCP clients
 

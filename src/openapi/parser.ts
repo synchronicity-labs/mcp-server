@@ -1,3 +1,4 @@
+import { MCP_EVENTS_OPERATION_ID, MCP_EVENTS_PATH } from '../telemetry/index.js';
 import { FEEDBACK_OPERATION_ID } from '../tools/feedback.js';
 import type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from './types.js';
 
@@ -20,6 +21,18 @@ const ALLOWED_TAGS = new Set([
   'batch',
 ]);
 
+// Collectors outside the allowed tags that the server reads by exact path and operation.
+// The MCP events collector only tells the server that the API takes usage events.
+const COLLECTORS: Record<string, string> = {
+  '/v2/analytics/chatgpt-events': 'analytics_captureChatgptEvent',
+  [MCP_EVENTS_PATH]: MCP_EVENTS_OPERATION_ID,
+  '/v2/feedback': FEEDBACK_OPERATION_ID,
+};
+
+function isCollector(path: string, method: string, operationId: string | undefined): boolean {
+  return method === 'post' && Object.hasOwn(COLLECTORS, path) && COLLECTORS[path] === operationId;
+}
+
 export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
   const operations: ParsedOperation[] = [];
 
@@ -29,17 +42,8 @@ export function parseSpec(spec: OpenApiSpec): ParsedOperation[] {
       if (!operation) continue;
 
       const tags = operation.tags ?? [];
-      const isChatgptCollector =
-        path === '/v2/analytics/chatgpt-events' &&
-        method === 'post' &&
-        operation.operationId === 'analytics_captureChatgptEvent';
-      const isFeedbackCollector =
-        path === '/v2/feedback' &&
-        method === 'post' &&
-        operation.operationId === FEEDBACK_OPERATION_ID;
       if (
-        !isChatgptCollector &&
-        !isFeedbackCollector &&
+        !isCollector(path, method, operation.operationId) &&
         !tags.some((t) => ALLOWED_TAGS.has(t.toLowerCase()))
       )
         continue;
