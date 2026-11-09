@@ -19,7 +19,7 @@ body carries no user, organization or credential fields, and the API ignores any
 | Who is active | `mcp_tool_called` | distinct `distinct_id` per day or week |
 | Which tools, how reliable, how fast | `mcp_tool_called` | `tool_name`, `outcome`, `error_code`, `latency_ms` |
 | In what order | `mcp_tool_called` | `session_id`, `call_index`, `previous_tool` |
-| What they ask for, without the content | `mcp_tool_called` | `arg_<field>` facets |
+| What they ask for, without the content | `mcp_tool_called` | `args` facets, read as `properties.args.<field>` |
 | Connect to generation result | both, then the API's `generation_completed` and `generation_failed` | `generation_id` |
 
 ## Events
@@ -39,11 +39,13 @@ The MCP server sends a batch of at most 50 events:
 }
 ```
 
-The API adds `organization_id`, `auth_method` (`oauth` or `api_key`), `mcp_version`
+The API adds `organization_id`, `auth_method` (`oauth`, `api_key` or `session`), `mcp_version`
 and `mcp_client` from the credential and headers. It sets `distinct_id` the way
 `generation_created` does: the user, the API key's owner, or the organization for an
-ownerless key. It flattens `args` into `arg_<field>` properties, and uses `event_id`
-as `$insert_id`, so a resent batch is not counted twice.
+ownerless key. It keeps `args` as one object (read a field as
+`properties.args.model`) and uses `event_id` as `$insert_id`, so a resent batch is not
+counted twice. PostHog's `timestamp` is when the API received the event, usually
+within two seconds of the call; order calls within a session by `call_index`.
 
 ### Every event
 
@@ -245,10 +247,10 @@ GROUP BY profile ORDER BY connected DESC
 What people ask `lipsync_create` for:
 
 ```sql
-SELECT properties.arg_model AS model,
-  coalesce(properties.arg_videoUrl, properties.arg_videoAssetId, properties.arg_imageUrl, properties.arg_imageAssetId) AS visual,
-  coalesce(properties.arg_audioUrl, properties.arg_audioAssetId, if(properties.arg_script IS NOT NULL, 'script', NULL)) AS voice,
-  properties.arg_script AS script_length, count() AS calls
+SELECT properties.args.model AS model,
+  coalesce(properties.args.videoUrl, properties.args.videoAssetId, properties.args.imageUrl, properties.args.imageAssetId) AS visual,
+  coalesce(properties.args.audioUrl, properties.args.audioAssetId, if(properties.args.script IS NOT NULL, 'script', NULL)) AS voice,
+  properties.args.script AS script_length, count() AS calls
 FROM events
 WHERE event = 'mcp_tool_called' AND properties.tool_name = 'lipsync_create'
   AND timestamp > now() - INTERVAL 7 DAY
