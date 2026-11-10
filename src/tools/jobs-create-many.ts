@@ -293,7 +293,7 @@ export function createJobsCreateManyTool(
 
   const description =
     `Start up to ${MAX_JOBS} independent Sync jobs at once by running one create tool once per item: ${names.join(', ')}. ` +
-    'Use it whenever the user wants 2 or more jobs that do not depend on each other, such as one video lip-synced to several audios, one video dubbed into several languages (one dubbing_create item per language, when available), or one Edit Dialogue preview, then one video, per variant. ' +
+    'Use it whenever the user wants 2 or more jobs that do not depend on each other, such as one video lipsynced to several audios, one video dubbed into several languages (one dubbing_create item per language, when available), or one Edit Dialogue preview, then one video, per variant. ' +
     'It works on every plan and uses the same API, limits and billing as calling the tool once per item; it is not the batch API. ' +
     'Each item is that tool’s own arguments and is checked as a direct call would be; nothing starts if any item is invalid or repeats another. ' +
     'This is a paid action: every item is billed as its own job. Before calling, estimate each distinct configuration with the matching estimate tool, tell the user the item count and the estimated total, and wait for one confirmation of the whole set. ' +

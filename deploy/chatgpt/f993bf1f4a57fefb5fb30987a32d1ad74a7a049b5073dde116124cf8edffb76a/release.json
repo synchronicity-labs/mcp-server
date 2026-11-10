@@ -1,0 +1,12 @@
+{
+  "repository": "synchronicity-labs/sync-api-v2",
+  "commit": "48ec5669b512e48eef079d261bba4dd3cb005363",
+  "tree": "dbe7955dc635de6c3c0a73127fd438ba1707365b",
+  "htmlSha256": "f993bf1f4a57fefb5fb30987a32d1ad74a7a049b5073dde116124cf8edffb76a",
+  "htmlBytes": 3383752,
+  "nodeVersion": "26.13.0",
+  "packageManager": "pnpm@12.14.0",
+  "buildCommands": [
+    "pnpm --filter @sync/chatgpt build"
+  ]
+}

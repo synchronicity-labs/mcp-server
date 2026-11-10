@@ -22,19 +22,23 @@ export const DESCRIPTION_EDITS: readonly Edit[] = [
 ];
 
 export const INSTRUCTION_EDITS: readonly Edit[] = [
+  [
+    'Before lipsync, read fresh account_get-usage in the organization that will run it. This tool reads the selected organization only: select the target with organizations_select before checking coverage for a different organizationId. Free coverage requires plan=null, hasActiveCredits=false, freeGenerationsExhausted=false and enough freeMonthlyLimits.generations remaining for every requested job. For script input, also require freeTtsExhausted=false, enough freeMonthlyLimits.tts remaining, and elevenLabsKeyConnected=false; a connected provider key can incur external speech charges. Check model and duration eligibility with the estimate; missing eligibility is unknown, and its base-rate amount is not a charge for covered work. When the whole request is covered, proceed without mentioning prices or asking for spending confirmation. Paid, external or unknown coverage still requires a quote and spending confirmation; omitted billing fields are unknown. A free lipsync allowance does not prove translation, dialogue previews or voice cloning is free. ',
+    '',
+  ],
   ['; quote and confirm the whole set once. ', '. '],
   [
     'Once ready, estimate and confirm the paid translation before calling dubbing_create when available with the returned asset id as videoAssetId. ',
     'Once ready, call dubbing_create when available with the returned asset id as videoAssetId. ',
   ],
   [
-    'Before confirming the paid action, use generations_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. ',
+    'Before confirming the paid action, use generations_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lipsync only; do not present it as the full workflow cost. Confirm the target language and configuration. ',
     '',
   ],
   ['Confirm the source audio, language and quote before translation-previews_create. ', ''],
   [
-    'After a translated audio preview is saved, estimate and confirm a separate lipsync_create-from-assets using that audio;',
-    'After a translated audio preview is saved, lipsync with that audio in a separate lipsync_create-from-assets or lipsync_create-timeline;',
+    'After a translated audio preview is saved, check coverage for a separate lipsync_create-from-assets using that audio; quote and confirm only when it is not fully covered. ',
+    'After a translated audio preview is saved, lipsync with that audio in a separate lipsync_create-from-assets or lipsync_create-timeline. ',
   ],
   ['Confirm script, voice and estimated cost. ', ''],
   [
@@ -42,7 +46,7 @@ export const INSTRUCTION_EDITS: readonly Edit[] = [
     'then use the saved asset. ',
   ],
   [
-    'Before quoting script-driven lipsync, call generations_estimate-cost with the actual replacement script when its schema supports script; use measured audioDuration if the replacement audio already exists. Explain the returned durationEstimate and label script-based pricing approximate until synthesis determines the actual length. Never substitute the full source video duration for replacement speech. Disclose speech synthesis separately. If those inputs are unavailable, estimate spoken duration from the script and label it approximate; do not present a source-video quote as the replacement-script price. Re-estimate after script, audio, model or sync-mode changes. ',
+    'For paid or unknown-coverage script-driven lipsync, call generations_estimate-cost with the actual replacement script when its schema supports script; use measured audioDuration if the replacement audio already exists. Explain the returned durationEstimate and label script-based pricing approximate until synthesis determines the actual length. Never substitute the full source video duration for replacement speech. Disclose speech synthesis separately. If those inputs are unavailable, estimate spoken duration from the script and label it approximate; do not present a source-video quote as the replacement-script price. Re-estimate after script, audio, model or sync-mode changes. ',
     '',
   ],
 ];
@@ -53,7 +57,7 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
   ],
   lipsync_create: [
     [
-      'Before confirming, estimate using the replacement script or measured audio duration, not the source video length. Script-based quotes are approximate and exclude speech synthesis. ',
+      'Check account_get-usage first. When free allowances cover the whole request, including speech for script input without a connected provider key, proceed without price mention or spending confirmation. Otherwise quote and confirm paid or external work; unknown coverage is not free. Estimate using the replacement script or measured audio duration, not the source video length. Script-based quotes are approximate and exclude speech synthesis. ',
       '',
     ],
   ],
@@ -73,7 +77,7 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
   dubbing_create: [
     [' before estimating or calling this tool', ' before calling this tool'],
     [
-      'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generations_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lip-sync pricing is not the full workflow cost. ',
+      'This is a paid action: confirm the requested language, configuration and estimated cost with the user before calling. Use generations_estimate-cost with workflow=translate-and-dub when that input is supported, and disclose any excluded external provider charges. Without the combined breakdown, lipsync pricing is not the full workflow cost. ',
       '',
     ],
   ],

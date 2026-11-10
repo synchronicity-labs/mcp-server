@@ -9,6 +9,10 @@ const counter = z.object({
 const billing = z.object({
   plan: z.string().nullable(),
   canManageBilling: z.boolean(),
+  hasActiveCredits: z.boolean().optional(),
+  freeGenerationsExhausted: z.boolean().optional(),
+  freeTtsExhausted: z.boolean().optional(),
+  elevenLabsKeyConnected: z.boolean().optional(),
   credits: z
     .object({
       balance: z.number().finite(),
@@ -66,7 +70,7 @@ export function createAccountManagementTools(http: HttpClient): McpToolDefinitio
       name: 'account_get-usage',
       title: 'Read Sync usage and balance',
       description:
-        "Read what the connected sync. organization has left to spend in the current billing period. Which section is filled depends on how it is billed: credits gives balance, available (spendable now) and inFlight (held by running jobs); freeMonthlyLimits gives generations and text-to-speech used and max, with monthlyResetDate. Only when both are null does it fill usage with the period's billed totalCostCents, totalFrames and totalTtsSeconds, and usage stays null if the API reports those totals as incomplete. canManageBilling is true only when billing allows it and the caller is an owner or admin. Not for what one past generation cost (generations_get-costs, when available), a quote for new work (generations_estimate-cost), or plan limits and organization (account_get-context). Buys no credits, changes no plan and starts no generation.",
+        "Read what the connected sync. organization has left to spend in the current billing period. Use this before lipsync to check free coverage; an estimate's base price is not a charge when the request is fully covered. credits gives balance, available (spendable now) and inFlight (held by running jobs); freeMonthlyLimits gives generations and text-to-speech used and max, with monthlyResetDate. A script needs both allowances. elevenLabsKeyConnected=true means speech may incur external provider charges. Missing hasActiveCredits, exhaustion or provider-key fields mean unknown coverage, never false. Only when credits and freeMonthlyLimits are both null does it fill usage with the period's billed totalCostCents, totalFrames and totalTtsSeconds, and usage stays null if the API reports those totals as incomplete. canManageBilling is true only when billing allows it and the caller is an owner or admin. Not for what one past generation cost (generations_get-costs, when available), a quote for paid work (generations_estimate-cost), or plan limits and organization (account_get-context). Buys no credits, changes no plan and starts no generation.",
       inputSchema: {},
       outputSchema: response.shape,
       annotations: {
