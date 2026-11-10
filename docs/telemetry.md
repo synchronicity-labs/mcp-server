@@ -144,7 +144,7 @@ Studio is open, and ChatGPT and Codex reconnect for nearly every call. So the ho
 server records:
 
 - a `background` call once per person, tool, `outcome`, `error_code`, `result_status`
-  and generation or job in each ten minutes;
+  and target (the generation, job or Studio view it names) in each ten minutes;
 - `mcp_session_initialized` once per person, client name and version, protocol version
   and capabilities in each ten minutes.
 

@@ -18,6 +18,7 @@ const STDIO_OWNER = 'stdio';
 const MAX_GAP_MS = 7 * 24 * 3_600_000;
 const MAX_LATENCY_MS = 3_600_000;
 const MAX_COUNT = 100_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const capped = (value: number, max: number) => Math.min(Math.max(0, Math.round(value)), max);
 
 export function telemetryClientName(name: string | undefined): string | undefined {
@@ -46,6 +47,14 @@ export type CallContext = {
 };
 
 const parentCall = new AsyncLocalStorage<string>();
+
+/** What a call is about, such as a generation or Studio mount, for repeat checks only. */
+function targetIds(args: Record<string, unknown> | undefined): string[] {
+  return Object.entries(args ?? {})
+    .filter(([, value]) => typeof value === 'string' && UUID.test(value))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .sort();
+}
 
 /** SHA-256 of the call's openai/session, which ChatGPT and Codex send per conversation. */
 function conversationId(meta: Record<string, unknown> | undefined): string | undefined {
@@ -118,6 +127,8 @@ export class TelemetrySession {
     try {
       const [key, credential] = this.#owner(owner, token);
       if (this.transport === 'http' && !credential) return;
+      // Nothing is recorded while waiting for the API, so nothing counts as seen either.
+      if (!this.queue.active) return;
       if (repeatKey && !this.queue.memory.firstInWindow(JSON.stringify([key, repeatKey]))) return;
       this.queue.record(key, credential, {
         event,
@@ -220,6 +231,7 @@ export class TelemetrySession {
                 outcome.error_code,
                 facets.result_status,
                 facets.generation_id ?? facets.job_id,
+                targetIds(context.args),
               ])
             : undefined,
         );

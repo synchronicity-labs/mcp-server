@@ -9,14 +9,13 @@ import { trackToolCall } from './tool-calls.js';
 const OWNER = JSON.stringify(['user-1', 'client-1', null]);
 const JOURNEY = '0b6c6a1e-3c5e-4a51-9f0e-4b7c2b1d9a10';
 
-function setup() {
+function setup(active = true) {
   const sent: TelemetryEvent[] = [];
-  const queue = new TelemetryQueue(async (events) => void sent.push(...events), {
-    maxEvents: 1000,
-    batchSize: 1000,
-    flushMs: 60_000,
-    maxInFlight: 8,
-  });
+  const queue = new TelemetryQueue(
+    async (events) => void sent.push(...events),
+    { maxEvents: 1000, batchSize: 1000, flushMs: 60_000, maxInFlight: 8 },
+    active,
+  );
   const session = (client = 'openai-mcp') => {
     const telemetry = new TelemetrySession(queue, 'http');
     telemetry.setClient(client, '1.0.0');
@@ -27,7 +26,7 @@ function setup() {
     await new Promise((resolve) => setTimeout(resolve, 5));
     return sent.splice(0);
   };
-  return { session, drain };
+  return { session, drain, queue };
 }
 
 const tool = (name: string, visibility?: string[]): McpToolDefinition => ({
@@ -97,6 +96,34 @@ describe('TelemetrySession across sessions', () => {
       ['studio-views_register', 1, undefined, 'ui'],
       ['generations_get', 1, undefined, 'model'],
       ['generations_get', 1, undefined, 'model'],
+    ]);
+  });
+
+  it('keeps background reads of different targets apart', async () => {
+    const { session, drain } = setup();
+    const read = tool('generations_get', ['app']);
+    const first = { id: '00000000-0000-4000-8000-000000000001' };
+    const second = { id: '00000000-0000-4000-8000-000000000002' };
+    for (const args of [first, second, first, second]) await call(session(), read, args);
+    expect((await drain()).map((e) => e.properties.tool_name)).toEqual([
+      'generations_get',
+      'generations_get',
+    ]);
+  });
+
+  it('does not count events dropped while waiting for the API as seen', async () => {
+    const { session, drain, queue } = setup(false);
+    const register = tool('studio-views_register', ['app']);
+    const connect = () =>
+      session().initialized({ protocolVersion: '2025-06-18', capabilities: {} }, OWNER, 'token');
+    connect();
+    await call(session(), register);
+    queue.activate();
+    connect();
+    await call(session(), register);
+    expect((await drain()).map((e) => e.event)).toEqual([
+      'mcp_session_initialized',
+      'mcp_tool_called',
     ]);
   });
 
