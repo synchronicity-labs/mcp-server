@@ -210,7 +210,7 @@ describe('jobs_create-many', () => {
         undefined,
         undefined,
         undefined,
-        { nextAction },
+        { nextAction, requiredCredits: 800, billingUrl: 'https://sync.so/billing' },
       );
     });
     const result = await run({ items: items('es', 'fr', 'ja', 'de') });
@@ -218,9 +218,10 @@ describe('jobs_create-many', () => {
     expect(callTool).toHaveBeenCalledTimes(2);
     expect(result.summary).toMatchObject({ failed: 2, notStarted: 2 });
     expect(result.nextStep).toContain('Stopped after No credits');
-    expect(result.items[0]?.error?.nextAction).toEqual({
-      type: 'buy_credits',
-      url: 'https://sync.so/billing',
+    expect(result.items[0]?.error).toMatchObject({
+      nextAction: { type: 'buy_credits', url: 'https://sync.so/billing' },
+      requiredCredits: 800,
+      billingUrl: 'https://sync.so/billing',
     });
   });
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ApiRequestError, type nextActionSchema } from '../http-client.js';
 import type { McpToolDefinition } from './generator.js';
 import { hashUuid } from './project-destination.js';
 
@@ -103,4 +104,45 @@ export function created(result: unknown): Record<string, unknown> {
     return structured;
   }
   return isRecord(result) ? result : {};
+}
+
+export type ItemError = {
+  message: string;
+  status?: number;
+  code?: string;
+  retryAfterMs?: number;
+  generationId?: string;
+  nextAction?: z.infer<typeof nextActionSchema>;
+  /** What following nextAction needs: the plan, the credits and where to pay. */
+  requiredPlan?: string;
+  requiredCredits?: number;
+  billingUrl?: string;
+  /** The request may have created the job; resending it with its key is safe. */
+  outcomeUnknown?: true;
+};
+
+export const TIMED_OUT: ItemError = {
+  message:
+    'No answer before the time limit, so this job may have started. Send this item again with the same idempotencyKey; its key makes that safe.',
+  code: 'outcome_unknown',
+  outcomeUnknown: true,
+};
+
+export function itemError(error: unknown): ItemError {
+  if (error instanceof ApiRequestError)
+    return {
+      message: error.message,
+      status: error.status,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+      ...(error.generationId ? { generationId: error.generationId } : {}),
+      ...(error.details?.nextAction ? { nextAction: error.details.nextAction } : {}),
+      ...(error.details?.requiredPlan ? { requiredPlan: error.details.requiredPlan } : {}),
+      ...(error.details?.requiredCredits === undefined
+        ? {}
+        : { requiredCredits: error.details.requiredCredits }),
+      ...(error.details?.billingUrl ? { billingUrl: error.details.billingUrl } : {}),
+    };
+  if (error instanceof z.ZodError) return { message: z.prettifyError(error) };
+  return { message: error instanceof Error ? error.message : String(error) };
 }
