@@ -10,6 +10,7 @@ import { asyncRequestListener } from './test-fixtures/request-listener.js';
 const projectId = '00000000-0000-4000-8000-000000000001';
 const draftId = '00000000-0000-4000-8000-000000000002';
 const visualId = '00000000-0000-4000-8000-000000000003';
+const archivedDraftId = '00000000-0000-4000-8000-000000000004';
 
 it('routes chat draft edits through the authenticated API without confirming UI application or calling paid tools', async () => {
   const calls: { method?: string; path?: string; auth?: string; body: Record<string, unknown> }[] =
@@ -131,6 +132,11 @@ it('routes chat draft edits through the authenticated API without confirming UI 
       // tools/list reads the account's features; the assertions cover the tools' own calls.
       if (req.url !== '/v2/account')
         calls.push({ method: req.method, path: req.url, auth: req.headers.authorization, body });
+      if (req.url === `/v2/projects/${projectId}/studio-drafts/${archivedDraftId}`) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ message: 'Not Found' }));
+        return;
+      }
       if (req.url !== `/v2/projects/${projectId}/studio-drafts/${draftId}`) {
         res.statusCode = 500;
         res.end(JSON.stringify({ message: 'Unexpected or paid request' }));
@@ -283,6 +289,17 @@ it('routes chat draft edits through the authenticated API without confirming UI 
       await nonUi.close();
       await nonUiServer.close();
     }
+    // An archived draft answers a bare 404; the agent learns where the current ids are.
+    const archived = await runWithAuth('draft-user', 'openai-mcp', () =>
+      client.callTool({
+        name: 'studio-drafts_get',
+        arguments: { projectId, draftId: archivedDraftId },
+      }),
+    );
+    expect(archived.isError).toBe(true);
+    expect(archived.structuredContent).toMatchObject({
+      error: { status: 404, nextStep: expect.stringContaining('studio-views_get') },
+    });
   } finally {
     await client.close();
     await server.close();

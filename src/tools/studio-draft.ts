@@ -95,6 +95,10 @@ export function supportsStudioDrafts(operations: ParsedOperation[]): boolean {
   );
 }
 
+// The API answers a bare 404, which agents retried with the same ids (CRAFT-7906).
+const DRAFT_NOT_OPEN =
+  'This draft is not open any more: Studio archives its draft when it opens another project or workflow. Call studio-views_get for the published viewId and use its context.draftId and context.projectId. If draftId is null, Studio has no editable draft, so ask the user to open the workflow in Studio. Never guess an id or reuse an older one.';
+
 /** The API owns authorization, persistence and compare-and-set across MCP sessions/pods. */
 export function createStudioDraftTools(
   operations: ParsedOperation[],
@@ -104,7 +108,14 @@ export function createStudioDraftTools(
   const path = (args: { projectId: string; draftId: string }) =>
     `/v2/projects/${args.projectId}/studio-drafts/${args.draftId}`;
   async function read(args: { projectId: string; draftId: string }, signal?: AbortSignal) {
-    const result = draft.parse(await http.request('get', path(args), { signal }));
+    let body: unknown;
+    try {
+      body = await http.request('get', path(args), { signal });
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 404) error.nextStep = DRAFT_NOT_OPEN;
+      throw error;
+    }
+    const result = draft.parse(body);
     if (result.id !== args.draftId || result.projectId !== args.projectId)
       throw new Error('Sync returned a different Studio draft.');
     return result;
