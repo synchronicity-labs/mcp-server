@@ -7,6 +7,7 @@ import { REVISION } from '../revision.js';
 import { PACKAGE_VERSION } from '../version.js';
 import { argumentFacets, invalidFields, type OutcomeFacets, resultFacets } from './facets.js';
 import type { TelemetryQueue } from './queue.js';
+import { telemetryReferralSource } from './referral.js';
 
 const CLIENT_NAME = /^[a-z0-9][a-z0-9 ._()/@-]{0,63}$/;
 const CLIENT_VERSION = /^[0-9A-Za-z.+_-]{1,32}$/;
@@ -94,12 +95,16 @@ export class TelemetrySession {
   #callIndex = 0;
   #previousTool: string | undefined;
   #previousCallAt: number | undefined;
+  readonly #referralSource: string | undefined;
 
   constructor(
     private readonly queue: TelemetryQueue,
     private readonly transport: 'http' | 'stdio',
+    referralSource?: unknown,
     private readonly now = () => new Date(),
-  ) {}
+  ) {
+    this.#referralSource = telemetryReferralSource(referralSource);
+  }
 
   setClient(name: string | undefined, version: unknown): void {
     const client = telemetryClientName(name);
@@ -129,7 +134,11 @@ export class TelemetrySession {
       if (this.transport === 'http' && !credential) return;
       // Nothing is recorded while waiting for the API, so nothing counts as seen either.
       if (!this.queue.active) return;
-      if (repeatKey && !this.queue.memory.firstInWindow(JSON.stringify([key, repeatKey]))) return;
+      if (
+        repeatKey &&
+        !this.queue.memory.firstInWindow(JSON.stringify([key, this.#referralSource, repeatKey]))
+      )
+        return;
       this.queue.record(key, credential, {
         event,
         event_id: randomUUID(),
@@ -138,6 +147,7 @@ export class TelemetrySession {
           session_id: this.id,
           transport: this.transport,
           ...this.#client,
+          ...(this.#referralSource && { referral_source: this.#referralSource }),
           server_version: PACKAGE_VERSION,
           server_revision: REVISION_FORMAT.test(REVISION) ? REVISION : 'unknown',
           ...properties,
