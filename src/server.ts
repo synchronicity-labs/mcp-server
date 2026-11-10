@@ -147,7 +147,7 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
     text: 'When a Sync tool error has nextAction, read it before anything else in the error: its type says what changes the outcome. retry_later: wait retryAfterSeconds, then send the same request once. reduce_input: shorten or shrink the input. upgrade_plan (requiredPlan names the plan), buy_credits, pay_invoice, update_payment_method, confirm_payment and manage_integration need a person: give them the link (nextAction.url) and do not retry until they say it is done. contact_support: stop and tell them to contact sync. support. Never resend a refused request unchanged. ',
   },
   {
-    text: 'When billing-approval-links_create is available and nextAction is upgrade_plan or buy_credits, or the user asks to upgrade or buy credits, create an approval link with the requiredPlan or requiredCredits and give the person its url; it charges nothing, and they approve and pay on sync.so. Afterwards account_get-context shows the new plan and account_get-usage the new balance; check before retrying. ',
+    text: 'When billing-approval-links_create is available and nextAction is upgrade_plan or buy_credits, or the user asks to upgrade or buy credits, create an approval link with the requiredPlan or requiredCredits, and the same organizationId if the refused request used one, and give the person its url; it charges nothing, and they approve and pay on sync.so. Afterwards account_get-context shows the new plan and account_get-usage the new balance; check before retrying. ',
     notChatgpt: true,
   },
   {

@@ -155,10 +155,24 @@ describe('billing-approval-links_create', () => {
     expect(result.structuredContent).toEqual(link);
     expect(JSON.stringify(result)).not.toContain('must-not-leak');
     await call('account-one', 'billing-approval-links_create', { credits: 800 });
-    expect(requests.slice(before)).toEqual([
+    // The organization choice also reads /v2/account to name the organization.
+    const posts = requests
+      .slice(before)
+      .filter((request) => request.path === '/v2/billing/approval-links');
+    expect(posts).toEqual([
       { method: 'POST', path: '/v2/billing/approval-links', body: { plan: 'pro' } },
       { method: 'POST', path: '/v2/billing/approval-links', body: { credits: 800 } },
     ]);
+  });
+
+  it('takes a one-call organizationId, so a refused create elsewhere pays for that organization', async () => {
+    const tool = (await claude.listTools()).tools.find(
+      (entry) => entry.name === 'billing-approval-links_create',
+    );
+    expect(tool?.inputSchema.properties).toHaveProperty('organizationId');
+    expect(claude.getInstructions()).toContain(
+      'the same organizationId if the refused request used one',
+    );
   });
 
   it('refuses both or neither of plan and credits before calling the API', async () => {

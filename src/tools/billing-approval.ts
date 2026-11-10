@@ -73,7 +73,7 @@ const link = z.object({
 });
 
 const DESCRIPTION =
-  "Create a sync.so link where a person approves and pays for a plan or a credit top-up for the session's organization, because you cannot pay. " +
+  "Create a sync.so link where a person approves and pays for a plan or a credit top-up, because you cannot pay. It is for the session's organization unless you pass organizationId; when the refused request ran with a one-call organizationId, pass the same one so the payment unblocks that organization. " +
   'Use it when a Sync refusal has nextAction.type upgrade_plan (pass plan: its requiredPlan) or buy_credits (pass credits: requiredCredits), or when the user asks to upgrade their plan or buy credits. ' +
   'Not for an unpaid invoice, a declined card or a payment to confirm (give the person nextAction.url instead), and not to read the current plan or balance (account_get-context, account_get-usage).\n\n' +
   'Effects: it creates no charge, subscription or payment and holds nothing. Each call returns a new link that does not expire, so reuse one you already have instead of creating another.\n\n' +

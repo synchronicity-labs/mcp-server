@@ -25,6 +25,8 @@ const ORGANIZATION_LOOKUP_MS = 2_000;
 /** Creates, estimates and billing reads that take a one-call organizationId. */
 const PER_CALL_ORGANIZATION_TOOLS = new Set([
   'account_get-usage',
+  // A refused create's approval link must pay for the organization that refused it.
+  'billing-approval-links_create',
   'lipsync_create',
   'lipsync_create-from-assets',
   'lipsync_create-timeline',
