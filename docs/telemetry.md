@@ -201,14 +201,21 @@ WHERE e.event = 'mcp_session_initialized' AND e.timestamp > now() - INTERVAL 30 
 GROUP BY day, profile ORDER BY day DESC
 ```
 
-Tool reliability and latency, last seven days:
+Tool reliability and latency, last seven days. Two API errors are expected answers, not
+failures: `import_in_progress` (a social import is still downloading; the agent asks
+again) and `STUDIO_VIEW_SUPERSEDED` (a newer Studio in the same chat took over), so they
+count apart:
 
 ```sql
 SELECT properties.tool_name AS tool, count() AS calls, uniq(distinct_id) AS people,
-  round(countIf(properties.outcome = 'success') / count(), 3) AS success_rate,
+  round(countIf(properties.outcome = 'success' OR coalesce(toString(properties.error_code), '')
+    IN ('import_in_progress', 'STUDIO_VIEW_SUPERSEDED')) / count(), 3) AS success_rate,
+  countIf(coalesce(toString(properties.error_code), '')
+    IN ('import_in_progress', 'STUDIO_VIEW_SUPERSEDED')) AS expected,
   countIf(properties.outcome = 'invalid_arguments') AS invalid,
   countIf(properties.outcome = 'refused') AS refused,
-  countIf(properties.outcome = 'api_error') AS api_errors,
+  countIf(properties.outcome = 'api_error' AND coalesce(toString(properties.error_code), '')
+    NOT IN ('import_in_progress', 'STUDIO_VIEW_SUPERSEDED')) AS api_errors,
   countIf(properties.outcome = 'timeout') AS timeouts,
   quantile(0.5)(toFloat(properties.latency_ms)) AS p50_ms,
   quantile(0.95)(toFloat(properties.latency_ms)) AS p95_ms
