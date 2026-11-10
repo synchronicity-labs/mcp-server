@@ -362,6 +362,18 @@ describe('usage telemetry over stdio', () => {
 });
 
 describe('usage telemetry on the hosted server', () => {
+  it('waits, inactive, when it starts before the API collects MCP events', async () => {
+    const { baseUrl, sent } = await api({ collector: false });
+    const factory = await createMcpServerFactory({ baseUrl, transport: 'http', port: 0 });
+    expect(factory.telemetry?.stats()).toMatchObject({ active: false });
+    const telemetry = new TelemetrySession(factory.telemetry!, 'http');
+    telemetry.setClient('openai-mcp', '1.0.0');
+    telemetry.initialized({ protocolVersion: '2025-06-18', capabilities: {} }, 'owner', 'token');
+    factory.telemetry!.flush();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sent).toEqual([]);
+  });
+
   it('sends each owner’s events with that owner’s token and keeps ChatGPT context coarse', async () => {
     const { baseUrl, sent } = await api({ failPaths: /estimate|voices|assets/ });
     const factory = await createMcpServerFactory({ baseUrl, transport: 'http', port: 0 });

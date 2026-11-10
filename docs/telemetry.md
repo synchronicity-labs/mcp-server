@@ -18,7 +18,7 @@ body carries no user, organization or credential fields, and the API ignores any
 | New or returning | `mcp_session_initialized` | the person's first event of this name |
 | Who is active | `mcp_tool_called` | distinct `distinct_id` per day or week |
 | Which tools, how reliable, how fast | `mcp_tool_called` | `tool_name`, `outcome`, `error_code`, `latency_ms` |
-| In what order | `mcp_tool_called` | `session_id`, `call_index`, `previous_tool` |
+| In what order | `mcp_tool_called` | `conversation_id` or `session_id`, then `call_index`, `previous_tool` |
 | What they ask for, without the content | `mcp_tool_called` | `args` facets, read as `properties.args.<field>` |
 | Connect to generation result | both, then the API's `generation_completed` and `generation_failed` | `generation_id` |
 
@@ -45,7 +45,8 @@ and `mcp_client` from the credential and headers. It sets `distinct_id` the way
 ownerless key. It keeps `args` as one object (read a field as
 `properties.args.model`) and uses `event_id` as `$insert_id`, so a resent batch is not
 counted twice. PostHog's `timestamp` is when the API received the event, usually
-within two seconds of the call; order calls within a session by `call_index`.
+within two seconds of the call, and calls sent in one batch share it; order calls by
+`call_index` instead.
 
 ### Every event
 
@@ -75,11 +76,12 @@ within two seconds of the call; order calls within a session by `call_index`.
 | `call_id` | Random per call |
 | `tool_name` | The tool's current name |
 | `called_as` | The old name, when the client called a renamed tool by it |
-| `call_index` | 1 for the session's first call, then 2, 3… |
-| `previous_tool` | The tool the session called before this one |
-| `ms_since_session_start`, `ms_since_previous_call` | Gaps, in milliseconds |
+| `call_index` | 1 for the first call, then 2, 3…, counted in the conversation or the session (see below) |
+| `previous_tool` | The tool called before this one in the same conversation or session |
+| `ms_since_previous_call` | Gap since that call, in milliseconds |
+| `ms_since_session_start` | Gap since this MCP session started, in milliseconds |
 | `parent_call_id` | For calls `jobs_create-many` makes on the agent's behalf |
-| `invocation` | `model`, `ui` (ChatGPT widget), `background` or `nested` |
+| `invocation` | `model`, `ui` (a user action in the widget), `background` (the widget on its own) or `nested` |
 | `outcome` | See below |
 | `error_status`, `error_code` | API status and code, when there is one |
 | `invalid_fields` | For `invalid_arguments`: the top-level fields that failed validation |
@@ -90,6 +92,16 @@ within two seconds of the call; order calls within a session by `call_index`.
 | `result_count` | How many items a list returned |
 | `conversation_id` | ChatGPT only: SHA-256 of its `openai/session` |
 | `locale`, `country` | ChatGPT only: `openai/locale` and `openai/userLocation.country` |
+
+ChatGPT and Codex open a new MCP session for nearly every call, so on the hosted
+server a call that carries a `conversation_id` and is not `background` is counted in
+its conversation: `call_index`, `previous_tool` and `ms_since_previous_call` continue
+across sessions. Other calls are counted in their session. The count lives in the
+server's memory, so it starts again at 1 after a deploy and after six quiet hours.
+
+The ChatGPT widget names its calls `ui` or `background`. Where the widget runs without
+its analytics, as in Codex, a call to a widget-only tool (`ui.visibility` without
+`model`) is `ui` when it carries an `idempotencyKey` and `background` otherwise.
 
 `outcome` is one of:
 
@@ -125,6 +137,20 @@ by its kind, and the API refuses a batch that breaks this. Fields the tool does 
 are not recorded. Hosts other than the listed ones
 become `other`, so a customer's own domain never appears.
 
+## Repeats
+
+The widget repeats some calls every few seconds, such as `studio-views_register` while
+Studio is open, and ChatGPT and Codex reconnect for nearly every call. So the hosted
+server records:
+
+- a `background` call once per person, tool, `outcome`, `error_code`, `result_status`
+  and target (the generation, job or Studio view it names) in each ten minutes;
+- `mcp_session_initialized` once per person, client name and version, protocol version
+  and capabilities in each ten minutes.
+
+Count people and connections from these events, not raw requests. A `session_id` on a
+call can have no `mcp_session_initialized` of its own. stdio records every session.
+
 ## Delivery
 
 Recording an event never waits and never fails a call. Events wait in a queue for
@@ -135,7 +161,10 @@ eight requests in flight, and drops new events when full. `mcp_runtime` log line
 report `telemetry.queued`, `sent`, `dropped` and `failed`.
 
 The server sends nothing until the API's published schema lists
-`analytics_captureMcpEvents`, so it can deploy before the API does.
+`analytics_captureMcpEvents`, so it can deploy before the API does. When the schema
+it read at startup does not list it, the server reads the schema again every ten
+minutes and starts recording once it does. It keeps nothing from before then. The
+`mcp_runtime` telemetry stats report `active: false` while it waits.
 
 ## Turning it off
 
@@ -188,19 +217,20 @@ WHERE event = 'mcp_tool_called' AND timestamp > now() - INTERVAL 7 DAY
 GROUP BY tool ORDER BY calls DESC
 ```
 
-Most common first three tools of a session:
+Most common first three tools of a conversation, or of a session for clients without
+conversations:
 
 ```sql
-SELECT path, count() AS sessions FROM (
-  SELECT properties.session_id AS session,
+SELECT path, count() AS conversations FROM (
+  SELECT coalesce(toString(properties.conversation_id), toString(properties.session_id)) AS chain,
     arrayStringConcat(arraySlice(arrayMap(x -> x.2,
       arraySort(x -> x.1, groupArray((toInt(properties.call_index), toString(properties.tool_name))))), 1, 3), ' > ') AS path
   FROM events
   WHERE event = 'mcp_tool_called' AND timestamp > now() - INTERVAL 7 DAY
-    AND properties.invocation != 'nested'
-  GROUP BY session
+    AND properties.invocation NOT IN ('nested', 'background')
+  GROUP BY chain
 )
-GROUP BY path ORDER BY sessions DESC LIMIT 30
+GROUP BY path ORDER BY conversations DESC LIMIT 30
 ```
 
 Which tool follows which:
@@ -209,7 +239,7 @@ Which tool follows which:
 SELECT properties.previous_tool AS from_tool, properties.tool_name AS to_tool, count() AS n
 FROM events
 WHERE event = 'mcp_tool_called' AND timestamp > now() - INTERVAL 7 DAY
-  AND properties.previous_tool IS NOT NULL
+  AND properties.previous_tool IS NOT NULL AND properties.invocation != 'background'
 GROUP BY from_tool, to_tool ORDER BY n DESC LIMIT 50
 ```
 
@@ -247,12 +277,15 @@ LEFT JOIN finished f ON f.generation_id = s.generation_id
 GROUP BY profile ORDER BY connected DESC
 ```
 
-What people ask `lipsync_create` for:
+What people ask `lipsync_create` for. ChatGPT passes attached files as `video`, `audio`
+and `image`:
 
 ```sql
 SELECT properties.args.model AS model,
-  coalesce(properties.args.videoUrl, properties.args.videoAssetId, properties.args.imageUrl, properties.args.imageAssetId) AS visual,
-  coalesce(properties.args.audioUrl, properties.args.audioAssetId, if(properties.args.script IS NOT NULL, 'script', NULL)) AS voice,
+  coalesce(properties.args.videoUrl, properties.args.videoAssetId, if(properties.args.video IS NOT NULL, 'file', NULL),
+    properties.args.imageUrl, properties.args.imageAssetId, if(properties.args.image IS NOT NULL, 'image_file', NULL)) AS visual,
+  coalesce(properties.args.audioUrl, properties.args.audioAssetId, if(properties.args.audio IS NOT NULL, 'file', NULL),
+    if(properties.args.script IS NOT NULL, 'script', NULL)) AS voice,
   properties.args.script AS script_length, count() AS calls
 FROM events
 WHERE event = 'mcp_tool_called' AND properties.tool_name = 'lipsync_create'
