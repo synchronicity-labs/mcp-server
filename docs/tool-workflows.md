@@ -234,6 +234,34 @@ releases omit `get-account-context.capabilities.projectRenaming`.
 organization. API keys retain a null signed-in account. The UI must not infer a
 personal asset scope or permissions from a client name or an API key's owner.
 
+## Billing refusals and approval links
+
+A billing, plan, credit or limit refusal from the API carries `nextAction`:
+`{ type, url?, retryAfterSeconds?, requiredPlan? }`. The tools pass it through in the
+error result (`structuredContent.error` and the JSON text block the model reads), as they
+do `requiredPlan`, `requiredCredits` and `billingUrl`; `jobs_create-many` puts it on the
+refused item's `error`. `src/http-client.ts` keeps only the error fields it lists, so a new
+API field reaches agents only after it is added there. `type` stays a plain string, since
+the API adds types: today `retry_later`, `upgrade_plan`, `buy_credits`, `pay_invoice`,
+`update_payment_method`, `confirm_payment`, `reduce_input`, `manage_integration` and
+`contact_support`. The server instructions tell the model to act on `nextAction` first,
+and `nextStep` says how for each type (`nextStep` in `src/server.ts`).
+
+An agent cannot pay, so for `upgrade_plan` and `buy_credits` it creates an approval link
+with `billing-approval-links_create` (`POST /v2/billing/approval-links`), passing
+`requiredPlan` as `plan` or `requiredCredits` as `credits` (exactly one). The result
+quotes the price (`amountCents`, `currency`, `interval`), the change (`subscribe`,
+`upgrade` or `top_up`) and the organization, and gives a sync.so `url`. The person opens
+it in a browser, signs in, and approves and pays there; only owners and admins can.
+Creating a link stores nothing and charges nothing, and links do not expire. Afterwards
+`account_get-context` shows the new plan and `account_get-usage` the new balance. A user
+can also ask for one directly ("upgrade us to Pro", "buy 1,000 credits").
+
+The API tags the operation `Billing`, which the OpenAPI parser does not generate tools
+from, so `src/openapi/parser.ts` reads it by exact path and operationId. The tool is listed
+only when the API publishes it, on the hosted server outside the ChatGPT app (not in its
+reviewed listing yet) and in every local toolset.
+
 ## Choose the organization
 
 Every call runs in one Sync organization, and paid work is created and billed there.

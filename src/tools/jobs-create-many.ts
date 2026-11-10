@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiRequestError, type HttpClient } from '../http-client.js';
+import { ApiRequestError, type HttpClient, nextActionSchema } from '../http-client.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import type { AnyJobKind } from './job-status.js';
 import { sleep, WAIT_BUDGET_MS } from './job-wait.js';
@@ -53,6 +53,7 @@ type ItemError = {
   code?: string;
   retryAfterMs?: number;
   generationId?: string;
+  nextAction?: z.infer<typeof nextActionSchema>;
   /** The request may have created the job; resending it with its key is safe. */
   outcomeUnknown?: true;
 };
@@ -87,6 +88,7 @@ function itemError(error: unknown): ItemError {
       ...(error.code ? { code: error.code } : {}),
       ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
       ...(error.generationId ? { generationId: error.generationId } : {}),
+      ...(error.details?.nextAction ? { nextAction: error.details.nextAction } : {}),
     };
   if (error instanceof z.ZodError) return { message: z.prettifyError(error) };
   return { message: error instanceof Error ? error.message : String(error) };
@@ -94,9 +96,9 @@ function itemError(error: unknown): ItemError {
 
 /**
  * A server error, a lost connection or an aborted request: the API may have admitted the job
- * anyway. fetch reports network failures as TypeError whatever the message ("fetch failed"
- * before a reply, "terminated" when the reply body breaks off), and aborts and timeouts as
- * AbortError or TimeoutError.
+ * anyway. fetch reports network failures as TypeError ("fetch failed" before a reply,
+ * "terminated" when the body breaks off), and aborts and timeouts as AbortError or
+ * TimeoutError.
  */
 function outcomeUnknown(error: unknown): boolean {
   if (error instanceof ApiRequestError) return error.status >= 500 || error.status === 408;
@@ -276,6 +278,7 @@ export function createJobsCreateManyTool(
       code: z.string().optional(),
       retryAfterMs: z.number().optional(),
       generationId: z.string().optional(),
+      nextAction: nextActionSchema.optional(),
       outcomeUnknown: z
         .literal(true)
         .optional()

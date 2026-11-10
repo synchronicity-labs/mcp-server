@@ -202,13 +202,26 @@ describe('jobs_create-many', () => {
 
   it('stops starting items after a billing refusal', async () => {
     const { run, callTool } = setup(async () => {
-      throw new ApiRequestError('No credits', 402, 'insufficient_credits');
+      const nextAction = { type: 'buy_credits', url: 'https://sync.so/billing' };
+      throw new ApiRequestError(
+        'No credits',
+        402,
+        'insufficient_credits',
+        undefined,
+        undefined,
+        undefined,
+        { nextAction },
+      );
     });
     const result = await run({ items: items('es', 'fr', 'ja', 'de') });
     // Unknown concurrency starts two at a time; both refusals arrive before anything else.
     expect(callTool).toHaveBeenCalledTimes(2);
     expect(result.summary).toMatchObject({ failed: 2, notStarted: 2 });
     expect(result.nextStep).toContain('Stopped after No credits');
+    expect(result.items[0]?.error?.nextAction).toEqual({
+      type: 'buy_credits',
+      url: 'https://sync.so/billing',
+    });
   });
 
   it('refuses invalid or repeated items before starting any', async () => {

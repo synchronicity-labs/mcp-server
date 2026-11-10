@@ -4,6 +4,10 @@ import type { JsonSchema, OpenApiSpec, ParsedOperation, ParsedParameter } from '
 /** POST /v2/feedback, read by feedback_send (tools/feedback.ts). */
 export const FEEDBACK_OPERATION_ID = 'agentFeedback_submit';
 
+/** POST /v2/billing/approval-links, read by billing-approval-links_create. */
+export const APPROVAL_LINKS_PATH = '/v2/billing/approval-links';
+export const APPROVAL_LINKS_OPERATION_ID = 'billingApprovalLinks_create';
+
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
 /** Only these tags produce MCP tools — everything else is filtered out. */
@@ -23,12 +27,14 @@ const ALLOWED_TAGS = new Set([
   'batch',
 ]);
 
-// Collectors outside the allowed tags that the server reads by exact path and operation.
-// The MCP events collector only tells the server that the API takes usage events.
+// POST operations outside the allowed tags that the server reads by exact path and
+// operation: collectors, and approval links (tagged Billing, whose other operations stay
+// out). The MCP events collector only tells the server that the API takes usage events.
 const COLLECTORS: Record<string, string> = {
   '/v2/analytics/chatgpt-events': 'analytics_captureChatgptEvent',
   [MCP_EVENTS_PATH]: MCP_EVENTS_OPERATION_ID,
   '/v2/feedback': FEEDBACK_OPERATION_ID,
+  [APPROVAL_LINKS_PATH]: APPROVAL_LINKS_OPERATION_ID,
 };
 
 function isCollector(path: string, method: string, operationId: string | undefined): boolean {
