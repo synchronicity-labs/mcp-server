@@ -1196,7 +1196,7 @@ function withUpdateNotice(updateCheck: UpdateCheck): (result: CallToolResult) =>
 
 /** Whether the API's schema lists the MCP events collector now, for a server that started first. */
 function collectorCheck(baseUrl: string) {
-  return async () => parseSpec(await fetchSpec(baseUrl)).some(isMcpEventsOperation);
+  return async () => parseSpec(await fetchSpec(baseUrl)).find(isMcpEventsOperation);
 }
 
 export async function createSyncMcpServer(
@@ -1215,7 +1215,7 @@ export async function createSyncMcpServer(
     createHttpClient(config.baseUrl, authHeaders),
     collectorCheck(config.baseUrl),
   );
-  const telemetry = queue && new TelemetrySession(queue, 'stdio');
+  const telemetry = queue && new TelemetrySession(queue, 'stdio', config.referralSource);
   const server = createProfiledServer(
     config,
     operations,

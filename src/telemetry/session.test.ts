@@ -16,8 +16,8 @@ function setup(active = true) {
     { maxEvents: 1000, batchSize: 1000, flushMs: 60_000, maxInFlight: 8 },
     active,
   );
-  const session = (client = 'openai-mcp') => {
-    const telemetry = new TelemetrySession(queue, 'http');
+  const session = (client = 'openai-mcp', referralSource?: unknown) => {
+    const telemetry = new TelemetrySession(queue, 'http', referralSource);
     telemetry.setClient(client, '1.0.0');
     return telemetry;
   };
@@ -58,6 +58,51 @@ const steps = (events: TelemetryEvent[]) =>
   events.map(({ properties: p }) => [p.tool_name, p.call_index, p.previous_tool, p.invocation]);
 
 describe('TelemetrySession across sessions', () => {
+  it.each([
+    [' GlAmA ', 'glama'],
+    ['a', 'a'],
+    ['a'.repeat(32), 'a'.repeat(32)],
+    ['DIRECTORY_2-beta', 'directory_2-beta'],
+    [undefined, undefined],
+    ['', undefined],
+    ['a'.repeat(33), undefined],
+    ['2directory', undefined],
+    ['https://glama.ai', undefined],
+    ['directory?token=private', undefined],
+    ['name@example.com', undefined],
+    ['two words', undefined],
+    [12, undefined],
+  ])('normalizes or omits referral %j on sessions and calls', async (input, expected) => {
+    const { session, drain } = setup();
+    const telemetry = session('openai-mcp', input);
+    telemetry.initialized({}, OWNER, 'token');
+    await call(telemetry, tool('generations_get'));
+    const events = await drain();
+    expect(events).toHaveLength(2);
+    for (const { properties } of events) {
+      if (expected === undefined) expect(properties).not.toHaveProperty('referral_source');
+      else expect(properties.referral_source).toBe(expected);
+    }
+  });
+
+  it('deduplicates session and background events separately for each referral', async () => {
+    const { session, drain } = setup();
+    const register = tool('studio-views_register', ['app']);
+    for (const source of [undefined, 'glama', 'smithery', ' GLAMA ', 'smithery', undefined]) {
+      const telemetry = session('openai-mcp', source);
+      telemetry.initialized({}, OWNER, 'token');
+      await call(telemetry, register);
+    }
+    const events = await drain();
+    for (const event of ['mcp_session_initialized', 'mcp_tool_called']) {
+      expect(
+        events
+          .filter((item) => item.event === event)
+          .map((item) => item.properties.referral_source),
+      ).toEqual([undefined, 'glama', 'smithery']);
+    }
+  });
+
   it('orders calls by conversation when the client opens a session per call', async () => {
     const { session, drain } = setup();
     const chat = { 'openai/session': 'conversation-a' };

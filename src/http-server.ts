@@ -291,9 +291,10 @@ function startUsageTelemetry(
     protocolVersion?: string;
     capabilities?: unknown;
   },
+  referralSource: string | string[] | undefined,
 ) {
   if (!queue) return { session: undefined, record: () => {} };
-  const session = new TelemetrySession(queue, 'http');
+  const session = new TelemetrySession(queue, 'http', referralSource);
   session.setClient(params.clientInfo.name, params.clientInfo.version);
   return {
     session,
@@ -775,7 +776,11 @@ export async function startHttpServer(
         const id = randomUUID();
         sessionId = id;
         initializedSessionId = id;
-        const usage = startUsageTelemetry(serverFactory.telemetry, init.data.params);
+        const usage = startUsageTelemetry(
+          serverFactory.telemetry,
+          init.data.params,
+          req.headers['x-mcp-referral'],
+        );
         recordInitialization = usage.record;
         session = new HttpSession(
           init.data.params.clientInfo.name.slice(0, 160),
