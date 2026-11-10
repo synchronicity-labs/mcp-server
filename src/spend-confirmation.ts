@@ -23,10 +23,13 @@ export const DESCRIPTION_EDITS: readonly Edit[] = [
 
 export const INSTRUCTION_EDITS: readonly Edit[] = [
   [
-    'Before lipsync, read fresh account_get-usage in the organization that will run it. This tool reads the selected organization only: select the target with organizations_select before checking coverage for a different organizationId. Free coverage requires plan=null, hasActiveCredits=false, freeGenerationsExhausted=false and enough freeMonthlyLimits.generations remaining for every requested job. For script input, also require freeTtsExhausted=false, enough freeMonthlyLimits.tts remaining, and elevenLabsKeyConnected=false; a connected provider key can incur external speech charges. Check model and duration eligibility with the estimate; missing eligibility is unknown, and its base-rate amount is not a charge for covered work. When the whole request is covered, proceed without mentioning prices or asking for spending confirmation. Paid, external or unknown coverage still requires a quote and spending confirmation; omitted billing fields are unknown. A free lipsync allowance does not prove translation, dialogue previews or voice cloning is free. ',
+    'Before lipsync, read fresh account_get-usage in the organization that will run it. Pass the same organizationId as the create call to check another organization without changing the session selection. Free coverage requires plan=null, hasActiveCredits=false, freeGenerationsExhausted=false and enough freeMonthlyLimits.generations remaining for every requested job. For script input, also require freeTtsExhausted=false, enough freeMonthlyLimits.tts remaining, and elevenLabsKeyConnected=false; a connected provider key can incur external speech charges. Check model and duration eligibility with the estimate; missing eligibility is unknown, and its base-rate amount is not a charge for covered work. When the whole request is covered, proceed without mentioning prices or asking for spending confirmation. Paid, external or unknown coverage still requires a quote and spending confirmation; omitted billing fields are unknown. A free lipsync allowance does not prove translation, dialogue previews or voice cloning is free. ',
     '',
   ],
-  ['; quote and confirm the whole set once. ', '. '],
+  [
+    'Check free coverage for every item in its own organization, requiring enough generation allowance for all jobs and speech allowance for every speech-preview item and script input combined in each organization. Fully covered sets need no price mention or spending confirmation; otherwise quote and confirm the whole set once. Never infer free translation or dialogue from a lipsync allowance. ',
+    '',
+  ],
   [
     'Once ready, estimate and confirm the paid translation before calling dubbing_create when available with the returned asset id as videoAssetId. ',
     'Once ready, call dubbing_create when available with the returned asset id as videoAssetId. ',
@@ -64,8 +67,8 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
   'lipsync_create-timeline': [['Estimate and confirm before creating; this starts', 'This starts']],
   'jobs_create-many': [
     [
-      'This is a paid action: every item is billed as its own job. Before calling, estimate each distinct configuration with the matching estimate tool, tell the user the item count and the estimated total, and wait for one confirmation of the whole set. ',
-      'Every item is billed as its own job. ',
+      'Check fresh account_get-usage in each item’s organization. Apply lipsync free-coverage rules to combined generation and speech usage per organization. Fully covered sets need no prices or spending confirmation. Otherwise estimate each configuration, show the item count, total and excluded charges, and confirm the set once. A lipsync allowance does not cover translation or dialogue. ',
+      'Each item uses its own job allowance or billing. ',
     ],
   ],
   batches_create: [
