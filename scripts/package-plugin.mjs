@@ -216,6 +216,7 @@ const TOOL_AREAS = [
   'assets',
   'audio-trims',
   'batches',
+  'billing-approval-links',
   'dialogue',
   'dialogue-edits',
   'dialogue-previews',
