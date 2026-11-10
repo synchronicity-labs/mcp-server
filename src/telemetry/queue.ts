@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { TelemetryMemory } from './memory.js';
 
 export type TelemetryEvent = {
   event: 'mcp_session_initialized' | 'mcp_tool_called';
@@ -21,8 +22,11 @@ const LIMITS = { maxEvents: 2000, batchSize: 50, flushMs: 2000, maxInFlight: 8 }
 /**
  * Batches events per verified owner and sends them with that owner's credential.
  * Recording never waits or throws. A bucket keeps its token only while it has events.
+ * An inactive queue, waiting for the API to collect MCP events, records nothing.
  */
 export class TelemetryQueue {
+  /** Call order and repeat checks that outlive a single session. */
+  readonly memory = new TelemetryMemory();
   readonly #buckets = new Map<string, Bucket>();
   readonly #stats: TelemetryStats = { queued: 0, sent: 0, dropped: 0, failed: 0 };
   // Sends run outside the recording request, so its organization and analytics headers stay out.
@@ -32,13 +36,26 @@ export class TelemetryQueue {
   #timer: ReturnType<typeof setTimeout> | undefined;
   // Set when a flush found every send slot busy, so the next finished send resumes it.
   #blocked = false;
+  #active: boolean;
 
   constructor(
     private readonly send: TelemetrySend,
     private readonly limits = LIMITS,
-  ) {}
+    active = true,
+  ) {
+    this.#active = active;
+  }
+
+  get active(): boolean {
+    return this.#active;
+  }
+
+  activate(): void {
+    this.#active = true;
+  }
 
   record(owner: string, token: string | undefined, event: TelemetryEvent): void {
+    if (!this.#active) return;
     if (this.#size >= this.limits.maxEvents) {
       this.#stats.dropped += 1;
       return;
@@ -61,8 +78,8 @@ export class TelemetryQueue {
     for (const owner of this.#buckets.keys()) this.#flushOwner(owner);
   }
 
-  stats(): TelemetryStats & { pending: number; inFlight: number } {
-    return { ...this.#stats, pending: this.#size, inFlight: this.#inFlight };
+  stats(): TelemetryStats & { active: boolean; pending: number; inFlight: number } {
+    return { ...this.#stats, active: this.#active, pending: this.#size, inFlight: this.#inFlight };
   }
 
   #schedule(): void {

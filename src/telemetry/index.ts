@@ -28,22 +28,57 @@ export function isMcpEventsOperation(operation: Pick<ParsedOperation, 'operation
   return operation.operationId === MCP_EVENTS_OPERATION_ID;
 }
 
+/** Reads the API's published schema again: true once it lists the MCP events collector. */
+export type CollectorCheck = () => Promise<boolean>;
+
+const RECHECK_MS = 10 * 60_000;
+
 /**
- * The process's event queue, or undefined when telemetry is off or the API does not
- * collect MCP events yet.
+ * The process's event queue, or undefined when telemetry is off. When the API does not
+ * collect MCP events yet and `recheck` is given, the queue starts inactive and turns on
+ * when a later read of the schema lists the collector, so a server that deploys before
+ * the API needs no restart. Without `recheck` it stays undefined.
  */
 export function createTelemetryQueue(
   enabled: boolean,
   operations: Pick<ParsedOperation, 'operationId'>[],
   http: HttpClient,
+  recheck?: CollectorCheck,
+  recheckMs = RECHECK_MS,
 ): TelemetryQueue | undefined {
-  if (!enabled || !operations.some(isMcpEventsOperation)) return undefined;
-  return new TelemetryQueue((events, token) => {
-    const send = () =>
-      http.request('post', MCP_EVENTS_PATH, {
-        body: { events },
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+  if (!enabled) return undefined;
+  const listed = operations.some(isMcpEventsOperation);
+  if (!listed && !recheck) return undefined;
+  const queue = new TelemetryQueue(
+    (events, token) => {
+      const send = () =>
+        http.request('post', MCP_EVENTS_PATH, {
+          body: { events },
+          signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+        });
+      return token ? runWithAuth(token, undefined, send) : send();
+    },
+    undefined,
+    listed,
+  );
+  if (!listed && recheck) waitForCollector(queue, recheck, recheckMs);
+  return queue;
+}
+
+function waitForCollector(queue: TelemetryQueue, recheck: CollectorCheck, everyMs: number): void {
+  let checking = false;
+  const timer = setInterval(() => {
+    if (checking) return;
+    checking = true;
+    // A failed read is the same as not listed yet: try again on the next tick.
+    void recheck()
+      .catch(() => false)
+      .then((collects) => {
+        checking = false;
+        if (!collects) return;
+        clearInterval(timer);
+        queue.activate();
       });
-    return token ? runWithAuth(token, undefined, send) : send();
-  });
+  }, everyMs);
+  timer.unref?.();
 }

@@ -5,9 +5,27 @@ import type { McpToolDefinition } from '../tools/index.js';
 import { classifyOutcome } from './facets.js';
 import type { CallContext, TelemetrySession } from './session.js';
 
-function invocation(args: Record<string, unknown> | undefined): CallContext['invocation'] {
+/** Widget-only tools (ui.visibility without model) are never offered to the model. */
+function widgetOnly(tool: McpToolDefinition): boolean {
+  const ui = tool.meta?.ui;
+  const visibility =
+    ui && typeof ui === 'object' ? (ui as { visibility?: unknown }).visibility : undefined;
+  return Array.isArray(visibility) && !visibility.includes('model');
+}
+
+/**
+ * Who started the call. The widget names it in syncAnalytics where its analytics run
+ * (ChatGPT); elsewhere, such as Codex, a widget-only tool's call still came from the
+ * widget: a user action when it carries an idempotency key, the widget itself otherwise.
+ */
+function invocation(
+  tool: McpToolDefinition,
+  args: Record<string, unknown> | undefined,
+): CallContext['invocation'] {
   const ui = uiAnalyticsSchema.safeParse(args?.syncAnalytics);
-  return ui.success ? ui.data.invocation_source : 'model';
+  if (ui.success) return ui.data.invocation_source;
+  if (!widgetOnly(tool)) return 'model';
+  return typeof args?.idempotencyKey === 'string' ? 'ui' : 'background';
 }
 
 /** Runs one tool call through the session's recorder. */
@@ -25,7 +43,7 @@ export function trackToolCall<T>(
       shape: tool.inputSchema,
       args,
       meta: context?._meta,
-      invocation: invocation(args),
+      invocation: invocation(tool, args),
     },
     run,
     (error, result) => classifyOutcome(error, result, context?.signal),
@@ -60,7 +78,7 @@ export function observeRejectedCalls(
           shape: definition.inputSchema,
           args: record,
           meta: undefined,
-          invocation: invocation(record),
+          invocation: invocation(definition, record),
         });
       }
       throw error;

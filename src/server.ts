@@ -1188,6 +1188,11 @@ function withUpdateNotice(updateCheck: UpdateCheck): (result: CallToolResult) =>
   };
 }
 
+/** Whether the API's schema lists the MCP events collector now, for a server that started first. */
+function collectorCheck(baseUrl: string) {
+  return async () => parseSpec(await fetchSpec(baseUrl)).some(isMcpEventsOperation);
+}
+
 export async function createSyncMcpServer(
   config: SyncMcpConfig,
   options: { updateCheck?: UpdateCheck } = {},
@@ -1202,6 +1207,7 @@ export async function createSyncMcpServer(
     config.telemetry !== false,
     operations,
     createHttpClient(config.baseUrl, authHeaders),
+    collectorCheck(config.baseUrl),
   );
   const telemetry = queue && new TelemetrySession(queue, 'stdio');
   const server = createProfiledServer(
@@ -1253,7 +1259,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
     telemetry?: TelemetrySession,
   ) => McpServer;
   toolCount: number;
-  /** Undefined when telemetry is off or the API does not collect MCP events yet. */
+  /** Undefined when telemetry is off; inactive until the API collects MCP events. */
   telemetry?: TelemetryQueue;
 }> {
   const [chatgptApp, ...previousApps] = await loadChatgptAppReleases(config.chatgptApp);
@@ -1297,6 +1303,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
       config.telemetry !== false,
       operations,
       createHttpClient(config.baseUrl),
+      collectorCheck(config.baseUrl),
     ),
     createServer: (clientName, handshakeClientName, telemetry) =>
       createProfiledServer(

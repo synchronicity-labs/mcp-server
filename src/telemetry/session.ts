@@ -47,9 +47,16 @@ export type CallContext = {
 
 const parentCall = new AsyncLocalStorage<string>();
 
+/** SHA-256 of the call's openai/session, which ChatGPT and Codex send per conversation. */
+function conversationId(meta: Record<string, unknown> | undefined): string | undefined {
+  const session = meta?.['openai/session'];
+  if (typeof session !== 'string' || session.length > 1024) return undefined;
+  return createHash('sha256').update(session).digest('hex');
+}
+
 function chatgptContext(meta: Record<string, unknown> | undefined): Record<string, string> {
   if (!meta) return {};
-  const session = meta['openai/session'];
+  const conversation = conversationId(meta);
   const locale = meta['openai/locale'];
   const location = meta['openai/userLocation'];
   const country =
@@ -57,10 +64,7 @@ function chatgptContext(meta: Record<string, unknown> | undefined): Record<strin
       ? (location as Record<string, unknown>).country
       : undefined;
   return {
-    ...(typeof session === 'string' &&
-      session.length <= 1024 && {
-        conversation_id: createHash('sha256').update(session).digest('hex'),
-      }),
+    ...(conversation && { conversation_id: conversation }),
     ...(typeof locale === 'string' &&
       /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/i.test(locale) && { locale }),
     ...(typeof country === 'string' &&
@@ -70,7 +74,9 @@ function chatgptContext(meta: Record<string, unknown> | undefined): Record<strin
 
 /**
  * One MCP session's events and call order. Hosted sessions build a new SDK server per
- * request, so this lives with the session, not the server.
+ * request, so this lives with the session, not the server. ChatGPT and Codex open a new
+ * session for nearly every call, so their calls are ordered by conversation instead, and
+ * the widget's own repeated calls and reconnections are recorded once per window.
  */
 export class TelemetrySession {
   readonly id = randomUUID();
@@ -107,10 +113,12 @@ export class TelemetrySession {
     properties: Record<string, unknown>,
     owner?: string,
     token?: string,
+    repeatKey?: string,
   ): void {
     try {
       const [key, credential] = this.#owner(owner, token);
       if (this.transport === 'http' && !credential) return;
+      if (repeatKey && !this.queue.memory.firstInWindow(JSON.stringify([key, repeatKey]))) return;
       this.queue.record(key, credential, {
         event,
         event_id: randomUUID(),
@@ -139,23 +147,24 @@ export class TelemetrySession {
     owner?: string,
     token?: string,
   ): void {
-    this.#record(
-      'mcp_session_initialized',
-      {
-        ...(typeof details.protocolVersion === 'string' &&
-          PROTOCOL.test(details.protocolVersion) && { protocol_version: details.protocolVersion }),
-        client_capabilities: clientCapabilities(details.capabilities),
-        ...(details.toolsets && { toolsets: details.toolsets.slice(0, 20) }),
-        ...(details.spendConfirmation === false && { spend_confirmation: false }),
-      },
-      owner,
-      token,
-    );
+    const properties = {
+      ...(typeof details.protocolVersion === 'string' &&
+        PROTOCOL.test(details.protocolVersion) && { protocol_version: details.protocolVersion }),
+      client_capabilities: clientCapabilities(details.capabilities),
+      ...(details.toolsets && { toolsets: details.toolsets.slice(0, 20) }),
+      ...(details.spendConfirmation === false && { spend_confirmation: false }),
+    };
+    // A hosted client that reconnects for every call is one connection per window.
+    const repeatKey =
+      this.transport === 'http'
+        ? JSON.stringify(['mcp_session_initialized', this.#client, properties])
+        : undefined;
+    this.#record('mcp_session_initialized', properties, owner, token, repeatKey);
   }
 
   /** Records a call that the SDK rejected before any handler ran. */
   rejected(context: CallContext): void {
-    const sequence = this.#sequence(context.tool);
+    const sequence = this.#sequence(context);
     this.#record('mcp_tool_called', {
       call_id: randomUUID(),
       ...this.#describe(context, sequence),
@@ -174,7 +183,7 @@ export class TelemetrySession {
     const callId = randomUUID();
     const parent = parentCall.getStore();
     // Calls jobs_create-many makes for the agent are not steps of the agent's own sequence.
-    const sequence = parent ? {} : this.#sequence(context.tool);
+    const sequence = parent ? {} : this.#sequence(context);
     const started = performance.now();
     let result: T | undefined;
     let failure: unknown;
@@ -187,30 +196,68 @@ export class TelemetrySession {
     } finally {
       try {
         const outcome = classify(failure, result);
-        this.#record('mcp_tool_called', {
-          call_id: callId,
-          ...this.#describe(context, sequence),
-          ...(parent && { parent_call_id: parent, invocation: 'nested' }),
-          ...outcome,
-          ...(outcome.outcome === 'invalid_arguments' && {
-            invalid_fields: invalidFields(context.shape, context.args),
-          }),
-          latency_ms: capped(performance.now() - started, MAX_LATENCY_MS),
-          ...(failure === undefined && resultFacets(context.tool, result)),
-        });
+        const facets = failure === undefined ? resultFacets(context.tool, result) : {};
+        this.#record(
+          'mcp_tool_called',
+          {
+            call_id: callId,
+            ...this.#describe(context, sequence),
+            ...(parent && { parent_call_id: parent, invocation: 'nested' }),
+            ...outcome,
+            ...(outcome.outcome === 'invalid_arguments' && {
+              invalid_fields: invalidFields(context.shape, context.args),
+            }),
+            latency_ms: capped(performance.now() - started, MAX_LATENCY_MS),
+            ...facets,
+          },
+          undefined,
+          undefined,
+          // The widget repeats its own calls every few seconds; the first of each kind is enough.
+          !parent && context.invocation === 'background'
+            ? JSON.stringify([
+                context.tool,
+                outcome.outcome,
+                outcome.error_code,
+                facets.result_status,
+                facets.generation_id ?? facets.job_id,
+              ])
+            : undefined,
+        );
       } catch {
         // Telemetry never affects a call.
       }
     }
   }
 
-  #sequence(tool: string): Record<string, unknown> {
+  /**
+   * The call's place in its conversation when it carries one and is not the widget's own
+   * background call; otherwise its place in this session.
+   */
+  #sequence(context: CallContext): Record<string, unknown> {
     const at = performance.now();
+    const started = { ms_since_session_start: capped(at - this.#started, MAX_GAP_MS) };
+    const conversation = conversationId(context.meta);
+    if (this.transport === 'http' && conversation && context.invocation !== 'background') {
+      const [owner] = this.#owner();
+      const step = this.queue.memory.nextInConversation(
+        JSON.stringify([owner, conversation]),
+        context.tool,
+      );
+      return {
+        call_index: capped(step.call_index, MAX_COUNT),
+        ...(step.previous_tool && { previous_tool: step.previous_tool }),
+        ...started,
+        ...(step.ms_since_previous_call !== undefined && {
+          ms_since_previous_call: capped(step.ms_since_previous_call, MAX_GAP_MS),
+        }),
+      };
+    }
+    const tool = context.tool;
     this.#callIndex += 1;
     const sequence = {
       call_index: capped(this.#callIndex, MAX_COUNT),
       ...(this.#previousTool && { previous_tool: this.#previousTool }),
-      ms_since_session_start: capped(at - this.#started, MAX_GAP_MS),
+      ...started,
       ...(this.#previousCallAt !== undefined && {
         ms_since_previous_call: capped(at - this.#previousCallAt, MAX_GAP_MS),
       }),
