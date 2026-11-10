@@ -27,7 +27,7 @@ export const INSTRUCTION_EDITS: readonly Edit[] = [
     '',
   ],
   [
-    'Check free coverage for every item in its own organization, requiring enough generation allowance for all jobs and speech allowance for every speech-preview item and script input combined in each organization. Fully covered sets need no price mention or spending confirmation; otherwise quote and confirm the whole set once. Never infer free translation or dialogue from a lipsync allowance. ',
+    'Check free coverage for every item in its own organization. Count only generation jobs against generation allowance, and combine speech-preview and script-input usage against speech allowance per organization. For speech previews, use speech-previews_get-options and ignore generation counters and freeGenerationsExhausted; speech-only sets do not need generation allowance. Fully covered sets need no price mention or spending confirmation; otherwise quote and confirm the whole set once. Never infer free translation or dialogue from a lipsync allowance. ',
     '',
   ],
   [
@@ -67,7 +67,7 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
   'lipsync_create-timeline': [['Estimate and confirm before creating; this starts', 'This starts']],
   'jobs_create-many': [
     [
-      'Check fresh account_get-usage in each item’s organization. Apply lipsync free-coverage rules to combined generation and speech usage per organization. Fully covered sets need no prices or spending confirmation. Otherwise estimate each configuration, show the item count, total and excluded charges, and confirm the set once. A lipsync allowance does not cover translation or dialogue. ',
+      'Check coverage per organization: generation allowance for generation jobs, speech allowance for previews and scripts combined. Speech-only sets use speech-previews_get-options, ignoring generation counters. Fully covered sets need no prices or approval. Otherwise quote each configuration, show count, total and excluded charges, and confirm once. A lipsync allowance does not cover translation or dialogue. ',
       'Each item uses its own job allowance or billing. ',
     ],
   ],
