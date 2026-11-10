@@ -267,7 +267,7 @@ export function createDialogueTools(
           .describe('Deprecated alias of transcriptionJobId.')
           .meta({ deprecated: true }),
       }).shape,
-      annotations: { ...writeHints, openWorldHint: false },
+      annotations: writeHints,
       handler: async (args, context) => {
         const key = previewKeySchema.optional().parse(args.idempotencyKey);
         if (key && !keyedPreview)
@@ -365,7 +365,7 @@ export function createDialogueTools(
           ),
       }).shape,
       outputSchema: generationOutputSchema,
-      annotations: { ...writeHints, openWorldHint: false },
+      annotations: writeHints,
       handler: async (args, context) => {
         const key = z
           .string()

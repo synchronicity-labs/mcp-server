@@ -52,21 +52,32 @@ The October 28 report names `dialogue-previews_create` and `dialogue-videos_crea
 with “This new tool definition needs further review before it can be published.”
 This generic finding does not identify a failed runtime call or its review cause.
 
-Both descriptors now set `openWorldHint: false`: they accept saved source and job
-IDs accessible to the connected Sync account, with no arbitrary source URL,
-destination or voice input. External hosting and provider processing alone do
-not make that a tool with open-ended entities. Both remain non-read-only and
-destructive because they queue synthesis/generation work that can incur charges;
-neither promises unconditional idempotency. The preview descriptor discloses
-source-voice cloning, synthesis charges, required approval, asynchronous polling,
-partial failures and conditional keyed recovery. `dialogue_upload-source` keeps
-`openWorldHint: true` because it can fetch a saved external source URL.
+The October 28 change set both descriptors to `openWorldHint: false` because
+their inputs use saved source and job IDs in the connected Sync account.
+
+The November 9 publisher review rejects the `dialogue-videos_create` update:
+"This tool is marked openWorldHint: false, but its behavior appears to interact
+with an independently controlled external system." The finding applies to the
+unpublished definition. The publisher says the earlier definition remains live;
+this is not evidence of a failed tool call.
+
+Version 0.3.2 restores `openWorldHint: true` for both Dialogue creation tools,
+matching the other synthesis and generation tools. This is a conservative response
+to the explicit finding. The screenshot establishes the finding for video creation
+only; preview creation gets the same annotation for consistency. OpenAI's guidelines
+allow `false` for bounded private accounts, even when externally hosted. Connectivity
+alone does not require `true`, and the finding does not identify a specific provider.
+
+Schemas, handlers and descriptions stay unchanged. Both tools remain non-read-only
+and destructive because they queue work that can incur charges; neither promises
+unconditional idempotency. Account access checks, approval instructions and retry
+rules still apply. Read and estimate tools retain `openWorldHint: false`.
 
 After the reviewed change is merged and deployed:
 
 1. Scan Tools on the existing production publisher connection. Inspect both
    exact tool names and verify the updated descriptions, schemas and annotations.
-2. Submit the held definitions for review. If the same generic finding persists,
+2. Submit the held definitions for review. If a finding persists,
    use the publisher support/appeal flow with the app ID above, the deployed SHA,
    scan timestamp and exact findings; request an actionable reason. Do not rename
    tools, weaken write/destructive hints or add an executor to bypass the hold.
