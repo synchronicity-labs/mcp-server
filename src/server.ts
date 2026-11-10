@@ -521,6 +521,8 @@ const NEXT_STEP_BY_CODE: Record<string, string> = {
     'This plan limits how long the output can be. Shorten the script or audio (audio-trims_create keeps the first part of saved audio), quote again, then create once.',
   feature_not_enabled:
     'This Sync account does not have the feature yet. Tell the user it needs to be enabled for their account; calling again fails the same way.',
+  generation_not_found:
+    'No generation with this id exists in the connected organization. Use the id a create call returned, or find it with projects_list-generations or generations_list; account_get-context names the organization in use. Asking again with the same id fails the same way.',
   stem_separation_source_not_hosted:
     'Stem separation reads only files in Sync storage. Upload the file (assets_create-upload-url, PUT the bytes, then assets_create with the returned URL) and separate the new asset.',
 };

@@ -76,6 +76,7 @@ describe('createToolErrorResult', () => {
     [429, 'concurrency_limit_reached', 'generations_get'],
     [402, 'generation_plan_duration_exceeded', 'audio-trims_create'],
     [402, 'free_tier_generations_exhausted', 'Sending the same request again fails'],
+    [404, 'generation_not_found', 'projects_list-generations'],
     [400, undefined, 'Sending the same request again fails'],
   ])('tells the agent what to do after a %i %s', (status, code, guidance) => {
     const result = createToolErrorResult(new ApiRequestError('rejected', status, code));
