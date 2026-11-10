@@ -41,12 +41,20 @@ const upstream = createServer(
       const mode = req.headers.authorization;
       res.end(
         JSON.stringify({
-          plan: mode === 'Bearer free' ? null : 'team',
+          plan: mode === 'Bearer free' || mode === 'Bearer external' ? null : 'team',
           canManageBilling: true,
+          ...(mode === 'Bearer free' || mode === 'Bearer external'
+            ? {
+                hasActiveCredits: false,
+                freeGenerationsExhausted: false,
+                freeTtsExhausted: mode === 'Bearer external',
+                elevenLabsKeyConnected: mode === 'Bearer external',
+              }
+            : {}),
           credits:
             mode === 'Bearer credits' ? { balance: 1500, available: 1200, inFlight: 300 } : null,
           freeMonthlyLimits:
-            mode === 'Bearer free'
+            mode === 'Bearer free' || mode === 'Bearer external'
               ? {
                   generations: { used: 2, max: 3 },
                   tts: { used: 4, max: 10 },
@@ -163,6 +171,27 @@ it('sums complete metered usage and retains the authoritative billing permission
   expect((await call('admin', 'account_get-usage')).structuredContent).toMatchObject({
     canManageBilling: true,
   });
+});
+
+it.each(['free', 'external'])('preserves %s coverage evidence for the model', async (token) => {
+  const result = await call(token, 'account_get-usage');
+  expect(result.structuredContent).toMatchObject({
+    hasActiveCredits: false,
+    freeGenerationsExhausted: false,
+    freeTtsExhausted: token === 'external',
+    elevenLabsKeyConnected: token === 'external',
+  });
+});
+
+it('keeps unavailable coverage evidence unknown', async () => {
+  const result = await call('member', 'account_get-usage');
+  for (const field of [
+    'hasActiveCredits',
+    'freeGenerationsExhausted',
+    'freeTtsExhausted',
+    'elevenLabsKeyConnected',
+  ])
+    expect(result.structuredContent).not.toHaveProperty(field);
 });
 
 it('never presents incomplete or unauthorized usage as a zero total', async () => {

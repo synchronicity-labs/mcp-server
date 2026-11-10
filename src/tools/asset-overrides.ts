@@ -153,7 +153,7 @@ export const ASSET_PROJECT_OVERRIDES: Record<string, ToolOverride> = {
       visibility:
         'USER (default) keeps the project visible only to you; ORGANIZATION makes it visible to every member of the organization.',
       defaultWorkflow:
-        'The workflow the user asked for, such as translate_and_dub for translation, lipsync for lip sync or edit_dialogue for Edit Dialogue. Omitted, the project has no default workflow.',
+        'The workflow the user asked for, such as translate_and_dub for translation, lipsync for lipsync or edit_dialogue for Edit Dialogue. Omitted, the project has no default workflow.',
     },
   },
   projects_list: {

@@ -23,7 +23,7 @@ import {
 import type { SyncMcpConfig } from './config.js';
 import { GENERATION_STATUS_HTML } from './generation-status-html.js';
 import {
-  GENERATION_STATUS_METADATA,
+  generationStatusMetadata,
   GENERATION_STATUS_URI,
   statusCardMeta,
   withGenerationStatusCard,
@@ -123,14 +123,14 @@ import {
 import { PACKAGE_VERSION } from './version.js';
 
 const SERVER_DESCRIPTION =
-  'Sync makes photos talk, lip-syncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
+  'Sync makes photos talk, lipsyncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 // Paragraphs marked appOnly apply only inside the ChatGPT app and its Studio bridge;
 // notChatgpt ones cover tools the ChatGPT app does not list.
 const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean }[] = [
   {
-    text: 'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. ',
+    text: 'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. Write lipsync as one word, without a hyphen. ',
   },
   {
     text: 'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ',
@@ -143,7 +143,10 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
     text: 'Every call runs in one Sync organization, and paid work is created and billed there. account_get-context names it and says how it was chosen. When organizations_list is available and the user names an organization or team, list the organizations and use the matching id; ask if several match. To work in another organization for the rest of the conversation, call organizations_select. To run one paid create in another organization without switching, pass organizationId on that create and on its estimate; reads of the ids it returns stay in that organization. Name the organization when confirming paid work if the user belongs to more than one. A Sync app connection acts only in the organizations ticked when it was connected; when a switch is refused for that, tell the user to reconnect Sync and tick that organization. API keys are bound to one organization and cannot switch. ',
   },
   {
-    text: 'For what a past generation actually cost, use generations_get-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lip sync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generations_estimate-cost or start a paid generation to answer a past-cost question. ',
+    text: 'Before lipsync, read fresh account_get-usage in the organization that will run it. Pass the same organizationId as the create call to check another organization without changing the session selection. Free coverage requires plan=null, hasActiveCredits=false, freeGenerationsExhausted=false and enough freeMonthlyLimits.generations remaining for every requested job. For script input, also require freeTtsExhausted=false, enough freeMonthlyLimits.tts remaining, and elevenLabsKeyConnected=false; a connected provider key can incur external speech charges. Check model and duration eligibility with the estimate; missing eligibility is unknown, and its base-rate amount is not a charge for covered work. When the whole request is covered, proceed without mentioning prices or asking for spending confirmation. Paid, external or unknown coverage still requires a quote and spending confirmation; omitted billing fields are unknown. A free lipsync allowance does not prove translation, dialogue previews or voice cloning is free. ',
+  },
+  {
+    text: 'For what a past generation actually cost, use generations_get-costs when available. Find the generation through history if its id is unknown, and ask which one if multiple match. Report dubbing and lipsync separately, credit face value rather than cash paid, and excluded costs. A null total means the full cost is unknown; show knownSubtotalUsd only as a partial amount. Never substitute generations_estimate-cost or start a paid generation to answer a past-cost question. ',
   },
   {
     text: 'In ChatGPT, default new lipsync and image-to-video requests to sync-3, the latest lipsync model, unless the user explicitly chooses another model. Preserve the selected model on an existing draft or an idempotent retry. ',
@@ -153,10 +156,10 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
     text: 'When voices_clone is available, use it only for an explicitly requested reusable voice clone from a sample the user owns or has permission to clone. Confirm the sample and voice name, explain plan/provider restrictions, and do not claim cloning is free. Use the returned id (not the provider voiceId) for lipsync_create with script. After an uncertain clone response, list voices and reconcile before considering another write; never automatically repeat cloning. ',
   },
   {
-    text: 'When audio-trims_create is available, offer prefix audio preparation for an over-limit lip-sync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lip-sync uses cut_off and preserves the original media. ',
+    text: 'When audio-trims_create is available, offer prefix audio preparation for an over-limit lipsync request, then re-quote the saved asset. Preparation is separate from paid generation. Video partial lipsync uses cut_off and preserves the original media. ',
   },
   {
-    text: 'When jobs_create-many is available and the user wants 2 or more independent jobs (one video lip-synced to several audios, dubbed into several languages, or one Edit Dialogue variant per name), start them with one jobs_create-many call instead of calling the create tool repeatedly or using batches_create, and follow them with jobs_get-many. It uses the same API, limits and billing as single calls on any paid plan; quote and confirm the whole set once. Keep batches_create for Scale accounts with large runs (20 to 500) that can wait hours. ',
+    text: 'When jobs_create-many is available and the user wants 2 or more independent jobs (one video lipsynced to several audios, dubbed into several languages, or one Edit Dialogue variant per name), start them with one jobs_create-many call instead of calling the create tool repeatedly or using batches_create, and follow them with jobs_get-many. It uses the same API, limits and billing as single calls on every plan. Check free coverage for every item in its own organization. Count only generation jobs against generation allowance, and combine speech-preview and script-input usage against speech allowance per organization. For speech previews, use speech-previews_get-options and ignore generation counters and freeGenerationsExhausted; speech-only sets do not need generation allowance. Fully covered sets need no price mention or spending confirmation; otherwise quote and confirm the whole set once. Never infer free translation or dialogue from a lipsync allowance. Keep batches_create for Scale accounts with large runs (20 to 500) that can wait hours. ',
     notChatgpt: true,
   },
   {
@@ -169,7 +172,7 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
     text: 'For a request such as “Translate this YouTube link to Spanish”, first call assets_create with the social URL, type=VIDEO and the selected projectId. YouTube, TikTok, Instagram and Facebook video links are imported into saved assets. A 409 import_in_progress means the import is running: wait retryAfterMs (15 seconds if absent), then repeat the identical assets_create request until it returns an asset. Keep the URL and project unchanged; do not submit a generation while importing or treat importJobId as an asset ID. On import_failed, import_not_enabled, import_unavailable or an import limit error, explain the returned reason and stop; offer a file upload instead of repeatedly starting imports. Once ready, estimate and confirm the paid translation before calling dubbing_create when available with the returned asset id as videoAssetId. ',
   },
   {
-    text: 'When dubbing_create is available, use it for translating speech and lip-syncing a saved video. Before confirming the paid action, use generations_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lip-sync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ',
+    text: 'When dubbing_create is available, use it for translating speech and lipsyncing a saved video. Before confirming the paid action, use generations_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lipsync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ',
   },
   {
     // Nothing reaches the model after its reply ends, so a job it hands back is one no one
@@ -177,7 +180,7 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
     text: 'After a create returns a generation id, call generations_get with wait: true. While it is still running, keep waiting in this same reply for up to about 15 minutes in total: tell the user once that you are waiting, call generations_get with wait: true again each time it returns unfinished, then give the finished result. Hand back sooner only when generationEstimate expects it to take longer than that or the user asks not to wait; then give the id and say they can ask you to check it. Nothing notifies you after your reply ends, so never say you will watch the job or report back on your own. ',
   },
   {
-    text: 'When standalone translation-preview tools are available, the app can translate saved audio before final lip-sync. Confirm the source audio, language and quote before translation-previews_create. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, estimate and confirm a separate lipsync_create-from-assets using that audio; do not send it through dubbing_create again. ',
+    text: 'When standalone translation-preview tools are available, the app can translate saved audio before final lipsync. Confirm the source audio, language and quote before translation-previews_create. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, check coverage for a separate lipsync_create-from-assets using that audio; quote and confirm only when it is not fully covered. Do not send it through dubbing_create again. ',
   },
   {
     text: 'When speech-previews_create is available, the app can synthesize a standalone audio preview for its video input. Confirm script, voice and estimated cost. Persist and reuse its idempotencyKey after uncertain admission, poll the same returned job, and never synthesize again because asset attachment failed. ',
@@ -191,7 +194,7 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
     appOnly: true,
   },
   {
-    text: 'Before quoting script-driven lipsync, call generations_estimate-cost with the actual replacement script when its schema supports script; use measured audioDuration if the replacement audio already exists. Explain the returned durationEstimate and label script-based pricing approximate until synthesis determines the actual length. Never substitute the full source video duration for replacement speech. Disclose speech synthesis separately. If those inputs are unavailable, estimate spoken duration from the script and label it approximate; do not present a source-video quote as the replacement-script price. Re-estimate after script, audio, model or sync-mode changes. ',
+    text: 'For paid or unknown-coverage script-driven lipsync, call generations_estimate-cost with the actual replacement script when its schema supports script; use measured audioDuration if the replacement audio already exists. Explain the returned durationEstimate and label script-based pricing approximate until synthesis determines the actual length. Never substitute the full source video duration for replacement speech. Disclose speech synthesis separately. If those inputs are unavailable, estimate spoken duration from the script and label it approximate; do not present a source-video quote as the replacement-script price. Re-estimate after script, audio, model or sync-mode changes. ',
   },
   {
     text: 'lipsync_create accepts exactly one visual input (image or video) and one driver (audio or script). For script, call voices_list and select an actual returned voiceId. Public/Sync-hosted media URLs and existing Sync asset IDs in the same organization are supported. For local media, use the Sync interface upload action, or request assets_create-upload-url, PUT the file bytes with its Content-Type, and register the returned URL with assets_create. Use assets_create for public URL imports and projects_create to create a project. The tool defaults to sync-3 and a NEW project. projectName names a new project and never reuses an existing one. Prefer a projectId returned by projects_list when selecting an existing project. When available, use projects_list-generations for history within that project; generations_list is the organization feed. Create once, then poll generations_get by the returned id with wait: true, omitting timeout to use the API default; if still pending, poll that same id rather than creating again. When COMPLETED, return the exact structuredContent.outputMediaUrl verbatim, preserving signed query parameters; outputUrl is a deprecated alias with the same value.',
@@ -744,7 +747,7 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
     description =
       'Create one lipsync video from exactly one visual (videoUrl, videoAssetId, imageUrl or imageAssetId) and one driver (audioUrl, audioAssetId, or script plus voiceId), to make a photo or video say a script or match its lips to supplied audio. When available, use lipsync_create-timeline instead for several audio clips or to lipsync only some ranges of one video, batches_create for 20 or more independent generations, dubbing_create to translate speech, and the Edit Dialogue tools (starting with dialogue_get-options) to change words in existing speech.\n\n' +
       'For a local file, when the assets tools are available, call assets_create-upload-url, PUT the bytes to its uploadUrl with the same Content-Type, register the url it returned (not the uploadUrl) with assets_create, and pass that asset id. provider, stability and similarityBoost apply only to script.\n\n' +
-      "This is a paid generation, billed in the session's organization unless organizationId names another. It returns the generation id and status at once; poll generations_get with wait: true until it finishes, then copy outputMediaUrl verbatim.\n\n" +
+      "This uses the session's organization unless organizationId names another. Check account_get-usage for free coverage; a script also needs free speech allowance and no connected provider key. Fully covered work needs no price mention or spending confirmation; otherwise follow the paid-work instructions. It returns the generation id and status at once; poll generations_get with wait: true until it finishes, then copy outputMediaUrl verbatim.\n\n" +
       "Without projectId it first creates a NEW project, named projectName or a default, even if that name matches existing work. The input combination is checked before that; rejections from the API itself come after the project exists. Pass projectId, with projectIntent=explicit and without projectName or projectCreationKey, only for a project the user explicitly chose or one just created for this request. continuation, from generations_get-continuation, requires the parent generation's projectId.\n\n" +
       'Before calling, persist an idempotencyKey and, without projectId, a fresh projectCreationKey. After a lost or uncertain response, never create again with new keys: if the error names a generationId, poll it with generations_get; otherwise resend the identical request with the same keys.';
     const assetIdDescriptions = {
@@ -1017,15 +1020,16 @@ function createProfiledServer(
   );
   observeRejectedCalls(server, telemetry, () => toolsByCallableName(sessionTools));
   const resources: Resource[] = [];
+  const statusMetadata = generationStatusMetadata(config.chatgptApp);
   resources.push({
     name: 'sync-generation-status',
     uri: GENERATION_STATUS_URI,
-    ...GENERATION_STATUS_METADATA,
+    ...statusMetadata,
   });
   server.registerResource(
     'sync-generation-status',
     GENERATION_STATUS_URI,
-    GENERATION_STATUS_METADATA,
+    statusMetadata,
     async () => {
       if (!getProfile().supportsStatusCard)
         throw new Error('This interface requires an app-compatible client.');
@@ -1033,9 +1037,9 @@ function createProfiledServer(
         contents: [
           {
             uri: GENERATION_STATUS_URI,
-            mimeType: GENERATION_STATUS_METADATA.mimeType,
+            mimeType: statusMetadata.mimeType,
             text: GENERATION_STATUS_HTML,
-            _meta: GENERATION_STATUS_METADATA._meta,
+            _meta: statusMetadata._meta,
           },
         ],
       };
