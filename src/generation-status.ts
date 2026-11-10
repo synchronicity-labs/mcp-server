@@ -1,4 +1,5 @@
 import type { ResourceMetadata, Tool } from '@modelcontextprotocol/server';
+import type { SyncMcpConfig } from './config.js';
 import { oldNameAliases } from './tool-names.js';
 import type { McpToolDefinition } from './tools/generator.js';
 import { MCP_APP_RESOURCE_MIME_TYPE } from './tools/upload-widget.js';
@@ -63,15 +64,18 @@ export function withStatusCardTool(descriptors: Tool[]): Tool[] {
 }
 
 const description =
-  'Status of this Sync generation, with estimated time remaining and a read-only Check status action.';
-export const GENERATION_STATUS_METADATA: ResourceMetadata = {
-  title: 'Sync generation status',
-  description,
-  mimeType: MCP_APP_RESOURCE_MIME_TYPE,
-  _meta: {
-    ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: ['data:'] } },
-    'openai/widgetDescription': description,
-    'openai/widgetPrefersBorder': true,
-    'openai/widgetCSP': { connect_domains: [], resource_domains: ['data:'] },
-  },
-};
+  'Status of this Sync generation, with estimated time remaining, a read-only Check status action and inline playback of the completed video.';
+export function generationStatusMetadata(app: SyncMcpConfig['chatgptApp']): ResourceMetadata {
+  const resourceDomains = [...(app?.resourceDomains ?? []), 'data:'];
+  return {
+    title: 'Sync generation status',
+    description,
+    mimeType: MCP_APP_RESOURCE_MIME_TYPE,
+    _meta: {
+      ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains } },
+      'openai/widgetDescription': description,
+      'openai/widgetPrefersBorder': true,
+      'openai/widgetCSP': { connect_domains: [], resource_domains: resourceDomains },
+    },
+  };
+}

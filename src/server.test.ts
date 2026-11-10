@@ -278,6 +278,13 @@ describe('SERVER_INSTRUCTIONS', () => {
     expect(SERVER_INSTRUCTIONS).toContain('one driver');
     expect(SERVER_INSTRUCTIONS).toContain('defaults to sync-3');
     expect(SERVER_INSTRUCTIONS).toContain('NEW project');
+    expect(SERVER_INSTRUCTIONS).toContain(
+      'When the whole request is covered, proceed without mentioning prices or asking for spending confirmation.',
+    );
+    expect(SERVER_INSTRUCTIONS).toContain('elevenLabsKeyConnected=false');
+    expect(SERVER_INSTRUCTIONS).toContain(
+      'Paid, external or unknown coverage still requires a quote and spending confirmation',
+    );
   });
 
   it('describes only tools available to every profile and exact result handling', () => {

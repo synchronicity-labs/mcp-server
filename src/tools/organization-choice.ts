@@ -22,8 +22,9 @@ import {
 // Longest a result waits to name its default organization; past it, `organization` is omitted.
 const ORGANIZATION_LOOKUP_MS = 2_000;
 
-/** Paid creates, and the estimates that quote them, that take a one-call organizationId. */
+/** Creates, estimates and billing reads that take a one-call organizationId. */
 const PER_CALL_ORGANIZATION_TOOLS = new Set([
+  'account_get-usage',
   'lipsync_create',
   'lipsync_create-from-assets',
   'lipsync_create-timeline',
@@ -89,7 +90,7 @@ function withOrganization(result: unknown, organization: OrganizationSummary | u
 }
 
 /**
- * Adds an optional organizationId that runs one paid create in another organization,
+ * Adds an optional organizationId that runs one call in another organization,
  * and reports the organization each call ran in.
  */
 export function withOrganizationChoice(

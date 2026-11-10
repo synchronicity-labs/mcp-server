@@ -129,6 +129,11 @@ only the length of a script, and only the kind of a link (YouTube, Sync storage 
 `other`), never the link. It never sends prompts, scripts, file names, URLs, media,
 error messages or your key. [docs/telemetry.md](docs/telemetry.md) lists every field.
 
+Directories can optionally supply `X-MCP-Referral` on hosted initialization or
+`SYNC_MCP_REFERRAL` for the npm package. When supplied and supported by the API,
+this self-reported source is included in usage events. See
+[directory referrals](docs/telemetry.md#directory-referrals) for the format and limits.
+
 To turn it off, set `SYNC_MCP_TELEMETRY=off` or `DO_NOT_TRACK=1`, or pass
 `--no-telemetry`.
 

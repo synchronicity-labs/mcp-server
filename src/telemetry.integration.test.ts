@@ -5,9 +5,11 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
+import { resolveConfig } from './config.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { TelemetrySession } from './telemetry/index.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import { referralCollectorSchema } from './test-fixtures/telemetry.js';
 import { translationSpec } from './test-fixtures/translation.js';
 
 // What the MCP server sends to POST /v2/analytics/mcp-events, end to end through real
@@ -20,7 +22,11 @@ const videoAssetId = '00000000-0000-4000-8000-000000000002';
 
 const mcpEvents = {
   '/v2/analytics/mcp-events': {
-    post: { operationId: 'analytics_captureMcpEvents', tags: ['Analytics'] },
+    post: {
+      operationId: 'analytics_captureMcpEvents',
+      tags: ['Analytics'],
+      requestBody: { content: { 'application/json': { schema: referralCollectorSchema() } } },
+    },
   },
 };
 const spec = {
@@ -44,6 +50,7 @@ type Props = Record<string, unknown> & { args?: Record<string, unknown> };
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   const pending = cleanups.splice(0);
   while (pending.length > 0) await pending.pop()!();
 });
@@ -117,6 +124,7 @@ const COMMON = [
   'client_version',
   'server_version',
   'server_revision',
+  'referral_source',
 ];
 const ALLOWED: Record<string, readonly string[]> = {
   mcp_session_initialized: [
@@ -239,14 +247,17 @@ async function callEveryTool(client: Client, run: <T>(fn: () => Promise<T>) => P
 
 describe('usage telemetry over stdio', () => {
   it('records the session and each call in order, enough to answer the tracking plan', async () => {
-    const { baseUrl, sent } = await api({ failPaths: /^\/v2\/generate\/estimate-cost/ });
-    const server = await createSyncMcpServer({
-      apiKey: 'key',
-      baseUrl,
-      transport: 'stdio',
-      port: 0,
-      updateCheck: false,
-    });
+    vi.stubEnv('SYNC_MCP_REFERRAL', ' GlAmA ');
+    const { baseUrl, sent } = await api({ failPaths: /^\/v2\/generate\// });
+    const server = await createSyncMcpServer(
+      resolveConfig({
+        apiKey: 'key',
+        baseUrl,
+        transport: 'stdio',
+        port: 0,
+        updateCheck: false,
+      }),
+    );
     const client = await connect(server, 'Claude-Code');
     const dub = { videoAssetId, targetLang: 'es', model: 'sync-3' };
     await client.callTool({ name: 'dubbing_create', arguments: { ...dub, idempotencyKey: ID } });
@@ -271,6 +282,7 @@ describe('usage telemetry over stdio', () => {
 
     const all = events(sent);
     expectContract(all);
+    expect(all.every((event) => event.properties.referral_source === 'glama')).toBe(true);
     // Sent with the process's own credential, never inside the body.
     for (const batch of sent) expect(batch.headers['x-api-key']).toBe('key');
     expect(JSON.stringify(all)).not.toContain('key"');
@@ -315,19 +327,22 @@ describe('usage telemetry over stdio', () => {
   });
 
   it('sends nothing when turned off or before the API collects MCP events', async () => {
+    vi.stubEnv('SYNC_MCP_REFERRAL', 'glama');
     for (const [config, collector] of [
       [{ telemetry: false }, true],
       [{}, false],
     ] as const) {
       const { baseUrl, sent } = await api({ collector });
-      const server = await createSyncMcpServer({
-        apiKey: 'key',
-        baseUrl,
-        transport: 'stdio',
-        port: 0,
-        updateCheck: false,
-        ...config,
-      });
+      const server = await createSyncMcpServer(
+        resolveConfig({
+          apiKey: 'key',
+          baseUrl,
+          transport: 'stdio',
+          port: 0,
+          updateCheck: false,
+          ...config,
+        }),
+      );
       const client = await connect(server, 'cursor');
       await client.callTool({
         name: 'dubbing_create',
@@ -337,6 +352,30 @@ describe('usage telemetry over stdio', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(sent).toEqual([]);
     }
+  });
+
+  it('uses an explicit config referral ahead of the environment', async () => {
+    vi.stubEnv('SYNC_MCP_REFERRAL', 'glama');
+    const { baseUrl, sent } = await api();
+    const server = await createSyncMcpServer(
+      resolveConfig({
+        apiKey: 'key',
+        baseUrl,
+        transport: 'stdio',
+        port: 0,
+        updateCheck: false,
+        referralSource: ' Smithery ',
+      }),
+    );
+    const client = await connect(server, 'cursor');
+    await client.callTool({ name: 'account_get-context', arguments: {} });
+    await client.close();
+    await until(() => calls(sent).length === 1);
+    expect(events(sent)).toHaveLength(2);
+    expect(events(sent).map((event) => event.properties.referral_source)).toEqual([
+      'smithery',
+      'smithery',
+    ]);
   });
 
   it('leaks no argument, result or error text from any tool', async () => {

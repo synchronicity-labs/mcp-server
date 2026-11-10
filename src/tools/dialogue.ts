@@ -350,7 +350,7 @@ export function createDialogueTools(
           'Completed Edit Dialogue audio preview ID for this source video and the current user-approved edits. Not a transcription or generation ID.',
         ),
         model: generationSchema.shape.model.describe(
-          'Lip-sync model returned by models_list, matching the approved estimate.',
+          'Lipsync model returned by models_list, matching the approved estimate.',
         ),
         continuation: generationContextSchema
           .optional()

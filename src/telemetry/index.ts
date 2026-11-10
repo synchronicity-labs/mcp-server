@@ -2,6 +2,7 @@ import { runWithAuth } from '../auth/async-context.js';
 import type { HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import { TelemetryQueue } from './queue.js';
+import { collectorAcceptsReferral } from './referral.js';
 
 export { TelemetrySession } from './session.js';
 export type { TelemetryQueue } from './queue.js';
@@ -28,8 +29,9 @@ export function isMcpEventsOperation(operation: Pick<ParsedOperation, 'operation
   return operation.operationId === MCP_EVENTS_OPERATION_ID;
 }
 
-/** Reads the API's published schema again: true once it lists the MCP events collector. */
-export type CollectorCheck = () => Promise<boolean>;
+type CollectorOperation = Pick<ParsedOperation, 'operationId' | 'requestBody'>;
+/** Reads the collector's current request schema from the API. */
+export type CollectorCheck = () => Promise<CollectorOperation | undefined>;
 
 const RECHECK_MS = 10 * 60_000;
 
@@ -41,43 +43,60 @@ const RECHECK_MS = 10 * 60_000;
  */
 export function createTelemetryQueue(
   enabled: boolean,
-  operations: Pick<ParsedOperation, 'operationId'>[],
+  operations: CollectorOperation[],
   http: HttpClient,
   recheck?: CollectorCheck,
   recheckMs = RECHECK_MS,
 ): TelemetryQueue | undefined {
   if (!enabled) return undefined;
-  const listed = operations.some(isMcpEventsOperation);
-  if (!listed && !recheck) return undefined;
+  const collector = operations.find(isMcpEventsOperation);
+  if (!collector && !recheck) return undefined;
+  let referral = collectorAcceptsReferral(collector?.requestBody?.schema);
   const queue = new TelemetryQueue(
     (events, token) => {
       const send = () =>
         http.request('post', MCP_EVENTS_PATH, {
-          body: { events },
+          body: {
+            events: referral
+              ? events
+              : events.map((event) => {
+                  const properties = { ...event.properties };
+                  delete properties.referral_source;
+                  return { ...event, properties };
+                }),
+          },
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
       return token ? runWithAuth(token, undefined, send) : send();
     },
     undefined,
-    listed,
+    Boolean(collector),
   );
-  if (!listed && recheck) waitForCollector(queue, recheck, recheckMs);
+  if (!referral && recheck) {
+    waitForCollector(recheck, recheckMs, (current) => {
+      queue.activate();
+      referral = collectorAcceptsReferral(current.requestBody?.schema);
+      return referral;
+    });
+  }
   return queue;
 }
 
-function waitForCollector(queue: TelemetryQueue, recheck: CollectorCheck, everyMs: number): void {
+function waitForCollector(
+  recheck: CollectorCheck,
+  everyMs: number,
+  update: (collector: CollectorOperation) => boolean,
+): void {
   let checking = false;
   const timer = setInterval(() => {
     if (checking) return;
     checking = true;
     // A failed read is the same as not listed yet: try again on the next tick.
     void recheck()
-      .catch(() => false)
-      .then((collects) => {
+      .catch(() => undefined)
+      .then((collector) => {
         checking = false;
-        if (!collects) return;
-        clearInterval(timer);
-        queue.activate();
+        if (collector && update(collector)) clearInterval(timer);
       });
   }, everyMs);
   timer.unref?.();

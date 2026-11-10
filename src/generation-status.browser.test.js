@@ -1,4 +1,7 @@
-import { mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect as browserExpect, chromium } from '@playwright/test';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -11,6 +14,8 @@ afterEach(() => vi.unstubAllGlobals());
 it.each([
   'standard',
   'legacy',
+  'hybrid',
+  'no-media-policy',
   'uncertain',
   'legacy-uncertain',
   'uncertain-text',
@@ -51,6 +56,17 @@ it.each([
     let holdRead = false;
     let releaseRead;
     const calls = [];
+    const directory = await mkdtemp(join(tmpdir(), 'sync-status-release-'));
+    const appHtml = '<html><body>Fixture Studio app</body></html>';
+    await writeFile(join(directory, 'app.html'), appHtml);
+    await writeFile(
+      join(directory, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        file: 'app.html',
+        sha256: createHash('sha256').update(appHtml).digest('hex'),
+      }),
+    );
     vi.stubGlobal('fetch', async (input, init) => {
       const path = new URL(input).pathname;
       if (path === '/api-json')
@@ -91,6 +107,15 @@ it.each([
       baseUrl: 'https://fixture.invalid',
       transport: 'http',
       port: 0,
+      ...(bridge === 'no-media-policy'
+        ? {}
+        : {
+            chatgptApp: {
+              directory,
+              domain: 'https://sync.fixture.invalid',
+              resourceDomains: ['https://fixture.invalid'],
+            },
+          }),
     });
     const server = factory.createServer();
     const client = new Client({ name: 'openai-mcp', version: '1.0.0' });
@@ -103,6 +128,12 @@ it.each([
     });
     await context.route(/^https:\/\/(sync\.so|fixture\.invalid)\//, (route) =>
       route.fulfill({ contentType: 'text/html', body: '<title>Fixture destination</title>' }),
+    );
+    const videoBytes = await readFile(new URL('./test-fixtures/status-card.mp4', import.meta.url));
+    await context.route(signedUrl, (route) =>
+      route.request().resourceType() === 'media'
+        ? route.fulfill({ contentType: 'video/mp4', body: videoBytes })
+        : route.fulfill({ contentType: 'text/html', body: '<title>Fixture destination</title>' }),
     );
     await context.tracing.start({ screenshots: true, snapshots: true });
     await mkdir('.cache/status-card', { recursive: true });
@@ -126,9 +157,20 @@ it.each([
           : { id: generationId, projectId, generationEstimate: estimate },
       );
       expect(JSON.stringify(accepted)).not.toContain('privateInput');
-      const delivered = bridge.endsWith('-text')
-        ? { ...accepted, structuredContent: undefined }
-        : accepted;
+      if (bridge === 'hybrid') holdRead = true;
+      const delivered =
+        bridge === 'hybrid'
+          ? {
+              ...accepted,
+              structuredContent: {
+                ...accepted.structuredContent,
+                status: 'COMPLETED',
+                outputUrl: signedUrl,
+              },
+            }
+          : bridge.endsWith('-text')
+            ? { ...accepted, structuredContent: undefined }
+            : accepted;
       const resource = await client.readResource({ uri: descriptor._meta.ui.resourceUri });
       const page = await context.newPage();
       const pageErrors = [];
@@ -152,18 +194,26 @@ it.each([
         ({ html, toolResult, hostBridge, fontSources }) => {
           let srcdoc = html.replace(
             '<head>',
-            `<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src ${fontSources.join(' ')}">`,
+            `<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src ${fontSources.join(' ')}; media-src ${fontSources.join(' ')}">`,
           );
           const iframe = document.querySelector('iframe');
+          window.standardInitializes = 0;
+          window.standardInitialized = false;
           const handleMessage = async (event) => {
             if (event.source !== iframe.contentWindow) return;
             const message = event.data;
+            if (message.method === 'ui/notifications/initialized') {
+              window.standardInitialized = true;
+              return;
+            }
             if (message.method === 'ui/notifications/size-changed') {
               iframe.style.height = `${message.params.height}px`;
               return;
             }
             if (message.id === undefined) return;
             if (message.method === 'ui/initialize') {
+              window.standardInitializes += 1;
+              if (hostBridge.startsWith('legacy')) return;
               // Deliver immediately, including before initialization has finished.
               event.source.postMessage(
                 { jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: toolResult },
@@ -204,7 +254,7 @@ it.each([
           window.addEventListener('message', (event) => {
             void handleMessage(event);
           });
-          if (hostBridge.startsWith('legacy'))
+          if (hostBridge.startsWith('legacy') || hostBridge === 'hybrid')
             srcdoc = srcdoc.replace(
               '<script>',
               '<script>window.openai = { theme: "light", toolOutput: ' +
@@ -221,7 +271,18 @@ it.each([
         },
       );
       const frame = page.frameLocator('iframe');
-      await browserExpect(frame.getByRole('status')).toHaveText('Processing');
+      await browserExpect.poll(() => page.evaluate(() => window.standardInitializes)).toBe(1);
+      if (bridge.startsWith('legacy')) await page.clock.fastForward(4001);
+      else
+        await browserExpect.poll(() => page.evaluate(() => window.standardInitialized)).toBe(true);
+      if (bridge === 'hybrid') {
+        await browserExpect.poll(() => Boolean(releaseRead)).toBe(true);
+        await browserExpect(frame.locator('video')).toHaveCount(0);
+        releaseRead();
+        releaseRead = undefined;
+      }
+      await browserExpect(frame.locator('output[aria-live="polite"]')).toHaveText('Processing');
+
       await browserExpect
         .poll(() =>
           frame.locator('body').evaluate(async () => {
@@ -306,7 +367,7 @@ it.each([
       await browserExpect(check).toBeEnabled();
       current = { id: generationId, projectId, status: 'COMPLETED', outputUrl: signedUrl };
       await check.click();
-      await browserExpect(frame.getByRole('status')).toHaveText('Completed');
+      await browserExpect(frame.locator('output[aria-live="polite"]')).toHaveText('Completed');
       await browserExpect(frame.getByRole('link', { name: 'View video' })).toHaveAttribute(
         'href',
         signedUrl,
@@ -314,6 +375,29 @@ it.each([
       await browserExpect(frame.locator('#estimate')).toBeHidden();
       await browserExpect(check).toBeEnabled();
       releaseRead();
+      const video = frame.getByLabel('Generated video', { exact: true });
+      if (bridge === 'no-media-policy') {
+        await browserExpect(
+          frame.getByText(
+            'Preview unavailable. Use View video to open it, or check status for a fresh link.',
+          ),
+        ).toBeVisible();
+      } else {
+        await browserExpect(video).toHaveAttribute('src', signedUrl);
+        await video.evaluate(async (element) => {
+          element.muted = true;
+          await element.play();
+        });
+        await browserExpect
+          .poll(() =>
+            video.evaluate((element) => element.getVideoPlaybackQuality().totalVideoFrames),
+          )
+          .toBeGreaterThan(0);
+        await video.evaluate((element) => element.pause());
+        await frame
+          .getByRole('main')
+          .screenshot({ path: `.cache/status-card/${bridge}-completed.png` });
+      }
       const resultOpened = context.waitForEvent('page');
       await frame.getByRole('link', { name: 'View video' }).click();
       const resultPage = await resultOpened;
@@ -324,11 +408,11 @@ it.each([
       await browserExpect(frame.getByRole('alert')).toHaveText(
         'Unable to open this link. Try again.',
       );
-      await browserExpect(frame.getByRole('status')).toHaveText('Completed');
+      await browserExpect(frame.locator('output[aria-live="polite"]')).toHaveText('Completed');
       await browserExpect(frame.getByRole('link', { name: 'View video' })).toBeVisible();
       const reads = calls.length;
       await page.clock.fastForward(30000);
-      await browserExpect(frame.getByRole('status')).toHaveText('Completed');
+      await browserExpect(frame.locator('output[aria-live="polite"]')).toHaveText('Completed');
       expect(calls).toHaveLength(reads);
       expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(1);
       expect(
@@ -336,12 +420,18 @@ it.each([
           .filter((call) => call.path.startsWith('/v2/generate/'))
           .every((call) => call.path.endsWith(generationId)),
       ).toBe(true);
+      refused = true;
+      await check.click();
+      await browserExpect(frame.getByRole('alert')).toContainText('Access unavailable');
+      await browserExpect(frame.locator('video')).toHaveCount(0);
+      await browserExpect(frame.getByRole('link', { name: 'View video' })).toHaveCount(0);
       expect(pageErrors).toEqual([]);
     } finally {
       await context.tracing.stop({ path: `.cache/status-card/${bridge}-trace.zip` });
       await browser.close();
       await client.close();
       await server.close();
+      await rm(directory, { recursive: true, force: true });
     }
   },
   30000,

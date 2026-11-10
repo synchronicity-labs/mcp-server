@@ -57,6 +57,7 @@ within two seconds of the call, and calls sent in one batch share it; order call
 | `client_profile` | `chatgpt`, `codex`, `claude` or `generic` |
 | `client_name` | The handshake name, lowercased, such as `claude-code` or `cursor`. Self-reported |
 | `client_version` | The handshake version when it looks like a version |
+| `referral_source` | Optional self-reported directory slug, such as `glama`; absent when unknown |
 | `server_version` | This package's version |
 | `server_revision` | The deployed commit, or `unknown` |
 
@@ -137,6 +138,45 @@ by its kind, and the API refuses a batch that breaks this. Fields the tool does 
 are not recorded. Hosts other than the listed ones
 become `other`, so a customer's own domain never appears.
 
+## Directory referrals
+
+A directory can attach a source marker to the connection configuration it gives
+users. For hosted HTTP, send `X-MCP-Referral: glama` on the `initialize` request.
+For the npm package, set `SYNC_MCP_REFERRAL=glama` in the server's environment.
+Programmatic stdio callers can override it with `referralSource` in the config.
+The hosted server ignores that environment/config value and reads each session's
+header instead.
+
+The server trims and lowercases the value, then accepts a letter followed by up
+to 31 lowercase letters, digits, underscores or hyphens (`^[a-z][a-z0-9_-]{0,31}$`).
+Absent or invalid values, including duplicate HTTP headers, are omitted. The
+value is fixed at initialization; later requests cannot change a session's source.
+Both session and tool events carry it, including nested and failed tool calls.
+Existing telemetry opt-outs apply.
+
+These names are a sync. convention, not a standard MCP referral field. Registry
+entries can describe remote headers and package environment variables, but each
+directory and client must preserve the marker in the installed configuration.
+Do not set a directory's name in the shared `server.json`: that would label
+connections from every directory the same way. Catalog metadata and website UTM
+parameters do not automatically reach an MCP session.
+
+A marker is self-reported. It neither changes permissions nor replaces
+`client_name` or `client_profile`. It shows which configured source a connection
+reports, not verified first-touch acquisition or the effect of a paid promotion.
+No marker means unknown; the server never guesses from the connecting app.
+
+The collector must advertise optional `referral_source` on both event schemas
+before the MCP server sends it. Until then, ordinary usage telemetry continues
+without the field. The server rechecks the schema every ten minutes until support
+appears. Deploy the API's validator and event-registry changes across all replicas
+before using marked configurations; schema detection cannot prove every replica
+has finished a rolling deployment.
+
+Registry references: [remote headers](https://modelcontextprotocol.io/registry/remote-servers),
+[server schema](https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json)
+and [aggregator metadata](https://modelcontextprotocol.io/registry/registry-aggregators).
+
 ## Repeats
 
 The widget repeats some calls every few seconds, such as `studio-views_register` while
@@ -144,9 +184,9 @@ Studio is open, and ChatGPT and Codex reconnect for nearly every call. So the ho
 server records:
 
 - a `background` call once per person, tool, `outcome`, `error_code`, `result_status`
-  and target (the generation, job or Studio view it names) in each ten minutes;
+  and target (the generation, job or Studio view it names), per referral source, in each ten minutes;
 - `mcp_session_initialized` once per person, client name and version, protocol version
-  and capabilities in each ten minutes.
+  and capabilities, per referral source, in each ten minutes.
 
 Count people and connections from these events, not raw requests. A `session_id` on a
 call can have no `mcp_session_initialized` of its own. stdio records every session.
@@ -174,6 +214,17 @@ The npm package honours `SYNC_MCP_TELEMETRY=off`, `--no-telemetry` and
 ## Queries
 
 HogQL for PostHog. Rudy runs the same queries.
+
+Active people and calls by reported directory, last 30 days. Missing markers stay
+unknown, and a person may appear under multiple sources:
+
+```sql
+SELECT coalesce(nullIf(toString(properties.referral_source), ''), 'unknown') AS source,
+  uniq(distinct_id) AS people, count() AS tool_calls
+FROM events
+WHERE event = 'mcp_tool_called' AND timestamp > now() - INTERVAL 30 DAY
+GROUP BY source ORDER BY people DESC
+```
 
 Sessions and people per client and auth method, per week:
 

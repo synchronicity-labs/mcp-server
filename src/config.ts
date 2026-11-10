@@ -19,6 +19,8 @@ export type SyncMcpConfig = {
   toolsets?: Toolset[];
   /** False sends no usage events; see docs/telemetry.md. */
   telemetry?: boolean;
+  /** stdio only: optional directory attribution; see docs/telemetry.md. */
+  referralSource?: string;
   chatgptApp?: {
     directory: string;
     previousDirectories?: string[];
@@ -69,6 +71,7 @@ function resolveChatgptAppRelease():
 }
 
 export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpConfig {
+  const referralSource = resolveReferralSource(overrides);
   const release = overrides.chatgptApp ? undefined : resolveChatgptAppRelease();
   return {
     apiKey: overrides.apiKey ?? process.env.SYNC_API_KEY,
@@ -86,6 +89,7 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
       overrides.updateCheck ?? parseUpdateCheck(process.env.SYNC_MCP_UPDATE_CHECK) ?? true,
     toolsets: overrides.toolsets ?? parseToolsets(process.env.SYNC_MCP_TOOLSETS),
     telemetry: resolveTelemetry(overrides.telemetry, process.env),
+    referralSource,
     chatgptApp:
       overrides.chatgptApp ??
       (release
@@ -101,4 +105,8 @@ export function resolveConfig(overrides: Partial<SyncMcpConfig> = {}): SyncMcpCo
           }
         : undefined),
   };
+}
+
+function resolveReferralSource(overrides: Partial<SyncMcpConfig>): string | undefined {
+  return overrides.referralSource ?? process.env.SYNC_MCP_REFERRAL;
 }
