@@ -29,6 +29,8 @@ const CORE = new Set([
   'organizations_list',
   'organizations_select',
   'account_get-usage',
+  // Any paid workflow can be refused for a plan or credits; a person approves the payment.
+  'billing-approval-links_create',
   'models_list',
   'feedback_send',
   'generations_get',

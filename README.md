@@ -149,6 +149,7 @@ Links can be public media URLs or YouTube, TikTok, Instagram and Facebook videos
 | "Translate https://www.youtube.com/watch?v=… to Spanish." | Imports the link with `assets_create`, quotes the cost, and after you confirm runs `dubbing_create` |
 | "Make video asset `<video-asset-id>` say “thanks for watching” in a calm narrator voice." | Picks a voice with `voices_list`, quotes the script, then `lipsync_create` with `script` |
 | "How many credits do I have left?" | `account_get-usage` |
+| "Upgrade us to Pro." | `billing-approval-links_create`, then gives you the sync.so link to approve and pay |
 | "What did my last generation cost?" | Finds it in history and reads `generations_get-costs` |
 
 Translation, dubbing, speech previews and voice clones are quoted and confirmed
@@ -177,7 +178,7 @@ The hosted server exposes a curated set of tools to every client:
 | Projects | `projects_create`, `projects_get`, `projects_list`, `projects_list-generations`, `projects_rename` |
 | Many jobs | `jobs_create-many`², `jobs_get-many`² |
 | Batches | `batches_create`², `batches_get`², `batches_list`² |
-| Account | `account_get-context`, `account_get-usage`, `organizations_list`, `organizations_select` |
+| Account | `account_get-context`, `account_get-usage`, `organizations_list`, `organizations_select`, `billing-approval-links_create`³ |
 
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
@@ -189,6 +190,11 @@ the set. See [Jobs](docs/jobs.md#many-jobs-at-once). A batch is the API's separa
 pipeline for large runs (20 to 500 generations) on Scale plans and above that can wait
 hours. Where the account's plan doesn't include batch, the API answers 402 with
 `requiredPlan` and `billingUrl`, which the tools pass on.
+
+³ Not in the ChatGPT app listing yet, and listed only when the API publishes
+`POST /v2/billing/approval-links`. It returns a sync.so link where a person approves and
+pays for a plan or credits; creating it charges nothing. See
+[Billing refusals and approval links](docs/tool-workflows.md#billing-refusals-and-approval-links).
 
 Organizations with the matching feature also get `scenes_detect` (camera cuts in a
 video) and `stems_separate` (vocals and background audio), outside the ChatGPT

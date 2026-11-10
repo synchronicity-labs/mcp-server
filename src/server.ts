@@ -69,6 +69,7 @@ import { createAssetAnalysisTools } from './tools/asset-analysis.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
 import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { BATCH_TOOLS, createBatchTools, isBatchOperation } from './tools/batches.js';
+import { billingApprovalOperation, createBillingApprovalTools } from './tools/billing-approval.js';
 import {
   createDialogueTools,
   dialogueOperations,
@@ -141,6 +142,13 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
   },
   {
     text: 'Every call runs in one Sync organization, and paid work is created and billed there. account_get-context names it and says how it was chosen. When organizations_list is available and the user names an organization or team, list the organizations and use the matching id; ask if several match. To work in another organization for the rest of the conversation, call organizations_select. To run one paid create in another organization without switching, pass organizationId on that create and on its estimate; reads of the ids it returns stay in that organization. Name the organization when confirming paid work if the user belongs to more than one. A Sync app connection acts only in the organizations ticked when it was connected; when a switch is refused for that, tell the user to reconnect Sync and tick that organization. API keys are bound to one organization and cannot switch. ',
+  },
+  {
+    text: 'When a Sync tool error has nextAction, read it before anything else in the error: its type says what changes the outcome. retry_later: wait retryAfterSeconds, then send the same request once. reduce_input: shorten or shrink the input. upgrade_plan (requiredPlan names the plan), buy_credits, pay_invoice, update_payment_method, confirm_payment and manage_integration need a person: give them the link (nextAction.url) and do not retry until they say it is done. contact_support: stop and tell them to contact sync. support. Never resend a refused request unchanged. ',
+  },
+  {
+    text: 'When billing-approval-links_create is available and nextAction is upgrade_plan or buy_credits, or the user asks to upgrade or buy credits, create an approval link with the requiredPlan or requiredCredits, and the same organizationId if the refused request used one, and give the person its url; it charges nothing, and they approve and pay on sync.so. Afterwards account_get-context shows the new plan and account_get-usage the new balance; check before retrying. ',
+    notChatgpt: true,
   },
   {
     text: 'Before lipsync, read fresh account_get-usage in the organization that will run it. Pass the same organizationId as the create call to check another organization without changing the session selection. Free coverage requires plan=null, hasActiveCredits=false, freeGenerationsExhausted=false and enough freeMonthlyLimits.generations remaining for every requested job. For script input, also require freeTtsExhausted=false, enough freeMonthlyLimits.tts remaining, and elevenLabsKeyConnected=false; a connected provider key can incur external speech charges. Check model and duration eligibility with the estimate; missing eligibility is unknown, and its base-rate amount is not a charge for covered work. When the whole request is covered, proceed without mentioning prices or asking for spending confirmation. Paid, external or unknown coverage still requires a quote and spending confirmation; omitted billing fields are unknown. A free lipsync allowance does not prove translation, dialogue previews or voice cloning is free. ',
@@ -235,6 +243,7 @@ export function serverDescription(spendConfirmation = true): string {
 }
 
 const JOB_SET_TOOLS = ['jobs_create-many', 'jobs_get-many'];
+const APPROVAL_TOOLS = ['billing-approval-links_create'];
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
   'analytics_track-event',
@@ -316,6 +325,7 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'batches_list',
   'jobs_create-many',
   'jobs_get-many',
+  'billing-approval-links_create',
   // Listed only to accounts with the feature; see account-features.ts.
   'scenes_detect',
   'stems_separate',
@@ -530,10 +540,36 @@ const NEXT_STEP_BY_CODE: Record<string, string> = {
     'Stem separation reads only files in Sync storage. Upload the file (assets_create-upload-url, PUT the bytes, then assets_create with the returned URL) and separate the new asset.',
 };
 
+// A person pays through an approval link; the agent cannot. Ahead of the code's own step,
+// since a payment is what changes the outcome.
+const PAYMENT_STEP_BY_ACTION: Record<string, string> = {
+  upgrade_plan:
+    'This needs a higher plan (nextAction.requiredPlan), or a request that fits the current one. When billing-approval-links_create is available, create a link for that plan and give its url to the person; otherwise give them nextAction.url. The same request fails the same way until account_get-context shows the new plan.',
+  buy_credits:
+    'This needs more credits (requiredCredits). When billing-approval-links_create is available, create a link for those credits and give its url to the person; otherwise give them nextAction.url. The same request fails the same way until account_get-usage shows the new balance.',
+};
+const PERSON_ACTS =
+  'A person must act at nextAction.url, or billingUrl when it has none: pay an invoice, update the payment method, confirm a payment or fix a connected provider account. Give them the link and wait until they say it is done; the same request fails the same way until then.';
+const NEXT_STEP_BY_ACTION: Record<string, string> = {
+  pay_invoice: PERSON_ACTS,
+  update_payment_method: PERSON_ACTS,
+  confirm_payment: PERSON_ACTS,
+  manage_integration: PERSON_ACTS,
+  retry_later:
+    'Wait nextAction.retryAfterSeconds, then send the same request once. Sending it sooner fails the same way.',
+  reduce_input:
+    'No plan lifts this limit. Shorten or shrink the input, then send it once. ' + RESUBMIT_FAILS,
+  contact_support:
+    'Only sync. support can resolve this. Tell the user to contact them (nextAction.url); calling again fails the same way.',
+};
+
 function nextStep(error: ApiRequestError): string | undefined {
   const organization = organizationNextStep(error);
   if (organization) return organization;
+  const action = error.details?.nextAction?.type;
+  if (action && PAYMENT_STEP_BY_ACTION[action]) return PAYMENT_STEP_BY_ACTION[action];
   if (error.code && NEXT_STEP_BY_CODE[error.code]) return NEXT_STEP_BY_CODE[error.code];
+  if (action && NEXT_STEP_BY_ACTION[action]) return NEXT_STEP_BY_ACTION[action];
   return [400, 402, 403, 422].includes(error.status) ? RESUBMIT_FAILS : undefined;
 }
 
@@ -695,7 +731,8 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   // Kept out of the reviewed ChatGPT app listing; its embedded Studio has no timeline.
   if (tool.name === 'lipsync_create-timeline') return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet.
-  if ([...BATCH_TOOLS, ...JOB_SET_TOOLS].includes(tool.name)) return profile.name !== 'chatgpt';
+  if ([...BATCH_TOOLS, ...JOB_SET_TOOLS, ...APPROVAL_TOOLS].includes(tool.name))
+    return profile.name !== 'chatgpt';
   // Not in the reviewed ChatGPT app listing yet; other profiles list them per account.
   if (isFeatureGatedTool(tool.name)) return profile.name !== 'chatgpt';
   if (['assets_upload', 'assets_open-upload-widget'].includes(tool.name))
@@ -803,6 +840,7 @@ function createTools(
       translationPreviewOperations([operation]).length === 0 &&
       !operation.path.startsWith('/v2/audio-trims') &&
       !isBatchOperation(operation) &&
+      !billingApprovalOperation(operation) &&
       operation.studioDraftVersion !== 1 &&
       operation.studioViewVersion !== 1 &&
       !generationCostsOperation(operation) &&
@@ -843,6 +881,7 @@ function createTools(
     ...createStudioViewTools(operations, httpClient),
     ...createStudioDraftTools(operations, httpClient),
     ...createAccountManagementTools(httpClient),
+    ...createBillingApprovalTools(operations, httpClient),
     ...createGenerationCostsTools(operations, httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),

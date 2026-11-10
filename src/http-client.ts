@@ -50,10 +50,33 @@ const importErrorDetailsSchema = z.object({
   progress: z.number().min(0).max(100).optional(),
 });
 
-// Error fields worth showing the agent as they are: what a refusal needs (a 402's plan and
-// billing page), a batch limit's counts, and the line a batch refusal points at.
+/**
+ * What to do after a billing, plan, credit or limit refusal, as the API names it. type is
+ * a string, not an enum: the API adds types (retry_later, upgrade_plan, buy_credits,
+ * pay_invoice, update_payment_method, confirm_payment, reduce_input, manage_integration,
+ * contact_support today) and an agent should still see one this server does not know.
+ */
+export const nextActionSchema = z
+  .object({
+    type: z.string().min(1).describe('What to do next, such as upgrade_plan or retry_later.'),
+    url: z.string().optional().catch(undefined).describe('Page where a person does it.'),
+    retryAfterSeconds: z
+      .number()
+      .nonnegative()
+      .optional()
+      .catch(undefined)
+      .describe('Seconds to wait before sending the same request again.'),
+    requiredPlan: z.string().optional().catch(undefined).describe('Plan that lifts the limit.'),
+  })
+  .describe('The API’s next action for this refusal. Act on it before anything else.');
+
+// Error fields worth showing the agent as they are: what a refusal needs (its next action,
+// a 402's plan, credits and billing page), a batch limit's counts, and the line a batch
+// refusal points at.
 const errorDetailsSchema = z.object({
+  nextAction: nextActionSchema.optional().catch(undefined),
   requiredPlan: z.string().optional().catch(undefined),
+  requiredCredits: z.number().int().positive().optional().catch(undefined),
   billingUrl: z.string().optional().catch(undefined),
   activeBatches: z.number().optional().catch(undefined),
   concurrencyLimit: z.number().optional().catch(undefined),

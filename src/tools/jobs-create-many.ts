@@ -1,9 +1,17 @@
 import { z } from 'zod';
-import { ApiRequestError, type HttpClient } from '../http-client.js';
+import { ApiRequestError, type HttpClient, nextActionSchema } from '../http-client.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import type { AnyJobKind } from './job-status.js';
 import { sleep, WAIT_BUDGET_MS } from './job-wait.js';
-import { checkItems, created, keyFields, withKeys } from './jobs-create-many-items.js';
+import {
+  checkItems,
+  created,
+  type ItemError,
+  itemError,
+  keyFields,
+  TIMED_OUT,
+  withKeys,
+} from './jobs-create-many-items.js';
 import { MAX_JOBS } from './jobs-get-many.js';
 import { parseAccountOverview } from './organizations.js';
 
@@ -47,15 +55,6 @@ const CREATE_TOOLS: Record<string, CreateSpec> = {
   'speech-previews_create': { kind: 'speech_preview', reads: ['projectId'] },
 };
 
-type ItemError = {
-  message: string;
-  status?: number;
-  code?: string;
-  retryAfterMs?: number;
-  generationId?: string;
-  /** The request may have created the job; resending it with its key is safe. */
-  outcomeUnknown?: true;
-};
 type Job = { kind: AnyJobKind; id: string; projectId?: string; videoAssetId?: string };
 type Started = { kind: AnyJobKind; id?: string; job?: Job };
 type Outcome = { index: number } & (
@@ -72,31 +71,11 @@ export type CreateManyOptions = {
   requestMs?: number;
 };
 
-const TIMED_OUT: ItemError = {
-  message:
-    'No answer before the time limit, so this job may have started. Send this item again with the same idempotencyKey; its key makes that safe.',
-  code: 'outcome_unknown',
-  outcomeUnknown: true,
-};
-
-function itemError(error: unknown): ItemError {
-  if (error instanceof ApiRequestError)
-    return {
-      message: error.message,
-      status: error.status,
-      ...(error.code ? { code: error.code } : {}),
-      ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
-      ...(error.generationId ? { generationId: error.generationId } : {}),
-    };
-  if (error instanceof z.ZodError) return { message: z.prettifyError(error) };
-  return { message: error instanceof Error ? error.message : String(error) };
-}
-
 /**
  * A server error, a lost connection or an aborted request: the API may have admitted the job
- * anyway. fetch reports network failures as TypeError whatever the message ("fetch failed"
- * before a reply, "terminated" when the reply body breaks off), and aborts and timeouts as
- * AbortError or TimeoutError.
+ * anyway. fetch reports network failures as TypeError ("fetch failed" before a reply,
+ * "terminated" when the body breaks off), and aborts and timeouts as AbortError or
+ * TimeoutError.
  */
 function outcomeUnknown(error: unknown): boolean {
   if (error instanceof ApiRequestError) return error.status >= 500 || error.status === 408;
@@ -276,6 +255,23 @@ export function createJobsCreateManyTool(
       code: z.string().optional(),
       retryAfterMs: z.number().optional(),
       generationId: z.string().optional(),
+      nextAction: nextActionSchema.optional(),
+      requiredPlan: z
+        .string()
+        .optional()
+        .describe(
+          'The plan that lifts this refusal; pass it as plan to billing-approval-links_create.',
+        ),
+      requiredCredits: z
+        .number()
+        .optional()
+        .describe(
+          'Credits this item needed; pass at least this as credits to billing-approval-links_create.',
+        ),
+      billingUrl: z
+        .string()
+        .optional()
+        .describe('Where a person manages billing for this organization.'),
       outcomeUnknown: z
         .literal(true)
         .optional()
