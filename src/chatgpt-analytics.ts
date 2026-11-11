@@ -182,8 +182,11 @@ export function createAnalyticsTool(http: HttpClient): McpToolDefinition {
       openWorldHint: false,
       idempotentHint: true,
     },
-    handler: async (args) => {
+    handler: async (args, context) => {
       const event = eventSchema.parse(args);
+      // The collector counts ChatGPT app events. Codex runs the same widget, which sends
+      // these too since it tags its tool calls there; they are accepted and dropped.
+      if (context?.clientProfile?.name !== 'chatgpt') return { accepted: false };
       const attribution = getToolAnalytics();
       await http.request('post', '/v2/analytics/chatgpt-events', {
         signal: AbortSignal.timeout(1500),

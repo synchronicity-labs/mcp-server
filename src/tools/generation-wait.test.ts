@@ -16,6 +16,12 @@ const operation: ParsedOperation = {
     { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
     { name: 'wait', in: 'query', required: false, schema: { type: 'boolean' } },
     { name: 'timeout', in: 'query', required: false, schema: { type: 'number' } },
+    {
+      name: 'include',
+      in: 'query',
+      required: false,
+      schema: { type: 'string', enum: ['progress'] },
+    },
   ],
 };
 
@@ -47,6 +53,20 @@ describe('generations_get wait', () => {
       expect(path).toBe('/v2/generate/generation');
       expect(options?.query).toEqual({ wait: 'true', timeout: '10' });
     }
+  });
+
+  it('drops include=progress while waiting, which the API refuses with wait', async () => {
+    const request = vi.fn<HttpClient['request']>(async () => ({
+      id: 'generation',
+      status: 'COMPLETED',
+    }));
+    const tool = generationsGet(request);
+    await expect(
+      tool.handler({ id: 'generation', wait: true, include: 'progress' }),
+    ).resolves.toMatchObject({ status: 'COMPLETED' });
+    expect(request.mock.calls[0]?.[2]?.query).toEqual({ wait: 'true' });
+    await tool.handler({ id: 'generation', include: 'progress' });
+    expect(request.mock.calls[1]?.[2]?.query).toEqual({ include: 'progress' });
   });
 
   it('reads once without wait', async () => {

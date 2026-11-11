@@ -126,7 +126,11 @@ function withGenerationWait(tool: JsonTool): JsonTool {
     ...tool,
     handler: async (args, context) => {
       if (args.wait !== true) return handler(args, context);
-      const read = (signal = context?.signal) => handler(args, { ...context, signal });
+      // The API refuses wait with include=progress (a bare 400). Waiting is what the
+      // agent asked for, and the settled generation needs no progress, so drop include.
+      const { include, ...rest } = args;
+      const waitArgs = include === 'progress' ? rest : args;
+      const read = (signal = context?.signal) => handler(waitArgs, { ...context, signal });
       return pollUntil(read, jobSettled, context, {
         describe: (job) => `generation ${String(rawStatus(job) ?? 'pending').toLowerCase()}`,
       });
