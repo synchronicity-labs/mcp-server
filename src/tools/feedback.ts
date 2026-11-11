@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import { FEEDBACK_OPERATION_ID, schemaProperty } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
+import { recentGeneration } from '../recent-generations.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 
 /**
@@ -54,6 +55,9 @@ const input = z
   })
   .strict();
 
+/** Kinds about one result, where the conversation's latest generation fills a missing id. */
+const ABOUT_A_RESULT = new Set(['bug', 'confusing_error', 'workaround']);
+
 const receipt = z.object({ id: z.string(), received: z.literal(true) });
 
 /**
@@ -101,11 +105,17 @@ export function createFeedbackTools(
         idempotentHint: false,
         openWorldHint: false,
       },
-      handler: async (args, context) =>
-        receipt.parse(
+      handler: async (args, context) => {
+        const report = input.parse(args);
+        // A report about a result is useless without it; the agent often leaves it out.
+        const generationId =
+          report.generationId ??
+          (ABOUT_A_RESULT.has(report.kind) ? recentGeneration(context?.generationKey) : undefined);
+        return receipt.parse(
           await http.request('post', '/v2/feedback', {
             body: {
-              ...input.parse(args),
+              ...report,
+              ...(generationId && { generationId }),
               ...linkTo(context),
               source: 'mcp',
               mcpVersion: version,
@@ -118,7 +128,8 @@ export function createFeedbackTools(
             },
             signal: context?.signal,
           }),
-        ),
+        );
+      },
     },
   ];
 }

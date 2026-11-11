@@ -39,6 +39,13 @@ function spec(linkFields: boolean) {
       '/v2/analytics/mcp-events': {
         post: { operationId: 'analytics_captureMcpEvents', tags: ['Analytics'] },
       },
+      '/v2/generate/{id}': {
+        get: {
+          operationId: 'GenerateController_getGeneration',
+          tags: ['Generate'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        },
+      },
     },
   };
 }
@@ -55,6 +62,9 @@ async function setup(linkFields: boolean) {
       if (req.url === '/v2/feedback') {
         feedback.push(JSON.parse(raw));
         return void res.end(JSON.stringify({ id: 'feedback-1', received: true }));
+      }
+      if (req.url?.startsWith('/v2/generate/')) {
+        return void res.end(JSON.stringify({ id: GENERATION, status: 'COMPLETED' }));
       }
       if (req.url === '/v2/analytics/mcp-events') {
         events.push(...JSON.parse(raw).events);
@@ -95,6 +105,7 @@ const report = {
   severity: 'major',
 };
 const session = 'chatgpt-session-handle';
+const GENERATION = '0b6c6a1e-3c5e-4a51-9f0e-4b7c2b1d9a10';
 
 describe('feedback_send in ChatGPT', () => {
   it('is listed and instructed, including for requests the tools cannot do', async () => {
@@ -118,6 +129,35 @@ describe('feedback_send in ChatGPT', () => {
     expect(feedback[0]).not.toHaveProperty('mcpSessionId');
     expect(feedback[0]).not.toHaveProperty('conversationId');
     expect(feedback[0]).toMatchObject({ ...report, client: { name: 'openai-mcp' } });
+  });
+
+  it('names the conversation’s latest generation on a report about a result that left it out', async () => {
+    const { client, run, feedback } = await setup(false);
+    const call = (name: string, args: Record<string, unknown>, conversation = session) =>
+      run(() =>
+        client.callTool({
+          name,
+          arguments: args,
+          _meta: { 'openai/session': conversation },
+        }),
+      );
+    await call('generations_get', { id: GENERATION });
+    const bug = { kind: 'bug', message: 'The result shows no visible lipsync.' };
+
+    await call('feedback_send', bug);
+    // Not for a missing capability, nor for another conversation.
+    await call('feedback_send', report);
+    await call('feedback_send', bug, 'another-conversation');
+    // An id the agent gave stays as given.
+    const named = '00000000-0000-4000-8000-000000000002';
+    await call('feedback_send', { ...bug, generationId: named });
+
+    expect(feedback.map((body) => body.generationId)).toEqual([
+      GENERATION,
+      undefined,
+      undefined,
+      named,
+    ]);
   });
 
   it('names its session and conversation, matching the usage events', async () => {
