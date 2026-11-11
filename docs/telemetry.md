@@ -100,9 +100,11 @@ its conversation: `call_index`, `previous_tool` and `ms_since_previous_call` con
 across sessions. Other calls are counted in their session. The count lives in the
 server's memory, so it starts again at 1 after a deploy and after six quiet hours.
 
-The ChatGPT widget names its calls `ui` or `background`. Where the widget runs without
-its analytics, as in Codex, a call to a widget-only tool (`ui.visibility` without
-`model`) is `ui` when it carries an `idempotencyKey` and `background` otherwise.
+The widget names its own calls `ui` or `background` in every host that runs it,
+ChatGPT and Codex, from 0.3.8 on; before that Codex's widget calls on model-visible
+tools such as `studio-drafts_get` were recorded as `model`. A call to a widget-only
+tool (`ui.visibility` without `model`) that arrives without that name is `ui` when it
+carries an `idempotencyKey` and `background` otherwise.
 
 `outcome` is one of:
 

@@ -139,7 +139,9 @@ export function createAccountContextTool(
         ...(plan?.limits ? { generationLimits: plan.limits } : {}),
         capabilities: {
           projectRenaming: true,
-          ...(chatgptAnalytics && context?.clientProfile?.name === 'chatgpt'
+          // The widget tags its own tool calls only when this is set, in every host it runs
+          // in; its interaction events still reach the collector from ChatGPT alone.
+          ...(chatgptAnalytics && context?.clientProfile?.supportsAppUi
             ? { chatgptAnalytics: true }
             : {}),
           ...(studioDraftSync ? { studioDraftSync: true } : {}),

@@ -110,6 +110,29 @@ it.each([true, false])(
           },
         },
       ]);
+      // Codex runs the same widget: it learns to tag its own calls, but its interaction
+      // events never reach the ChatGPT collector.
+      const codexServer = factory.createServer();
+      const codex = new Client({ name: 'openai-mcp (Codex)', version: 'analytics-test' });
+      const [codexClient, codexTransport] = InMemoryTransport.createLinkedPair();
+      await codexServer.connect(codexTransport);
+      await codex.connect(codexClient);
+      try {
+        const codexAccount = await runWithAuth('fixture-user', 'openai-mcp (Codex)', () =>
+          codex.callTool({ name: 'account_get-context', arguments: {} }),
+        );
+        expect(codexAccount.structuredContent).toMatchObject({
+          capabilities: { chatgptAnalytics: true },
+        });
+        const dropped = await runWithAuth('fixture-user', 'openai-mcp (Codex)', () =>
+          codex.callTool({ name: 'analytics_track-event', arguments: event }),
+        );
+        expect(dropped.structuredContent).toEqual({ accepted: false });
+        expect(calls).toHaveLength(1);
+      } finally {
+        await codex.close();
+        await codexServer.close();
+      }
     } finally {
       await client.close();
       await server.close();
