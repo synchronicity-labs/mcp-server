@@ -19,6 +19,7 @@ const GENERATION_TOOLS = new Set([
   'lipsync_create-timeline',
   'dubbing_create',
   'dialogue-videos_create',
+  'generations_create',
   'generations_get',
   'generations_get-continuation',
 ]);
