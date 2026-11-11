@@ -198,7 +198,10 @@ pays for a plan or credits; creating it charges nothing. See
 
 Organizations with the matching feature also get `scenes_detect` (camera cuts in a
 video) and `stems_separate` (vocals and background audio), outside the ChatGPT
-app. They are in the `lipsync` and `assets` toolsets locally.
+app. They are in the `lipsync` and `assets` toolsets locally. The same goes for
+`faces_detect`, `faces_get` and `faces_get-timeline` (faces, shots and who talks in a
+video) and the `shots` input of `lipsync_create`, in the `lipsync` toolset; see
+[Lipsync planning](docs/lipsync-planning.md).
 
 Clients with app support also get the tools behind the embedded Studio app:
 Studio views and drafts, the upload widget and app helpers. Those are clients
@@ -381,6 +384,7 @@ credentials, query or fragment. Existing deployments need no new setting.
 ## Learn More
 
 - [Tool workflows](docs/tool-workflows.md) — How multi-step and paid tools behave
+- [Lipsync planning](docs/lipsync-planning.md) — Face analysis tools and shot input, for organizations with the feature
 - [HTTP server configuration](docs/http-server.md) — Environment variables and runtime limits
 - [Maintainer notes](docs/maintainers.md) — Hosted compatibility, cancellation, OAuth proxy, uploads and monitoring
 - [Claude directory readiness](docs/claude-directory-readiness.md) — Review checklist and remaining submission work

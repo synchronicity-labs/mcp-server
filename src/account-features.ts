@@ -1,6 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/server';
 import type { HttpClient } from './http-client.js';
 import { type OrganizationSession, runInOrganizationSession } from './organization-selection.js';
+import { currentToolName } from './tool-names.js';
 import { parseAccountOverview } from './tools/organizations.js';
 
 /**
@@ -12,11 +13,41 @@ import { parseAccountOverview } from './tools/organizations.js';
 const TOOL_FEATURES: Readonly<Record<string, string>> = {
   scenes_detect: 'scene_detection',
   stems_separate: 'stem_separation',
+  faces_detect: 'face_validation',
+  faces_get: 'face_validation',
+  'faces_get-timeline': 'lipsync_planning',
+};
+
+/**
+ * Optional inputs of listed tools that only accounts with the feature see, for request
+ * fields the API refuses without it. Like a gated tool, a call with one is not refused here.
+ */
+const PARAMETER_FEATURES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  lipsync_create: { shots: 'lipsync_planning' },
 };
 
 export function isFeatureGatedTool(name: string): boolean {
   return Object.hasOwn(TOOL_FEATURES, name);
 }
+
+function gatedParameters(tool: Tool): [name: string, feature: string][] {
+  const properties = tool.inputSchema.properties ?? {};
+  // App profiles also list a renamed tool under its old name (withLegacyAppDescriptors).
+  return Object.entries(PARAMETER_FEATURES[currentToolName(tool.name)] ?? {}).filter(([name]) =>
+    Object.hasOwn(properties, name),
+  );
+}
+
+/** The descriptor without the gated inputs whose feature is not in `enabled`. */
+export function withoutGatedParameters(tool: Tool, enabled: ReadonlySet<string> = new Set()): Tool {
+  const hidden = gatedParameters(tool).filter(([, feature]) => !enabled.has(feature));
+  if (hidden.length === 0) return tool;
+  const properties = { ...tool.inputSchema.properties };
+  for (const [name] of hidden) delete properties[name];
+  return { ...tool, inputSchema: { ...tool.inputSchema, properties } };
+}
+
+const isGated = (tool: Tool) => isFeatureGatedTool(tool.name) || gatedParameters(tool).length > 0;
 
 // tools/list waits on this read, so it must not take the API's full request budget.
 const FEATURES_TIMEOUT_MS = 5_000;
@@ -51,15 +82,18 @@ async function sessionFeatures(
   }
 }
 
-/** The descriptors this organization may see; reads features only when a gated tool is listed. */
+/**
+ * The descriptors this organization may see; reads features only when a gated tool or
+ * input is listed.
+ */
 export async function listedForAccount(
   descriptors: Tool[],
   session: OrganizationSession,
   http: HttpClient,
 ): Promise<Tool[]> {
-  if (!descriptors.some((tool) => isFeatureGatedTool(tool.name))) return descriptors;
+  if (!descriptors.some(isGated)) return descriptors;
   const enabled = await sessionFeatures(session, http);
-  return descriptors.filter(
-    (tool) => !isFeatureGatedTool(tool.name) || enabled.has(TOOL_FEATURES[tool.name]!),
-  );
+  return descriptors
+    .filter((tool) => !isFeatureGatedTool(tool.name) || enabled.has(TOOL_FEATURES[tool.name]!))
+    .map((tool) => withoutGatedParameters(tool, enabled));
 }

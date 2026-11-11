@@ -72,6 +72,8 @@ reading, since the start route allows 60 calls an hour. The source must be in
 Sync storage (`stem_separation_source_not_hosted` otherwise). The tools don't
 mix audio, so the agent lays a dub over `backgroundUrl` itself.
 
+Face tools work alike: [Lipsync planning](lipsync-planning.md).
+
 ## Quote replacement speech
 
 For “make this video say this script”, pass the replacement `script` to

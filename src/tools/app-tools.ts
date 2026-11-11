@@ -4,6 +4,7 @@ import type { HttpClient } from '../http-client.js';
 import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import type { McpToolDefinition } from './generator.js';
+import { lipsyncShotsInput, parseLipsyncOptions } from './lipsync-shots.js';
 import {
   ASSET_TYPE_BY_KIND,
   assertValidFileParam,
@@ -13,7 +14,7 @@ import {
   resolveMedia,
   uploadMediaAsset,
 } from './media-upload.js';
-import { modelOptionsSchema, parseModelOptions } from './model-options.js';
+import { modelOptionsSchema } from './model-options.js';
 import { generationOutputSchema, uploadMediaOutputSchema } from './output-schemas.js';
 import {
   assertProjectDestination,
@@ -244,6 +245,7 @@ export function createAppTools(
           .describe(
             'Model-specific generation preferences. Keep unchanged when retrying the same idempotency key.',
           ),
+        shots: lipsyncShotsInput,
         idempotencyKey: z
           .string()
           .regex(/^[A-Za-z0-9._~-]{1,128}$/)
@@ -327,7 +329,7 @@ export function createAppTools(
         };
 
         const resolvedModel = model ?? 'sync-3';
-        const options = parseModelOptions(args.options, {
+        const options = parseLipsyncOptions(args, {
           model: resolvedModel,
           image: providedCount(imageUrl, imageAssetId, image) > 0,
         });
@@ -480,7 +482,7 @@ export function createAppTools(
   // asset-only arguments. Reuse generation admission/execution without exposing
   // the host's attachment transport to this app-only entry point.
   const inputSchema = { ...lipsync.inputSchema };
-  for (const key of ['video', 'image', 'audio', 'videoUrl', 'imageUrl', 'audioUrl']) {
+  for (const key of ['video', 'image', 'audio', 'videoUrl', 'imageUrl', 'audioUrl', 'shots']) {
     delete inputSchema[key];
   }
   const { 'openai/fileParams': _fileParams, ...meta } = lipsync.meta ?? {};

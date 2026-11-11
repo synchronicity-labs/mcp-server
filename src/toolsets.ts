@@ -80,6 +80,9 @@ const CATEGORY_BY_TOOL: Record<string, Category> = {
   // Feature-gated: listed only to accounts with the feature (account-features.ts).
   scenes_detect: 'lipsync',
   stems_separate: 'assets',
+  faces_detect: 'lipsync',
+  faces_get: 'lipsync',
+  'faces_get-timeline': 'lipsync',
   assets_upload: 'assets',
   'assets_open-upload-widget': 'assets',
   projects_rename: 'projects',
