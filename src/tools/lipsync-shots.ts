@@ -28,7 +28,7 @@ export const lipsyncShotsInput = z
   .max(2000)
   .optional()
   .describe(
-    'The video’s camera shots, replacing Sync’s own shot detection, which misses jump cuts (same camera, footage removed). Start from faces_get-timeline shots and add a boundary at each cut it missed. Every boundary must be a real cut: a boundary in mid-shot makes the mouth jump, and a shot that starts a few frames before a real cut gets the wrong face on those frames. In video order: the first starts at frame 0 and each starts at the previous endFrame. sync-3 or sync-3-pro with a video only. Omit to let Sync detect shots.',
+    'The video’s camera shots, replacing Sync’s own shot detection, which misses jump cuts (same camera, footage removed). Start from faces_get-timeline shots and add a boundary at each cut it missed. Every boundary must be a real cut: a boundary in mid-shot makes the mouth jump, and a shot that starts a few frames before a real cut gets the wrong face on those frames. In video order: the first starts at frame 0 and each starts at the previous endFrame. sync-3, sync-3-pro or studio-1 with a video only. Omit to let Sync detect shots.',
   );
 
 type Shot = { startFrame: number; endFrame: number };
