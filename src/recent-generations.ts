@@ -11,6 +11,17 @@ import { resultFacets } from './telemetry/facets.js';
 const TTL_MS = 30 * 60_000;
 const MAX_ENTRIES = 10_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Only tools that create or read a generation. Other results can carry ids the telemetry
+// facets read as a generation, such as a translation preview job.
+const GENERATION_TOOLS = new Set([
+  'lipsync_create',
+  'lipsync_create-from-assets',
+  'lipsync_create-timeline',
+  'dubbing_create',
+  'dialogue-videos_create',
+  'generations_get',
+  'generations_get-continuation',
+]);
 
 const entries = new Map<string, { id: string; at: number }>();
 
@@ -37,6 +48,7 @@ export function generationContextKey(
 
 /** The generation a tool result created or describes, if any. */
 function generationIn(tool: string, result: unknown): string | undefined {
+  if (!GENERATION_TOOLS.has(tool)) return undefined;
   const facets = resultFacets(tool, result);
   if (typeof facets.generation_id === 'string') return facets.generation_id;
   // generations_get answers with the generation itself.

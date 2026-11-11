@@ -131,6 +131,15 @@ describe('jobs_create-many', () => {
     expect(progress.mock.calls.at(-1)?.[1]).toBe('5 of 5 started');
   });
 
+  it('runs each item in the conversation of the call that started them', async () => {
+    const { tool, callTool } = setup(started, { concurrency: 2 });
+    await tool.handler({ tool: 'dubbing_create', idempotencyKey: setKey, items: items('es') }, {
+      callTool,
+      generationKey: 'conversation-key',
+    } as ToolRequestContext);
+    expect(callTool.mock.calls[0]![2]).toMatchObject({ generationKey: 'conversation-key' });
+  });
+
   it('waits out concurrency_limit_reached and resends the same keyed request', async () => {
     const { run, callTool } = setup(
       async (args, attempt) => {

@@ -1031,6 +1031,8 @@ function createProfiledServer(
   handshakeClientName?: string,
   updateCheck?: UpdateCheck,
   telemetry?: TelemetrySession,
+  // The hosted MCP session; scopes per-conversation state when telemetry is off.
+  mcpSessionId?: string,
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined = httpClientName;
@@ -1102,11 +1104,10 @@ function createProfiledServer(
     }
     const activeProfile = profile;
     const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
-    const generationKey = generationContextKey(
-      parameters[1]?._meta,
-      telemetry?.id,
-      config.transport,
-    );
+    // A nested call (jobs_create-many's items) keeps the key of the call that made it.
+    const generationKey =
+      parameters[1]?.generationKey ??
+      generationContextKey(parameters[1]?._meta, mcpSessionId ?? telemetry?.id, config.transport);
     const execute = () =>
       trackToolExecution(
         // The analytics collector still names tools as they were before the rename.
@@ -1399,6 +1400,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
     clientName?: string,
     handshakeClientName?: string,
     telemetry?: TelemetrySession,
+    mcpSessionId?: string,
   ) => McpServer;
   toolCount: number;
   /** Undefined when telemetry is off; inactive until the API collects MCP events. */
@@ -1447,7 +1449,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
       createHttpClient(config.baseUrl),
       collectorCheck(config.baseUrl),
     ),
-    createServer: (clientName, handshakeClientName, telemetry) =>
+    createServer: (clientName, handshakeClientName, telemetry, mcpSessionId) =>
       createProfiledServer(
         config,
         operations,
@@ -1459,6 +1461,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
         handshakeClientName,
         undefined,
         telemetry,
+        mcpSessionId,
       ),
   };
 }

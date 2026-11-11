@@ -37,6 +37,9 @@ describe('recent generations', () => {
     // A result with no generation changes nothing.
     rememberGeneration(key, 'assets_list', { items: [] }, 4000);
     expect(recentGeneration(key, 5000)).toBe(OTHER);
+    // A translation preview's id is a job, not a generation.
+    rememberGeneration(key, 'translation-previews_create', { structuredContent: { id: ID } }, 4500);
+    expect(recentGeneration(key, 5000)).toBe(OTHER);
     expect(recentGeneration(key, 2000 + 30 * 60_000)).toBeUndefined();
     expect(recentGeneration(undefined)).toBeUndefined();
   });

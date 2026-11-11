@@ -40,7 +40,7 @@ export type ToolRequestContext = {
   callTool?: (
     name: string,
     args: Record<string, unknown>,
-    context: { signal?: AbortSignal },
+    context: { signal?: AbortSignal; generationKey?: string },
   ) => Promise<unknown>;
 };
 
