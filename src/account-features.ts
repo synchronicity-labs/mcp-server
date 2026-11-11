@@ -24,6 +24,7 @@ const TOOL_FEATURES: Readonly<Record<string, string>> = {
  */
 const PARAMETER_FEATURES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   lipsync_create: { shots: 'lipsync_planning' },
+  'lipsync_create-timeline': { shots: 'lipsync_planning' },
 };
 
 export function isFeatureGatedTool(name: string): boolean {

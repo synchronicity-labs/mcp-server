@@ -200,8 +200,8 @@ Organizations with the matching feature also get `scenes_detect` (camera cuts in
 video) and `stems_separate` (vocals and background audio), outside the ChatGPT
 app. They are in the `lipsync` and `assets` toolsets locally. The same goes for
 `faces_detect`, `faces_get` and `faces_get-timeline` (faces, shots and who talks in a
-video) and the `shots` input of `lipsync_create`, in the `lipsync` toolset; see
-[Lipsync planning](docs/lipsync-planning.md).
+video) and the `shots` input of `lipsync_create` and `lipsync_create-timeline`, in the
+`lipsync` toolset; see [Lipsync planning](docs/lipsync-planning.md).
 
 Clients with app support also get the tools behind the embedded Studio app:
 Studio views and drafts, the upload widget and app helpers. Those are clients
