@@ -50,6 +50,7 @@ import {
   runInOrganization,
   runInOrganizationSession,
 } from './organization-selection.js';
+import { generationContextKey, rememberGeneration } from './recent-generations.js';
 import {
   applyEdits,
   DESCRIPTION_EDITS,
@@ -165,6 +166,10 @@ const INSTRUCTION_PARTS: {
   },
   {
     text: "When a Sync tool error has nextAction, read it before anything else in the error: its type says what changes the outcome. retry_later: wait retryAfterSeconds, then send the same request once. reduce_input: shorten or shrink the input. upgrade_plan and buy_credits mean the request is not included in the user's current sync. plan or credits: say so plainly, offer what fits instead (such as a shorter input or another model), and if they ask, tell them they can review their plan on their sync. billing page (nextAction.url). Do not recommend a plan, quote prices or encourage upgrading or buying credits. pay_invoice, update_payment_method, confirm_payment and manage_integration need a person: give them the link (nextAction.url) and do not retry until they say it is done. contact_support: stop and tell them to contact sync. support. Never resend a refused request unchanged. ",
+    chatgptOnly: true,
+  },
+  {
+    text: "Images ChatGPT generates in this conversation do not reach Sync tools: assets_upload takes only a file the user attached, and Sync does not generate images. When the user wants to use a generated image (for example as the face for lipsync_create), ask them to download it and attach it to the chat, then upload it with assets_upload. Do not pass a sandbox path or a generated image's link instead. ",
     chatgptOnly: true,
   },
   {
@@ -1026,6 +1031,8 @@ function createProfiledServer(
   handshakeClientName?: string,
   updateCheck?: UpdateCheck,
   telemetry?: TelemetrySession,
+  // The hosted MCP session; scopes per-conversation state when telemetry is off.
+  mcpSessionId?: string,
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined = httpClientName;
@@ -1097,6 +1104,10 @@ function createProfiledServer(
     }
     const activeProfile = profile;
     const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
+    // A nested call (jobs_create-many's items) keeps the key of the call that made it.
+    const generationKey =
+      parameters[1]?.generationKey ??
+      generationContextKey(parameters[1]?._meta, mcpSessionId ?? telemetry?.id, config.transport);
     const execute = () =>
       trackToolExecution(
         // The analytics collector still names tools as they were before the rename.
@@ -1105,20 +1116,24 @@ function createProfiledServer(
         parameters[1]?._meta,
         activeProfile.name,
         httpClient,
-        (businessArgs) =>
-          tool.handler(businessArgs, {
+        async (businessArgs) => {
+          const result = await tool.handler(businessArgs, {
             ...parameters[1],
             clientProfile: activeProfile,
             clientName,
             callTool,
             ...(telemetry && { telemetrySessionId: telemetry.id }),
+            ...(generationKey && { generationKey }),
             // Only stdio holds a connection that can carry an unrelated notification.
             ...(config.transport === 'stdio'
               ? {
                   toolListChanged: () => void server.server.sendToolListChanged().catch(() => {}),
                 }
               : {}),
-          }),
+          });
+          rememberGeneration(generationKey, tool.name, result);
+          return result;
+        },
         analytics,
       );
     // Each call keeps the organization it started in, even if the session switches.
@@ -1385,6 +1400,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
     clientName?: string,
     handshakeClientName?: string,
     telemetry?: TelemetrySession,
+    mcpSessionId?: string,
   ) => McpServer;
   toolCount: number;
   /** Undefined when telemetry is off; inactive until the API collects MCP events. */
@@ -1433,7 +1449,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
       createHttpClient(config.baseUrl),
       collectorCheck(config.baseUrl),
     ),
-    createServer: (clientName, handshakeClientName, telemetry) =>
+    createServer: (clientName, handshakeClientName, telemetry, mcpSessionId) =>
       createProfiledServer(
         config,
         operations,
@@ -1445,6 +1461,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
         handshakeClientName,
         undefined,
         telemetry,
+        mcpSessionId,
       ),
   };
 }

@@ -364,7 +364,12 @@ export function createJobsCreateManyTool(
         const limit = await inFlightLimit(http, calls.length, signal, caller);
         const call = async (index: number, itemSignal: AbortSignal) => {
           const item = calls[index]!;
-          const result = created(await callTool(request.tool, item, { signal: itemSignal }));
+          const result = created(
+            await callTool(request.tool, item, {
+              signal: itemSignal,
+              ...(context.generationKey && { generationKey: context.generationKey }),
+            }),
+          );
           const id = typeof result.id === 'string' ? result.id : undefined;
           const reads = Object.fromEntries(
             (spec.reads ?? []).flatMap((field) =>

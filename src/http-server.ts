@@ -335,6 +335,7 @@ export async function startHttpServer(
       clientName?: string,
       handshakeClientName?: string,
       telemetry?: TelemetrySession,
+      mcpSessionId?: string,
     ) => McpServer;
     toolCount: number;
     telemetry?: TelemetryQueue;
@@ -785,7 +786,7 @@ export async function startHttpServer(
         session = new HttpSession(
           init.data.params.clientInfo.name.slice(0, 160),
           (clientName, handshakeClientName) =>
-            serverFactory.createServer(clientName, handshakeClientName, usage.session),
+            serverFactory.createServer(clientName, handshakeClientName, usage.session, id),
           (version) => sessionTelemetry.protocol(id, version),
           (details) =>
             logEvent('mcp_rpc_error', {

@@ -30,6 +30,8 @@ export type ToolRequestContext = {
   calledAs?: string;
   // The session's usage-telemetry id, so a report can name the calls that led to it.
   telemetrySessionId?: string;
+  // Owner and conversation (or session), so feedback can name the generation it is about.
+  generationKey?: string;
   // Sends notifications/progress when the caller passed a progressToken; a no-op otherwise.
   progress?: (progress: number, message?: string) => Promise<void>;
   // Sends notifications/tools/list_changed where the session can deliver it; absent otherwise.
@@ -38,7 +40,7 @@ export type ToolRequestContext = {
   callTool?: (
     name: string,
     args: Record<string, unknown>,
-    context: { signal?: AbortSignal },
+    context: { signal?: AbortSignal; generationKey?: string },
   ) => Promise<unknown>;
 };
 

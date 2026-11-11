@@ -375,6 +375,16 @@ describe('SERVER_INSTRUCTIONS', () => {
     }
   });
 
+  it('tells only the ChatGPT app to have generated images downloaded and attached', () => {
+    expect(serverInstructions(resolveClientProfile('openai-mcp'))).toContain(
+      'ask them to download it and attach it to the chat',
+    );
+    for (const client of ['openai-mcp (codex)', 'claude-code'])
+      expect(serverInstructions(resolveClientProfile(client))).not.toContain(
+        'Images ChatGPT generates',
+      );
+  });
+
   it('mentions the jobs_*-many tools only to clients that list them', () => {
     const chatgpt = serverInstructions(resolveClientProfile('openai-mcp'));
     expect(chatgpt).not.toContain('jobs_create-many');
