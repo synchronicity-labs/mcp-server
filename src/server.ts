@@ -86,6 +86,7 @@ import {
   dialogueOperations,
   keyedDialoguePreviews,
 } from './tools/dialogue.js';
+import { createFacePeopleTool } from './tools/face-people.js';
 import { createFeedbackTools, FEEDBACK_INSTRUCTIONS, feedbackOperation } from './tools/feedback.js';
 import { adaptGeneratedTool } from './tools/generated-adapters.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
@@ -362,6 +363,7 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'faces_detect',
   'faces_get',
   'faces_get-timeline',
+  'faces_get-people',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'analytics_track-event',
@@ -984,6 +986,7 @@ function createTools(
     ...createFeedbackTools(operations, httpClient, PACKAGE_VERSION),
     ...createAssetAnalysisTools(httpClient),
     ...createAssetFacesTools(httpClient),
+    createFacePeopleTool(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
