@@ -29,7 +29,12 @@ import {
   withGenerationStatusCard,
   withStatusCardTool,
 } from './generation-status.js';
-import { ApiRequestError, cameFromApi, createHttpClient } from './http-client.js';
+import {
+  type ApiErrorDetails,
+  ApiRequestError,
+  cameFromApi,
+  createHttpClient,
+} from './http-client.js';
 import { errorFields } from './log-redaction.js';
 import { fetchSpec } from './openapi/fetcher.js';
 import { parseSpec } from './openapi/parser.js';
@@ -128,8 +133,14 @@ const SERVER_DESCRIPTION =
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
 // Paragraphs marked appOnly apply only inside the ChatGPT app and its Studio bridge;
-// notChatgpt ones cover tools the ChatGPT app does not list.
-const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean }[] = [
+// notChatgpt ones cover tools the ChatGPT app does not list. chatgptOnly ones replace a
+// notChatgpt part for the ChatGPT app, whose listing may not sell plans or credits.
+const INSTRUCTION_PARTS: {
+  text: string;
+  appOnly?: boolean;
+  notChatgpt?: boolean;
+  chatgptOnly?: boolean;
+}[] = [
   {
     text: 'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. Write lipsync as one word, without a hyphen. ',
   },
@@ -145,6 +156,11 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
   },
   {
     text: 'When a Sync tool error has nextAction, read it before anything else in the error: its type says what changes the outcome. retry_later: wait retryAfterSeconds, then send the same request once. reduce_input: shorten or shrink the input. upgrade_plan (requiredPlan names the plan), buy_credits, pay_invoice, update_payment_method, confirm_payment and manage_integration need a person: give them the link (nextAction.url) and do not retry until they say it is done. contact_support: stop and tell them to contact sync. support. Never resend a refused request unchanged. ',
+    notChatgpt: true,
+  },
+  {
+    text: "When a Sync tool error has nextAction, read it before anything else in the error: its type says what changes the outcome. retry_later: wait retryAfterSeconds, then send the same request once. reduce_input: shorten or shrink the input. upgrade_plan and buy_credits mean the request is not included in the user's current sync. plan or credits: say so plainly, offer what fits instead (such as a shorter input or another model), and if they ask, tell them they can review their plan on their sync. billing page (nextAction.url). Do not recommend a plan, quote prices or encourage upgrading or buying credits. pay_invoice, update_payment_method, confirm_payment and manage_integration need a person: give them the link (nextAction.url) and do not retry until they say it is done. contact_support: stop and tell them to contact sync. support. Never resend a refused request unchanged. ",
+    chatgptOnly: true,
   },
   {
     text: 'When billing-approval-links_create is available and nextAction is upgrade_plan or buy_credits, or the user asks to upgrade or buy credits, create an approval link with the requiredPlan or requiredCredits, and the same organizationId if the refused request used one, and give the person its url; it charges nothing, and they approve and pay on sync.so. Afterwards account_get-context shows the new plan and account_get-usage the new balance; check before retrying. ',
@@ -209,8 +225,12 @@ const INSTRUCTION_PARTS: { text: string; appOnly?: boolean; notChatgpt?: boolean
   },
 ];
 
-export const SERVER_INSTRUCTIONS = INSTRUCTION_PARTS.map((part) => part.text).join('');
-const MODEL_ONLY_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.appOnly)
+export const SERVER_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.chatgptOnly)
+  .map((part) => part.text)
+  .join('');
+const MODEL_ONLY_INSTRUCTIONS = INSTRUCTION_PARTS.filter(
+  (part) => !part.appOnly && !part.chatgptOnly,
+)
   .map((part) => part.text)
   .join('');
 const CHATGPT_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.notChatgpt)
@@ -460,6 +480,7 @@ export function registerTools(
   authMetadataUrl?: string,
   onToolError?: (tool: string, error: unknown) => void,
   decorateResult: (result: CallToolResult) => CallToolResult = (result) => result,
+  isChatgptApp: () => boolean = () => false,
 ): void {
   const names = new Set(tools.map((tool) => tool.name));
   for (const tool of tools) {
@@ -495,7 +516,7 @@ export function registerTools(
         return decorateResult(createJsonToolResult(result, tool.outputSchema));
       } catch (error) {
         onToolError?.(tool.name, error);
-        return decorateResult(createToolErrorResult(error, authMetadataUrl));
+        return decorateResult(createToolErrorResult(error, authMetadataUrl, isChatgptApp()));
       }
     };
     server.registerTool(tool.name, config, run);
@@ -548,6 +569,50 @@ const PAYMENT_STEP_BY_ACTION: Record<string, string> = {
   buy_credits:
     'This needs more credits (requiredCredits). When billing-approval-links_create is available, create a link for those credits and give its url to the person; otherwise give them nextAction.url. The same request fails the same way until account_get-usage shows the new balance.',
 };
+// The ChatGPT app's listing may not sell plans or credits or link to checkout (OpenAI app
+// guidelines, Commerce and monetization): it may say a request is not in the plan and
+// point at an informational page. The billing page shows the plan without starting one.
+const CHATGPT_STEP_BY_ACTION: Record<string, string> = {
+  upgrade_plan:
+    "This is not included in the user's current sync. plan. Say so plainly and offer what fits the current plan instead, such as a shorter input or another model. If they ask, tell them they can review their plan on their sync. billing page (nextAction.url). Do not recommend a plan, quote prices or encourage upgrading. The same request fails the same way until account_get-context shows a different plan.",
+  buy_credits:
+    'The organization does not have enough sync. credits for this. Say so plainly and offer what fits instead, such as a shorter input. If they ask, tell them they can review billing on their sync. billing page (nextAction.url). Do not quote prices or encourage buying credits. The same request fails the same way until account_get-usage shows a higher balance.',
+};
+
+/** The billing page on the same sync. app as a checkout or billing link, or undefined. */
+function billingPage(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const { origin, protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:'
+      ? `${origin}/billing/subscription`
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * For the ChatGPT app: an upgrade or credit refusal points at the billing page, never the
+ * approval page, which starts a checkout.
+ */
+function chatgptBilling(error: ApiRequestError): { details?: ApiErrorDetails; next?: string } {
+  const details = error.details;
+  const action = details?.nextAction;
+  if (!details || !action || !CHATGPT_STEP_BY_ACTION[action.type]) return { details };
+  const { url: _checkout, ...rest } = action;
+  const page = billingPage(details.billingUrl) ?? billingPage(action.url);
+  const { billingUrl: _billing, ...others } = details;
+  return {
+    details: {
+      ...others,
+      nextAction: { ...rest, ...(page && { url: page }) },
+      ...(page && { billingUrl: page }),
+    },
+    next: CHATGPT_STEP_BY_ACTION[action.type],
+  };
+}
+
 const PERSON_ACTS =
   'A person must act at nextAction.url, or billingUrl when it has none: pay an invoice, update the payment method, confirm a payment or fix a connected provider account. Give them the link and wait until they say it is done; the same request fails the same way until then.';
 const NEXT_STEP_BY_ACTION: Record<string, string> = {
@@ -593,10 +658,15 @@ export function logToolError(profile: () => string): (tool: string, error: unkno
   };
 }
 
-export function createToolErrorResult(error: unknown, authMetadataUrl?: string): CallToolResult {
+export function createToolErrorResult(
+  error: unknown,
+  authMetadataUrl?: string,
+  chatgptApp = false,
+): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ApiRequestError) {
-    const next = error.nextStep ?? nextStep(error);
+    const billing = chatgptApp ? chatgptBilling(error) : { details: error.details };
+    const next = billing.next ?? error.nextStep ?? nextStep(error);
     const structuredContent = {
       error: {
         message,
@@ -606,7 +676,7 @@ export function createToolErrorResult(error: unknown, authMetadataUrl?: string):
         ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
         ...(error.generationId ? { generationId: error.generationId } : {}),
         ...error.importDetails,
-        ...error.details,
+        ...billing.details,
       },
     };
     return {
@@ -1056,6 +1126,7 @@ function createProfiledServer(
     // stdout is the protocol channel over stdio.
     config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,
     config.transport === 'stdio' && updateCheck ? withUpdateNotice(updateCheck) : undefined,
+    () => getProfile().name === 'chatgpt',
   );
   observeRejectedCalls(server, telemetry, () => toolsByCallableName(sessionTools));
   const resources: Resource[] = [];

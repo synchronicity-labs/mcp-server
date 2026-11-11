@@ -86,6 +86,61 @@ describe('createToolErrorResult', () => {
     expect(result.content).toEqual([{ type: 'text', text: expect.stringContaining(guidance) }]);
   });
 
+  it.each([
+    ['upgrade_plan', { requiredPlan: 'creator' }, "not included in the user's current sync. plan"],
+    ['buy_credits', { requiredCredits: 500 }, 'not have enough sync. credits'],
+  ])('points the ChatGPT app at the billing page, never checkout, for %s', (type, extra, step) => {
+    const approval = 'https://sync.so/checkout/approve?organizationId=org&plan=creator';
+    const error = new ApiRequestError(
+      'Upgrade required',
+      402,
+      'free_tier_generations_exhausted',
+      undefined,
+      undefined,
+      undefined,
+      {
+        nextAction: { type, url: approval, ...('requiredPlan' in extra && extra) },
+        billingUrl: 'https://sync.so/billing/subscription',
+        ...extra,
+      },
+    );
+    const chatgpt = createToolErrorResult(error, undefined, true);
+    const text = JSON.stringify(chatgpt);
+    expect(text).not.toContain('/checkout/');
+    expect(chatgpt.structuredContent).toMatchObject({
+      error: {
+        nextAction: { type, url: 'https://sync.so/billing/subscription' },
+        billingUrl: 'https://sync.so/billing/subscription',
+        nextStep: expect.stringContaining(step),
+      },
+    });
+    expect(
+      String((chatgpt.structuredContent as { error: { nextStep: string } }).error.nextStep),
+    ).toContain('Do not');
+    // Every other client keeps the approval link it can hand to a person.
+    expect(createToolErrorResult(error).structuredContent).toMatchObject({
+      error: { nextAction: { url: approval }, nextStep: expect.stringContaining('approval') },
+    });
+  });
+
+  it('keeps other refusals unchanged in the ChatGPT app', () => {
+    const invoice = 'https://invoice.stripe.com/i/abc';
+    const error = new ApiRequestError(
+      'Unpaid',
+      402,
+      'invoice_unpaid',
+      undefined,
+      undefined,
+      undefined,
+      {
+        nextAction: { type: 'pay_invoice', url: invoice },
+      },
+    );
+    expect(createToolErrorResult(error, undefined, true).structuredContent).toMatchObject({
+      error: { nextAction: { type: 'pay_invoice', url: invoice } },
+    });
+  });
+
   it('logs the tool, profile, status and code of a failed call', () => {
     const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     try {
@@ -306,6 +361,18 @@ describe('SERVER_INSTRUCTIONS', () => {
     expect(modelOnly).not.toContain('In ChatGPT');
     expect(modelOnly).toContain('exactly one visual input');
     expect(modelOnly).toContain('assets_create-upload-url');
+  });
+
+  it('never tells the ChatGPT app to hand over upgrade or credit links', () => {
+    const chatgpt = serverInstructions(resolveClientProfile('openai-mcp'));
+    expect(chatgpt).not.toContain('upgrade_plan (requiredPlan names the plan), buy_credits');
+    expect(chatgpt).toContain('Do not recommend a plan, quote prices or encourage upgrading');
+    expect(chatgpt.match(/When a Sync tool error has nextAction/g)).toHaveLength(1);
+    for (const client of ['openai-mcp (codex)', 'claude-code']) {
+      const other = serverInstructions(resolveClientProfile(client));
+      expect(other).toContain('upgrade_plan (requiredPlan names the plan), buy_credits');
+      expect(other).not.toContain('Do not recommend a plan');
+    }
   });
 
   it('mentions the jobs_*-many tools only to clients that list them', () => {
