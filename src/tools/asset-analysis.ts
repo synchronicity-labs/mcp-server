@@ -4,7 +4,7 @@ import type { McpToolDefinition } from './generator.js';
 import { pollUntil, waitInput } from './job-wait.js';
 
 /**
- * Scene detection and stem separation. Their API routes are internal and behind
+ * Scene detection and stem separation (face analysis is in asset-faces.ts). Their API routes are internal and behind
  * server-side feature flags, so they are not in the public spec and are written by hand.
  * They are listed only to accounts whose features include them (account-features.ts);
  * a call from any other account still gets the API's 404, reported as not enabled.
@@ -17,7 +17,7 @@ const assetId = z.uuid();
 // as asset_not_found, keep their own error.
 const MISSING_ROUTE = / - (?:Not Found|Cannot (?:GET|POST) \S+)$/;
 
-async function whenEnabled<T>(feature: string, call: () => Promise<T>): Promise<T> {
+export async function whenEnabled<T>(feature: string, call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {

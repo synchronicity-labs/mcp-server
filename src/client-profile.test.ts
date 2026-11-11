@@ -687,8 +687,9 @@ it.each([0, 1, 2])(
     const factory = await createMcpServerFactory(config);
     // jobs_create-many runs lipsync_create; jobs_get-many reads through generations_get.
     const jobTools = count === 2 ? 2 : 1;
-    // Includes scenes_detect and stems_separate, which only accounts with their features list.
-    expect(factory.toolCount).toBe(15 + count + jobTools);
+    // Includes scenes_detect, stems_separate and the three faces_* tools, which only accounts
+    // with their features list.
+    expect(factory.toolCount).toBe(18 + count + jobTools);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = currentTools((await chatgpt.client.listTools()).tools);

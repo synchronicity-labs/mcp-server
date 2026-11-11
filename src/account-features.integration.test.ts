@@ -15,9 +15,16 @@ import { HttpSession } from './http-session.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
-// scenes_detect and stems_separate are listed only to accounts whose GET /v2/account
-// features name them, over stdio and per hosted session.
-const GATED = ['scenes_detect', 'stems_separate'];
+// Feature-gated tools are listed only to accounts whose GET /v2/account features name
+// them, over stdio and per hosted session; so is lipsync_create's shots input.
+const GATED = [
+  'scenes_detect',
+  'stems_separate',
+  'faces_detect',
+  'faces_get',
+  'faces_get-timeline',
+];
+const ALL_FEATURES = ['scene_detection', 'stem_separation', 'face_validation', 'lipsync_planning'];
 type Account = { status?: number; body: unknown };
 
 const cleanups: (() => Promise<void> | void)[] = [];
@@ -58,6 +65,11 @@ const withFeatures = (features: string[]): Account => ({
 });
 const gatedNames = async (client: Client) =>
   (await client.listTools()).tools.map((tool) => tool.name).filter((name) => GATED.includes(name));
+const lipsyncInputs = async (client: Client) =>
+  Object.keys(
+    (await client.listTools()).tools.find((tool) => tool.name === 'lipsync_create')?.inputSchema
+      .properties ?? {},
+  );
 
 async function stdio(account: (auth: string | undefined) => Account) {
   const api = await stubApi(account);
@@ -78,16 +90,34 @@ async function stdio(account: (auth: string | undefined) => Account) {
 
 describe('feature-gated tools over stdio', () => {
   it('lists each tool when the account has its feature, reading features once', async () => {
-    const { client, accountReads } = await stdio(() =>
-      withFeatures(['scene_detection', 'stem_separation', 'face_validation']),
-    );
+    const { client, accountReads } = await stdio(() => withFeatures(ALL_FEATURES));
     const tools = (await client.listTools()).tools;
-    for (const name of GATED) {
-      const tool = tools.find((candidate) => candidate.name === name);
-      expect(tool?.inputSchema.required).toEqual(['assetId']);
-      expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual(['assetId', 'wait']);
-      expect(tool?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    const inputs = Object.fromEntries(
+      tools
+        .filter((tool) => GATED.includes(tool.name))
+        .map((tool) => [tool.name, Object.keys(tool.inputSchema.properties ?? {})]),
+    );
+    expect(inputs).toEqual({
+      scenes_detect: ['assetId', 'wait'],
+      stems_separate: ['assetId', 'wait'],
+      faces_detect: ['assetId', 'wait'],
+      faces_get: ['assetId', 'frame', 'startFrame', 'endFrame'],
+      'faces_get-timeline': ['assetId'],
+    });
+    for (const tool of tools.filter((candidate) => GATED.includes(candidate.name))) {
+      expect(tool.inputSchema.required).toEqual(['assetId']);
+      // tool-parameter-descriptions.test.ts lists no gated tool, so check the faces_* inputs.
+      if (tool.name.startsWith('faces_'))
+        for (const [name, schema] of Object.entries(tool.inputSchema.properties ?? {}))
+          expect((schema as { description?: string }).description, name).toBeTruthy();
+      expect(tool.annotations).toMatchObject({
+        readOnlyHint: !['scenes_detect', 'stems_separate', 'faces_detect'].includes(tool.name),
+        destructiveHint: false,
+      });
     }
+    const shots = tools.find((tool) => tool.name === 'lipsync_create')?.inputSchema.properties
+      ?.shots as { description?: string } | undefined;
+    expect(shots?.description).toContain('faces_get-timeline');
     expect(await gatedNames(client)).toEqual(GATED);
     expect(accountReads).toHaveLength(1);
   });
@@ -95,11 +125,16 @@ describe('feature-gated tools over stdio', () => {
   it.each([
     [['scene_detection'], ['scenes_detect']],
     [['stem_separation'], ['stems_separate']],
-    [['face_validation'], []],
+    [['face_validation'], ['faces_detect', 'faces_get']],
+    [['lipsync_planning'], ['faces_get-timeline']],
+    [['face_detection'], []],
     [[], []],
   ])('with features %j lists %j', async (features, listed) => {
     const { client } = await stdio(() => withFeatures(features));
     expect(await gatedNames(client)).toEqual(listed);
+    expect((await lipsyncInputs(client)).includes('shots')).toBe(
+      features.includes('lipsync_planning'),
+    );
   });
 
   it.each([
@@ -117,13 +152,15 @@ describe('feature-gated tools over stdio', () => {
     const { client, accountReads } = await stdio(() =>
       failing
         ? { status: 500, body: { message: 'Internal server error' } }
-        : withFeatures(['scene_detection', 'stem_separation']),
+        : withFeatures(ALL_FEATURES),
     );
     expect(await gatedNames(client)).toEqual([]);
+    expect(await lipsyncInputs(client)).not.toContain('shots');
     failing = false;
     expect(await gatedNames(client)).toEqual(GATED);
     expect(await gatedNames(client)).toEqual(GATED);
-    expect(accountReads).toHaveLength(2);
+    // One failed read per list until it answers, then one kept answer.
+    expect(accountReads).toHaveLength(3);
   });
 
   it('does not read features when the toolset leaves the tools out', async () => {
@@ -148,7 +185,7 @@ describe('feature-gated tools over stdio', () => {
 
 describe('feature-gated tools on the hosted server', () => {
   const FEATURES: Record<string, string[]> = {
-    'Bearer token-both': ['scene_detection', 'stem_separation'],
+    'Bearer token-both': ALL_FEATURES,
     'Bearer token-scenes': ['scene_detection'],
     'Bearer token-none': [],
   };
@@ -201,6 +238,8 @@ describe('feature-gated tools on the hosted server', () => {
     expect(await gatedNames(both)).toEqual(GATED);
     expect(await gatedNames(scenes)).toEqual(['scenes_detect']);
     expect(await gatedNames(none)).toEqual([]);
+    expect(await lipsyncInputs(both)).toContain('shots');
+    expect(await lipsyncInputs(scenes)).not.toContain('shots');
     expect(await gatedNames(both)).toEqual(GATED);
     expect(api.accountReads).toEqual([
       'Bearer token-both',
@@ -210,10 +249,18 @@ describe('feature-gated tools on the hosted server', () => {
 
     const codex = await hostedSession(factory, 'openai-mcp (Codex)', 'token-both');
     expect(await gatedNames(codex)).toEqual(GATED);
+    // App profiles also list lipsync_create under its old name, create-lipsync.
+    const codexNone = await hostedSession(factory, 'openai-mcp (Codex)', 'token-none');
+    const inputs = (await codexNone.listTools()).tools
+      .filter((tool) => ['lipsync_create', 'create-lipsync'].includes(tool.name))
+      .map((tool) => Object.hasOwn(tool.inputSchema.properties ?? {}, 'shots'));
+    expect(inputs).toEqual([false, false]);
 
+    // ChatGPT lists neither gated tools nor gated inputs, so it never reads features.
     const chatgpt = await hostedSession(factory, 'openai-mcp', 'token-both');
     expect(await gatedNames(chatgpt)).toEqual([]);
-    expect(api.accountReads).toHaveLength(4);
+    expect(await lipsyncInputs(chatgpt)).not.toContain('shots');
+    expect(api.accountReads).toHaveLength(5);
   });
 
   it('hides them when the account read fails', async () => {

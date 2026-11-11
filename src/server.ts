@@ -1,7 +1,11 @@
 import type { CallToolResult, Resource, Tool } from '@modelcontextprotocol/server';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { isFeatureGatedTool, listedForAccount } from './account-features.js';
+import {
+  isFeatureGatedTool,
+  listedForAccount,
+  withoutGatedParameters,
+} from './account-features.js';
 import { relayUploadTool } from './app-upload-relay.js';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from './asset-thumbnail.js';
 import { createApiKeyAuth } from './auth/api-key.js';
@@ -72,6 +76,7 @@ import { createAccountManagementTools } from './tools/account-management.js';
 import { createAppTools } from './tools/app-tools.js';
 import { createAssetAnalysisTools } from './tools/asset-analysis.js';
 import { createAssetCreatorsTool } from './tools/asset-creators.js';
+import { createAssetFacesTools } from './tools/asset-faces.js';
 import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.js';
 import { BATCH_TOOLS, createBatchTools, isBatchOperation } from './tools/batches.js';
 import { billingApprovalOperation, createBillingApprovalTools } from './tools/billing-approval.js';
@@ -349,6 +354,9 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   // Listed only to accounts with the feature; see account-features.ts.
   'scenes_detect',
   'stems_separate',
+  'faces_detect',
+  'faces_get',
+  'faces_get-timeline',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'analytics_track-event',
@@ -970,6 +978,7 @@ function createTools(
     ...createSpeechTools(operations, httpClient),
     ...createFeedbackTools(operations, httpClient, PACKAGE_VERSION),
     ...createAssetAnalysisTools(httpClient),
+    ...createAssetFacesTools(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
@@ -1243,6 +1252,9 @@ function createProfiledServer(
         _meta: createToolDescriptorMeta(tool.meta),
         securitySchemes: tool.meta?.securitySchemes ?? TOOL_SECURITY_SCHEMES,
       }));
+      // Like gated tools, gated inputs stay out of the reviewed ChatGPT app listing.
+      if (initializedProfile.name === 'chatgpt')
+        descriptors = descriptors.map((tool) => withoutGatedParameters(tool));
       if (initializedProfile.supportsAppUi) descriptors = withLegacyAppDescriptors(descriptors);
       else if (initializedProfile.supportsStatusCard) descriptors = withStatusCardTool(descriptors);
       sharedCatalog?.descriptors.set(initializedProfile.name, descriptors);

@@ -223,6 +223,7 @@ const TOOL_AREAS = [
   'dialogue-transcriptions',
   'dialogue-videos',
   'dubbing',
+  'faces',
   'feedback',
   'generate',
   'generations',
