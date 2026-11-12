@@ -23,6 +23,11 @@ it.each([
     client_secret: 'secret',
   });
 });
+it('passes a public client id through without a secret', () => {
+  expect(mergeBasicClientCredentials({ client_id: 'client' }, undefined)).toEqual({
+    client_id: 'client',
+  });
+});
 it('decodes form-encoded Basic values once, preserving plus and colons', () => {
   const encoded = Buffer.from('client+name%2B%3A:secret%2B+%3A%2520').toString('base64');
   expect(mergeBasicClientCredentials({}, `Basic ${encoded}`)).toEqual({

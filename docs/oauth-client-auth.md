@@ -3,10 +3,19 @@
 Support `client_secret_post` and the existing `client_secret_basic` compatibility
 path on both `/token` and `/revoke`. Both are normalized into exactly one
 body-secret request for the Sync API to validate. Metadata advertises these two
-methods. Registration normalization still defaults/forces confidential
-`client_secret_post`, including when a client requests `none`; this preserves
-existing registration and cold-client recovery behavior. No public-client support
-or SDK upgrade is introduced.
+methods. Registration forces confidential `client_secret_post`, including when
+a client requests `none`, for the ChatGPT and Claude app callbacks, which have
+used that flow since June 2026.
+
+## Public clients (CRAFT-8114)
+
+Any other client that registers with `token_endpoint_auth_method: none`
+(Gemini CLI, the Gemini app) is forwarded as `none`; the API then registers it
+without a secret and reports `none`. Such a client authenticates with PKCE
+alone, so `/token` and `/revoke` forward a `client_id` without a secret and let
+the API decide: it requires a secret only from a client that has one. A secret
+that is sent must not be empty. Metadata still advertises only the two secret
+methods; Gemini clients send `none` regardless.
 
 ## Diagnosing a publisher connection
 

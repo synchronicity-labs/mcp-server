@@ -159,13 +159,6 @@ const failures = [
   },
   { name: 'no credentials', body: '', header: undefined, status: 400, error: 'invalid_client' },
   {
-    name: 'missing secret',
-    body: 'client_id=client',
-    header: undefined,
-    status: 400,
-    error: 'invalid_client',
-  },
-  {
     name: 'empty secret',
     body: 'client_id=client&client_secret=',
     header: undefined,
@@ -242,6 +235,19 @@ for (const path of ['/token', '/revoke']) {
       expect(sent?.authorization).toBeUndefined();
     },
   );
+  it(`${path}: forwards a public client's id without a secret`, async () => {
+    const before = calls.length;
+    const res = await post(
+      path,
+      'grant_type=authorization_code&code=fake-code&code_verifier=fake-verifier&token=fake-token&client_id=public-client',
+    );
+    expect(res.status).toBe(200);
+    expect(calls).toHaveLength(before + 1);
+    const sent = calls.at(-1);
+    expect(sent?.body.get('client_id')).toBe('public-client');
+    expect(sent?.body.has('client_secret')).toBe(false);
+    expect(sent?.body.get('code_verifier')).toBe('fake-verifier');
+  });
   it(`${path}: includes Basic challenge for backend authentication rejection`, async () => {
     upstreamStatus = 401;
     try {
@@ -364,7 +370,6 @@ it('distinguishes local credential rejection and does not echo an unrecognized g
 it.each([
   ['', 'missing', 'missing'],
   ['client_secret=private-secret', 'missing', 'present'],
-  ['client_id=private-client', 'present', 'missing'],
   ['client_id=&client_secret=private-secret', 'empty', 'present'],
   ['client_id=private-client&client_secret=', 'present', 'empty'],
 ])('distinguishes missing and empty body credentials: %s', async (body, idState, secretState) => {
@@ -558,3 +563,37 @@ it.each([200, 401, 403, 429, 503])(
     }
   },
 );
+
+it('registers a public client and exchanges its code without a secret', async () => {
+  const redirect = 'http://localhost:7777/oauth/callback';
+  upstreamBody = JSON.stringify({
+    client_id: 'gemini-client',
+    redirect_uris: [redirect],
+    token_endpoint_auth_method: 'none',
+  });
+  try {
+    const registered = await fetch(`${url}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Gemini CLI MCP Client',
+        redirect_uris: [redirect],
+        token_endpoint_auth_method: 'none',
+      }),
+    });
+    expect(registered.status).toBe(201);
+    const client = await registered.json();
+    expect(client).toMatchObject({ token_endpoint_auth_method: 'none' });
+    expect(client).not.toHaveProperty('client_secret');
+  } finally {
+    upstreamBody = undefined;
+  }
+  const before = calls.length;
+  const token = await post(
+    '/token',
+    `grant_type=authorization_code&code=fake-code&code_verifier=fake-verifier&redirect_uri=${encodeURIComponent(redirect)}&client_id=gemini-client`,
+  );
+  expect(token.status).toBe(200);
+  expect(calls).toHaveLength(before + 1);
+  expect(calls.at(-1)?.body.has('client_secret')).toBe(false);
+});

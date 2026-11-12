@@ -170,7 +170,7 @@ for (const path of ['/token', '/revoke']) {
     const before = [...scenarios.values()].reduce((n, s) => n + s.calls, 0);
     const res = await fetch(url + path, {
       method: 'POST',
-      body: new URLSearchParams({ client_id: 'missing-secret' }),
+      body: new URLSearchParams({ client_id: 'empty-secret', client_secret: '' }),
     });
     expect(res.status).toBe(400);
     expect(res.headers.get('cache-control')).toBe('no-store');
