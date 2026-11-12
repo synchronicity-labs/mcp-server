@@ -61,11 +61,12 @@ export function mergeBasicClientCredentials(
   }
   const basic = extractBasicClientCredentials(authorization);
   if (basic) return { ...body, client_id: basic.clientId, client_secret: basic.clientSecret };
+  // A public client (Gemini, Gemini CLI) sends only its id; the API decides
+  // whether that client needs a secret. A secret that is sent must not be empty.
   if (
     typeof body.client_id !== 'string' ||
     !body.client_id ||
-    typeof body.client_secret !== 'string' ||
-    !body.client_secret
+    (Object.hasOwn(body, 'client_secret') && !body.client_secret)
   ) {
     throw new ClientAuthenticationError(400);
   }

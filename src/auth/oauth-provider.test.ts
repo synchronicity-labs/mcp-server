@@ -109,3 +109,92 @@ describe('createOAuthProvider — getClient', () => {
     expect(await provider.clientsStore.getClient('nope')).toBeUndefined();
   });
 });
+
+describe('createOAuthProvider — public clients', () => {
+  beforeEach(() => {
+    process.env.OAUTH_REGISTRATION_SECRET = 'reg-secret';
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    process.env.OAUTH_REGISTRATION_SECRET = undefined;
+  });
+
+  // The registration body sent to the API, and the API's reply.
+  function registerWith(reply: Record<string, unknown>) {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(typeof init?.body === 'string' ? init.body : '{}'));
+        return { ok: true, json: async () => ({ client_id: 'client-123', ...reply }) };
+      }),
+    );
+    return { bodies, provider: createOAuthProvider(API) };
+  }
+
+  const geminiCli = {
+    client_name: 'Gemini CLI MCP Client',
+    redirect_uris: ['http://localhost:7777/oauth/callback'],
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'none',
+  };
+
+  it('registers a client that asks for none as public', async () => {
+    const { bodies, provider } = registerWith({
+      redirect_uris: geminiCli.redirect_uris,
+      token_endpoint_auth_method: 'none',
+    });
+    const registered = await provider.clientsStore.registerClient?.(geminiCli);
+
+    expect(bodies[0]).toMatchObject({ token_endpoint_auth_method: 'none' });
+    expect(registered).toMatchObject({ token_endpoint_auth_method: 'none' });
+    expect(registered).not.toHaveProperty('client_secret');
+    expect(registered).not.toHaveProperty('client_secret_expires_at');
+  });
+
+  it('keeps a client confidential when the API still gives it a secret', async () => {
+    const { provider } = registerWith({
+      client_secret: 'client-secret',
+      redirect_uris: geminiCli.redirect_uris,
+    });
+    const registered = await provider.clientsStore.registerClient?.(geminiCli);
+
+    expect(registered).toMatchObject({
+      client_secret: 'client-secret',
+      token_endpoint_auth_method: 'client_secret_post',
+    });
+  });
+
+  it('keeps the Claude app confidential though it asks for none', async () => {
+    const { bodies, provider } = registerWith({
+      client_secret: 'client-secret',
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+    });
+    await provider.clientsStore.registerClient?.({
+      ...geminiCli,
+      client_name: 'Claude',
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+    });
+
+    expect(bodies[0]).toMatchObject({ token_endpoint_auth_method: 'client_secret_post' });
+  });
+
+  it('reads a public client back as public after a restart', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          client_id: 'client-123',
+          redirect_uris: geminiCli.redirect_uris,
+          token_endpoint_auth_method: 'none',
+        }),
+      })),
+    );
+    const client = await createOAuthProvider(API).clientsStore.getClient('client-123');
+
+    expect(client).toMatchObject({ token_endpoint_auth_method: 'none' });
+  });
+});

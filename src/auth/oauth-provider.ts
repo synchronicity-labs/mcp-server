@@ -3,24 +3,50 @@ import { ProxyOAuthServerProvider } from '@modelcontextprotocol/server-legacy/au
 import { createTokenVerifier } from './verification-cache.js';
 
 const CONFIDENTIAL_CLIENT_AUTH_METHOD = 'client_secret_post';
+const PUBLIC_CLIENT_AUTH_METHOD = 'none';
 const NON_EXPIRING_CLIENT_SECRET = 0;
 
+// The ChatGPT and Claude apps register asking for `none` but connect with the
+// secret they are given, as they have since June 2026. They stay confidential;
+// any other client that asks for `none` (Gemini, Gemini CLI) is public and
+// signs in with PKCE alone.
+const CONFIDENTIAL_AGENT_HOSTS = new Set(['chatgpt.com', 'claude.ai', 'claude.com']);
+
+function hostOf(uri: string): string | null {
+  try {
+    return new URL(uri).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function isPublicClient(client: OAuthClientInformationFull): boolean {
+  return (
+    client.token_endpoint_auth_method === PUBLIC_CLIENT_AUTH_METHOD &&
+    !client.redirect_uris.some((uri) => CONFIDENTIAL_AGENT_HOSTS.has(hostOf(String(uri)) ?? ''))
+  );
+}
+
 function normalizeClientInfo(client: OAuthClientInformationFull): OAuthClientInformationFull {
+  // A client the API gave a secret is confidential, whatever it asked for.
+  const isPublic =
+    !client.client_secret && client.token_endpoint_auth_method === PUBLIC_CLIENT_AUTH_METHOD;
   return {
     ...client,
     response_types: client.response_types ?? ['code'],
-    token_endpoint_auth_method: CONFIDENTIAL_CLIENT_AUTH_METHOD,
+    token_endpoint_auth_method: isPublic
+      ? PUBLIC_CLIENT_AUTH_METHOD
+      : CONFIDENTIAL_CLIENT_AUTH_METHOD,
     ...(client.client_secret && client.client_secret_expires_at == null
       ? { client_secret_expires_at: NON_EXPIRING_CLIENT_SECRET }
       : {}),
   };
 }
 
-function asConfidentialClient(client: OAuthClientInformationFull): OAuthClientInformationFull {
-  return {
-    ...client,
-    token_endpoint_auth_method: CONFIDENTIAL_CLIENT_AUTH_METHOD,
-  };
+function forRegistration(client: OAuthClientInformationFull): OAuthClientInformationFull {
+  return isPublicClient(client)
+    ? client
+    : { ...client, token_endpoint_auth_method: CONFIDENTIAL_CLIENT_AUTH_METHOD };
 }
 
 /**
@@ -119,9 +145,7 @@ export function createOAuthProvider(
         getClient: resolveClient,
         ...(originalRegister && {
           registerClient: async (client: OAuthClientInformationFull) => {
-            const registered = normalizeClientInfo(
-              await originalRegister(asConfidentialClient(client)),
-            );
+            const registered = normalizeClientInfo(await originalRegister(forRegistration(client)));
             clientCache.set(registered.client_id, registered);
             return registered;
           },
