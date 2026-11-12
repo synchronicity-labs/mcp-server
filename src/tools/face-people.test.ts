@@ -1,6 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, expect, it, vi } from 'vitest';
-import { createFacePeopleTool, peopleIn } from './face-people.js';
+import { createFacePeopleTool, fetchPicture, peopleIn } from './face-people.js';
 
 const ASSET = '0b6c6a1e-3c5e-4a51-9f0e-4b7c2b1d9a10';
 const track = (trackId: string, personId: string | null, extra: Record<string, unknown> = {}) => ({
@@ -66,6 +66,69 @@ describe('peopleIn', () => {
         speakers: ['SPEAKER_02'],
       }),
     ]);
+  });
+});
+
+describe('peopleIn with a split track', () => {
+  it('counts each person segment for its own person; picture and point stay with the largest face', () => {
+    const split = {
+      ...timeline,
+      tracks: [
+        track('shared', null, {
+          startFrame: 0,
+          endFrame: 100,
+          detectedFrames: 100,
+          largestFace: { frame: 80, x: 1000, y: 100 },
+          pictureUrl: 'https://bucket.example.test/shared.jpg',
+          personSegments: [
+            { startFrame: 0, endFrame: 40, personId: 'carol' },
+            { startFrame: 40, endFrame: 100, personId: 'dave' },
+          ],
+        }),
+      ],
+      talking: [{ startFrame: 20, endFrame: 60, speaker: 'SPEAKER_01', trackId: 'shared' }],
+    };
+    const { people } = peopleIn(split);
+    expect(
+      people.map(({ personId, detectedFrames, talkingFrames, select, pictureUrl }) => ({
+        personId,
+        detectedFrames,
+        talkingFrames,
+        select,
+        pictureUrl,
+      })),
+    ).toEqual([
+      {
+        personId: 'dave',
+        detectedFrames: 60,
+        talkingFrames: 20,
+        select: { frame: 80, x: 1000, y: 100 },
+        pictureUrl: 'https://bucket.example.test/shared.jpg',
+      },
+      { personId: 'carol', detectedFrames: 40, talkingFrames: 20, select: null, pictureUrl: null },
+    ]);
+  });
+});
+
+describe('fetchPicture', () => {
+  const respond = (bytes: number) =>
+    vi.fn(
+      async () =>
+        new Response(new Uint8Array(bytes), { headers: { 'content-type': 'image/jpeg' } }),
+    );
+
+  it('reads a picture within the limit and stops reading one past it', async () => {
+    vi.stubGlobal('fetch', respond(1024));
+    expect(await fetchPicture('https://bucket.example.test/a.jpg')).toMatchObject({
+      mimeType: 'image/jpeg',
+    });
+    vi.stubGlobal('fetch', respond(600 * 1024));
+    expect(await fetchPicture('https://bucket.example.test/a.jpg')).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it('reads only https links', async () => {
+    expect(await fetchPicture('http://bucket.example.test/a.jpg')).toBeNull();
   });
 });
 

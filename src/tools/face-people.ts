@@ -19,6 +19,7 @@ const MAX_PICTURE_BYTES = 512 * 1024;
 const PICTURE_TIMEOUT_MS = 5_000;
 
 const point = z.object({ frame: z.number().int(), x: z.number().int(), y: z.number().int() });
+const range = { startFrame: z.number().int(), endFrame: z.number().int() };
 const timelineSchema = z.object({
   status: z.enum(['completed', 'pending', 'failed', 'not_requested']),
   frameCount: z.number().int().nullable(),
@@ -27,24 +28,20 @@ const timelineSchema = z.object({
     z.object({
       trackId: z.string(),
       personId: z.string().nullable(),
-      startFrame: z.number().int(),
-      endFrame: z.number().int(),
+      ...range,
       detectedFrames: z.number().int(),
       faceHeight: z.object({ median: z.number() }).nullable(),
       largestFace: point.nullable().optional(),
       pictureUrl: z.string().nullable().optional(),
+      personSegments: z.array(z.object({ ...range, personId: z.string().nullable() })).optional(),
     }),
   ),
   talking: z.array(
-    z.object({
-      startFrame: z.number().int(),
-      endFrame: z.number().int(),
-      speaker: z.string().nullable(),
-      trackId: z.string().nullable(),
-    }),
+    z.object({ ...range, speaker: z.string().nullable(), trackId: z.string().nullable() }),
   ),
 });
 type Timeline = z.infer<typeof timelineSchema>;
+type Track = Timeline['tracks'][number];
 
 type Person = {
   label: string;
@@ -61,43 +58,93 @@ type Person = {
   pictureUrl: string | null;
 };
 
+/** One person's share of a track: the whole track, or one of its person segments. */
+type Piece = {
+  trackId: string;
+  personId: string;
+  startFrame: number;
+  endFrame: number;
+  detectedFrames: number;
+  faceHeight: number | null;
+  select: z.infer<typeof point> | null;
+  pictureUrl: string | null;
+};
+
+const overlap = (a: { startFrame: number; endFrame: number }, b: typeof a) =>
+  Math.max(0, Math.min(a.endFrame, b.endFrame) - Math.max(a.startFrame, b.startFrame));
+
+/**
+ * A track split into person segments names different people over its frames, so each
+ * segment counts for its own person. The picture and point stay with the segment that
+ * holds the largest face, the only frame known to show that person.
+ */
+function pieces(track: Track): Piece[] {
+  const segments = track.personSegments?.length
+    ? track.personSegments
+    : [{ startFrame: track.startFrame, endFrame: track.endFrame, personId: track.personId }];
+  const length = Math.max(1, track.endFrame - track.startFrame);
+  const face = track.largestFace ?? null;
+  return segments.map((segment) => {
+    const holdsFace =
+      face !== null && face.frame >= segment.startFrame && face.frame < segment.endFrame;
+    return {
+      trackId: track.trackId,
+      personId: segment.personId ?? track.trackId,
+      startFrame: segment.startFrame,
+      endFrame: segment.endFrame,
+      detectedFrames: Math.round(
+        (track.detectedFrames * (segment.endFrame - segment.startFrame)) / length,
+      ),
+      faceHeight: track.faceHeight ? Math.round(track.faceHeight.median) : null,
+      select: holdsFace ? face : null,
+      pictureUrl: holdsFace ? (track.pictureUrl ?? null) : null,
+    };
+  });
+}
+
+function toPerson(
+  personId: string,
+  group: Piece[],
+  talking: Timeline['talking'],
+  width: number | null,
+): Omit<Person, 'label'> {
+  // The piece where the face is biggest, among those with a point, gives picture and point.
+  const rank = (piece: Piece) => [piece.select ? 1 : 0, piece.faceHeight ?? 0] as const;
+  const best = group.reduce((a, b) => {
+    const [aPoint, aHeight] = rank(a);
+    const [bPoint, bHeight] = rank(b);
+    return bPoint > aPoint || (bPoint === aPoint && bHeight > aHeight) ? b : a;
+  });
+  const third = width && best.select ? best.select.x / width : null;
+  const spoken = talking.flatMap((span) => {
+    const frames = group
+      .filter((piece) => piece.trackId === span.trackId)
+      .reduce((sum, piece) => sum + overlap(piece, span), 0);
+    return frames > 0 ? [{ frames, speaker: span.speaker }] : [];
+  });
+  return {
+    personId,
+    trackIds: [...new Set(group.map((piece) => piece.trackId))],
+    firstFrame: Math.min(...group.map((piece) => piece.startFrame)),
+    lastFrame: Math.max(...group.map((piece) => piece.endFrame)) - 1,
+    detectedFrames: group.reduce((sum, piece) => sum + piece.detectedFrames, 0),
+    faceHeight: best.faceHeight,
+    position: third === null ? null : third < 1 / 3 ? 'left' : third > 2 / 3 ? 'right' : 'center',
+    select: best.select,
+    talkingFrames: spoken.reduce((sum, talk) => sum + talk.frames, 0),
+    speakers: [...new Set(spoken.flatMap((talk) => (talk.speaker ? [talk.speaker] : [])))].sort(),
+    pictureUrl: best.pictureUrl ?? group.find((piece) => piece.pictureUrl)?.pictureUrl ?? null,
+  };
+}
+
 /** One entry per person (tracks matched across shots), most visible first. */
 export function peopleIn(timeline: Timeline): { people: Person[]; omitted: number } {
-  const talking = new Map<string, { frames: number; speakers: Set<string> }>();
-  for (const span of timeline.talking) {
-    if (!span.trackId) continue;
-    const entry = talking.get(span.trackId) ?? { frames: 0, speakers: new Set<string>() };
-    entry.frames += span.endFrame - span.startFrame;
-    if (span.speaker) entry.speakers.add(span.speaker);
-    talking.set(span.trackId, entry);
-  }
-  const groups = new Map<string, Timeline['tracks']>();
-  for (const track of timeline.tracks) {
-    const id = track.personId ?? track.trackId;
-    groups.set(id, [...(groups.get(id) ?? []), track]);
-  }
-  const all = [...groups].map(([personId, tracks]) => {
-    // The track where the face is biggest gives the picture and the point.
-    const best = tracks.reduce((a, b) =>
-      (b.faceHeight?.median ?? 0) > (a.faceHeight?.median ?? 0) ? b : a,
-    );
-    const select = best.largestFace ?? null;
-    const third = timeline.width && select ? select.x / timeline.width : null;
-    const talks = tracks.map((track) => talking.get(track.trackId));
-    return {
-      personId,
-      trackIds: tracks.map((track) => track.trackId),
-      firstFrame: Math.min(...tracks.map((track) => track.startFrame)),
-      lastFrame: Math.max(...tracks.map((track) => track.endFrame)) - 1,
-      detectedFrames: tracks.reduce((sum, track) => sum + track.detectedFrames, 0),
-      faceHeight: best.faceHeight ? Math.round(best.faceHeight.median) : null,
-      position: third === null ? null : third < 1 / 3 ? 'left' : third > 2 / 3 ? 'right' : 'center',
-      select,
-      talkingFrames: talks.reduce((sum, talk) => sum + (talk?.frames ?? 0), 0),
-      speakers: [...new Set(talks.flatMap((talk) => [...(talk?.speakers ?? [])]))].sort(),
-      pictureUrl: best.pictureUrl ?? tracks.find((track) => track.pictureUrl)?.pictureUrl ?? null,
-    } satisfies Omit<Person, 'label'>;
-  });
+  const groups = new Map<string, Piece[]>();
+  for (const piece of timeline.tracks.flatMap(pieces))
+    groups.set(piece.personId, [...(groups.get(piece.personId) ?? []), piece]);
+  const all = [...groups].map(([personId, group]) =>
+    toPerson(personId, group, timeline.talking, timeline.width),
+  );
   const seen = all
     .filter((person) => person.detectedFrames >= MIN_DETECTED_FRAMES)
     .sort((a, b) => b.detectedFrames - a.detectedFrames || a.firstFrame - b.firstFrame);
@@ -112,6 +159,24 @@ export type FetchPicture = (
   signal?: AbortSignal,
 ) => Promise<{ data: string; mimeType: string } | null>;
 
+/** The body, or null once it passes `limit` bytes; stops reading there. */
+async function readAtMost(response: Response, limit: number): Promise<Buffer | null> {
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return Buffer.concat(chunks);
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+}
+
 /** A picture as base64, or null when it cannot be read; the people list stands without it. */
 export const fetchPicture: FetchPicture = async (url, signal) => {
   if (!url.startsWith('https://')) return null;
@@ -123,9 +188,8 @@ export const fetchPicture: FetchPicture = async (url, signal) => {
     });
     const mimeType = response.headers.get('content-type')?.split(';')[0]?.trim() ?? '';
     if (!response.ok || !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return null;
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.byteLength > MAX_PICTURE_BYTES) return null;
-    return { data: bytes.toString('base64'), mimeType };
+    const bytes = await readAtMost(response, MAX_PICTURE_BYTES);
+    return bytes && { data: bytes.toString('base64'), mimeType };
   } catch {
     signal?.throwIfAborted();
     return null;
