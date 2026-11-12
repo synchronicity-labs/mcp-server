@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  generationCardProgressSchema,
+  generationDisplaySchema,
+} from './generation-card-details.js';
 
 const resultUrl = z
   .string()
@@ -9,6 +13,16 @@ const resultUrl = z
   .optional();
 
 export const generationOutputSchema = {
+  display: generationDisplaySchema
+    .optional()
+    .describe(
+      'Authorized job title, source thumbnail and dubbing languages for the generation card; missing details are unknown.',
+    ),
+  progress: generationCardProgressSchema
+    .optional()
+    .describe(
+      'Measured worker progress when include=progress is requested; task counts are internal tasks, not shots.',
+    ),
   id: z.string().describe('Sync generation id.').optional(),
   projectId: z.string().nullable().describe('Sync project containing this generation.').optional(),
   status: z.string().describe('Current generation status.').optional(),

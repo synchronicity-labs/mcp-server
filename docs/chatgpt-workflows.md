@@ -123,6 +123,18 @@ show unavailable; overdue jobs show a delay message instead of zero or a new ETA
 Terminal jobs hide the estimate. Playback links are exposed only after a fresh
 authorized status read, and signed result URLs remain intact. `projectId` is
 included in the safe generation projection for the exact Open in Sync fallback.
+
+The card requests `include=progress` to show the worker's measured percentage
+and completed/total task counts. These tasks are not shots. Missing measurements
+stay indeterminate; an ETA never becomes a completion percentage. Explicit
+progress reads also get optional `display` context from authenticated project,
+source-asset and completed-dub reads, bounded together to 1.5 seconds. Failures
+omit context without failing the status read. Submission results retain the
+requested translation languages until the completed dub can report its detected
+source language. Only the source asset's exact thumbnail is returned, and the
+card removes it when a subsequent read omits it or loses access. Source media,
+provider state and project internals are excluded from the projection.
+
 Link clicks use the host's `ui/open-link` request or legacy `openExternal` bridge,
 so navigation works inside a sandbox without popup permission. Legacy navigation
 disables redirect rewriting to preserve signed video URLs.

@@ -64,7 +64,7 @@ export function withStatusCardTool(descriptors: Tool[]): Tool[] {
 }
 
 const description =
-  'Status of this Sync generation, with estimated time remaining, a read-only Check status action and inline playback of the completed video.';
+  'This Sync generation: title, source thumbnail, summary, measured progress and estimated time remaining, with a read-only check status action and completed video playback.';
 export function generationStatusMetadata(app: SyncMcpConfig['chatgptApp']): ResourceMetadata {
   const resourceDomains = [...(app?.resourceDomains ?? []), 'data:'];
   return {

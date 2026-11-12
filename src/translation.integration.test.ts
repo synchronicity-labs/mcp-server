@@ -130,6 +130,7 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   expect(result.structuredContent).toEqual({
     id: '00000000-0000-4000-8000-000000000003',
     status: 'PENDING',
+    display: { sourceLang: 'auto', targetLang: 'es', title: undefined },
   });
   expect(JSON.stringify(result)).not.toContain('private-input-must-not-leak');
   expect(calls.map((call) => call.path)).toEqual([`/v2/projects/${projectId}`, '/v2/generate']);

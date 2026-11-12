@@ -182,7 +182,11 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
     videoAssetId: saved.id,
   });
   expect(result.isError).not.toBe(true);
-  expect(result.structuredContent).toEqual({ id: generationId, status: 'PENDING' });
+  expect(result.structuredContent).toEqual({
+    id: generationId,
+    status: 'PENDING',
+    display: { sourceLang: 'auto', targetLang: 'es', title: undefined },
+  });
   expect(calls.map((request) => request.path)).toEqual([
     ...Array.from({ length: 4 }, () => '/v2/assets'),
     '/v2/generate/estimate-cost',

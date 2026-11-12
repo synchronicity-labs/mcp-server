@@ -6,11 +6,17 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { expect as browserExpect, chromium } from '@playwright/test';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createMcpServerFactory } from './server.js';
+import {
+  cardSource,
+  thumbnailUrl,
+  thumbnailResponse,
+  cardContextResponse,
+} from './test-fixtures/generation-card.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
-// Exercise a served resource, real MCP tools and a browser host together. The API
-// fixture never performs provider work; every status read must retain the one job.
+// Real MCP and packaged UI; the synthetic API does no provider work.
+// Every status read must retain the originating job.
 it.each([
   'standard',
   'legacy',
@@ -49,6 +55,7 @@ it.each([
       projectId,
       status: 'PROCESSING',
       generationEstimate: estimate,
+      ...cardSource,
     };
     let refused = false;
     let malformed = false;
@@ -79,6 +86,7 @@ it.each([
                 tags: ['Generate'],
                 parameters: [
                   { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                  { name: 'include', in: 'query', schema: { type: 'string' } },
                 ],
               },
             },
@@ -96,7 +104,8 @@ it.each([
         );
       if (path === '/v2/generate')
         return Response.json({ ...current, status: 'PENDING', privateInput: 'hidden' });
-      if (path === `/v2/projects/${projectId}`) return Response.json({ id: projectId });
+      const details = cardContextResponse(path, projectId, generationId);
+      if (details) return details;
       if (path === `/v2/generate/${generationId}`)
         return refused
           ? Response.json({ message: 'Access unavailable' }, { status: 403 })
@@ -129,6 +138,7 @@ it.each([
     await context.route(/^https:\/\/(sync\.so|fixture\.invalid)\//, (route) =>
       route.fulfill({ contentType: 'text/html', body: '<title>Fixture destination</title>' }),
     );
+    await context.route(thumbnailUrl, (route) => route.fulfill(thumbnailResponse));
     const videoBytes = await readFile(new URL('./test-fixtures/status-card.mp4', import.meta.url));
     await context.route(signedUrl, (route) =>
       route.request().resourceType() === 'media'
@@ -194,7 +204,7 @@ it.each([
         ({ html, toolResult, hostBridge, fontSources }) => {
           let srcdoc = html.replace(
             '<head>',
-            `<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src ${fontSources.join(' ')}; media-src ${fontSources.join(' ')}">`,
+            `<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src ${fontSources.join(' ')}; media-src ${fontSources.join(' ')}; img-src ${fontSources.join(' ')}">`,
           );
           const iframe = document.querySelector('iframe');
           window.standardInitializes = 0;
@@ -294,7 +304,16 @@ it.each([
         )
         .toBe(true);
       await browserExpect(frame.getByText('3 minutes remaining')).toBeVisible();
-      const check = frame.getByRole('button', { name: 'Check status', exact: true });
+      await browserExpect(frame.getByRole('heading', { name: 'Product launch' })).toBeVisible();
+      await browserExpect(frame.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
+      await browserExpect(frame.getByText('2 / 5 tasks completed')).toBeVisible();
+      if (bridge !== 'no-media-policy')
+        await browserExpect
+          .poll(() =>
+            frame.getByAltText('Source video thumbnail').evaluate((img) => img.naturalWidth),
+          )
+          .toBeGreaterThan(0);
+      const check = frame.getByRole('button', { name: 'check status', exact: true });
       await browserExpect(check).toBeEnabled();
       await browserExpect(frame.getByRole('link', { name: 'Open in Sync' })).toHaveAttribute(
         'href',
@@ -360,7 +379,7 @@ it.each([
       // Both bridges must recover when a host never answers, then ignore its late reply.
       holdRead = true;
       await check.click();
-      await browserExpect(frame.getByRole('button', { name: 'Checking status…' })).toBeDisabled();
+      await browserExpect(frame.getByRole('button', { name: 'checking status…' })).toBeDisabled();
       await browserExpect.poll(() => Boolean(releaseRead)).toBe(true);
       await page.clock.fastForward(15001);
       await browserExpect(frame.getByRole('alert')).toContainText('Sync did not respond');

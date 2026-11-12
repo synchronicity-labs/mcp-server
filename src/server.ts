@@ -89,6 +89,7 @@ import {
 import { createFacePeopleTool } from './tools/face-people.js';
 import { createFeedbackTools, FEEDBACK_INSTRUCTIONS, feedbackOperation } from './tools/feedback.js';
 import { adaptGeneratedTool } from './tools/generated-adapters.js';
+import { withGenerationCardDetails } from './tools/generation-card-details.js';
 import { createGenerationContinuationTool } from './tools/generation-continuation.js';
 import { createGenerationCostsTools, generationCostsOperation } from './tools/generation-costs.js';
 import { withGenerationOutputAliases } from './tools/generation-output.js';
@@ -1007,9 +1008,12 @@ function createTools(
       : toolsetIncludes(config.toolsets, tool.name, HOSTED_HTTP_TOOL_ALLOWLIST);
   // Readers are built from every tool, so jobs_wait reaches a kind whose own tools a toolset
   // leaves out. jobs_create-many runs creates as client calls, so only listed ones.
-  const tools = [...adapted, ...createJobTools(adapted), ...createJobsGetManyTool(adapted)].filter(
-    listed,
-  );
+  // Generic job waits need measured progress, without the card's optional context reads.
+  const tools = [
+    ...adapted.map((tool) => withGenerationCardDetails(tool, httpClient)),
+    ...createJobTools(adapted),
+    ...createJobsGetManyTool(adapted),
+  ].filter(listed);
   return [
     ...tools,
     ...createJobsCreateManyTool(tools, httpClient, {
