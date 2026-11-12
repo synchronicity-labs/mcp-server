@@ -16,6 +16,7 @@ const TOOL_FEATURES: Readonly<Record<string, string>> = {
   faces_detect: 'face_validation',
   faces_get: 'face_validation',
   'faces_get-timeline': 'lipsync_planning',
+  'faces_get-people': 'lipsync_planning',
 };
 
 /**
