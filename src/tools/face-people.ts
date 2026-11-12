@@ -145,7 +145,7 @@ export function createFacePeopleTool(
     description:
       'Show the people faces_detect found in a saved VIDEO asset, each with a picture of their face, to pick the face to lipsync the way the user describes it: by look ("the redhead", "the kid", "the man in glasses"), by place ("the person on the left") or by voice ("whoever speaks first"). Up to 8 people, most visible first, labeled person 1, person 2 and so on. ' +
       'Each has the picture (as an image, and pictureUrl, a link valid for an hour), position in the frame where their face is largest, faceHeight in pixels, the frames they appear in, how many frames they talk and their speaker labels, and select: a point on their face. ' +
-      'To lipsync that person, pass select as options.active_speaker_detection { frame_number: select.frame, coordinates: [select.x, select.y] } on lipsync_create. Never pass boxes. ' +
+      'To lipsync that person, pass select as options.active_speaker_detection { frame_number: select.frame, coordinates: [select.x, select.y] } on lipsync_create. Never pass boxes. select is where the face is largest, which can fall outside the part that gets lipsynced (a short driver lipsyncs only the opening frames; a timeline clip only its range). Then take a point on that person inside that part instead: a faces_get-timeline talking point of one of their trackIds, or their box center from faces_get. ' +
       'Compare the pictures with the description yourself. If several people could match, or none clearly does, show the user the pictures with their labels and ask which one before creating. ' +
       'status is pending until faces_detect finishes; call faces_detect with wait: true first.',
     inputSchema: input.shape,
