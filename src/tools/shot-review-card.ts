@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import { whenEnabled } from './asset-analysis.js';
@@ -62,6 +63,11 @@ export function createShotReviewCardTool(http: HttpClient): McpToolDefinition {
       'Show the person a finished lipsync or dub cut into its shots, as a card where they play each shot, flag the ones that look wrong and say why, render only those again, compare each new take with the first render, and build the final video. Use it when the person says a finished video looks wrong in places or asks to review, fix or redo parts of it. Get the shots, fps and frameCount first from faces_get-timeline (after faces_detect) or scenes_detect on the generation’s video. This tool only reads and opens the card: the card’s own buttons start the paid render of the flagged shots and the free final build, and each time it tells you the ids, so never call shots_regenerate or shots_splice yourself for a review the card is running. Returns the generation’s video, its source video, and the shots as given.',
     inputSchema: input.shape,
     outputSchema: {
+      reviewId: z
+        .string()
+        .describe(
+          'Made new by each call. The card works the idempotency key of each take out from it, so reloading the card cannot start a take twice and a review opened again is new work.',
+        ),
       generationId: z.uuid().describe('The first render under review.'),
       title: z.string().optional().describe('The generation’s title, when it has one.'),
       videoUrl: z.string().describe('The first render’s video.'),
@@ -104,6 +110,7 @@ export function createShotReviewCardTool(http: HttpClient): McpToolDefinition {
           );
         const sourceUrl = generation.input?.find((item) => item.type === 'video')?.url;
         return {
+          reviewId: randomUUID(),
           generationId: generation.id,
           ...(generation.summary?.title ? { title: generation.summary.title } : {}),
           videoUrl,

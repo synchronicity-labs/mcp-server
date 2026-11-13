@@ -194,6 +194,7 @@ it('opens a shot review only on a finished generation whose shots cover the whol
     ];
     const opened = await review(shots);
     expect(opened.structuredContent).toEqual({
+      reviewId: expect.any(String),
       generationId: GENERATION,
       title: 'Keynote in German',
       videoUrl: 'https://fixture.invalid/result.mp4',
