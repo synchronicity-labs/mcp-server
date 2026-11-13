@@ -3,7 +3,7 @@
   "name": "io.github.synchronicity-labs/mcp-server",
   "title": "sync. labs",
   "description": "Lipsync videos, dub them into other languages, make talking videos and open sync. Studio.",
-  "version": "0.3.16",
+  "version": "0.3.17",
   "websiteUrl": "https://sync.so",
   "repository": {
     "url": "https://github.com/synchronicity-labs/mcp-server",
@@ -27,7 +27,7 @@
     {
       "registryType": "npm",
       "identifier": "@sync.so/mcp-server",
-      "version": "0.3.16",
+      "version": "0.3.17",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
