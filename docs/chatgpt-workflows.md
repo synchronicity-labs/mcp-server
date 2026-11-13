@@ -224,7 +224,9 @@ the person asks to see it.
 optional `create`: the create call the quote is for, without `idempotencyKey`.
 The call must be the job the quote prices, or the quote is refused:
 `dubbing_create` only with `workflow=translate-and-dub`, `lipsync_create` only
-without it, and the same model (a call that names none gets the quoted one). The
+without it, the same model (a call that names none gets the quoted one), and
+`options.reasoning_enabled` only on a quote made with `reasoningEnabled=true`,
+since reasoning costs more. The
 quote echoes the call with an `idempotencyKey` made for it and, when it names no
 project, a `projectCreationKey`, so a retry makes neither a second video nor a
 second project. The price check

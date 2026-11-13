@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ClientProfile } from './client-profile.js';
 import { LIPSYNC_INPUTS_NOT_FROM_ASSETS } from './tools/app-tools.js';
 import type { McpToolDefinition } from './tools/generator.js';
+import { REASONING_MODELS } from './tools/model-options.js';
 import { projectIntentError, projectUseAllowed } from './tools/project-intent.js';
 
 const createCall = z
@@ -11,7 +12,7 @@ const createCall = z
     arguments: z.record(z.string(), z.unknown()),
   })
   .describe(
-    'Optional. The exact create call this quote is for: the tool and its arguments, complete and final, without idempotencyKey or projectCreationKey (the quote makes both). It must be the job priced here: dubbing_create only with workflow=translate-and-dub, lipsync_create only without it, and the same model. When given, the price card in the chat gets a Create button that starts that paid job itself when the person presses it, and then tells you its generation id. Pass it only for a job the person asked for, once every input is saved and settled. Never call the create tool yourself for the same job after the card reports it started.',
+    'Optional. The exact create call this quote is for: the tool and its arguments, complete and final, without idempotencyKey or projectCreationKey (the quote makes both). It must be the job priced here: dubbing_create only with workflow=translate-and-dub, lipsync_create only without it, the same model, and options.reasoning_enabled only with reasoningEnabled=true. When given, the price card in the chat gets a Create button that starts that paid job itself when the person presses it, and then tells you its generation id. Pass it only for a job the person asked for, once every input is saved and settled. Never call the create tool yourself for the same job after the card reports it started.',
   );
 
 /**
@@ -34,6 +35,17 @@ function quotedCall(
   if (model !== priced.model)
     throw new Error(
       `create.arguments.model is ${String(model)} but this quote prices ${String(priced.model)}. Quote the model the job will use.`,
+    );
+  // Reasoning costs more, so a job that turns it on must have been quoted with it.
+  const options = z
+    .object({ reasoning_enabled: z.boolean().optional() })
+    .safeParse(call.arguments.options).data;
+  const reasons = options?.reasoning_enabled === true && REASONING_MODELS.has(String(model));
+  if (reasons !== (priced.reasoningEnabled === true))
+    throw new Error(
+      reasons
+        ? 'create.arguments.options.reasoning_enabled is true but this quote prices the job without reasoning. Quote with reasoningEnabled=true.'
+        : `This quote prices reasoning, but the create call does not use it${REASONING_MODELS.has(String(model)) ? '' : `: ${String(model)} has none`}. Quote without reasoningEnabled, or set create.arguments.options.reasoning_enabled.`,
     );
   // The create tools refuse an existing project the person did not choose. The card may
   // run this call through an entry point without that check, so it is made here.

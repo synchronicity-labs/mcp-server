@@ -63,7 +63,8 @@ export const modelOptionsSchema = z
   .strict()
   .describe('Optional model controls. Omit any field to use its default.');
 
-const REASONING_MODELS = new Set(['lipsync-2-pro', 'sync-2-pro']);
+/** Models that charge more with reasoning on; every other model has none. */
+export const REASONING_MODELS = new Set(['lipsync-2-pro', 'sync-2-pro']);
 
 /**
  * The API takes speaker detection as an object; agents may send a boolean. Agents also

@@ -200,7 +200,42 @@ it('hands the price check card the create call to run, without sending it to the
     expect(JSON.stringify(otherModel.content)).toContain(
       'create.arguments.model is sync-3 but this quote prices lipsync-2-pro',
     );
+    // Reasoning costs more: a call that turns it on needs a quote that priced it, and a
+    // quote that priced it needs a call that uses it.
+    const pro = { model: 'lipsync-2-pro', duration: 222 };
+    const reasoning = {
+      tool: 'lipsync_create',
+      arguments: { videoAssetId: 'video-1', audioAssetId: 'audio-1' },
+    };
+    const withReasoning = {
+      ...reasoning,
+      arguments: { ...reasoning.arguments, options: { reasoning_enabled: true } },
+    };
+    const cheaper = await client.callTool({
+      name: estimate.name,
+      arguments: { ...pro, create: withReasoning },
+    });
+    expect(JSON.stringify(cheaper.content)).toContain(
+      'reasoning_enabled is true but this quote prices the job without reasoning',
+    );
+    const dearer = await client.callTool({
+      name: estimate.name,
+      arguments: { ...pro, reasoningEnabled: true, create: reasoning },
+    });
+    expect(JSON.stringify(dearer.content)).toContain(
+      'This quote prices reasoning, but the create call does not use it',
+    );
     expect(calls.filter((call) => call.path === '/v2/generate/estimate-cost')).toHaveLength(quotes);
+    const matched = await client.callTool({
+      name: estimate.name,
+      arguments: { ...pro, reasoningEnabled: true, create: withReasoning },
+    });
+    expect(matched.structuredContent).toMatchObject({
+      create: { arguments: { options: { reasoning_enabled: true } } },
+    });
+    expect(calls.filter((call) => call.path === '/v2/generate/estimate-cost')).toHaveLength(
+      quotes + 1,
+    );
     expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
   } finally {
     await close();
