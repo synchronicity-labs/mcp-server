@@ -10,10 +10,15 @@ import { PACKAGE_VERSION } from './version.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  if (args.includes('--version') || args.includes('-v')) {
+    process.stdout.write(`${PACKAGE_VERSION}\n`);
+    return;
+  }
   const config = resolveConfig(parseArgs(args));
 
-  if (args[0] === 'login') {
-    process.exitCode = await runLogin(args.slice(1), config.baseUrl);
+  const command = args[0];
+  if (command === 'login' || command === 'setup') {
+    process.exitCode = await runLogin(command, args.slice(1), config.baseUrl);
     return;
   }
 
@@ -79,13 +84,17 @@ function parseArgs(args: string[]): Partial<{
 
 function printUsage(): void {
   process.stderr.write(`Usage: sync-mcp [options]
+       sync-mcp setup --email <address> [--agent <name>]
+       sync-mcp setup --code <code>
        sync-mcp login --email <address> [--agent <name>]
        sync-mcp login --code <code>
 
 Commands:
-  login               Sign in by a code emailed to you, with no browser. Run it with
-                      --email, then again with --code and the code from the email.
-                      --agent names your agent in the emails sync. sends.
+  setup               Sign in by a code emailed to you, with no browser, and add this
+                      server to your agent. Run it with --email, then again with --code
+                      and the code from the email. --agent names your agent; Claude Code
+                      and Codex are detected and get the server added for every project.
+  login               The same sign-in, without adding the server to an agent.
 
 Options:
   --api-key <key>     API key (or set SYNC_API_KEY env var)
@@ -102,6 +111,7 @@ Options:
   --toolsets <list>   stdio only: comma-separated tools to list (or set SYNC_MCP_TOOLSETS):
                       default, lipsync, dubbing, assets, projects, transcription,
                       voices, admin or all (default: the hosted set without admin)
+  -v, --version       Print the version
   -h, --help          Show this help message
 `);
 }
