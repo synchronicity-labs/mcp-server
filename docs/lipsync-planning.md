@@ -94,7 +94,7 @@ only those shots again and then builds one final video. Both tools are listed wi
 
 `shots_regenerate` refuses, before anything is created, a render that is not
 COMPLETED, one made from timeline clips or several speakers, one with no saved audio
-(made from a script), and one whose length differs from the video's
+(made from a script), and one whose length is unknown or differs from the video's
 (`frameCount / fps` against its `outputDuration`): its audio and video differed in
 length, so the video was cut, looped or retimed, and a take on the untouched video
 would not line up with it. Both tools refuse ranges out of order or overlapping and

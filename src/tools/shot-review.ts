@@ -151,12 +151,13 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
           'This generation was made from timeline clips or several speakers. Render its shots again with lipsync_create-timeline instead.',
         );
       // A take is rendered on the untouched video, so it lines up with the first render
-      // only when that render kept the video's length.
+      // only when that render kept the video's length. An unknown length is not a match.
       const videoSeconds = args.frameCount / args.fps;
-      if (
-        base.outputDuration != null &&
-        Math.abs(base.outputDuration - videoSeconds) > Math.max(2 / args.fps, 0.1)
-      )
+      if (base.outputDuration == null)
+        throw new Error(
+          'Sync did not report how long the first render runs, so it cannot be checked against the video. Redo the whole lipsync instead.',
+        );
+      if (Math.abs(base.outputDuration - videoSeconds) > Math.max(2 / args.fps, 0.1))
         throw new Error(
           `The first render runs ${base.outputDuration} s but the video runs ${Number(videoSeconds.toFixed(3))} s: its audio and video differed in length, so the video was cut, looped or retimed and a new take would not line up with it. Redo the whole lipsync instead.`,
         );

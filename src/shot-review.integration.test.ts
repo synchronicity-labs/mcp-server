@@ -203,6 +203,11 @@ describe('shots_regenerate', () => {
       firstRender({ input: [{ type: 'video', assetId: VIDEO }, { type: 'text' }] }),
       'no saved audio',
     ],
+    [
+      'a render whose length Sync did not report',
+      firstRender({ outputDuration: null }),
+      'did not report how long the first render runs',
+    ],
     // Its audio was shorter than the video, so the render was cut and a take would not line up.
     [
       'a render shorter than its video',
