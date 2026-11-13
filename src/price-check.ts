@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import type { ClientProfile } from './client-profile.js';
+import { LIPSYNC_INPUTS_NOT_FROM_ASSETS } from './tools/app-tools.js';
 import type { McpToolDefinition } from './tools/generator.js';
 
 const createCall = z
@@ -17,7 +19,11 @@ const createCall = z
  * keys are made here, with the quote: a card the host reloads sends the same ones, so a
  * retry can start neither a second video nor a second project.
  */
-function quotedCall(call: z.infer<typeof createCall>, priced: Record<string, unknown>) {
+function quotedCall(
+  call: z.infer<typeof createCall>,
+  priced: Record<string, unknown>,
+  profile: ClientProfile | undefined,
+) {
   const dub = priced.workflow === 'translate-and-dub';
   if (dub !== (call.tool === 'dubbing_create'))
     throw new Error(
@@ -28,9 +34,11 @@ function quotedCall(call: z.infer<typeof createCall>, priced: Record<string, unk
     throw new Error(
       `create.arguments.model is ${String(model)} but this quote prices ${String(priced.model)}. Quote the model the job will use.`,
     );
+  const tool = cardTool(call, profile);
+  if (!tool) return undefined;
   const placed = 'projectId' in call.arguments || 'projectCreationKey' in call.arguments;
   return {
-    tool: call.tool,
+    tool,
     arguments: {
       ...call.arguments,
       model,
@@ -39,6 +47,20 @@ function quotedCall(call: z.infer<typeof createCall>, priced: Record<string, unk
     },
     idempotencyKey: randomUUID(),
   };
+}
+
+/**
+ * The tool a card on this client can call for the quoted job, if any. A host with the
+ * Sync app refuses a card's call to lipsync_create, which takes attached files there, so
+ * its cards start a lipsync through the entry point for saved assets. A lipsync that
+ * needs an input that entry point does not take has no call a card can run: the quote
+ * then carries none, and the card asks the chat to create it.
+ */
+function cardTool(call: z.infer<typeof createCall>, profile: ClientProfile | undefined) {
+  if (call.tool !== 'lipsync_create' || !profile?.supportsAppUi) return call.tool;
+  return LIPSYNC_INPUTS_NOT_FROM_ASSETS.some((key) => call.arguments[key] !== undefined)
+    ? undefined
+    : 'lipsync_create-from-assets';
 }
 
 /**
@@ -54,7 +76,10 @@ export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
     inputSchema: { ...tool.inputSchema, create: createCall.optional() },
     handler: async (args, context) => {
       const { create, ...priced } = args;
-      const call = create === undefined ? undefined : quotedCall(createCall.parse(create), priced);
+      const call =
+        create === undefined
+          ? undefined
+          : quotedCall(createCall.parse(create), priced, context?.clientProfile);
       const result = await handler(priced, context);
       if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
       return {

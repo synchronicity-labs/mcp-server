@@ -41,6 +41,19 @@ function assertSingleSource(kind: MediaKind, count: number): void {
   }
 }
 
+/** lipsync_create inputs that lipsync_create-from-assets, the entry point embedded views call, does not take. */
+export const LIPSYNC_INPUTS_NOT_FROM_ASSETS = [
+  'video',
+  'image',
+  'audio',
+  'videoUrl',
+  'imageUrl',
+  'audioUrl',
+  'shots',
+  'speakers',
+  'allowOverlappingFaces',
+];
+
 /**
  * Hand-written tools layered on top of the auto-generated ones.
  *
@@ -463,19 +476,7 @@ export function createAppTools(
   // asset-only arguments. Reuse generation admission/execution without exposing
   // the host's attachment transport to this app-only entry point.
   const inputSchema = { ...lipsync.inputSchema };
-  for (const key of [
-    'video',
-    'image',
-    'audio',
-    'videoUrl',
-    'imageUrl',
-    'audioUrl',
-    'shots',
-    'speakers',
-    'allowOverlappingFaces',
-  ]) {
-    delete inputSchema[key];
-  }
+  for (const key of LIPSYNC_INPUTS_NOT_FROM_ASSETS) delete inputSchema[key];
   const { 'openai/fileParams': _fileParams, ...meta } = lipsync.meta ?? {};
   tools.push({
     ...lipsync,

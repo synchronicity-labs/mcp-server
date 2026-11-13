@@ -234,6 +234,14 @@ tells the model the generation's id. A quote without `create`, which is
 what a chat with the previous schema sends, leaves the button asking the chat to
 create it. `create` never reaches the API.
 
+ChatGPT refuses a card's call to a tool that takes attached files, and
+`lipsync_create` is one there. For a client with the Sync app, the quote
+therefore echoes a lipsync call as `lipsync_create-from-assets`, the same job
+through the entry point embedded views call. A lipsync that needs an input that
+entry point does not take (a link, an attached file, `shots`, `speakers` or
+`allowOverlappingFaces`) gets a quote without `create`, so the button asks the
+chat. Other clients keep `lipsync_create`.
+
 `shots_review` opens the shot review card on a completed generation. It refuses
 what `shots_regenerate` would refuse (timeline clips, several speakers, a script,
 a length that differs from the video's), so nobody flags shots that cannot be

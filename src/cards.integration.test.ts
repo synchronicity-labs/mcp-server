@@ -207,6 +207,46 @@ it('hands the price check card the create call to run, without sending it to the
   }
 });
 
+it('hands a ChatGPT card the lipsync call it is allowed to make, or none', async () => {
+  const { client, close } = await connect('openai-mcp');
+  try {
+    const { tools } = await client.listTools();
+    // ChatGPT refuses a card's call to a tool that takes attached files.
+    expect(tools.find((tool) => tool.name === 'lipsync_create')?._meta).toHaveProperty(
+      'openai/fileParams',
+    );
+    const fromAssets = tools.find((tool) => tool.name === 'lipsync_create-from-assets')!;
+    expect(fromAssets._meta).not.toHaveProperty('openai/fileParams');
+    expect(fromAssets._meta).toMatchObject({ 'openai/widgetAccessible': true });
+
+    const quote = (args: Record<string, unknown>) =>
+      client.callTool({
+        name: 'generations_estimate-cost',
+        arguments: {
+          model: 'sync-3',
+          duration: 222,
+          create: { tool: 'lipsync_create', arguments: args },
+        },
+      });
+    // Saved assets: the same job through the entry point a card can call, with its keys.
+    const saved = { videoAssetId: 'video-1', audioAssetId: 'audio-1' };
+    expect((await quote(saved)).structuredContent).toMatchObject({
+      estimatedCredits: 84,
+      create: {
+        tool: 'lipsync_create-from-assets',
+        arguments: { ...saved, model: 'sync-3', projectCreationKey: expect.stringMatching(UUID) },
+        idempotencyKey: expect.stringMatching(UUID),
+      },
+    });
+    // That entry point takes no link, so the quote carries no call and the card asks the chat.
+    const linked = await quote({ videoUrl: 'https://fixture.invalid/a.mp4', audioAssetId: 'a-1' });
+    expect(linked.structuredContent).toMatchObject({ estimatedCredits: 84 });
+    expect(linked.structuredContent).not.toHaveProperty('create');
+  } finally {
+    await close();
+  }
+});
+
 it('opens a shot review only on a finished generation whose shots cover the whole video', async () => {
   const { client, calls, close } = await connect('claude-ai');
   try {
