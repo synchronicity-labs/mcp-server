@@ -117,6 +117,16 @@ an active card rechecks it. A known job ID in an uncertain submission error is
 read back without replaying the write. Both MCP Apps and ChatGPT's legacy
 bridge keep a bounded read timeout and a usable Check status action after errors.
 
+Each check passes `include=progress`, so the API adds `progress` and `summary`
+and `generations_get` lists both in its output schema; a field missing from that
+schema never reaches the card. The card shows the job's title, a preview of the
+input, a summary line (dub languages, input duration, model) and a progress bar
+with "N of M steps done". Those steps are controller tasks, not camera shots.
+Every one of these fields is optional, so an API that predates them leaves the
+card at its status and estimate. The preview loads from the same
+`SYNC_CHATGPT_APP_RESOURCE_DOMAINS` origins as playback; an asset thumbnail on
+another origin is blocked by the host and the card shows its placeholder.
+
 Time remaining is derived from `generationEstimate.estimatedFinishAt` and the
 returned `serverTime`, advancing with a monotonic clock. Missing/invalid estimates
 show unavailable; overdue jobs show a delay message instead of zero or a new ETA.
