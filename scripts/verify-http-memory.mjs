@@ -33,6 +33,13 @@ assert(Number.isFinite(soakMinutes) && soakMinutes >= 0 && soakMinutes <= 120);
 let now = 0;
 const owner = { sub: 'memory-fixture', clientId: 'memory-fixture', organizationId: null };
 const sessionConfig = getSessionRuntimeConfig({});
+const pastIdleTtl = sessionConfig.idleTtlMs + 1;
+// Both scenarios open one session per 375 ms. Each stays for the idle TTL, and a full
+// table reclaims the oldest idle one, so the table never exceeds this.
+const retentionBound = Math.min(
+  sessionConfig.maxSessions + 1,
+  Math.ceil(sessionConfig.idleTtlMs / 375) + 45,
+);
 const sessions = new SessionRegistry({
   idleTtlMs: sessionConfig.idleTtlMs,
   maxSessions: sessionConfig.maxSessions,
@@ -144,7 +151,7 @@ try {
       }
       if (iterations % 160 === 0) await readResource(reused[0], catalog.current);
       await sessions.sweep();
-      assert(sessions.size < 365 + reused.length);
+      assert(sessions.size < retentionBound + reused.length);
       assert.equal(sessions.stats().rejected, 0);
       if (Date.now() >= nextSample) {
         const growth = (await heap()) - baseline;
@@ -164,7 +171,8 @@ try {
       iterations++;
       await new Promise((done) => setTimeout(done, Math.max(0, 375 - (Date.now() - scheduled))));
     }
-    const steady = samples.slice(3);
+    // Samples are a minute apart; the table only plateaus once the first sessions expire.
+    const steady = samples.slice(Math.ceil(sessionConfig.idleTtlMs / 60_000) + 1);
     if (steady.length > 2)
       assert(
         Math.max(...steady) - Math.min(...steady) < 32 * 1024 ** 2,
@@ -182,7 +190,7 @@ try {
       }),
     );
   } else {
-    now += 120_001;
+    now += pastIdleTtl;
     assert.equal(await sessions.sweep(), 1);
     const baseline = await heap();
     for (let cycle = 1; cycle <= 3; cycle++) {
@@ -193,7 +201,7 @@ try {
       assert.equal(sessions.size, 2);
       const liveGrowth = (await heap()) - baseline;
       assert(liveGrowth < 32 * 1024 ** 2, `Completed HTTP responses retained ${liveGrowth} bytes`);
-      now += 120_001;
+      now += pastIdleTtl;
       assert.equal(await sessions.sweep(), 2);
       assert.equal(sessions.size, 0);
       const expired = await post(clients[0], 'tools/list');
@@ -212,14 +220,17 @@ try {
       await initialize();
       now += 375;
       if (index % 40 === 0) await sessions.sweep();
-      assert(sessions.size < 365, 'Idle sessions accumulated beyond the retention window');
+      assert(
+        sessions.size < retentionBound,
+        'Idle sessions accumulated beyond the retention window',
+      );
       if (index % 400 === 0) {
         peakHeapGrowth = Math.max(peakHeapGrowth, (await heap()) - baseline);
         assert(peakHeapGrowth < 128 * 1024 ** 2, 'Session churn retained excessive heap');
       }
     }
     assert.equal(sessions.stats().rejected, 0);
-    now += 120_001;
+    now += pastIdleTtl;
     await sessions.sweep();
     assert.equal(sessions.size, 0);
     assert((await heap()) - baseline < 32 * 1024 ** 2, 'Churn left retained sessions');
