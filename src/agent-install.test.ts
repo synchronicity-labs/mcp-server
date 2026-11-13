@@ -21,14 +21,38 @@ describe('adding the server to the agent', () => {
       return { ok: true, output: '' };
     };
 
-    await expect(addToAgent('claude code', SERVER, run)).resolves.toEqual({
+    await expect(addToAgent('Claude Code', SERVER, run, {})).resolves.toEqual({
       agent: 'Claude Code',
       outcome: 'added',
     });
     await expect(
-      addToAgent('Codex CLI', `${SERVER} --base-url https://api.test`, run),
+      addToAgent('Codex CLI', `${SERVER} --base-url https://api.test`, run, {}),
     ).resolves.toEqual({ agent: 'Codex', outcome: 'added' });
     expect(runs).toEqual([CLAUDE, `${CODEX} --base-url https://api.test`]);
+  });
+
+  it.each(['claude-code', 'claudecode', 'Claude', 'CLAUDE CODE'])(
+    'knows the agent however it spells its name: %s',
+    async (name) => {
+      const run = async () => ({ ok: true, output: '' });
+
+      await expect(addToAgent(name, SERVER, run, {})).resolves.toEqual({
+        agent: 'Claude Code',
+        outcome: 'added',
+      });
+    },
+  );
+
+  it('falls back to the agent whose shell this is when the name says nothing', async () => {
+    const run = async () => ({ ok: true, output: '' });
+
+    await expect(
+      addToAgent('sync. MCP server', SERVER, run, { CODEX_THREAD_ID: 'thread-1' }),
+    ).resolves.toEqual({ agent: 'Codex', outcome: 'added' });
+    await expect(addToAgent(undefined, SERVER, run, { CLAUDECODE: '1' })).resolves.toEqual({
+      agent: 'Claude Code',
+      outcome: 'added',
+    });
   });
 
   it('says so when the agent already has the server', async () => {
@@ -37,7 +61,7 @@ describe('adding the server to the agent', () => {
       output: 'MCP server sync already exists in user config',
     });
 
-    await expect(addToAgent('Claude Code', SERVER, run)).resolves.toEqual({
+    await expect(addToAgent('Claude Code', SERVER, run, {})).resolves.toEqual({
       agent: 'Claude Code',
       outcome: 'exists',
     });
@@ -46,7 +70,7 @@ describe('adding the server to the agent', () => {
   it('hands back the command when the agent’s own command fails', async () => {
     const run = async () => ({ ok: false, output: 'spawn claude ENOENT' });
 
-    await expect(addToAgent('Claude Code', SERVER, run)).resolves.toEqual({
+    await expect(addToAgent('Claude Code', SERVER, run, {})).resolves.toEqual({
       agent: 'Claude Code',
       outcome: 'manual',
       commands: [CLAUDE],
@@ -58,11 +82,11 @@ describe('adding the server to the agent', () => {
       throw new Error('ran a command for an unknown agent');
     };
 
-    await expect(addToAgent('Cursor', SERVER, run)).resolves.toEqual({
+    await expect(addToAgent('Cursor', SERVER, run, {})).resolves.toEqual({
       outcome: 'manual',
       commands: [CLAUDE, CODEX],
     });
-    expect(manualAdd('Codex', SERVER)).toEqual({
+    expect(manualAdd('Codex', SERVER, {})).toEqual({
       agent: 'Codex',
       outcome: 'manual',
       commands: [CODEX],
