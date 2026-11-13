@@ -92,7 +92,7 @@ Ask the person for the code in that email, then run:
 `;
   }
   if (code) {
-    const finished = await finishEmailLogin({ baseUrl, code });
+    const finished = await finishEmailLogin({ baseUrl, code, command });
     const account = await describeAccount(baseUrl);
     const server = packageCommand(baseUrl);
     const agent = option(args, '--agent') ?? finished.agentName;

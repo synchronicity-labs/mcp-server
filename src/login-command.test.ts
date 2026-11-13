@@ -129,6 +129,27 @@ describe('sync-mcp setup and login', () => {
     expect(printed).toContain(`  codex mcp add sync -- ${SERVER}`);
   });
 
+  it('keeps a retry in setup, so the server still gets added', async () => {
+    expect(await run('setup', ['--code', '123456'])).toBe(1);
+    expect(refused).toContain('setup --email <your email>');
+
+    await run('setup', ['--email', 'person@example.com']);
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(
+          JSON.stringify({ error: 'invalid_grant', error_description: 'Incorrect code.' }),
+          { status: 400 },
+        ),
+    );
+    refused = '';
+
+    expect(await run('setup', ['--code', '000000'])).toBe(1);
+    expect(refused).toContain('setup --code <code>');
+    expect(refused).not.toContain('login');
+    expect(installs).toEqual([]);
+  });
+
   it('prints the usage and fails when neither step is asked for', async () => {
     expect(await run('setup', [])).toBe(1);
     expect(refused).toContain('sync-mcp setup --email <address>');

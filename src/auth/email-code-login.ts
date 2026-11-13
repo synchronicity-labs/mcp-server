@@ -72,8 +72,8 @@ export function packageCommand(baseUrl: string, args = ''): string {
   return `${PACKAGE_COMMAND}${args ? ` ${args}` : ''}${target}`;
 }
 
-const startAgain = (baseUrl: string) =>
-  `Start again with: ${packageCommand(baseUrl, 'login --email <your email>')}`;
+const startAgain = (baseUrl: string, command: string) =>
+  `Start again with: ${packageCommand(baseUrl, `${command} --email <your email>`)}`;
 
 function field(body: unknown, name: string): string | undefined {
   const value = body && typeof body === 'object' ? (body as Record<string, unknown>)[name] : null;
@@ -234,8 +234,11 @@ function forget(finished: PendingLogin): Promise<void> {
 export async function finishEmailLogin(params: {
   baseUrl: string;
   code: string;
+  /** The command the person is in, so a retry stays in it: `setup` also adds the server. */
+  command?: 'login' | 'setup';
 }): Promise<{ email: string; agentName: string }> {
-  const START_AGAIN = startAgain(params.baseUrl);
+  const command = params.command ?? 'login';
+  const START_AGAIN = startAgain(params.baseUrl, command);
   const pending = await readStoreFile<PendingLogin>(PENDING_FILE);
   if (!pending?.requestId || !sameApi(pending.baseUrl, params.baseUrl)) {
     throw new LoginError(`No sign-in is waiting for a code. ${START_AGAIN}`);
@@ -253,7 +256,7 @@ export async function finishEmailLogin(params: {
   if (!('ok' in result)) {
     if (result.code === 'invalid_grant' && result.description === 'Incorrect code.') {
       throw new LoginError(
-        `That code is not right. Check the email and run: ${packageCommand(params.baseUrl, 'login --code <code>')}`,
+        `That code is not right. Check the email and run: ${packageCommand(params.baseUrl, `${command} --code <code>`)}`,
       );
     }
     // Every other refusal ends the request, so the next step is a new code.
