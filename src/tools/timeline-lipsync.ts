@@ -4,8 +4,7 @@ import type { HttpClient } from '../http-client.js';
 import { schemaProperty } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
-import { parseLipsyncOptions, timelineShotsInput } from './lipsync-shots.js';
-import { modelOptionsSchema } from './model-options.js';
+import { modelOptionsSchema, parseModelOptions } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
 import {
   assertProjectDestination,
@@ -95,7 +94,6 @@ const input = z
       ),
     model: z.string().trim().min(1).optional().describe('Model to use. Defaults to sync-3.'),
     options: modelOptionsSchema.optional(),
-    shots: timelineShotsInput,
     idempotencyKey: z
       .string()
       .regex(/^[A-Za-z0-9._~-]{1,128}$/)
@@ -254,11 +252,7 @@ function clipOverride({ syncMode, speaker: face }: Clip) {
  * of a Studio timeline. Each distinct audio asset becomes one input, and each
  * clip a segment that reads its part of that audio.
  */
-export function generationBody(
-  args: TimelineInput,
-  projectId: string,
-  options: ReturnType<typeof parseLipsyncOptions>,
-) {
+export function generationBody(args: TimelineInput, projectId: string) {
   // One input per distinct audio, keyed by asset id or URL.
   const audioKey = (c: { audioAssetId?: string; audioUrl?: string }) =>
     c.audioAssetId ? `asset:${c.audioAssetId}` : `url:${c.audioUrl}`;
@@ -269,8 +263,10 @@ export function generationBody(
   ];
   for (const audio of audios)
     if (!refs.has(audioKey(audio))) refs.set(audioKey(audio), `audio-${refs.size + 1}`);
+  const model = args.model ?? 'sync-3';
+  const options = parseModelOptions(args.options, { model });
   return {
-    model: args.model ?? 'sync-3',
+    model,
     ...(options === undefined ? {} : { options }),
     input: [
       { type: 'video', assetId: args.videoAssetId },
@@ -375,8 +371,6 @@ export function createTimelineLipsyncTool(
         (args.outputAudio.audioAssetId === undefined) === (args.outputAudio.audioUrl === undefined)
       )
         throw new Error('outputAudio: give audioAssetId or audioUrl, exactly one.');
-      // Before any project exists, so a bad shot list creates nothing.
-      const options = parseLipsyncOptions(args, { model: args.model ?? 'sync-3' });
 
       // Like lipsync_create: a new project unless the user picked one.
       const projectId =
@@ -395,7 +389,7 @@ export function createTimelineLipsyncTool(
       return httpClient.request('post', '/v2/generate', {
         signal,
         ...(args.idempotencyKey ? { headers: { 'Idempotency-Key': args.idempotencyKey } } : {}),
-        body: generationBody(args, projectId, options),
+        body: generationBody(args, projectId),
       });
     },
   };

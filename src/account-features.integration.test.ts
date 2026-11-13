@@ -16,7 +16,7 @@ import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 // Feature-gated tools are listed only to accounts whose GET /v2/account features name
-// them, over stdio and per hosted session; so is the shots input of both lipsync tools.
+// them, over stdio and per hosted session; so is lipsync_create's shots input.
 const GATED = [
   'scenes_detect',
   'stems_separate',
@@ -24,7 +24,13 @@ const GATED = [
   'faces_get',
   'faces_get-timeline',
 ];
-const ALL_FEATURES = ['scene_detection', 'stem_separation', 'face_validation', 'lipsync_planning'];
+const ALL_FEATURES = [
+  'scene_detection',
+  'stem_separation',
+  'face_validation',
+  'lipsync_planning',
+  'multispeaker',
+];
 type Account = { status?: number; body: unknown };
 
 const cleanups: (() => Promise<void> | void)[] = [];
@@ -65,17 +71,13 @@ const withFeatures = (features: string[]): Account => ({
 });
 const gatedNames = async (client: Client) =>
   (await client.listTools()).tools.map((tool) => tool.name).filter((name) => GATED.includes(name));
-const SHOT_TOOLS = ['lipsync_create', 'lipsync_create-timeline'];
-// The lipsync tools that list the gated shots input, by name. shots_regenerate is itself a
-// gated tool, and shots is what it is for.
-const withShots = async (client: Client) =>
-  (await client.listTools()).tools
-    .filter(
-      (tool) =>
-        tool.name !== 'shots_regenerate' &&
-        Object.hasOwn(tool.inputSchema.properties ?? {}, 'shots'),
-    )
-    .map((tool) => tool.name);
+const GATED_INPUTS = ['shots', 'speakers', 'allowOverlappingFaces'];
+const gatedInputs = (names: string[]) => names.filter((name) => GATED_INPUTS.includes(name));
+const lipsyncInputs = async (client: Client) =>
+  Object.keys(
+    (await client.listTools()).tools.find((tool) => tool.name === 'lipsync_create')?.inputSchema
+      .properties ?? {},
+  );
 
 async function stdio(account: (auth: string | undefined) => Account) {
   const api = await stubApi(account);
@@ -121,14 +123,9 @@ describe('feature-gated tools over stdio', () => {
         destructiveHint: false,
       });
     }
-    const shots = (name: string) =>
-      (tools.find((tool) => tool.name === name)?.inputSchema.properties?.shots ?? {}) as {
-        description?: string;
-      };
-    expect(shots('lipsync_create').description).toContain('faces_get-timeline');
-    expect(shots('lipsync_create-timeline').description).toContain(
-      'a clip’s endFrame is INCLUSIVE',
-    );
+    const shots = tools.find((tool) => tool.name === 'lipsync_create')?.inputSchema.properties
+      ?.shots as { description?: string } | undefined;
+    expect(shots?.description).toContain('faces_get-timeline');
     expect(await gatedNames(client)).toEqual(GATED);
     expect(accountReads).toHaveLength(1);
   });
@@ -138,14 +135,16 @@ describe('feature-gated tools over stdio', () => {
     [['stem_separation'], ['stems_separate']],
     [['face_validation'], ['faces_detect', 'faces_get']],
     [['lipsync_planning'], ['faces_get-timeline']],
+    [['multispeaker'], []],
     [['face_detection'], []],
     [[], []],
   ])('with features %j lists %j', async (features, listed) => {
     const { client } = await stdio(() => withFeatures(features));
     expect(await gatedNames(client)).toEqual(listed);
-    expect(await withShots(client)).toEqual(
-      features.includes('lipsync_planning') ? SHOT_TOOLS : [],
-    );
+    const inputs = await lipsyncInputs(client);
+    expect(inputs.includes('shots')).toBe(features.includes('lipsync_planning'));
+    for (const name of ['speakers', 'allowOverlappingFaces'])
+      expect(inputs.includes(name), name).toBe(features.includes('multispeaker'));
   });
 
   it('lists the shot review tools only with lipsync_planning', async () => {
@@ -177,7 +176,7 @@ describe('feature-gated tools over stdio', () => {
         : withFeatures(ALL_FEATURES),
     );
     expect(await gatedNames(client)).toEqual([]);
-    expect(await withShots(client)).toEqual([]);
+    expect(await lipsyncInputs(client)).not.toContain('shots');
     failing = false;
     expect(await gatedNames(client)).toEqual(GATED);
     expect(await gatedNames(client)).toEqual(GATED);
@@ -260,8 +259,8 @@ describe('feature-gated tools on the hosted server', () => {
     expect(await gatedNames(both)).toEqual(GATED);
     expect(await gatedNames(scenes)).toEqual(['scenes_detect']);
     expect(await gatedNames(none)).toEqual([]);
-    expect(await withShots(both)).toEqual(SHOT_TOOLS);
-    expect(await withShots(scenes)).toEqual([]);
+    expect(gatedInputs(await lipsyncInputs(both))).toEqual(GATED_INPUTS);
+    expect(gatedInputs(await lipsyncInputs(scenes))).toEqual([]);
     expect(await gatedNames(both)).toEqual(GATED);
     expect(api.accountReads).toEqual([
       'Bearer token-both',
@@ -271,19 +270,24 @@ describe('feature-gated tools on the hosted server', () => {
 
     const codex = await hostedSession(factory, 'openai-mcp (Codex)', 'token-both');
     expect(await gatedNames(codex)).toEqual(GATED);
-    // App profiles also list lipsync_create under its old name, create-lipsync. The timeline
-    // tool is not an app tool, so its old name create-timeline-lipsync stays unlisted.
-    expect(await withShots(codex)).toEqual([...SHOT_TOOLS, 'create-lipsync']);
+    // App profiles also list lipsync_create under its old name, create-lipsync.
     const codexNone = await hostedSession(factory, 'openai-mcp (Codex)', 'token-none');
-    expect((await codexNone.listTools()).tools.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining([...SHOT_TOOLS, 'create-lipsync']),
+    const inputs = (await codexNone.listTools()).tools
+      .filter((tool) => ['lipsync_create', 'create-lipsync'].includes(tool.name))
+      .map((tool) => gatedInputs(Object.keys(tool.inputSchema.properties ?? {})));
+    expect(inputs).toEqual([[], []]);
+    // With every feature both names list them: the old name is the same tool.
+    const codexInputs = Object.fromEntries(
+      (await codex.listTools()).tools
+        .filter((tool) => ['lipsync_create', 'create-lipsync'].includes(tool.name))
+        .map((tool) => [tool.name, gatedInputs(Object.keys(tool.inputSchema.properties ?? {}))]),
     );
-    expect(await withShots(codexNone)).toEqual([]);
+    expect(codexInputs).toEqual({ lipsync_create: GATED_INPUTS, 'create-lipsync': GATED_INPUTS });
 
     // ChatGPT lists neither gated tools nor gated inputs, so it never reads features.
     const chatgpt = await hostedSession(factory, 'openai-mcp', 'token-both');
     expect(await gatedNames(chatgpt)).toEqual([]);
-    expect(await withShots(chatgpt)).toEqual([]);
+    expect(gatedInputs(await lipsyncInputs(chatgpt))).toEqual([]);
     expect(api.accountReads).toHaveLength(5);
   });
 

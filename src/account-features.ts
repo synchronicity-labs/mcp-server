@@ -26,8 +26,11 @@ const TOOL_FEATURES: Readonly<Record<string, string>> = {
  * fields the API refuses without it. Like a gated tool, a call with one is not refused here.
  */
 const PARAMETER_FEATURES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  lipsync_create: { shots: 'lipsync_planning' },
-  'lipsync_create-timeline': { shots: 'lipsync_planning' },
+  lipsync_create: {
+    shots: 'lipsync_planning',
+    speakers: 'multispeaker',
+    allowOverlappingFaces: 'multispeaker',
+  },
 };
 
 export function isFeatureGatedTool(name: string): boolean {
