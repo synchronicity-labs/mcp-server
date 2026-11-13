@@ -12,7 +12,7 @@ const createCall = z
     arguments: z.record(z.string(), z.unknown()),
   })
   .describe(
-    'Optional. The exact create call this quote is for: the tool and its arguments, complete and final, without idempotencyKey or projectCreationKey (the quote makes both). It must be the job priced here: dubbing_create only with workflow=translate-and-dub, lipsync_create only without it, the same model, and options.reasoning_enabled only with reasoningEnabled=true. When given, the price card in the chat gets a Create button that starts that paid job itself when the person presses it, and then tells you its generation id. Pass it only for a job the person asked for, once every input is saved and settled. Never call the create tool yourself for the same job after the card reports it started.',
+    'Optional. The exact create call this quote is for: the tool and its arguments, complete and final, without idempotencyKey or projectCreationKey (the quote makes both) and without organizationId (the call runs in the organization this quote runs in). It must be the job priced here: dubbing_create only with workflow=translate-and-dub, lipsync_create only without it, the same model, and options.reasoning_enabled only with reasoningEnabled=true. When given, the price card in the chat gets a Create button that starts that paid job itself when the person presses it, and then tells you its generation id. Pass it only for a job the person asked for, once every input is saved and settled. Never call the create tool yourself for the same job after the card reports it started.',
   );
 
 /**
@@ -46,6 +46,14 @@ function quotedCall(
       reasons
         ? 'create.arguments.options.reasoning_enabled is true but this quote prices the job without reasoning. Quote with reasoningEnabled=true.'
         : `This quote prices reasoning, but the create call does not use it${REASONING_MODELS.has(String(model)) ? '' : `: ${String(model)} has none`}. Quote without reasoningEnabled, or set create.arguments.options.reasoning_enabled.`,
+    );
+  // The price is for one organization's plan, balance and assets. The call may not name
+  // another: the quote names the organization, and the call is tied to it below.
+  const named = call.arguments.organizationId;
+  const quoted = typeof priced.organizationId === 'string' ? priced.organizationId : undefined;
+  if (named !== undefined && named !== quoted)
+    throw new Error(
+      `create.arguments.organizationId is ${JSON.stringify(named)} but this quote runs in ${quoted ?? 'the session’s organization'}. Pass organizationId on the quote, and the same one or none in create.arguments.`,
     );
   // The create tools refuse an existing project the person did not choose. The card may
   // run this call through an entry point without that check, so it is made here.
@@ -101,10 +109,25 @@ export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
           : quotedCall(createCall.parse(create), priced, context?.clientProfile);
       const result = await handler(priced, context);
       if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+      // The organization the quote ran in, so the card's call runs there too: neither a
+      // one-call organizationId on the quote nor a later switch of the session moves it.
+      const ranIn =
+        z.object({ organization: z.object({ id: z.uuid() }) }).safeParse(result).data?.organization
+          .id ?? priced.organizationId;
       return {
         ...result,
         request: { model: priced.model, duration: priced.duration, workflow: priced.workflow },
-        ...(call ? { create: call } : {}),
+        ...(call
+          ? {
+              create: {
+                ...call,
+                arguments: {
+                  ...call.arguments,
+                  ...(typeof ranIn === 'string' ? { organizationId: ranIn } : {}),
+                },
+              },
+            }
+          : {}),
       };
     },
   };

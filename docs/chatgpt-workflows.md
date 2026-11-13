@@ -249,6 +249,12 @@ tools enforce: without `projectIntent=explicit`, or a project this user just
 created, the quote is refused. The saved-assets entry point has no such check of
 its own, so the quote is where it is made for a card.
 
+The echoed call also carries the `organizationId` the quote ran in, whether the
+quote named one or used the session's, so the card's call spends in the
+organization whose price the person approved even if the session switches
+afterwards. A `create` call that names a different organization than its quote
+is refused.
+
 `shots_review` opens the shot review card on a completed generation. It refuses
 what `shots_regenerate` would refuse (timeline clips, several speakers, a script,
 a length that differs from the video's), so nobody flags shots that cannot be

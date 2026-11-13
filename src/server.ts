@@ -1025,8 +1025,10 @@ function createTools(
     config.spendConfirmation === false ? withoutSpendConfirmation(tool) : tool;
   const adapted = allTools
     .map(withProjectIntent)
-    .map(withPriceCheck)
     .map((tool) => withOrganizationChoice(tool, httpClient, credential))
+    // Outside the organization choice: a quote's create call is tied to the organization
+    // the quote ran in.
+    .map(withPriceCheck)
     .map(withGenerationStatusCard)
     .map(withGenerationOutputAliases)
     .map(spend);

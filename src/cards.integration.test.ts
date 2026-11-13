@@ -10,6 +10,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const USAGE = 'ui://sync/card-usage-v1.html';
 const GENERATION = '00000000-0000-4000-8000-000000000003';
 const TIMELINE = '00000000-0000-4000-8000-000000000004';
+const ORGANIZATION = '00000000-0000-4000-8000-000000000005';
 const billing = {
   plan: 'creator',
   canManageBilling: true,
@@ -44,10 +45,14 @@ async function connect(clientName: string) {
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     });
     if (url.pathname === '/v2/oauth/account')
-      return Response.json({ organization: { id: 'org-1', name: 'Acme', role: 'owner' } });
+      return Response.json({ organization: { id: ORGANIZATION, name: 'Acme', role: 'owner' } });
     if (url.pathname === '/v2/billing') return Response.json(billing);
     if (url.pathname === '/v2/account')
-      return Response.json({ plan: { id: 'pro', name: 'Pro' }, features: ['lipsync_planning'] });
+      return Response.json({
+        organization: { id: ORGANIZATION, name: 'Acme' },
+        plan: { id: 'pro', name: 'Pro' },
+        features: ['lipsync_planning'],
+      });
     if (
       url.pathname === `/v2/generate/${GENERATION}` ||
       url.pathname === `/v2/generate/${TIMELINE}`
@@ -200,6 +205,29 @@ it('hands the price check card the create call to run, without sending it to the
     expect(JSON.stringify(otherModel.content)).toContain(
       'create.arguments.model is sync-3 but this quote prices lipsync-2-pro',
     );
+    // The call runs in the organization the quote ran in, whatever the session does later,
+    // and may not name another.
+    expect(
+      (quote.structuredContent as { create: { arguments: unknown } }).create.arguments,
+    ).toMatchObject({
+      organizationId: ORGANIZATION,
+    });
+    const elsewhere = await client.callTool({
+      name: estimate.name,
+      arguments: {
+        ...priced,
+        create: {
+          ...create,
+          arguments: {
+            ...create.arguments,
+            organizationId: '00000000-0000-4000-8000-000000000006',
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(elsewhere.content)).toContain(
+      'but this quote runs in the session’s organization',
+    );
     // Reasoning costs more: a call that turns it on needs a quote that priced it, and a
     // quote that priced it needs a call that uses it.
     const pro = { model: 'lipsync-2-pro', duration: 222 };
@@ -284,7 +312,7 @@ it('hands a ChatGPT card the lipsync call it is allowed to make, or none', async
     const chosen = await quote({ ...project, projectIntent: 'explicit' });
     expect((chosen.structuredContent as { create: unknown }).create).toEqual({
       tool: 'lipsync_create-from-assets',
-      arguments: { ...project, model: 'sync-3' },
+      arguments: { ...project, model: 'sync-3', organizationId: ORGANIZATION },
       idempotencyKey: expect.stringMatching(UUID),
     });
     // That entry point takes no link, so the quote carries no call and the card asks the chat.
