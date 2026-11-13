@@ -10,6 +10,7 @@ import { relayUploadTool } from './app-upload-relay.js';
 import { ASSET_THUMBNAIL_INSTRUCTIONS } from './asset-thumbnail.js';
 import { createApiKeyAuth } from './auth/api-key.js';
 import { performDeviceAuth } from './auth/device-auth.js';
+import { emailLoginAuth, savedEmailLogin } from './auth/email-code-login.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { loadToken } from './auth/token-store.js';
 import {
@@ -36,6 +37,7 @@ import {
 import {
   type ApiErrorDetails,
   ApiRequestError,
+  type AuthSource,
   cameFromApi,
   createHttpClient,
 } from './http-client.js';
@@ -1026,7 +1028,7 @@ function createTools(
 function createProfiledServer(
   config: SyncMcpConfig,
   operations: ReturnType<typeof parseSpec>,
-  authHeaders: Record<string, string> = {},
+  authHeaders: AuthSource = {},
   chatgptApp?: ChatgptApp,
   previousApps: ChatgptApp[] = [],
   sharedCatalog?: {
@@ -1480,10 +1482,18 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
 async function resolveAuth(
   config: SyncMcpConfig,
   log: (message: string) => void,
-): Promise<Record<string, string>> {
+): Promise<AuthSource> {
   if (config.apiKey) {
     log('Using API key authentication\n');
     return createApiKeyAuth(config.apiKey).headers;
+  }
+
+  // An emailed-code sign-in stays signed in: a refusal mid-session says to sign in
+  // again, where a device flow nobody is watching would only hang.
+  const emailLogin = await savedEmailLogin(config.baseUrl);
+  if (emailLogin) {
+    log('Using the saved sync. sign-in\n');
+    return emailLoginAuth(emailLogin);
   }
 
   const cachedToken = await loadToken();
