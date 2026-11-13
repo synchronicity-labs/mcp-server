@@ -6,6 +6,12 @@ import { generationContextHeaders, generationContextSchema } from './generation-
 import type { McpToolDefinition } from './generator.js';
 import { lipsyncShotsInput, parseLipsyncOptions } from './lipsync-shots.js';
 import {
+  allowOverlappingFacesInput,
+  lipsyncSpeakersInput,
+  parseLipsyncSpeakers,
+} from './lipsync-speakers.js';
+import { lipsyncSubmission } from './lipsync-submission.js';
+import {
   ASSET_TYPE_BY_KIND,
   assertValidFileParam,
   fileInput,
@@ -25,42 +31,6 @@ import { createRunningSubmissions } from './running-submissions.js';
 
 function providedCount(...values: unknown[]): number {
   return values.filter(Boolean).length;
-}
-
-// Picks the source the way resolveMedia does. A ChatGPT file is named by its file_id;
-// its download_url changes on every call.
-function mediaIdentity(url: unknown, assetId: unknown, file: unknown): unknown {
-  if (assetId) return ['asset', assetId];
-  if (url) return ['url', url];
-  if (file && typeof file === 'object' && 'file_id' in file) return ['file', file.file_id];
-  return file;
-}
-
-/**
- * What makes two lipsync_create calls the same request, ignoring keys and new-project
- * names. The client is part of it because each client has its own default project.
- */
-function lipsyncSubmission(
-  args: Record<string, unknown>,
-  model: string,
-  options: unknown,
-  client: string,
-): unknown[] {
-  return [
-    client,
-    mediaIdentity(args.videoUrl, args.videoAssetId, args.video),
-    mediaIdentity(args.imageUrl, args.imageAssetId, args.image),
-    mediaIdentity(args.audioUrl, args.audioAssetId, args.audio),
-    args.script,
-    args.voiceId,
-    args.provider,
-    args.stability,
-    args.similarityBoost,
-    model,
-    options,
-    args.projectId,
-    args.continuation,
-  ];
 }
 
 function assertSingleSource(kind: MediaKind, count: number): void {
@@ -246,6 +216,8 @@ export function createAppTools(
             'Model-specific generation preferences. Keep unchanged when retrying the same idempotency key.',
           ),
         shots: lipsyncShotsInput,
+        speakers: lipsyncSpeakersInput,
+        allowOverlappingFaces: allowOverlappingFacesInput,
         idempotencyKey: z
           .string()
           .regex(/^[A-Za-z0-9._~-]{1,128}$/)
@@ -350,8 +322,12 @@ export function createAppTools(
         const hasScript = Boolean(script);
         const hasVideo = videoSourceCount > 0;
         const hasImage = imageSourceCount > 0;
+        const multi = parseLipsyncSpeakers(args, {
+          image: hasImage,
+          singleDriver: hasAudio || hasScript,
+        });
 
-        if (!hasAudio && !hasScript) {
+        if (!hasAudio && !hasScript && !multi) {
           throw new Error(
             'Audio or script is required - pass `audioAssetId`, or pass `script` with a `voiceId` from voices_list. lipsync_create also accepts `audioUrl` or an uploaded audio file.',
           );
@@ -408,26 +384,28 @@ export function createAppTools(
           );
 
           // URLs go through verbatim; uploaded files are re-hosted; assetIds are reused.
-          const driver = hasScript
-            ? {
-                type: 'text',
-                provider: {
-                  name: provider ?? 'elevenlabs',
-                  voiceId,
-                  script,
-                  ...(stability === undefined ? {} : { stability }),
-                  ...(similarityBoost === undefined ? {} : { similarityBoost }),
-                },
-              }
-            : await resolveMedia(
-                httpClient,
-                'audio',
-                audioUrl,
-                audioAssetId,
-                audio,
-                runtime,
-                signal,
-              );
+          const driver = multi
+            ? undefined
+            : hasScript
+              ? {
+                  type: 'text',
+                  provider: {
+                    name: provider ?? 'elevenlabs',
+                    voiceId,
+                    script,
+                    ...(stability === undefined ? {} : { stability }),
+                    ...(similarityBoost === undefined ? {} : { similarityBoost }),
+                  },
+                }
+              : await resolveMedia(
+                  httpClient,
+                  'audio',
+                  audioUrl,
+                  audioAssetId,
+                  audio,
+                  runtime,
+                  signal,
+                );
           const visual = hasImage
             ? await resolveMedia(
                 httpClient,
@@ -461,8 +439,11 @@ export function createAppTools(
               : {}),
             body: {
               model: resolvedModel,
-              ...(options === undefined ? {} : { options }),
-              input: [visual, driver],
+              ...(options === undefined && !multi?.options.allow_overlapping_boxes
+                ? {}
+                : { options: { ...options, ...multi?.options } }),
+              input: multi ? [visual, ...multi.inputs] : [visual, driver],
+              ...(multi ? { speakers: multi.speakers } : {}),
               projectId,
             },
           });
@@ -482,7 +463,17 @@ export function createAppTools(
   // asset-only arguments. Reuse generation admission/execution without exposing
   // the host's attachment transport to this app-only entry point.
   const inputSchema = { ...lipsync.inputSchema };
-  for (const key of ['video', 'image', 'audio', 'videoUrl', 'imageUrl', 'audioUrl', 'shots']) {
+  for (const key of [
+    'video',
+    'image',
+    'audio',
+    'videoUrl',
+    'imageUrl',
+    'audioUrl',
+    'shots',
+    'speakers',
+    'allowOverlappingFaces',
+  ]) {
     delete inputSchema[key];
   }
   const { 'openai/fileParams': _fileParams, ...meta } = lipsync.meta ?? {};

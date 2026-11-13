@@ -13,7 +13,8 @@ comes back as `feature_not_enabled`.
 | `faces_detect` | `GET /v2/assets/{id}/faces?frame=0`, then `POST /v2/assets/{id}/faces` | `face_validation` |
 | `faces_get` | `GET /v2/assets/{id}/faces` | `face_validation` |
 | `faces_get-timeline` | `GET /v2/assets/{id}/faces/timeline` | `lipsync_planning` |
-| `lipsync_create` and `lipsync_create-timeline` `shots` input | `options.shots` on `POST /v2/generate` | `lipsync_planning` |
+| `lipsync_create` `shots` input | `options.shots` on `POST /v2/generate` | `lipsync_planning` |
+| `lipsync_create` `speakers` and `allowOverlappingFaces` inputs | `speakers` and `options.allow_overlapping_boxes` on `POST /v2/generate` | `multispeaker` |
 
 `faces_detect` reads the status first and starts an analysis only when there is none
 or the last one failed, because the start route allows 20 calls in 10 minutes; it
@@ -28,43 +29,56 @@ as the API stores them. Each `talking` range carries a `point` that selects its 
 ## Conventions the descriptions teach
 
 - Frames count from 0 at the video's first frame, and every `endFrame` of these
-  tools is exclusive, `shots` included. `scenes_detect` scenes and
-  `lipsync_create-timeline` clips use an inclusive `endFrame`, so a clip ends at the
-  timeline's `endFrame - 1`.
+  tools is exclusive. `scenes_detect` scenes and `lipsync_create-timeline` clips use
+  an inclusive `endFrame`, so a clip ends at the timeline's `endFrame - 1`.
 - Boxes are `[x1, y1, x2, y2]` in source pixels of the upright (displayed) frame.
 - To select a face, pass a point (the center of its box at a frame) as
   `options.active_speaker_detection.frame_number` and `coordinates`, never the boxes.
   In a segment override (a timeline clip's `speaker`), the frame counts from the
   segment's first frame.
 
-There is no tool for face boxes as a generation input: boxes passed to a generation
-lower its quality.
+A single-speaker generation takes no face boxes: boxes passed to one lower its
+quality. `speakers` does take them, for the reason below.
 
-## `shots` on lipsync_create and lipsync_create-timeline
+## `shots` on lipsync_create
 
 `shots` takes camelCase `{ startFrame, endFrame }` like the timeline's (the timeline's
-own shots plus the jump cuts it missed) and sends `options.shots` with `start_frame`
-and `end_frame`. It replaces the pipeline's own shot detection, which misses jump cuts.
-Pipeline tests set two rules:
+own shots plus the jump cuts it missed; every boundary a real cut) and sends
+`options.shots` with `start_frame` and `end_frame`. It replaces the pipeline's own
+shot detection, which misses jump cuts. The tool refuses, before creating a project,
+an empty list, more than 2000 shots, a first shot not starting at 0, a gap or
+overlap, an empty shot and an image input; the API decides the rest (model, and
+`segments`, which `lipsync_create` never sends). `lipsync_create-timeline` has no
+`shots`, since its clips are `segments`: the pipeline analyses each clip by itself, a
+shot list for the whole video makes that analysis fail, and the clip then runs with
+no shots, reference frames or analysis face boxes at all. Release 0.3.9 offered the
+combination; it never worked.
 
-- Every shot boundary must be a real cut. A boundary in mid-shot makes the mouth jump,
-  and a shot that starts a few frames before a real cut gets the wrong face there.
-- The shot list counts frames from 0 at the video's first frame, also when the request
-  has clips, and its `endFrame` is exclusive. A timeline clip's `endFrame` is
-  inclusive, so a clip that ends where a shot ends has `endFrame` one less than the
-  shot's. The timeline tool's `shots` description says so in capitals.
+## `speakers` on lipsync_create
 
-On `lipsync_create-timeline` the shots travel with the clips (`segments`). An agent
-sends both because one clip can then cover a speaker's whole turn across several cuts,
-which means fewer clip ends.
+`speakers` lipsyncs several people of one video in a single generation (sync-3 and
+sync-3-pro), each to their own audio, in place of `audioUrl`/`audioAssetId`/`script`.
+The tool sends one audio input per speaker with the speaker's `id` as its `refId`,
+and the API's `speakers` with `audio.refId` and a `face`:
 
-The tools refuse, before creating a project, an empty list, more than 2000 shots, a
-first shot not starting at 0, a gap or overlap, an empty shot and, on
-`lipsync_create`, an image input. The API decides the rest, such as the model. It
-also refuses `shots` together with studio-1 tuning settings
-(`extra_services_options`), because the pipeline ignored the shot list when both were
-sent; the MCP tools do not check this, and their `options` do not offer those
-settings.
+| `face` | Sent as | What the pipeline does |
+| --- | --- | --- |
+| `frameNumber` and `coordinates` | `frame_number`, `coordinates` | Lipsyncs that face for the whole video, also where the person only listens |
+| `boxes` | `bounding_boxes` | Lipsyncs the face on frames with a box; a `null` frame keeps the face as filmed |
+| `faceTrackUrl` | `bounding_boxes_url` | Same, from a public `{ "bounding_boxes": [...] }` file |
+
+A point replaces a listener's reactions (a laugh becomes a closed mouth), so the
+description steers an agent to boxes with `null` on the shots where a person has no
+lines. Each speaker's audio has to be as long as the video, within 0.04 s, and hold
+only that person's words; the output plays the tracks mixed. `allowOverlappingFaces`
+sends `options.allow_overlapping_boxes: true`: without it the pipeline fails a
+generation where two speakers' face boxes overlap on any frame.
+
+The tool refuses, before creating a project: `speakers` with an image, with a single
+audio or script, a repeated or `default` id, a speaker without exactly one audio
+source, a face given in no way or in more than one, and `allowOverlappingFaces`
+without `speakers`. The API decides the rest (model, speaker limit of 3 unless the
+organization has another, the flag: a 403 while it is off).
 
 `PARAMETER_FEATURES` in `src/account-features.ts` hides a gated input from
 `tools/list` for organizations without the feature, by name and by a renamed tool's
