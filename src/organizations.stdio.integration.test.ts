@@ -5,6 +5,7 @@ import { ACME, api, cleanUp, connect, HOME, lipsync } from './test-fixtures/orga
 // Device auth on stdio: a signed-in user, who can choose an organization per request.
 vi.mock('./auth/token-store.js', () => ({
   loadToken: async () => 'device-token',
+  loadCredentials: async () => null,
   saveToken: async () => {},
   clearToken: async () => {},
 }));

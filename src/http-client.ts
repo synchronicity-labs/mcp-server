@@ -126,6 +126,17 @@ export function cameFromApi(error: unknown): boolean {
 }
 
 type AuthHeaders = Record<string, string>;
+/**
+ * Fixed headers, or a function for a sign-in that renews itself between requests. Such a
+ * sign-in can say what to do when the API stops accepting it.
+ */
+export type AuthSource = AuthHeaders | ((() => Promise<AuthHeaders>) & { signedOutStep?: string });
+
+const sourceHeaders = async (source: AuthSource): Promise<AuthHeaders> =>
+  typeof source === 'function' ? source() : source;
+
+const signedOutStep = (status: number, source: AuthSource): string | undefined =>
+  status === 401 && typeof source === 'function' ? source.signedOutStep : undefined;
 
 export type HttpClient = {
   request: (
@@ -145,11 +156,12 @@ export type HttpClient = {
  *
  * Auth is resolved in this order:
  * 1. Per-request token from AsyncLocalStorage (set by OAuth middleware in HTTP transport)
- * 2. Static auth headers (API key or device auth token, set at startup for stdio transport)
+ * 2. The stdio transport's own credential, set at startup: an API key or device token as
+ *    fixed headers, or an emailed-code sign-in as a function that keeps it renewed
  */
 export function createHttpClient(
   baseUrl: string,
-  staticAuthHeaders: AuthHeaders = {},
+  staticAuth: AuthSource = {},
   stdioClientName?: () => string | undefined,
 ): HttpClient {
   return {
@@ -173,7 +185,7 @@ export function createHttpClient(
         const perRequestToken = getAuthToken();
         const authHeaders: Record<string, string> = perRequestToken
           ? { Authorization: `Bearer ${perRequestToken}` }
-          : { ...staticAuthHeaders };
+          : { ...(await sourceHeaders(staticAuth)) };
 
         const organization = chosenOrganization();
         const headers: Record<string, string> = {
@@ -244,6 +256,7 @@ export function createHttpClient(
             errorDetails(parsed),
           );
           error.suggestion = apiSuggestion(parsed);
+          error.nextStep = signedOutStep(response.status, staticAuth);
           apiResponseErrors.add(error);
           throw error;
         }

@@ -2,6 +2,7 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { resolveConfig } from './config.js';
+import { runLogin } from './login-command.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { parseToolsets, type Toolset } from './toolsets.js';
 import { startConfiguredUpdateCheck } from './update-check.js';
@@ -10,6 +11,11 @@ import { PACKAGE_VERSION } from './version.js';
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const config = resolveConfig(parseArgs(args));
+
+  if (args[0] === 'login') {
+    process.exitCode = await runLogin(args.slice(1), config.baseUrl);
+    return;
+  }
 
   if (config.transport === 'stdio') {
     // Started before auth and the spec fetch, and never awaited.
@@ -73,6 +79,13 @@ function parseArgs(args: string[]): Partial<{
 
 function printUsage(): void {
   process.stderr.write(`Usage: sync-mcp [options]
+       sync-mcp login --email <address> [--agent <name>]
+       sync-mcp login --code <code>
+
+Commands:
+  login               Sign in by a code emailed to you, with no browser. Run it with
+                      --email, then again with --code and the code from the email.
+                      --agent names your agent in the emails sync. sends.
 
 Options:
   --api-key <key>     API key (or set SYNC_API_KEY env var)

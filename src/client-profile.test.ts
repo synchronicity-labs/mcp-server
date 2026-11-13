@@ -632,6 +632,7 @@ describe('immutable client profiles', () => {
     'keeps %s stdio authentication local without contaminating an HTTP session',
     async (authentication) => {
       const calls = fakeApi();
+      vi.spyOn(tokenStore, 'loadCredentials').mockResolvedValue(null);
       vi.spyOn(tokenStore, 'loadToken').mockResolvedValue('fake-device-token');
       const stdio = await createSyncMcpServer({
         ...config,
