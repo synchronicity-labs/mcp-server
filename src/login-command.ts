@@ -1,3 +1,4 @@
+import { type AddResult, addToAgent, detectAgent, manualAdd } from './agent-install.js';
 import {
   apiUrl,
   finishEmailLogin,
@@ -8,13 +9,21 @@ import {
 import { loadCredentials } from './auth/token-store.js';
 import { PACKAGE_VERSION } from './version.js';
 
+/** `setup` signs in and adds the server to the agent; `login` only signs in. */
+export type LoginCommand = 'login' | 'setup';
+
 const USAGE = `Usage:
+  sync-mcp setup --email <address> [--agent <name>]   Email a sign-in code
+  sync-mcp setup --code <code>                        Sign in and add the server to your agent
   sync-mcp login --email <address> [--agent <name>]   Email a sign-in code
-  sync-mcp login --code <code>                        Finish with the emailed code
+  sync-mcp login --code <code>                        Sign in only
 
 Signs in without a browser. --agent names the agent in the emails sync. sends
-(for example "Claude Code"). A code connects the account's personal workspace.
+(for example "Claude Code"); it is detected in Claude Code and Codex. A code
+connects the account's personal workspace.
 `;
+
+const NEW_SESSION = 'Start a new session so the sync. tools load.';
 
 function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -47,38 +56,63 @@ async function describeAccount(baseUrl: string): Promise<string> {
   }
 }
 
-async function login(args: string[], baseUrl: string): Promise<string> {
+/** How the server reached the agent, or what the person's agent still has to run. */
+function installed(result: AddResult, server: string): string {
+  if (result.outcome !== 'manual') {
+    return result.outcome === 'added'
+      ? `Added the sync. server to ${result.agent} for every project.\n${NEW_SESSION}`
+      : `The sync. server was already added to ${result.agent}.\nIf its tools are not loaded, start a new session.`;
+  }
+  const commands = result.commands.map((line) => `  ${line}`).join('\n');
+  return result.agent
+    ? `Add the sync. server to ${result.agent} with:\n${commands}\n${NEW_SESSION}`
+    : `Add the sync. server to your agent: it runs the command "${server}" over stdio. For example:\n${commands}\n${NEW_SESSION}`;
+}
+
+type Install = typeof addToAgent;
+
+async function login(
+  command: LoginCommand,
+  args: string[],
+  baseUrl: string,
+  install: Install,
+): Promise<string> {
   const email = option(args, '--email');
   const code = option(args, '--code');
   if (email) {
     const started = await startEmailLogin({
       baseUrl,
       email,
-      agentName: option(args, '--agent'),
+      agentName: option(args, '--agent') ?? detectAgent(),
       registrationUrl: process.env.SYNC_MCP_REGISTRATION_URL,
     });
     return `Sent a sign-in code to ${started.email}. It expires in ${started.expiresInMinutes} minutes.
 Ask the person for the code in that email, then run:
-  ${packageCommand(baseUrl, 'login --code <code>')}
+  ${packageCommand(baseUrl, `${command} --code <code>`)}
 `;
   }
   if (code) {
     const finished = await finishEmailLogin({ baseUrl, code });
     const account = await describeAccount(baseUrl);
     const server = packageCommand(baseUrl);
+    const agent = option(args, '--agent') ?? finished.agentName;
+    const result = command === 'setup' ? await install(agent, server) : manualAdd(agent, server);
     return `Signed in to sync. as ${finished.email}${account ? ` (${account})` : ''}.
-If the sync. server is not added to your agent yet, add it with the command "${server}", for example:
-  claude mcp add sync -- ${server}
-Then start a new session so the sync. tools load.
+${installed(result, server)}
 `;
   }
   throw new LoginError(USAGE);
 }
 
-/** `sync-mcp login`: prints the result for the agent to relay, and returns the exit code. */
-export async function runLogin(args: string[], baseUrl: string): Promise<number> {
+/** `sync-mcp setup` and `login`: prints the result for the agent to relay; returns the exit code. */
+export async function runLogin(
+  command: LoginCommand,
+  args: string[],
+  baseUrl: string,
+  install: Install = addToAgent,
+): Promise<number> {
   try {
-    process.stdout.write(await login(args, baseUrl));
+    process.stdout.write(await login(command, args, baseUrl, install));
     return 0;
   } catch (error) {
     if (!(error instanceof LoginError)) throw error;

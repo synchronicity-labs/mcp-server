@@ -116,6 +116,7 @@ describe('signing in by emailed code', () => {
 
     await expect(finishEmailLogin({ baseUrl: API, code: ' 123456 ' })).resolves.toEqual({
       email: 'person@example.com',
+      agentName: 'Claude Code',
     });
 
     expect(call(2).body).toMatchObject({
@@ -234,6 +235,11 @@ describe('signing in by emailed code', () => {
   it.each([
     [
       { status: 403, body: { errorCode: 'email_code_connect_unavailable' } },
+      'not available yet. Sign in through the browser instead',
+    ],
+    // An API without the routes yet answers like any unknown path.
+    [
+      { status: 404, body: { message: 'Cannot POST /v2/oauth/email-code' } },
       'not available yet. Sign in through the browser instead',
     ],
     [{ status: 429, retryAfter: '120', body: {} }, 'Try again in 2 minutes'],

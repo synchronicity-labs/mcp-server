@@ -29,7 +29,10 @@ const REFRESH_MARGIN_MS = 60_000;
 const DEFAULT_AGENT_NAME = 'sync. MCP server';
 const PACKAGE_COMMAND = 'npx -y @sync.so/mcp-server@latest';
 const BROWSER_SIGN_IN =
-  'Sign in through the browser instead: add the hosted server (https://mcp.sync.so/mcp) to your agent, or start this server without an API key and open the link it prints.';
+  'Sign in through the browser instead, by adding the hosted server https://mcp.sync.so/mcp to your agent. ' +
+  'Claude Code: run `claude mcp add --scope user --transport http sync https://mcp.sync.so/mcp`, then the person starts a new session, runs /mcp and signs in to sync. ' +
+  'Codex: run `codex mcp add sync --url https://mcp.sync.so/mcp`, then `codex mcp login sync`. ' +
+  'Any other agent: add that URL as a remote MCP server and sign in when it asks.';
 
 /** A refusal whose message is written for the person signing in. */
 export class LoginError extends Error {
@@ -116,7 +119,8 @@ function sharedRefusal(refusal: Refusal): LoginError {
   if (refusal.status === 429) {
     return new LoginError(`Too many attempts. Try again ${waitFor(refusal.retryAfterSeconds)}.`);
   }
-  if (refusal.code === 'email_code_connect_unavailable') {
+  // A 404 is an API that does not have the routes yet, which is the same answer for the person.
+  if (refusal.code === 'email_code_connect_unavailable' || refusal.status === 404) {
     return new LoginError(`Signing in by emailed code is not available yet. ${BROWSER_SIGN_IN}`);
   }
   if (refusal.code === 'web_approval_required') {
@@ -230,7 +234,7 @@ function forget(finished: PendingLogin): Promise<void> {
 export async function finishEmailLogin(params: {
   baseUrl: string;
   code: string;
-}): Promise<{ email: string }> {
+}): Promise<{ email: string; agentName: string }> {
   const START_AGAIN = startAgain(params.baseUrl);
   const pending = await readStoreFile<PendingLogin>(PENDING_FILE);
   if (!pending?.requestId || !sameApi(pending.baseUrl, params.baseUrl)) {
@@ -269,7 +273,7 @@ export async function finishEmailLogin(params: {
   if (!login) throw new LoginError(`sync. did not finish the sign-in. ${START_AGAIN}`);
   // Under the lock, so a renewal another server has in flight cannot save over it.
   await withStoreLock(() => saveCredentials(login));
-  return { email: pending.email };
+  return { email: pending.email, agentName: pending.clientName };
 }
 
 /** The sign-in to save from a token response, or null when the response is not one. */
