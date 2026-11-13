@@ -9,7 +9,7 @@ sessions and invalidates process-local upload tickets without fixing load.
 See [the session-state decision](session-lifecycle.md): SDK transports are now
 request-scoped; only ownership, presentation and cancellation context persists.
 
-Idle sessions expire after two minutes (`MCP_SESSION_IDLE_TTL_MS=120000`); the
+Idle sessions expire after ten minutes (`MCP_SESSION_IDLE_TTL_MS=600000`); the
 sweeper runs every 15 seconds (`MCP_SESSION_SWEEP_INTERVAL_MS=15000`). Admission
 also expires idle entries, so a full table does not wait for the next sweep.
 At the count limit, admission may reclaim the oldest session with no in-flight

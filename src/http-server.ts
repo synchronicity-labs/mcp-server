@@ -68,7 +68,10 @@ const OAUTH_FORM_FIELDS = [
 ] as const;
 const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN || 'npwmwee4nxi0N3Rm14jmmsldnkv27qSnU3mY5rFCc5E';
-const DEFAULT_SESSION_IDLE_TTL_MS = 2 * 60_000;
+// Long enough for a host's discovery session to outlast one turn that waits on the user
+// (Claude.ai renders widgets through it); an idle session holds only its client name,
+// owner and flags, and a full table reclaims the oldest idle one rather than refusing.
+const DEFAULT_SESSION_IDLE_TTL_MS = 10 * 60_000;
 const DEFAULT_MAX_SESSIONS = 1_000;
 const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 15_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
@@ -281,6 +284,20 @@ export function rpcLogDetails(method: string, params: unknown): Record<string, s
           : '<other resource>',
     };
   return {};
+}
+
+/** The JSON-RPC methods a request carried and, for a single message, what it targeted. */
+function rpcSummary(messages: Record<string, unknown>[]): Record<string, unknown> {
+  const named = messages.filter(
+    (message): message is Record<string, unknown> & { method: string } =>
+      typeof message.method === 'string',
+  );
+  const [only, ...rest] = named;
+  if (!only) return {};
+  return {
+    rpcMethods: named.slice(0, 10).map((message) => message.method.slice(0, 80)),
+    ...(rest.length === 0 ? rpcLogDetails(only.method, only.params) : {}),
+  };
 }
 
 /** A hosted session's usage recorder; it records initialization once the reply succeeded. */
@@ -753,6 +770,12 @@ export async function startHttpServer(
       if (sessionId) {
         lease = sessions.acquire(sessionId, owner);
         if (!lease) {
+          logEvent('mcp_session_not_found', {
+            requestId: res.locals.requestId,
+            httpMethod: req.method,
+            ...sessionTelemetry.notFound(sessionId),
+            ...rpcSummary(rpcMessages),
+          });
           res.status(404).json({ error: 'Session not found' });
           return;
         }
