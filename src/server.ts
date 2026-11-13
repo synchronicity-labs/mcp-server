@@ -1,4 +1,9 @@
-import type { CallToolResult, Resource, Tool } from '@modelcontextprotocol/server';
+import type {
+  CallToolResult,
+  ReadResourceResult,
+  Resource,
+  Tool,
+} from '@modelcontextprotocol/server';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import {
@@ -13,6 +18,14 @@ import { performDeviceAuth } from './auth/device-auth.js';
 import { emailLoginAuth, savedEmailLogin } from './auth/email-code-login.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { loadToken } from './auth/token-store.js';
+import {
+  CARD_RESOURCE_NAMES,
+  CARD_TOOL_NAMES,
+  cardMeta,
+  cardResources,
+  createCardTools,
+  withCard,
+} from './cards.js';
 import {
   createAnalyticsTool,
   toolAnalyticsSupport,
@@ -30,7 +43,6 @@ import { GENERATION_STATUS_HTML } from './generation-status-html.js';
 import {
   generationStatusMetadata,
   GENERATION_STATUS_URI,
-  statusCardMeta,
   withGenerationStatusCard,
   withStatusCardTool,
 } from './generation-status.js';
@@ -52,6 +64,7 @@ import {
   runInOrganization,
   runInOrganizationSession,
 } from './organization-selection.js';
+import { withPriceCheck } from './price-check.js';
 import { generationContextKey, rememberGeneration } from './recent-generations.js';
 import {
   applyEdits,
@@ -120,6 +133,7 @@ import {
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { withProjectIntent } from './tools/project-intent.js';
+import { createShotReviewCardTool } from './tools/shot-review-card.js';
 import { createShotReviewTools } from './tools/shot-review.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
@@ -295,6 +309,7 @@ const APP_UI_TOOLS = new Set([
   'studio-views_ack',
 ]);
 export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
+  ...CARD_TOOL_NAMES,
   'analytics_track-event',
   'studio-views_get',
   'studio-views_open-project',
@@ -379,6 +394,9 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'shots_splice',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
+  'jobs_get-many',
+  'shots_regenerate',
+  'shots_splice',
   'analytics_track-event',
   'studio-views_get',
   'studio-views_open-project',
@@ -825,6 +843,8 @@ function isAppOnlyTool(tool: McpToolDefinition): boolean {
 
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
   if (isAppOnlyTool(tool)) return profile.supportsAppUi;
+  // A tool that only shows a card is noise for a client that renders none.
+  if (CARD_TOOL_NAMES.has(tool.name) && !profile.supportsStatusCard) return false;
   if (tool.name === 'lipsync_create-from-assets') return profile.supportsAppUi;
   // Kept out of the reviewed ChatGPT app listing; its embedded Studio has no timeline.
   if (tool.name === 'lipsync_create-timeline') return profile.name !== 'chatgpt';
@@ -910,7 +930,7 @@ function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDe
             ([key]) => !key.startsWith('openai/') && key !== 'ui',
           ),
         ),
-        ...(profile.supportsStatusCard ? statusCardMeta(tool.meta) : {}),
+        ...(profile.supportsStatusCard ? cardMeta(tool.name, tool.meta) : {}),
       };
   const presented = { ...tool, inputSchema, description, meta };
   return profile.supportsAppUi && WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name)
@@ -1003,6 +1023,7 @@ function createTools(
     ...createAssetFacesTools(httpClient),
     createFacePeopleTool(httpClient),
     ...createShotReviewTools(httpClient),
+    createShotReviewCardTool(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
@@ -1014,6 +1035,9 @@ function createTools(
   const adapted = allTools
     .map(withProjectIntent)
     .map((tool) => withOrganizationChoice(tool, httpClient, credential))
+    // Outside the organization choice: a quote's create call is tied to the organization
+    // the quote ran in.
+    .map(withPriceCheck)
     .map(withGenerationStatusCard)
     .map(withGenerationOutputAliases)
     .map(spend);
@@ -1023,15 +1047,42 @@ function createTools(
       : toolsetIncludes(config.toolsets, tool.name, HOSTED_HTTP_TOOL_ALLOWLIST);
   // Readers are built from every tool, so jobs_wait reaches a kind whose own tools a toolset
   // leaves out. jobs_create-many runs creates as client calls, so only listed ones.
-  const tools = [...adapted, ...createJobTools(adapted), ...createJobsGetManyTool(adapted)].filter(
-    listed,
-  );
+  const tools = [
+    ...adapted,
+    ...createCardTools(adapted),
+    ...createJobTools(adapted),
+    ...createJobsGetManyTool(adapted),
+  ].filter(listed);
   return [
     ...tools,
     ...createJobsCreateManyTool(tools, httpClient, {
       keyedDialoguePreviews: keyedDialoguePreviews(operations),
     }).map(spend),
-  ].filter(listed);
+  ]
+    .filter(listed)
+    .map(withCard);
+}
+
+type CardResource = ReturnType<typeof cardResources>[number];
+
+/** Registers each card through `register` and returns its entry for resources/list. */
+function registerCardResources(
+  cards: CardResource[],
+  register: (card: CardResource, read: () => ReadResourceResult) => unknown,
+): Resource[] {
+  return cards.map((card) => {
+    register(card, () => ({
+      contents: [
+        {
+          uri: card.uri,
+          mimeType: card.metadata.mimeType,
+          text: card.html,
+          _meta: card.metadata._meta,
+        },
+      ],
+    }));
+    return { name: card.name, uri: card.uri, ...card.metadata };
+  });
 }
 
 function createProfiledServer(
@@ -1188,19 +1239,26 @@ function createProfiledServer(
     clientName,
     refusal: refused === false ? undefined : { reason: refused, message },
   });
+  const statusCardRead = (resource: string) =>
+    uiRead(resource, !getProfile().supportsStatusCard && 'no_status_card');
   server.registerResource('sync-generation-status', GENERATION_STATUS_URI, statusMetadata, () =>
-    readUiResource(
-      uiRead(GENERATION_STATUS_URI, !getProfile().supportsStatusCard && 'no_status_card'),
-      () => ({
-        contents: [
-          {
-            uri: GENERATION_STATUS_URI,
-            mimeType: statusMetadata.mimeType,
-            text: GENERATION_STATUS_HTML,
-            _meta: statusMetadata._meta,
-          },
-        ],
-      }),
+    readUiResource(statusCardRead(GENERATION_STATUS_URI), () => ({
+      contents: [
+        {
+          uri: GENERATION_STATUS_URI,
+          mimeType: statusMetadata.mimeType,
+          text: GENERATION_STATUS_HTML,
+          _meta: statusMetadata._meta,
+        },
+      ],
+    })),
+  );
+  // The other cards are the same packaged bundle, each under its own resource.
+  resources.push(
+    ...registerCardResources(cardResources(config.chatgptApp), (card, read) =>
+      server.registerResource(card.name, card.uri, card.metadata, () =>
+        readUiResource(statusCardRead(card.uri), read),
+      ),
     ),
   );
   registerUploadWidgetResource({
@@ -1247,7 +1305,7 @@ function createProfiledServer(
   server.server.setRequestHandler('resources/list', () => ({
     resources: resources.filter((resource) => {
       if (resource.name === 'sync-app') return getProfile().supportsAppUi;
-      if (resource.name === 'sync-generation-status') return getProfile().supportsStatusCard;
+      if (CARD_RESOURCE_NAMES.has(resource.name)) return getProfile().supportsStatusCard;
       return getProfile().supportsUploads;
     }),
   }));

@@ -76,7 +76,7 @@ const link = z.object({
 });
 
 const DESCRIPTION =
-  'Create a link your payment wallet pays to start a plan or buy credits for the organization, when you have a wallet that pays Machine Payments Protocol URLs with a Stripe shared payment token, such as Link CLI. ' +
+  "Create a link your payment wallet pays to start a plan or buy credits, when you have a wallet that pays Machine Payments Protocol URLs with a Stripe shared payment token, such as Link CLI. It is for the session's organization unless you pass organizationId; when the refused request ran with a one-call organizationId, pass the same one so the payment unblocks that organization. " +
   'Use it when the user asks you to pay for a plan or credits, or a Sync refusal has nextAction.type upgrade_plan or buy_credits and the user has let you spend. ' +
   'Without such a wallet, or when the user would rather pay themselves, use billing-approval-links_create. Not for changing or cancelling an existing paid plan, an unpaid invoice or a declined card.\n\n' +
   'Effects: creating the link charges nothing. Paying it charges the wallet: once for credits, and for a plan now and again every month until the person revokes the wallet’s token, which ends the plan at the end of the paid month. Say the price and, for a plan, that it renews monthly, and get the user’s go-ahead before paying.\n\n' +

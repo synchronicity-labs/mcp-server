@@ -86,6 +86,7 @@ const CATEGORY_BY_TOOL: Record<string, Category> = {
   'faces_get-people': 'lipsync',
   shots_regenerate: 'lipsync',
   shots_splice: 'lipsync',
+  shots_review: 'lipsync',
   assets_upload: 'assets',
   'assets_open-upload-widget': 'assets',
   projects_rename: 'projects',

@@ -33,6 +33,26 @@ export const generationOutputSchema = {
 };
 
 /**
+ * GET /v2/generate/{id} adds these with include=progress. The status card reads them, so
+ * they must be listed here to pass createJsonToolResult; an older API omits them.
+ */
+export const generationReadOutputSchema = {
+  ...generationOutputSchema,
+  progress: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      'Only with include=progress: stage (queued, processing, completed or failed), phase while it runs (queued, dubbing, rendering or finishing), percent (0-100), completedTasks, runningTasks and waitingTasks, estimatedFinishAt and estimatedTimeRemaining in seconds. The tasks are internal render steps, not shots or scenes; never present them as shots.',
+    ),
+  summary: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      'Only with include=progress: what the generation is, for display. title, preview ({type: image or video, url}), sourceLanguage and targetLanguage for a dub, and the input duration in seconds; each may be absent.',
+    ),
+};
+
+/**
  * GET /v2/generations/{id} answers with the API's GenerationDto, whose names differ from
  * the Generation that /v2/generate returns. Keep the shared names, add the DTO's own.
  */

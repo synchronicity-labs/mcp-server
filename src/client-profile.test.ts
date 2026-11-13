@@ -218,7 +218,11 @@ describe('immutable client profiles', () => {
     const { client } = await connect(factory, 'claude-ai');
     const { tools } = await client.listTools();
     const create = tools.find((tool) => tool.name === 'lipsync_create')!;
-    expect(create._meta?.ui).toEqual({ resourceUri: GENERATION_STATUS_URI });
+    // App visibility lets the price check card's Create button call it.
+    expect(create._meta?.ui).toEqual({
+      resourceUri: GENERATION_STATUS_URI,
+      visibility: ['model', 'app'],
+    });
     expect(JSON.stringify(tools)).not.toContain('openai/');
     expect(tools.find((tool) => tool.name === 'generations_get')?._meta?.ui).toBeUndefined();
     // The card checks through the old name, so it is listed for the card but not the model.
@@ -306,7 +310,9 @@ describe('immutable client profiles', () => {
         // ChatGPT app listing only.
         const chatgpt = index < 2;
         const tools = currentTools((await client.listTools()).tools);
-        expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 3));
+        // account_show-usage and voices_show are listed wherever a card can render.
+        const cardTools = index < 4 ? 2 : 0;
+        expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 3) + cardTools);
         expect(tools.some((tool) => tool.name === 'lipsync_create-timeline')).toBe(!chatgpt);
         expect(tools.some((tool) => tool.name === 'assets_upload')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'assets_open-upload-widget')).toBe(
@@ -323,9 +329,11 @@ describe('immutable client profiles', () => {
           expect(Boolean(create.inputSchema.properties?.[field])).toBe(supportsUploads);
         }
         const resources = (await client.listResources()).resources.map((resource) => resource.name);
-        // Claude renders the generation status card, and only that card.
+        // Claude renders the cards, and nothing else from the app.
         expect(resources.includes('sync-generation-status')).toBe(index < 4);
-        expect(resources.some((name) => name !== 'sync-generation-status')).toBe(supportsUploads);
+        expect(resources.some((name) => !/^sync-(generation-status|card-)/.test(name))).toBe(
+          supportsUploads,
+        );
         expect(
           (
             await client.callTool({
@@ -489,6 +497,8 @@ describe('immutable client profiles', () => {
                 'lipsync_create-from-assets',
                 'voices_list',
                 'generations_get',
+                'account_show-usage',
+                'voices_show',
               ]
             : [
                 'account_get-context',
@@ -502,6 +512,8 @@ describe('immutable client profiles', () => {
                 'lipsync_create-timeline',
                 'voices_list',
                 'generations_get',
+                // Only a client that renders cards lists the tools that show one.
+                ...(index === 1 ? ['account_show-usage', 'voices_show'] : []),
                 'jobs_get-many',
                 'jobs_create-many',
               ],
@@ -517,7 +529,10 @@ describe('immutable client profiles', () => {
         expect(Boolean(create._meta?.['openai/widgetAccessible'])).toBe(index === 0);
         const resources = (await client.listResources()).resources.map((resource) => resource.name);
         expect(resources.includes('sync-generation-status')).toBe(index < 2);
-        expect(resources.some((name) => name !== 'sync-generation-status')).toBe(index === 0);
+        // Beyond the cards, only ChatGPT gets the upload widget and the Studio app.
+        expect(resources.some((name) => !/^sync-(generation-status|card-)/.test(name))).toBe(
+          index === 0,
+        );
         if (index === 0) {
           expect((await client.readResource({ uri: UPLOAD_WIDGET_URI })).contents).toHaveLength(1);
           expect(
@@ -593,7 +608,7 @@ describe('immutable client profiles', () => {
     expect(calls.filter((call) => call.path === '/v2/generate')).toHaveLength(3);
     // Repeated notifications cannot reconfigure the immutable session profile.
     sessions[0]!.server.server.oninitialized?.();
-    expect(currentTools((await sessions[0]!.client.listTools()).tools)).toHaveLength(14);
+    expect(currentTools((await sessions[0]!.client.listTools()).tools)).toHaveLength(16);
   });
 
   it.each(['chatgpt', 'claude', 'unknown'])(
@@ -721,21 +736,25 @@ it.each([0, 1, 2])(
     const factory = await createMcpServerFactory(config);
     // jobs_create-many runs lipsync_create; jobs_get-many reads through generations_get.
     const jobTools = count === 2 ? 2 : 1;
-    // Includes scenes_detect, stems_separate, the four faces_* tools, the two shots_* tools
-    // and billing-payment-links_create, which only accounts with their features list.
-    expect(factory.toolCount).toBe(22 + count + jobTools);
+    // Includes scenes_detect, stems_separate, the four faces_* tools, the three shots_*
+    // tools and billing-payment-links_create, which only accounts with their features list.
+    // account_show-usage always; voices_show once its source operation is generated.
+    const cardTools = count === 0 ? 1 : 2;
+    expect(factory.toolCount).toBe(23 + count + jobTools + cardTools);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = currentTools((await chatgpt.client.listTools()).tools);
     const claudeTools = (await claude.client.listTools()).tools;
     // lipsync_create-timeline stays out of the ChatGPT app listing.
-    expect(chatTools).toHaveLength(12 + count);
+    expect(chatTools).toHaveLength(12 + count + cardTools);
     // Widget-only tools such as assets_list-creators (member emails) stay out of model-only catalogs.
-    expect(currentTools(claudeTools)).toHaveLength(9 + count + jobTools);
+    expect(currentTools(claudeTools)).toHaveLength(9 + count + jobTools + cardTools);
     // The status card's app-only old name comes with generations_get, and only with it.
     const names = new Set(claudeTools.map((tool) => tool.name));
     expect(names.has('generate_get-generation')).toBe(names.has('generations_get'));
-    expect(claudeTools).toHaveLength(9 + count + jobTools + (names.has('generations_get') ? 1 : 0));
+    expect(claudeTools).toHaveLength(
+      9 + count + jobTools + cardTools + (names.has('generations_get') ? 1 : 0),
+    );
     expect(claudeTools.map((tool) => tool.name)).not.toContain('assets_list-creators');
     expect(chatTools.map((tool) => tool.name)).toContain('assets_list-creators');
     expect(chatTools.some((tool) => tool.name.includes('unused'))).toBe(false);

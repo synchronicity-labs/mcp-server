@@ -239,9 +239,20 @@ it.each(['claude', 'unknown', 'openai-mcp (Codex).evil'])(
       expect((await client.listTools()).tools.map((entry) => entry.name)).not.toContain(
         'sync-app_open',
       );
-      // Claude renders the generation status card, never the Studio app.
+      // Claude renders the cards, never the Studio app.
       expect((await client.listResources()).resources.map((resource) => resource.name)).toEqual(
-        name === 'claude' ? ['sync-generation-status'] : [],
+        name === 'claude'
+          ? [
+              'sync-generation-status',
+              'sync-card-quote',
+              'sync-card-shots',
+              'sync-card-jobs',
+              'sync-card-translation',
+              'sync-card-usage',
+              'sync-card-voices',
+              'sync-card-recent',
+            ]
+          : [],
       );
       for (const tool of ['sync-app_open', 'app_open', 'open-sync-app'])
         expect((await client.callTool({ name: tool, arguments: {} })).isError, tool).toBe(true);

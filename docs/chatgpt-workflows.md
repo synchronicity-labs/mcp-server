@@ -117,6 +117,21 @@ an active card rechecks it. A known job ID in an uncertain submission error is
 read back without replaying the write. Both MCP Apps and ChatGPT's legacy
 bridge keep a bounded read timeout and a usable Check status action after errors.
 
+Each check passes `include=progress`, so the API adds `progress` and `summary`
+and `generations_get` lists both in its output schema; a field missing from that
+schema never reaches the card. The card shows the input's picture with the job's
+title and facts over it (dub languages, length, model), a step track from
+`progress.phase` (queued, dubbing, visually dubbing, finishing; a lipsync skips
+dubbing and reads lip syncing) and a progress bar with "N of M steps done" that
+breaks down into done, processing and queued on hover. Those steps are
+controller tasks, not camera shots. A finished generation plays in the card,
+beside its original when the input was a video, with its recorded cost from
+`generations_get-costs`. Every one of these fields is optional, so an API that
+predates them leaves the card at its status and estimate. The preview loads from
+the same `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` origins as playback; an asset
+thumbnail on another origin is blocked by the host and the card shows its
+placeholder.
+
 Time remaining is derived from `generationEstimate.estimatedFinishAt` and the
 returned `serverTime`, advancing with a monotonic clock. Missing/invalid estimates
 show unavailable; overdue jobs show a delay message instead of zero or a new ETA.
@@ -179,3 +194,79 @@ accepted requests, signed URLs and recovery receipts are not editable through
 the chat draft patch. Appearance and timeline editing remain excluded.
 Synchronization tools are advertised only when the companion API capability is
 available; older API releases retain local Studio editing.
+
+## Cards
+
+`src/cards.ts` lists the other cards a chat shows inline. They are the same
+packaged bundle as the generation status card (`deploy/generation-status`), each
+served under its own resource (`ui://sync/card-<name>-v1.html`) with a
+`sync-card` meta tag that tells the bundle which card to be. Every profile with
+`supportsStatusCard` lists and reads them; a client that renders no card sees
+neither the resources nor the tools that only show one.
+
+| Card | Opens from | Calls |
+| --- | --- | --- |
+| price check | `generations_estimate-cost` | `account_get-usage`, then the create tool |
+| jobs | `jobs_create-many` | `jobs_get-many` |
+| translated audio preview | `translation-previews_create` | `translation-previews_get` |
+| usage and balance | `account_show-usage` | `account_get-usage` |
+| voices | `voices_show` | none |
+| recent videos | `generations_show-recent` | none |
+| shot review | `shots_review` | `shots_regenerate`, the status read, `shots_splice` |
+
+A card opens only from a tool whose result the person asked to see. The model
+calls `account_get-usage`, `voices_list` and `generations_list` for its own
+checks, often several times in a turn, so those stay without a card; the three
+`*_show` tools read exactly the same data under a name the model calls only when
+the person asks to see it.
+
+`generations_estimate-cost` repeats what it priced as `request`, and takes an
+optional `create`: the create call the quote is for, without `idempotencyKey`.
+The call must be the job the quote prices, or the quote is refused:
+`dubbing_create` only with `workflow=translate-and-dub`, `lipsync_create` only
+without it, the same model (a call that names none gets the quoted one), and
+`options.reasoning_enabled` only on a quote made with `reasoningEnabled=true`,
+since reasoning costs more. The
+quote echoes the call with an `idempotencyKey` made for it and, when it names no
+project, a `projectCreationKey`, so a retry makes neither a second video nor a
+second project. The price check
+card's Create button runs the call with that key, so a card the host reloads can
+never start the video twice; it then hands the result to the status card and
+tells the model the generation's id. A quote without `create`, which is
+what a chat with the previous schema sends, leaves the button asking the chat to
+create it. `create` never reaches the API.
+
+ChatGPT refuses a card's call to a tool that takes attached files, and
+`lipsync_create` is one there. For a client with the Sync app, the quote
+therefore echoes a lipsync call as `lipsync_create-from-assets`, the same job
+through the entry point embedded views call. A lipsync that needs an input that
+entry point does not take (a link, an attached file, `shots`, `speakers` or
+`allowOverlappingFaces`) gets a quote without `create`, so the button asks the
+chat. Other clients keep `lipsync_create`.
+
+A `create` call that names an existing `projectId` is held to the rule the create
+tools enforce: without `projectIntent=explicit`, or a project this user just
+created, the quote is refused. The saved-assets entry point has no such check of
+its own, so the quote is where it is made for a card.
+
+The echoed call also carries the `organizationId` the quote ran in, whether the
+quote named one or used the session's, so the card's call spends in the
+organization whose price the person approved even if the session switches
+afterwards. A `create` call that names a different organization than its quote
+is refused. When the quote names none and the session's organization cannot be
+read, the quote carries no `create`, and the button asks the chat.
+
+`shots_review` opens the shot review card on a completed generation. It refuses
+what `shots_regenerate` would refuse (timeline clips, several speakers, a script,
+a length that differs from the video's), so nobody flags shots that cannot be
+rendered again. It only
+reads: it checks that the given shots cover the video from frame 0 to
+`frameCount` and returns the first render, its source video and the shots. The
+card keeps the review itself (flags, takes, picks) and tells the model each id
+as it starts a take or builds the final video. It is behind `lipsync_planning`
+like the other `shots_*` tools, so ChatGPT never lists it.
+
+A card calls tools itself, so on card-only clients the tools in
+`CARD_CALLED_TOOLS` carry `ui.visibility: ['model', 'app']`; app profiles reach
+them through `WIDGET_CALLABLE_HOSTED_TOOLS`.
+

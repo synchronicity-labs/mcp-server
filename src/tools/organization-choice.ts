@@ -27,6 +27,8 @@ const PER_CALL_ORGANIZATION_TOOLS = new Set([
   'account_get-usage',
   // A refused create's approval link must pay for the organization that refused it.
   'billing-approval-links_create',
+  // Likewise a payment link: paying it must unblock the organization that refused.
+  'billing-payment-links_create',
   'lipsync_create',
   'lipsync_create-from-assets',
   'lipsync_create-timeline',

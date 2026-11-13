@@ -23,7 +23,10 @@ const link = {
   organization: { id: '00000000-0000-4000-8000-0000000000b2', name: 'personal' },
 };
 
+const OTHER_ORGANIZATION = '00000000-0000-4000-8000-0000000000c3';
 const requests: { path?: string; body?: unknown }[] = [];
+// The organization each payment link was asked for, as the API reads it.
+const linkedFor: (string | undefined)[] = [];
 const upstream = createServer(
   asyncRequestListener(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -31,12 +34,20 @@ const upstream = createServer(
       return void res.end(JSON.stringify({ openapi: '3.0.0', paths: {} }));
     if (req.url === '/v2/account') {
       const features = req.headers.authorization === 'Bearer payer' ? ['agent_payments'] : [];
-      return void res.end(JSON.stringify({ plan: { id: 'free', name: 'Free' }, features }));
+      const id = req.headers['x-sync-organization-id'] ?? link.organization.id;
+      return void res.end(
+        JSON.stringify({
+          plan: { id: 'free', name: 'Free' },
+          organization: { id, name: 'personal' },
+          features,
+        }),
+      );
     }
     let raw = '';
     for await (const chunk of req) raw += chunk;
     requests.push({ path: req.url, body: raw ? JSON.parse(raw) : undefined });
     if (req.method === 'POST' && req.url === '/v2/billing/payment-links') {
+      linkedFor.push(req.headers['x-sync-organization-id'] as string | undefined);
       res.statusCode = 201;
       return void res.end(JSON.stringify({ ...link, internalNote: 'must-not-leak' }));
     }
@@ -74,6 +85,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   requests.length = 0;
+  linkedFor.length = 0;
 });
 afterAll(async () => {
   for (const close of closers) await close();
@@ -101,6 +113,20 @@ describe('billing-payment-links_create', () => {
       { path: '/v2/billing/payment-links', body: { plan: 'hobby' } },
       { path: '/v2/billing/payment-links', body: { credits: 800 } },
     ]);
+  });
+
+  it('pays for the organization a refused request ran in, when given its organizationId', async () => {
+    const agent = await connect('claude-code');
+
+    await agent.call('payer', { credits: 800 });
+    const result = await agent.call('payer', { credits: 800, organizationId: OTHER_ORGANIZATION });
+
+    expect(result.isError).toBeFalsy();
+    expect(linkedFor).toEqual([undefined, OTHER_ORGANIZATION]);
+    expect(requests.at(-1)).toEqual({
+      path: '/v2/billing/payment-links',
+      body: { credits: 800 },
+    });
   });
 
   it.each([[{}], [{ plan: 'hobby', credits: 800 }]])(
