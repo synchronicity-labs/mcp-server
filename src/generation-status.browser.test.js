@@ -368,7 +368,7 @@ it.each([
       await browserExpect(frame.getByRole('button', { name: 'Checking status…' })).toBeDisabled();
       await browserExpect.poll(() => Boolean(releaseRead)).toBe(true);
       await page.clock.fastForward(15001);
-      await browserExpect(frame.getByRole('alert')).toContainText('Sync did not respond');
+      await browserExpect(frame.getByRole('alert')).toContainText('sync. labs did not respond');
       await browserExpect(check).toBeEnabled();
       current = {
         id: generationId,
