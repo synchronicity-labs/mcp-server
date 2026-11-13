@@ -2,7 +2,7 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { resolveConfig } from './config.js';
-import { runLogin } from './login-command.js';
+import { agentGuide, runLogin } from './login-command.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
 import { parseToolsets, type Toolset } from './toolsets.js';
 import { startConfiguredUpdateCheck } from './update-check.js';
@@ -17,6 +17,10 @@ async function main(): Promise<void> {
   const config = resolveConfig(parseArgs(args));
 
   const command = args[0];
+  if (command === 'guide') {
+    process.stdout.write(await agentGuide());
+    return;
+  }
   if (command === 'login' || command === 'setup') {
     process.exitCode = await runLogin(command, args.slice(1), config.baseUrl);
     return;
@@ -88,6 +92,7 @@ function printUsage(): void {
        sync-mcp setup --code <code>
        sync-mcp login --email <address> [--agent <name>]
        sync-mcp login --code <code>
+       sync-mcp guide
 
 Commands:
   setup               Sign in by a code emailed to you, with no browser, and add this
@@ -95,6 +100,8 @@ Commands:
                       and the code from the email. --agent names your agent; Claude Code
                       and Codex are detected and get the server added for every project.
   login               The same sign-in, without adding the server to an agent.
+  guide               Print the guide setup hands a coding agent: what to tell the person,
+                      and how plans and paying work from the chat.
 
 Options:
   --api-key <key>     API key (or set SYNC_API_KEY env var)

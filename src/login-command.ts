@@ -1,4 +1,5 @@
-import { type AddResult, addToAgent, detectAgent, manualAdd } from './agent-install.js';
+import { readFile } from 'node:fs/promises';
+import { type AddResult, addSkills, addToAgent, detectAgent, manualAdd } from './agent-install.js';
 import {
   apiUrl,
   finishEmailLogin,
@@ -9,8 +10,16 @@ import {
 import { loadCredentials } from './auth/token-store.js';
 import { PACKAGE_VERSION } from './version.js';
 
-/** `setup` signs in and adds the server to the agent; `login` only signs in. */
+/** `setup` signs in and adds the server and skills to the agent; `login` only signs in. */
 export type LoginCommand = 'login' | 'setup';
+
+/**
+ * What a coding agent tells the person once setup is done, and how it handles plans and
+ * paying afterwards. It ships beside the build as a file, so it reads as one document.
+ */
+export async function agentGuide(): Promise<string> {
+  return readFile(new URL('../AGENT_GUIDE.md', import.meta.url), 'utf8');
+}
 
 const USAGE = `Usage:
   sync-mcp setup --email <address> [--agent <name>]   Email a sign-in code
@@ -69,7 +78,14 @@ function installed(result: AddResult, server: string): string {
     : `Add the sync. server to your agent: it runs the command "${server}" over stdio. For example:\n${commands}\n${NEW_SESSION}`;
 }
 
-type Install = typeof addToAgent;
+function skillsInstalled(result: AddResult): string {
+  if (result.outcome !== 'manual') return `Added the sync. skills to ${result.agent}.`;
+  return `Add the sync. skills, the step-by-step workflows, with:\n  ${result.commands.join('\n  ')}`;
+}
+
+/** How setup reaches the agent; tests replace both. */
+export type Install = { server: typeof addToAgent; skills: typeof addSkills };
+const INSTALL: Install = { server: addToAgent, skills: addSkills };
 
 async function login(
   command: LoginCommand,
@@ -96,10 +112,13 @@ Ask the person for the code in that email, then run:
     const account = await describeAccount(baseUrl);
     const server = packageCommand(baseUrl);
     const agent = option(args, '--agent') ?? finished.agentName;
-    const result = command === 'setup' ? await install(agent, server) : manualAdd(agent, server);
-    return `Signed in to sync. as ${finished.email}${account ? ` (${account})` : ''}.
-${installed(result, server)}
-`;
+    const signedIn = `Signed in to sync. as ${finished.email}${account ? ` (${account})` : ''}.`;
+    if (command === 'login') return `${signedIn}\n${installed(manualAdd(agent, server), server)}\n`;
+    const added = await install.server(agent, server);
+    const skills = await install.skills(agent);
+    // The guide is the last thing the agent reads, so it is what the agent acts on.
+    const guide = await agentGuide().catch(() => '');
+    return `${signedIn}\n${installed(added, server)}\n${skillsInstalled(skills)}\n${guide ? `\n${guide}` : ''}`;
   }
   throw new LoginError(USAGE);
 }
@@ -109,7 +128,7 @@ export async function runLogin(
   command: LoginCommand,
   args: string[],
   baseUrl: string,
-  install: Install = addToAgent,
+  install: Install = INSTALL,
 ): Promise<number> {
   try {
     process.stdout.write(await login(command, args, baseUrl, install));

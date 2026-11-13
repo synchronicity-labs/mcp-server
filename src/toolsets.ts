@@ -31,6 +31,8 @@ const CORE = new Set([
   'account_get-usage',
   // Any paid workflow can be refused for a plan or credits; a person approves the payment.
   'billing-approval-links_create',
+  // What a plan or credits cost, before either is bought.
+  'billing-plans_list',
   'models_list',
   'feedback_send',
   'generations_get',

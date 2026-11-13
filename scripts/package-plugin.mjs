@@ -218,6 +218,7 @@ const TOOL_AREAS = [
   'batches',
   'billing-approval-links',
   'billing-payment-links',
+  'billing-plans',
   'dialogue',
   'dialogue-edits',
   'dialogue-previews',

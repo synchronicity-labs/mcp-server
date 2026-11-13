@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addToAgent, detectAgent, manualAdd } from './agent-install.js';
+import { addSkills, addToAgent, detectAgent, manualAdd } from './agent-install.js';
 
 const SERVER = 'npx -y @sync.so/mcp-server@latest';
 const CLAUDE = `claude mcp add --scope user sync -- ${SERVER}`;
@@ -90,6 +90,44 @@ describe('adding the server to the agent', () => {
       agent: 'Codex',
       outcome: 'manual',
       commands: [CODEX],
+    });
+  });
+
+  it('adds the sync. skills for every project with the agent’s name in the skills installer', async () => {
+    const runs: string[] = [];
+    const run = async (binary: string, args: string[]) => {
+      runs.push([binary, ...args].join(' '));
+      return { ok: true, output: '' };
+    };
+
+    await expect(addSkills('claude-code', run, {})).resolves.toEqual({
+      agent: 'Claude Code',
+      outcome: 'added',
+    });
+    await expect(addSkills(undefined, run, { CODEX_THREAD_ID: 't' })).resolves.toEqual({
+      agent: 'Codex',
+      outcome: 'added',
+    });
+    expect(runs).toEqual([
+      'npx -y skills add synchronicity-labs/skills -g -y -a claude-code -s *',
+      'npx -y skills add synchronicity-labs/skills -g -y -a codex -s *',
+    ]);
+  });
+
+  it('hands back the skills command when the installer fails or the agent is not known', async () => {
+    const failing = async () => ({ ok: false, output: 'network' });
+    const never = async () => {
+      throw new Error('ran the installer for an unknown agent');
+    };
+
+    await expect(addSkills('Codex', failing, {})).resolves.toEqual({
+      agent: 'Codex',
+      outcome: 'manual',
+      commands: ["npx -y skills add synchronicity-labs/skills -g -y -a codex -s '*'"],
+    });
+    await expect(addSkills('Cursor', never, {})).resolves.toEqual({
+      outcome: 'manual',
+      commands: ["npx -y skills add synchronicity-labs/skills -g -s '*'"],
     });
   });
 });

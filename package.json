@@ -1,6 +1,6 @@
 {
   "name": "@sync.so/mcp-server",
-  "version": "0.3.21",
+  "version": "0.3.22",
   "description": "Official sync. labs MCP server: lipsync and dub videos, make photos talk and manage assets from any MCP client",
   "keywords": [
     "ai",
@@ -27,6 +27,7 @@
     "dist",
     "deploy/generation-status",
     "README.md",
+    "AGENT_GUIDE.md",
     "LICENSE"
   ],
   "type": "module",

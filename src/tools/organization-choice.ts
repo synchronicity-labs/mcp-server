@@ -29,6 +29,8 @@ const PER_CALL_ORGANIZATION_TOOLS = new Set([
   'billing-approval-links_create',
   // Likewise a payment link: paying it must unblock the organization that refused.
   'billing-payment-links_create',
+  // And the prices quoted before either link are that organization's.
+  'billing-plans_list',
   'lipsync_create',
   'lipsync_create-from-assets',
   'lipsync_create-timeline',
