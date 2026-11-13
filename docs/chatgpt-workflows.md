@@ -253,7 +253,8 @@ The echoed call also carries the `organizationId` the quote ran in, whether the
 quote named one or used the session's, so the card's call spends in the
 organization whose price the person approved even if the session switches
 afterwards. A `create` call that names a different organization than its quote
-is refused.
+is refused. When the quote names none and the session's organization cannot be
+read, the quote carries no `create`, and the button asks the chat.
 
 `shots_review` opens the shot review card on a completed generation. It refuses
 what `shots_regenerate` would refuse (timeline clips, several speakers, a script,

@@ -117,16 +117,10 @@ export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
       return {
         ...result,
         request: { model: priced.model, duration: priced.duration, workflow: priced.workflow },
-        ...(call
-          ? {
-              create: {
-                ...call,
-                arguments: {
-                  ...call.arguments,
-                  ...(typeof ranIn === 'string' ? { organizationId: ranIn } : {}),
-                },
-              },
-            }
+        // A quote whose organization could not be named carries no call: the card asks the
+        // chat instead of spending wherever the session happens to be when it is pressed.
+        ...(call && typeof ranIn === 'string'
+          ? { create: { ...call, arguments: { ...call.arguments, organizationId: ranIn } } }
           : {}),
       };
     },

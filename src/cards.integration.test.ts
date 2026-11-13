@@ -19,7 +19,7 @@ const billing = {
 };
 
 /** A hosted server over a fixture API that records every request it is sent. */
-async function connect(clientName: string) {
+async function connect(clientName: string, { accountDown = false } = {}) {
   const calls: { path: string; search: string; body: unknown }[] = [];
   vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
     const url = new URL(input);
@@ -47,6 +47,8 @@ async function connect(clientName: string) {
     if (url.pathname === '/v2/oauth/account')
       return Response.json({ organization: { id: ORGANIZATION, name: 'Acme', role: 'owner' } });
     if (url.pathname === '/v2/billing') return Response.json(billing);
+    if (url.pathname === '/v2/account' && accountDown)
+      return Response.json({ message: 'Unavailable' }, { status: 503 });
     if (url.pathname === '/v2/account')
       return Response.json({
         organization: { id: ORGANIZATION, name: 'Acme' },
@@ -265,6 +267,31 @@ it('hands the price check card the create call to run, without sending it to the
       quotes + 1,
     );
     expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
+  } finally {
+    await close();
+  }
+});
+
+it('gives the card no call to run when the quote cannot name its organization', async () => {
+  // The account read that names the session's organization fails.
+  const { client, calls, close } = await connect('claude-ai', { accountDown: true });
+  try {
+    const priced = { model: 'sync-3', duration: 222, workflow: 'translate-and-dub' };
+    const quote = await client.callTool({
+      name: 'generations_estimate-cost',
+      arguments: {
+        ...priced,
+        create: {
+          tool: 'dubbing_create',
+          arguments: { videoAssetId: 'video-1', targetLang: 'de' },
+        },
+      },
+    });
+    // The price still stands, but a call without its organization would run wherever the
+    // session is when the button is pressed, so the card gets none and asks the chat.
+    expect(quote.structuredContent).toMatchObject({ estimatedCredits: 84, request: priced });
+    expect(quote.structuredContent).not.toHaveProperty('create');
+    expect(calls.some((call) => call.path === '/v2/account')).toBe(true);
   } finally {
     await close();
   }
