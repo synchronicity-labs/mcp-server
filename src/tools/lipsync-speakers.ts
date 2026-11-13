@@ -110,6 +110,12 @@ export function parseLipsyncSpeakers(
     throw new Error(
       'With speakers, give each speaker its own audio (speakers[].audioUrl or audioAssetId) and omit audioUrl, audioAssetId, audio and script.',
     );
+  // Parsed by parseLipsyncOptions before this, so it is an object or absent.
+  const options = args.options as { active_speaker_detection?: unknown } | undefined;
+  if (options?.active_speaker_detection !== undefined)
+    throw new Error(
+      'With speakers, omit options.active_speaker_detection: each speaker’s face says who to lipsync.',
+    );
   const seen = new Set<string>();
   const inputs: AudioInput[] = [];
   const mapped = speakers.map((item, index) => {

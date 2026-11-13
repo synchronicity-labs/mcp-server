@@ -71,6 +71,8 @@ const withFeatures = (features: string[]): Account => ({
 });
 const gatedNames = async (client: Client) =>
   (await client.listTools()).tools.map((tool) => tool.name).filter((name) => GATED.includes(name));
+const GATED_INPUTS = ['shots', 'speakers', 'allowOverlappingFaces'];
+const gatedInputs = (names: string[]) => names.filter((name) => GATED_INPUTS.includes(name));
 const lipsyncInputs = async (client: Client) =>
   Object.keys(
     (await client.listTools()).tools.find((tool) => tool.name === 'lipsync_create')?.inputSchema
@@ -257,8 +259,8 @@ describe('feature-gated tools on the hosted server', () => {
     expect(await gatedNames(both)).toEqual(GATED);
     expect(await gatedNames(scenes)).toEqual(['scenes_detect']);
     expect(await gatedNames(none)).toEqual([]);
-    expect(await lipsyncInputs(both)).toContain('shots');
-    expect(await lipsyncInputs(scenes)).not.toContain('shots');
+    expect(gatedInputs(await lipsyncInputs(both))).toEqual(GATED_INPUTS);
+    expect(gatedInputs(await lipsyncInputs(scenes))).toEqual([]);
     expect(await gatedNames(both)).toEqual(GATED);
     expect(api.accountReads).toEqual([
       'Bearer token-both',
@@ -272,13 +274,20 @@ describe('feature-gated tools on the hosted server', () => {
     const codexNone = await hostedSession(factory, 'openai-mcp (Codex)', 'token-none');
     const inputs = (await codexNone.listTools()).tools
       .filter((tool) => ['lipsync_create', 'create-lipsync'].includes(tool.name))
-      .map((tool) => Object.hasOwn(tool.inputSchema.properties ?? {}, 'shots'));
-    expect(inputs).toEqual([false, false]);
+      .map((tool) => gatedInputs(Object.keys(tool.inputSchema.properties ?? {})));
+    expect(inputs).toEqual([[], []]);
+    // With every feature both names list them: the old name is the same tool.
+    const codexInputs = Object.fromEntries(
+      (await codex.listTools()).tools
+        .filter((tool) => ['lipsync_create', 'create-lipsync'].includes(tool.name))
+        .map((tool) => [tool.name, gatedInputs(Object.keys(tool.inputSchema.properties ?? {}))]),
+    );
+    expect(codexInputs).toEqual({ lipsync_create: GATED_INPUTS, 'create-lipsync': GATED_INPUTS });
 
     // ChatGPT lists neither gated tools nor gated inputs, so it never reads features.
     const chatgpt = await hostedSession(factory, 'openai-mcp', 'token-both');
     expect(await gatedNames(chatgpt)).toEqual([]);
-    expect(await lipsyncInputs(chatgpt)).not.toContain('shots');
+    expect(gatedInputs(await lipsyncInputs(chatgpt))).toEqual([]);
     expect(api.accountReads).toHaveLength(5);
   });
 

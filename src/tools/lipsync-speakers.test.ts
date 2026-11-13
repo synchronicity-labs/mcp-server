@@ -134,6 +134,14 @@ describe('lipsync_create speakers', () => {
       'speakers[0].face needs both frameNumber and coordinates',
     ],
     [
+      'speaker detection next to speakers',
+      {
+        options: { active_speaker_detection: true },
+        speakers: [{ id: 'left', audioAssetId: 'a', face: point }],
+      },
+      'omit options.active_speaker_detection',
+    ],
+    [
       'the overlap option alone',
       { audioAssetId: 'audio-1', allowOverlappingFaces: true },
       'needs speakers',
