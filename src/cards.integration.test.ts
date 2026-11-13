@@ -157,7 +157,8 @@ it('hands the price check card the create call to run, without sending it to the
     expect(quote.structuredContent).toMatchObject({
       estimatedCredits: 84,
       request: priced,
-      create,
+      // The quote mints the key its create call must use, however often the card reloads.
+      create: { ...create, idempotencyKey: expect.stringMatching(/^[A-Za-z0-9._~-]{1,128}$/) },
     });
     expect(calls.find((call) => call.path === '/v2/generate/estimate-cost')?.body).toEqual(priced);
 

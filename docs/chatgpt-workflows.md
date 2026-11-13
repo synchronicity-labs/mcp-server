@@ -222,9 +222,10 @@ the person asks to see it.
 
 `generations_estimate-cost` repeats what it priced as `request`, and takes an
 optional `create`: the create call the quote is for, without `idempotencyKey`.
-The price check card's Create button runs that call with one key for the life of
-the card, hands the result to the status card, and tells the model the
-generation's id so it is not created twice. A quote without `create`, which is
+The quote echoes that call with an `idempotencyKey` made for it. The price check
+card's Create button runs the call with that key, so a card the host reloads can
+never start the video twice; it then hands the result to the status card and
+tells the model the generation's id. A quote without `create`, which is
 what a chat with the previous schema sends, leaves the button asking the chat to
 create it. `create` never reaches the API.
 
