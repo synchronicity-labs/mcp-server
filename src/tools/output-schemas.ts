@@ -42,7 +42,7 @@ export const generationReadOutputSchema = {
     .record(z.string(), z.unknown())
     .optional()
     .describe(
-      'Only with include=progress: stage (queued, processing, completed or failed), percent (0-100), completedTasks, runningTasks and waitingTasks, estimatedFinishAt and estimatedTimeRemaining in seconds. The tasks are internal render steps, not shots or scenes; never present them as shots.',
+      'Only with include=progress: stage (queued, processing, completed or failed), phase while it runs (queued, dubbing, rendering or finishing), percent (0-100), completedTasks, runningTasks and waitingTasks, estimatedFinishAt and estimatedTimeRemaining in seconds. The tasks are internal render steps, not shots or scenes; never present them as shots.',
     ),
   summary: z
     .record(z.string(), z.unknown())
