@@ -84,6 +84,12 @@ import { createAudioTrimTools, supportsAudioTrimming } from './tools/audio-trim.
 import { BATCH_TOOLS, createBatchTools, isBatchOperation } from './tools/batches.js';
 import { billingApprovalOperation, createBillingApprovalTools } from './tools/billing-approval.js';
 import {
+  createBillingPaymentLinkTools,
+  PAYMENT_LINK_TOOL,
+  PAYMENT_UNAVAILABLE_IN_CLIENT,
+  paysInClient,
+} from './tools/billing-payment-links.js';
+import {
   createDialogueTools,
   dialogueOperations,
   keyedDialoguePreviews,
@@ -362,6 +368,7 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'jobs_get-many',
   'billing-approval-links_create',
   // Listed only to accounts with the feature; see account-features.ts.
+  PAYMENT_LINK_TOOL,
   'scenes_detect',
   'stems_separate',
   'faces_detect',
@@ -824,6 +831,7 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   // Not in the reviewed ChatGPT app listing yet.
   if ([...BATCH_TOOLS, ...JOB_SET_TOOLS, ...APPROVAL_TOOLS].includes(tool.name))
     return profile.name !== 'chatgpt';
+  if (tool.name === PAYMENT_LINK_TOOL) return paysInClient(profile);
   // Not in the reviewed ChatGPT app listing yet; other profiles list them per account.
   if (isFeatureGatedTool(tool.name)) return profile.name !== 'chatgpt';
   if (['assets_upload', 'assets_open-upload-widget'].includes(tool.name))
@@ -973,6 +981,7 @@ function createTools(
     ...createStudioDraftTools(operations, httpClient),
     ...createAccountManagementTools(httpClient),
     ...createBillingApprovalTools(operations, httpClient),
+    ...createBillingPaymentLinkTools(httpClient),
     ...createGenerationCostsTools(operations, httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
@@ -1104,6 +1113,8 @@ function createProfiledServer(
     if (!profile) throw new Error('Complete MCP initialization before calling tools.');
     if (isAppOnlyTool(tool) && !profile.supportsAppUi)
       throw new Error('Open the Sync app in ChatGPT, or use the Sync tools in this client.');
+    if (tool.name === PAYMENT_LINK_TOOL && !paysInClient(profile))
+      throw new Error(PAYMENT_UNAVAILABLE_IN_CLIENT);
     if (
       !profile.supportsUploads &&
       (['assets_upload', 'assets_open-upload-widget'].includes(tool.name) ||
