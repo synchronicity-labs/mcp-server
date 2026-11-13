@@ -13,6 +13,8 @@ type Agent = {
   binary: string;
   /** Arguments that add `server` for every project, not only the current folder. */
   add: (server: string[]) => string[];
+  /** This agent's name in the `skills` installer (https://skills.sh). */
+  skillsAgent: string;
 };
 
 const AGENTS: readonly Agent[] = [
@@ -21,27 +23,35 @@ const AGENTS: readonly Agent[] = [
     marker: 'CLAUDECODE',
     binary: 'claude',
     add: (server) => ['mcp', 'add', '--scope', 'user', 'sync', '--', ...server],
+    skillsAgent: 'claude-code',
   },
   {
     name: 'Codex',
     marker: 'CODEX_THREAD_ID',
     binary: 'codex',
     add: (server) => ['mcp', 'add', 'sync', '--', ...server],
+    skillsAgent: 'codex',
   },
 ];
 
 const ADD_TIMEOUT_MS = 30_000;
+// The skills installer downloads itself and the skills repository first.
+const SKILLS_TIMEOUT_MS = 120_000;
 
 export type AddResult =
   | { agent: string; outcome: 'added' | 'exists' }
   /** Not added: the commands to run by hand, for this agent or for each known one. */
   | { agent?: string; outcome: 'manual'; commands: string[] };
 
-type Run = (binary: string, args: string[]) => Promise<{ ok: boolean; output: string }>;
+type Run = (
+  binary: string,
+  args: string[],
+  timeoutMs?: number,
+) => Promise<{ ok: boolean; output: string }>;
 
-const runBinary: Run = (binary, args) =>
+const runBinary: Run = (binary, args, timeoutMs = ADD_TIMEOUT_MS) =>
   new Promise((resolve) => {
-    execFile(binary, args, { timeout: ADD_TIMEOUT_MS }, (error, stdout, stderr) => {
+    execFile(binary, args, { timeout: timeoutMs }, (error, stdout, stderr) => {
       resolve({ ok: !error, output: `${stdout}${stderr}` });
     });
   });
@@ -94,4 +104,43 @@ export async function addToAgent(
   if (result.ok) return { agent: agent.name, outcome: 'added' };
   if (/already exists/i.test(result.output)) return { agent: agent.name, outcome: 'exists' };
   return manualAdd(agentName, serverCommand, env);
+}
+
+/** The sync. skills, for every project: `-g` is the user's own skills folder. */
+const skillsArgs = (skillsAgent: string) => [
+  '-y',
+  'skills',
+  'add',
+  'synchronicity-labs/skills',
+  '-g',
+  '-y',
+  '-a',
+  skillsAgent,
+  '-s',
+  '*',
+];
+const skillsCommand = (skillsAgent: string) =>
+  ['npx', ...skillsArgs(skillsAgent)].join(' ').replace('-s *', "-s '*'");
+
+/**
+ * Adds the sync. skills (the workflows for lipsync, dubbing and the rest) to the named
+ * agent, or returns the command when it cannot. Skills are optional: the tools work
+ * without them, so a failure here never fails the setup.
+ */
+export async function addSkills(
+  agentName: string | undefined,
+  run: Run = runBinary,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<AddResult> {
+  const agent = known(agentName, env);
+  if (!agent) {
+    return {
+      outcome: 'manual',
+      commands: ["npx -y skills add synchronicity-labs/skills -g -s '*'"],
+    };
+  }
+  const result = await run('npx', skillsArgs(agent.skillsAgent), SKILLS_TIMEOUT_MS);
+  return result.ok
+    ? { agent: agent.name, outcome: 'added' }
+    : { agent: agent.name, outcome: 'manual', commands: [skillsCommand(agent.skillsAgent)] };
 }

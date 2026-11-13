@@ -42,3 +42,24 @@ agent's sync. sign-in would put that sign-in in front of the model.
   never adds an account read to a server that lists no other gated tool.
 - The server instructions do not mention it, so no client's instructions changed. The
   tool description carries the guidance.
+
+## Plans and prices
+
+`billing-plans_list` (`GET /v2/billing/plans`) lists what the organization can buy, with
+each price, so a person chooses in the chat instead of on the website. It only reads. It
+is listed wherever approval links are, which is every client but the ChatGPT app, and
+takes the same one-call `organizationId`. An API from before the route answers 404, and
+the tool then says to quote one plan with `billing-approval-links_create`.
+
+## The guide a coding agent gets
+
+[AGENT_GUIDE.md](../AGENT_GUIDE.md) ships in the npm package. `setup --code` prints it
+last, after it has added the server and the sync. skills
+(`npx skills add synchronicity-labs/skills`) to the agent, and `sync-mcp guide` prints it
+again. It tells the agent what to say to the person straight away (start a new session,
+what they can ask for, what the Free plan gives them, that they can pay from the chat)
+and how plans and paying work afterwards.
+
+It is a file here and not a skill on purpose. The skills are shared with the ChatGPT app,
+which must not promote plans. The guide reaches only an agent that ran `setup` in a
+terminal.

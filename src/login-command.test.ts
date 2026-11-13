@@ -12,6 +12,8 @@ let home: string;
 let printed: string;
 let refused: string;
 let installs: [agent: string | undefined, server: string][];
+let skillInstalls: (string | undefined)[];
+let skillsAdded: AddResult | undefined;
 
 const REPLIES: Record<string, unknown> = {
   '/register': { client_id: 'client-1' },
@@ -26,9 +28,15 @@ const REPLIES: Record<string, unknown> = {
 
 /** Runs the command against the stub API; `added` is what adding to the agent returns. */
 function run(command: LoginCommand, args: string[], added?: AddResult): Promise<number> {
-  return runLogin(command, args, API, async (agent, server) => {
-    installs.push([agent, server]);
-    return added ?? { agent: 'Claude Code', outcome: 'added' };
+  return runLogin(command, args, API, {
+    server: async (agent, server) => {
+      installs.push([agent, server]);
+      return added ?? { agent: 'Claude Code', outcome: 'added' };
+    },
+    skills: async (agent) => {
+      skillInstalls.push(agent);
+      return skillsAdded ?? { agent: 'Claude Code', outcome: 'added' };
+    },
   });
 }
 
@@ -42,6 +50,8 @@ beforeEach(async () => {
   printed = '';
   refused = '';
   installs = [];
+  skillInstalls = [];
+  skillsAdded = undefined;
   vi.spyOn(process.stdout, 'write').mockImplementation((text) => {
     printed += String(text);
     return true;
@@ -74,11 +84,39 @@ describe('sync-mcp setup and login', () => {
     printed = '';
     expect(await run('setup', ['--code', '123456'])).toBe(0);
     expect(installs).toEqual([['Claude Code', SERVER]]);
-    expect(printed).toBe(
+    expect(skillInstalls).toEqual(['Claude Code']);
+    expect(printed).toContain(
       'Signed in to sync. as person@example.com (workspace "personal", Free plan).\n' +
         'Added the sync. server to Claude Code for every project.\n' +
-        'Start a new session so the sync. tools load.\n',
+        'Start a new session so the sync. tools load.\n' +
+        'Added the sync. skills to Claude Code.\n',
     );
+  });
+
+  it('setup ends with the guide, which says what to tell the person and how paying works', async () => {
+    await run('setup', ['--email', 'person@example.com', '--agent', 'Claude Code']);
+    printed = '';
+
+    await run('setup', ['--code', '123456']);
+
+    const guide = printed.slice(printed.indexOf('# sync. labs'));
+    expect(guide).toContain('## Tell the person now');
+    expect(guide).toContain('They can pay from here');
+    expect(guide).toContain('billing-plans_list');
+    expect(printed.trimEnd().endsWith(guide.trimEnd())).toBe(true);
+  });
+
+  it('setup prints the skills command when it could not add them, and still finishes', async () => {
+    await run('setup', ['--email', 'person@example.com', '--agent', 'Codex']);
+    printed = '';
+    skillsAdded = { agent: 'Codex', outcome: 'manual', commands: ['npx -y skills add x'] };
+
+    expect(await run('setup', ['--code', '123456'])).toBe(0);
+
+    expect(printed).toContain(
+      'Add the sync. skills, the step-by-step workflows, with:\n  npx -y skills add x',
+    );
+    expect(printed).toContain('## Tell the person now');
   });
 
   it('setup says when the agent already had the server', async () => {
@@ -113,6 +151,8 @@ describe('sync-mcp setup and login', () => {
     expect(await run('login', ['--code', '123456'])).toBe(0);
 
     expect(installs).toEqual([]);
+    expect(skillInstalls).toEqual([]);
+    expect(printed).not.toContain('# sync. labs');
     expect(printed).toContain(
       `Add the sync. server to Claude Code with:\n  claude mcp add --scope user sync -- ${SERVER}`,
     );

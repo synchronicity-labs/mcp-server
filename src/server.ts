@@ -102,6 +102,7 @@ import {
   PAYMENT_UNAVAILABLE_IN_CLIENT,
   paysInClient,
 } from './tools/billing-payment-links.js';
+import { createBillingPlansTools, PLANS_TOOL } from './tools/billing-plans.js';
 import {
   createDialogueTools,
   dialogueOperations,
@@ -298,7 +299,8 @@ export function serverDescription(spendConfirmation = true): string {
 }
 
 const JOB_SET_TOOLS = ['jobs_create-many', 'jobs_get-many'];
-const APPROVAL_TOOLS = ['billing-approval-links_create'];
+// A person paying, and the price list they choose from; neither moves money itself.
+const APPROVAL_TOOLS = ['billing-approval-links_create', PLANS_TOOL];
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
   'analytics_track-event',
@@ -382,6 +384,7 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'jobs_create-many',
   'jobs_get-many',
   'billing-approval-links_create',
+  PLANS_TOOL,
   // Listed only to accounts with the feature; see account-features.ts.
   PAYMENT_LINK_TOOL,
   'scenes_detect',
@@ -534,6 +537,41 @@ function registeredMeta(meta: Record<string, unknown> | undefined): Record<strin
   return descriptorMeta;
 }
 
+function toolConfig(tool: McpToolDefinition) {
+  return Object.freeze({
+    title: tool.title?.toLowerCase(),
+    description: tool.description,
+    inputSchema: toolInputSchema(tool.inputSchema),
+    outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
+    annotations: tool.annotations,
+    _meta: registeredMeta(tool.meta),
+  });
+}
+
+// One registration config per tool, not one per session: every session of a server builds
+// its tools from the same definitions. Keyed by the input shape those sessions share, and
+// reused only while everything else the config is built from is the same too.
+const registeredConfigs = new WeakMap<
+  Record<string, z.ZodType>,
+  { from: McpToolDefinition; config: ReturnType<typeof toolConfig> }
+>();
+
+function registeredConfig(tool: McpToolDefinition): ReturnType<typeof toolConfig> {
+  const kept = registeredConfigs.get(tool.inputSchema);
+  if (
+    kept &&
+    kept.from.title === tool.title &&
+    kept.from.description === tool.description &&
+    kept.from.outputSchema === tool.outputSchema &&
+    kept.from.annotations === tool.annotations &&
+    kept.from.meta === tool.meta
+  )
+    return kept.config;
+  const config = toolConfig(tool);
+  registeredConfigs.set(tool.inputSchema, { from: tool, config });
+  return config;
+}
+
 export function registerTools(
   server: McpServer,
   tools: McpToolDefinition[],
@@ -544,14 +582,7 @@ export function registerTools(
 ): void {
   const names = new Set(tools.map((tool) => tool.name));
   for (const tool of tools) {
-    const config = {
-      title: tool.title?.toLowerCase(),
-      description: tool.description,
-      inputSchema: toolInputSchema(tool.inputSchema),
-      outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
-      annotations: tool.annotations,
-      _meta: registeredMeta(tool.meta),
-    };
+    const config = registeredConfig(tool);
     const run = async (
       args: Record<string, unknown> | undefined,
       ctx: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
@@ -1017,6 +1048,7 @@ function createTools(
     ...createAccountManagementTools(httpClient),
     ...createBillingApprovalTools(operations, httpClient),
     ...createBillingPaymentLinkTools(httpClient),
+    ...createBillingPlansTools(httpClient),
     ...createGenerationCostsTools(operations, httpClient),
     createAssetCreatorsTool(httpClient),
     createPlaybackMetadataTool(httpClient),
@@ -1151,10 +1183,10 @@ function createProfiledServer(
   );
   // Keep the SDK's input/output validation and execution. Hidden upload tools remain
   // callable only to return an actionable error; they cannot perform any upload.
-  const handlers = new Map<string, McpToolDefinition['handler']>();
-  // jobs_create-many runs each item through the same checks as a client's own call.
+  // jobs_create-many runs each item through the same checks as a client's own call. Found
+  // by name when it happens: a lookup table per session would cost every session memory.
   const callTool: NonNullable<ToolRequestContext['callTool']> = async (name, args, nested) => {
-    const handler = handlers.get(name);
+    const handler = sessionTools.find((tool) => tool.name === name)?.handler;
     if (!handler) throw new Error(`${name} is not available on this connection.`);
     return handler(args, nested);
   };
@@ -1229,7 +1261,6 @@ function createProfiledServer(
       runInOrganization(organization, execute),
     );
   }
-  for (const tool of sessionTools) handlers.set(tool.name, tool.handler);
   registerTools(
     server,
     sessionTools,

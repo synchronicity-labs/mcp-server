@@ -306,13 +306,13 @@ describe('immutable client profiles', () => {
     await Promise.all(
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
-        // lipsync_create-timeline, jobs_create-many and jobs_get-many stay out of the
-        // ChatGPT app listing only.
+        // lipsync_create-timeline, jobs_create-many, jobs_get-many and billing-plans_list
+        // stay out of the ChatGPT app listing only.
         const chatgpt = index < 2;
         const tools = currentTools((await client.listTools()).tools);
         // account_show-usage and voices_show are listed wherever a card can render.
         const cardTools = index < 4 ? 2 : 0;
-        expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 3) + cardTools);
+        expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 4) + cardTools);
         expect(tools.some((tool) => tool.name === 'lipsync_create-timeline')).toBe(!chatgpt);
         expect(tools.some((tool) => tool.name === 'assets_upload')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'assets_open-upload-widget')).toBe(
@@ -506,6 +506,7 @@ describe('immutable client profiles', () => {
                 'organizations_select',
                 'account_get-usage',
                 'projects_rename',
+                'billing-plans_list',
                 'assets_get-playback-metadata',
                 'generations_get-continuation',
                 'lipsync_create',
@@ -739,8 +740,9 @@ it.each([0, 1, 2])(
     // Includes scenes_detect, stems_separate, the four faces_* tools, the three shots_*
     // tools and billing-payment-links_create, which only accounts with their features list.
     // account_show-usage always; voices_show once its source operation is generated.
+    // billing-plans_list is always registered too.
     const cardTools = count === 0 ? 1 : 2;
-    expect(factory.toolCount).toBe(23 + count + jobTools + cardTools);
+    expect(factory.toolCount).toBe(24 + count + jobTools + cardTools);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = currentTools((await chatgpt.client.listTools()).tools);
@@ -748,12 +750,13 @@ it.each([0, 1, 2])(
     // lipsync_create-timeline stays out of the ChatGPT app listing.
     expect(chatTools).toHaveLength(12 + count + cardTools);
     // Widget-only tools such as assets_list-creators (member emails) stay out of model-only catalogs.
-    expect(currentTools(claudeTools)).toHaveLength(9 + count + jobTools + cardTools);
+    // billing-plans_list is listed outside the ChatGPT app.
+    expect(currentTools(claudeTools)).toHaveLength(10 + count + jobTools + cardTools);
     // The status card's app-only old name comes with generations_get, and only with it.
     const names = new Set(claudeTools.map((tool) => tool.name));
     expect(names.has('generate_get-generation')).toBe(names.has('generations_get'));
     expect(claudeTools).toHaveLength(
-      9 + count + jobTools + cardTools + (names.has('generations_get') ? 1 : 0),
+      10 + count + jobTools + cardTools + (names.has('generations_get') ? 1 : 0),
     );
     expect(claudeTools.map((tool) => tool.name)).not.toContain('assets_list-creators');
     expect(chatTools.map((tool) => tool.name)).toContain('assets_list-creators');
