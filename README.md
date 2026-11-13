@@ -100,6 +100,30 @@ Without `SYNC_API_KEY`, the server starts a device login on first run: visit the
 URL it prints and enter the code. The token is cached at
 `~/.config/sync/mcp-credentials.json`.
 
+#### Sign in with an emailed code
+
+A command-line agent can sign you in without a browser. It runs two commands and
+you read it one code from your inbox:
+
+```bash
+npx -y @sync.so/mcp-server@latest login --email you@example.com --agent "Claude Code"
+# sync. emails you a code; give it to the agent
+npx -y @sync.so/mcp-server@latest login --code 123456
+claude mcp add sync -- npx -y @sync.so/mcp-server@latest
+```
+
+To have your agent do all of it, ask: "Set up the sync. MCP server for me with
+`npx -y @sync.so/mcp-server@latest login`. My email is you@example.com." It asks you
+for the code, adds the server, and tells you to start a new session so the tools load.
+
+A new email gets a new sync. account. An existing account connects its personal
+workspace; connect a team workspace through the hosted server instead. sync. emails
+you when an agent connects, with a link that disconnects it. `--agent` is the name
+that email shows. The sign-in is saved in `~/.config/sync/mcp-credentials.json` and
+renews itself, and every local server on the machine shares it. This sign-in is
+rolling out: where it is not available yet, the command says so and points you to
+the browser sign-in.
+
 npm releases are published separately from the hosted deploy and can lag behind
 it, so prefer the hosted server when your client supports it. `@latest` makes npx
 fetch the newest release when the client restarts the server; without it, npx can
@@ -258,6 +282,13 @@ naming the new one. [Tool names](docs/tool-names.md) has the full old → new ta
 
 ```
 Usage: sync-mcp [options]
+       sync-mcp login --email <address> [--agent <name>]
+       sync-mcp login --code <code>
+
+Commands:
+  login               Sign in by a code emailed to you, with no browser. Run it with
+                      --email, then again with --code and the code from the email.
+                      --agent names your agent in the emails sync. sends.
 
 Options:
   --api-key <key>     API key (or set SYNC_API_KEY env var)

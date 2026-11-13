@@ -62,3 +62,44 @@ it.each([
   telemetry.close('session', 'closed');
   expect(emit.mock.calls[0]?.[1]).toMatchObject({ clientName: client, clientProfile: profile });
 });
+
+it('explains a 404 by the session it named: live elsewhere, recently closed or unknown', () => {
+  let now = 0;
+  const telemetry = new SessionTelemetry(vi.fn(), () => now);
+  telemetry.start('live-session', 'Anthropic/ClaudeAI', '2025-11-25');
+  telemetry.start('expired-session', 'Anthropic/ClaudeAI', '2025-11-25');
+  now = 600_000;
+  telemetry.close('expired-session', 'expired');
+  now = 602_300;
+  expect(telemetry.notFound('expired-session')).toEqual({
+    sessionRef: telemetry.reference('expired-session'),
+    cause: 'expired',
+    closedAgoMs: 2_300,
+    clientName: 'anthropic/claudeai',
+    clientProfile: 'claude',
+  });
+  expect(telemetry.notFound('live-session')).toMatchObject({
+    cause: 'other_owner',
+    clientProfile: 'claude',
+  });
+  expect(telemetry.notFound('never-seen')).toEqual({
+    sessionRef: telemetry.reference('never-seen'),
+    cause: 'unknown',
+  });
+  expect(JSON.stringify(telemetry.notFound('expired-session'))).not.toContain('expired-session');
+  now += 60 * 60_000 + 1;
+  expect(telemetry.notFound('expired-session')).toMatchObject({ cause: 'unknown' });
+});
+
+it('keeps a bounded memory of closed sessions', () => {
+  let now = 0;
+  const telemetry = new SessionTelemetry(vi.fn(), () => now);
+  for (let index = 0; index <= 5_000; index++) {
+    telemetry.start(`session-${index}`, 'openai-mcp', '2025-11-25');
+    telemetry.close(`session-${index}`, 'expired');
+    now += 1;
+  }
+  expect(telemetry.notFound('session-0')).toMatchObject({ cause: 'unknown' });
+  expect(telemetry.notFound('session-1')).toMatchObject({ cause: 'expired' });
+  expect(telemetry.notFound('session-5000')).toMatchObject({ cause: 'expired' });
+});

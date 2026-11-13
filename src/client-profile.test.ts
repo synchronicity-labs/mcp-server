@@ -249,6 +249,39 @@ describe('immutable client profiles', () => {
     );
   });
 
+  it('logs each status card read, served or refused, with the client that asked', async () => {
+    fakeApi();
+    const lines: Record<string, unknown>[] = [];
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      for (const text of String(chunk).split('\n').filter(Boolean)) {
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        if (parsed.event === 'ui_resource_read') lines.push(parsed);
+      }
+      return true;
+    });
+    const factory = await createMcpServerFactory(config);
+    const claude = await connect(factory, 'Anthropic/ClaudeAI');
+    await claude.client.readResource({ uri: GENERATION_STATUS_URI });
+    const unknown = await connect(factory, 'unverified-muse');
+    await expect(unknown.client.readResource({ uri: GENERATION_STATUS_URI })).rejects.toThrow();
+    expect(lines).toEqual([
+      expect.objectContaining({
+        resource: GENERATION_STATUS_URI,
+        clientProfile: 'claude',
+        clientName: 'Anthropic/ClaudeAI',
+        outcome: 'served',
+        bytes: expect.any(Number),
+      }),
+      expect.objectContaining({
+        resource: GENERATION_STATUS_URI,
+        clientProfile: 'generic',
+        clientName: 'unverified-muse',
+        outcome: 'refused',
+        reason: 'no_status_card',
+      }),
+    ]);
+  });
+
   it.each(['chatgpt', 'openai-mcp (Codex)', 'claude-ai', 'unknown'])(
     'tells %s to wait for a generation in the same reply',
     async (name) => {
@@ -632,6 +665,7 @@ describe('immutable client profiles', () => {
     'keeps %s stdio authentication local without contaminating an HTTP session',
     async (authentication) => {
       const calls = fakeApi();
+      vi.spyOn(tokenStore, 'loadCredentials').mockResolvedValue(null);
       vi.spyOn(tokenStore, 'loadToken').mockResolvedValue('fake-device-token');
       const stdio = await createSyncMcpServer({
         ...config,

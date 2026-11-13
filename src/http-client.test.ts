@@ -79,3 +79,36 @@ describe('social import error details', () => {
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', importDetails: undefined });
   });
 });
+
+describe('a sign-in that renews itself', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('asks for its headers on every request and names the way back in once refused', async () => {
+    const sent: (string | null)[] = [];
+    let status = 200;
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      sent.push(new Headers(init.headers).get('authorization'));
+      return new Response('{}', { status });
+    });
+    let token = 'first';
+    const auth = Object.assign(async () => ({ Authorization: `Bearer ${token}` }), {
+      signedOutStep: 'Sign in again.',
+    });
+    const client = createHttpClient('https://api.test', auth);
+
+    await client.request('get', '/v2/account');
+    token = 'renewed';
+    await client.request('get', '/v2/account');
+    expect(sent).toEqual(['Bearer first', 'Bearer renewed']);
+
+    status = 401;
+    await expect(client.request('get', '/v2/account')).rejects.toMatchObject({
+      status: 401,
+      nextStep: 'Sign in again.',
+    });
+    status = 403;
+    await expect(client.request('get', '/v2/account')).rejects.toMatchObject({
+      nextStep: undefined,
+    });
+  });
+});
