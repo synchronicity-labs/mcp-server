@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ClientProfile } from './client-profile.js';
 import { LIPSYNC_INPUTS_NOT_FROM_ASSETS } from './tools/app-tools.js';
 import type { McpToolDefinition } from './tools/generator.js';
+import { projectIntentError, projectUseAllowed } from './tools/project-intent.js';
 
 const createCall = z
   .object({
@@ -34,13 +35,19 @@ function quotedCall(
     throw new Error(
       `create.arguments.model is ${String(model)} but this quote prices ${String(priced.model)}. Quote the model the job will use.`,
     );
+  // The create tools refuse an existing project the person did not choose. The card may
+  // run this call through an entry point without that check, so it is made here.
+  const { projectIntent, ...fields } = call.arguments;
+  if (!projectUseAllowed(fields.projectId, projectIntent))
+    throw projectIntentError('The quote was not made: ');
   const tool = cardTool(call, profile);
   if (!tool) return undefined;
-  const placed = 'projectId' in call.arguments || 'projectCreationKey' in call.arguments;
+  const placed = 'projectId' in fields || 'projectCreationKey' in fields;
   return {
     tool,
     arguments: {
-      ...call.arguments,
+      // The saved-assets entry point has no projectIntent input; the others require it.
+      ...(tool === call.tool ? call.arguments : fields),
       model,
       // A new project needs its own key, or a retry would make another project.
       ...(placed ? {} : { projectCreationKey: randomUUID() }),

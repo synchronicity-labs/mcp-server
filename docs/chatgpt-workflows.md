@@ -242,6 +242,11 @@ entry point does not take (a link, an attached file, `shots`, `speakers` or
 `allowOverlappingFaces`) gets a quote without `create`, so the button asks the
 chat. Other clients keep `lipsync_create`.
 
+A `create` call that names an existing `projectId` is held to the rule the create
+tools enforce: without `projectIntent=explicit`, or a project this user just
+created, the quote is refused. The saved-assets entry point has no such check of
+its own, so the quote is where it is made for a card.
+
 `shots_review` opens the shot review card on a completed generation. It refuses
 what `shots_regenerate` would refuse (timeline clips, several speakers, a script,
 a length that differs from the video's), so nobody flags shots that cannot be

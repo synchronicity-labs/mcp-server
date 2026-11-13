@@ -238,6 +238,20 @@ it('hands a ChatGPT card the lipsync call it is allowed to make, or none', async
         idempotencyKey: expect.stringMatching(UUID),
       },
     });
+    // That entry point does not check that the person chose an existing project, so the
+    // quote does: without the choice it is refused, and with it the marker is not passed on.
+    const project = { ...saved, projectId: '00000000-0000-4000-8000-000000000009' };
+    const unchosen = await quote(project);
+    expect(unchosen.isError).toBe(true);
+    expect(JSON.stringify(unchosen.content)).toContain(
+      'Existing project use requires an explicit user selection',
+    );
+    const chosen = await quote({ ...project, projectIntent: 'explicit' });
+    expect((chosen.structuredContent as { create: unknown }).create).toEqual({
+      tool: 'lipsync_create-from-assets',
+      arguments: { ...project, model: 'sync-3' },
+      idempotencyKey: expect.stringMatching(UUID),
+    });
     // That entry point takes no link, so the quote carries no call and the card asks the chat.
     const linked = await quote({ videoUrl: 'https://fixture.invalid/a.mp4', audioAssetId: 'a-1' });
     expect(linked.structuredContent).toMatchObject({ estimatedCredits: 84 });
