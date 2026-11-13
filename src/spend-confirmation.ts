@@ -65,6 +65,7 @@ export const TOOL_DESCRIPTION_EDITS: Readonly<Record<string, readonly Edit[]>> =
     ],
   ],
   'lipsync_create-timeline': [['Estimate and confirm before creating; this starts', 'This starts']],
+  shots_regenerate: [['Estimate and confirm before creating; this starts', 'This starts']],
   'jobs_create-many': [
     [
       'Check coverage per organization: generation allowance for generation jobs, speech allowance for previews and scripts combined. Speech-only sets use speech-previews_get-options, ignoring generation counters. Fully covered sets need no prices or approval. Otherwise quote each configuration, show count, total and excluded charges, and confirm once. A lipsync allowance does not cover translation or dialogue. ',

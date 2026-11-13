@@ -233,6 +233,7 @@ const TOOL_AREAS = [
   'organizations',
   'projects',
   'scenes',
+  'shots',
   'speech-previews',
   'stems',
   'sync-app',

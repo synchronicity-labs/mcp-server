@@ -114,6 +114,7 @@ import {
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { withProjectIntent } from './tools/project-intent.js';
+import { createShotReviewTools } from './tools/shot-review.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
@@ -366,6 +367,8 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'faces_get',
   'faces_get-timeline',
   'faces_get-people',
+  'shots_regenerate',
+  'shots_splice',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'analytics_track-event',
@@ -989,6 +992,7 @@ function createTools(
     ...createAssetAnalysisTools(httpClient),
     ...createAssetFacesTools(httpClient),
     createFacePeopleTool(httpClient),
+    ...createShotReviewTools(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)

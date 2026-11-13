@@ -66,10 +66,15 @@ const withFeatures = (features: string[]): Account => ({
 const gatedNames = async (client: Client) =>
   (await client.listTools()).tools.map((tool) => tool.name).filter((name) => GATED.includes(name));
 const SHOT_TOOLS = ['lipsync_create', 'lipsync_create-timeline'];
-// The tools that list the shots input, by name.
+// The lipsync tools that list the gated shots input, by name. shots_regenerate is itself a
+// gated tool, and shots is what it is for.
 const withShots = async (client: Client) =>
   (await client.listTools()).tools
-    .filter((tool) => Object.hasOwn(tool.inputSchema.properties ?? {}, 'shots'))
+    .filter(
+      (tool) =>
+        tool.name !== 'shots_regenerate' &&
+        Object.hasOwn(tool.inputSchema.properties ?? {}, 'shots'),
+    )
     .map((tool) => tool.name);
 
 async function stdio(account: (auth: string | undefined) => Account) {
@@ -141,6 +146,17 @@ describe('feature-gated tools over stdio', () => {
     expect(await withShots(client)).toEqual(
       features.includes('lipsync_planning') ? SHOT_TOOLS : [],
     );
+  });
+
+  it('lists the shot review tools only with lipsync_planning', async () => {
+    const listed = async (features: string[]) => {
+      const { client } = await stdio(() => withFeatures(features));
+      return (await client.listTools()).tools
+        .map((tool) => tool.name)
+        .filter((name) => name.startsWith('shots_'));
+    };
+    expect(await listed(['lipsync_planning'])).toEqual(['shots_regenerate', 'shots_splice']);
+    expect(await listed(['scene_detection', 'face_validation'])).toEqual([]);
   });
 
   it.each([
