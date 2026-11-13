@@ -128,6 +128,14 @@ afterAll(async () => {
   }
 });
 
+/** The mcp_session_not_found lines written so far, oldest first. */
+function notFoundLogs(): Record<string, unknown>[] {
+  return vi
+    .mocked(process.stderr.write)
+    .mock.calls.flatMap(([chunk]) => String(chunk).split('\n'))
+    .filter((line) => line.includes('"mcp_session_not_found"'))
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
 async function request(
   sessionId: string | undefined,
   token: string,
@@ -180,6 +188,7 @@ it.each(['foreign-sub', 'foreign-client', 'foreign-org', 'missing-org'])(
       const denied = await request(id, token, method, method === 'POST' ? list : undefined);
       expect(denied.status).toBe(404);
       expect(await denied.json()).toEqual({ error: 'Session not found' });
+      expect(notFoundLogs().at(-1)).toMatchObject({ httpMethod: method, cause: 'other_owner' });
     }
     const refreshed = await request(id, 'owner-refreshed', 'POST', list);
     expect(refreshed.status).toBe(200);
@@ -190,6 +199,9 @@ it.each(['foreign-sub', 'foreign-client', 'foreign-org', 'missing-org'])(
     const gone = await request(id, 'owner', 'POST', list);
     expect(gone.status).toBe(404);
     await gone.text();
+    const log = notFoundLogs().at(-1);
+    expect(log).toMatchObject({ cause: 'client_delete', rpcMethods: ['tools/list'] });
+    expect(JSON.stringify(log)).not.toContain(id);
   },
 );
 it('rejects foreign cancellation and accepts cancellation by a refreshed owner token', async () => {
@@ -307,11 +319,18 @@ it('expires abandoned HTTP sessions while preserving a running tool and allowing
     params: { name: 'hold', arguments: {} },
   });
   await started.promise;
-  clockOffset = 120_001;
+  clockOffset = 10 * 60_000 + 1;
   try {
     const expired = await request(idle, 'owner', 'POST', list);
     expect(expired.status).toBe(404);
     await expired.text();
+    expect(notFoundLogs().at(-1)).toMatchObject({
+      httpMethod: 'POST',
+      cause: 'expired',
+      closedAgoMs: expect.any(Number),
+      clientProfile: 'generic',
+      rpcMethods: ['tools/list'],
+    });
     const replacement = await initialize();
     expect(aborted).toBe(false);
     release.resolve();

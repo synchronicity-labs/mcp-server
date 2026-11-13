@@ -33,6 +33,7 @@ assert(Number.isFinite(soakMinutes) && soakMinutes >= 0 && soakMinutes <= 120);
 let now = 0;
 const owner = { sub: 'memory-fixture', clientId: 'memory-fixture', organizationId: null };
 const sessionConfig = getSessionRuntimeConfig({});
+const pastIdleTtl = sessionConfig.idleTtlMs + 1;
 const sessions = new SessionRegistry({
   idleTtlMs: sessionConfig.idleTtlMs,
   maxSessions: sessionConfig.maxSessions,
@@ -182,7 +183,7 @@ try {
       }),
     );
   } else {
-    now += 120_001;
+    now += pastIdleTtl;
     assert.equal(await sessions.sweep(), 1);
     const baseline = await heap();
     for (let cycle = 1; cycle <= 3; cycle++) {
@@ -193,7 +194,7 @@ try {
       assert.equal(sessions.size, 2);
       const liveGrowth = (await heap()) - baseline;
       assert(liveGrowth < 32 * 1024 ** 2, `Completed HTTP responses retained ${liveGrowth} bytes`);
-      now += 120_001;
+      now += pastIdleTtl;
       assert.equal(await sessions.sweep(), 2);
       assert.equal(sessions.size, 0);
       const expired = await post(clients[0], 'tools/list');
@@ -207,19 +208,27 @@ try {
     // Model 45 minutes at 160 fresh sessions/minute (5x incident traffic), with
     // real HTTP initialization/discovery and no client DELETE. Virtual time keeps
     // this regression practical in CI; it is not a wall-clock production soak.
+    // One session per 375 ms stays for the idle TTL; a full table reclaims the oldest idle one.
+    const retentionBound = Math.min(
+      sessionConfig.maxSessions + 1,
+      Math.ceil(sessionConfig.idleTtlMs / 375) + 45,
+    );
     let peakHeapGrowth = 0;
     for (let index = 0; index < 7200; index++) {
       await initialize();
       now += 375;
       if (index % 40 === 0) await sessions.sweep();
-      assert(sessions.size < 365, 'Idle sessions accumulated beyond the retention window');
+      assert(
+        sessions.size < retentionBound,
+        'Idle sessions accumulated beyond the retention window',
+      );
       if (index % 400 === 0) {
         peakHeapGrowth = Math.max(peakHeapGrowth, (await heap()) - baseline);
         assert(peakHeapGrowth < 128 * 1024 ** 2, 'Session churn retained excessive heap');
       }
     }
     assert.equal(sessions.stats().rejected, 0);
-    now += 120_001;
+    now += pastIdleTtl;
     await sessions.sweep();
     assert.equal(sessions.size, 0);
     assert((await heap()) - baseline < 32 * 1024 ** 2, 'Churn left retained sessions');
