@@ -8,6 +8,7 @@ import { ACME, api, cleanUp, connect, HOME } from './test-fixtures/organizations
 // stem_separation and Acme has stem_separation and scene_detection.
 vi.mock('./auth/token-store.js', () => ({
   loadToken: async () => 'device-token',
+  loadCredentials: async () => null,
   saveToken: async () => {},
   clearToken: async () => {},
 }));

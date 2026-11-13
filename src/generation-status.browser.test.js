@@ -282,12 +282,12 @@ it.each([
         '17 done, 4 processing, 22 queued',
       );
       await loaded('main video', 'videoWidth');
-      await browserExpect(frame.getByRole('link', { name: 'Open in Sync' })).toHaveAttribute(
+      await browserExpect(frame.getByRole('link', { name: 'Open in sync. labs' })).toHaveAttribute(
         'href',
         `https://sync.so/projects/${projectId}/studio?notification=generation&generationId=${generationId}`,
       );
       const studioOpened = context.waitForEvent('page');
-      await frame.getByRole('link', { name: 'Open in Sync' }).click();
+      await frame.getByRole('link', { name: 'Open in sync. labs' }).click();
       const studioPage = await studioOpened;
       await studioPage.waitForURL(
         `https://sync.so/projects/${projectId}/studio?notification=generation&generationId=${generationId}`,
