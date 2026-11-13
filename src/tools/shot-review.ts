@@ -52,6 +52,7 @@ const baseGeneration = z.object({
   projectId: z.uuid().nullish(),
   input: z.array(media),
   dubAudioAssetId: z.uuid().nullish(),
+  outputDuration: z.number().nullish(),
   segments: z.array(z.unknown()).nullish(),
   speakers: z.array(z.unknown()).nullish(),
 });
@@ -97,6 +98,13 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
         .describe(
           'Frame rate of the video, from faces_detect, faces_get-timeline, scenes_detect or assets_get-playback-metadata. It places each shot on the audio, so never guess it.',
         ),
+      frameCount: z
+        .number()
+        .int()
+        .positive()
+        .describe(
+          'Frames in the video, from the same result as fps (frameCount, or the last scene’s endFrame + 1 from scenes_detect). It checks that the first render kept the video’s length.',
+        ),
       idempotencyKey: z
         .string()
         .min(1)
@@ -111,7 +119,7 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
     title: 'Render shots of a generation again',
     description: [
       'Render some shots of a finished lipsync or dub again, when the user says which shots look wrong. It lipsyncs only those shots, from the same video and the same audio as the first render (the dubbed track, for a dub), and returns a new generation: a whole-length video with the new shots in place and the original, unsynced picture everywhere else. That video is one take, not the result: once the user picked the takes, build the final video with shots_splice.',
-      'Give each shot the frames the first render used and say what was wrong with it: detectSpeaker when the wrong person’s mouth moved, occlusionDetection when something crossed the mouth. A shot with neither is simply rendered again. Works on a generation made from one video and one audio, or a dub; one made from a script, a timeline or several speakers cannot be re-rendered this way.',
+      'Give each shot the frames the first render used and say what was wrong with it: detectSpeaker when the wrong person’s mouth moved, occlusionDetection when something crossed the mouth. A shot with neither is simply rendered again. Works on a generation made from one video and one audio, or a dub; one made from a script, a timeline or several speakers cannot be re-rendered this way. The first render must run as long as the video: when its audio was shorter or longer, the video was cut, looped or retimed, a new take would not line up with it, and the tool starts nothing.',
       'Paid generation, billed for the listed shots only, not the whole video. Estimate and confirm before creating; this starts an asynchronous generation in the first render’s project and returns its id and status. Poll that id with generations_get and wait: true.',
     ].join('\n\n'),
     inputSchema: input.shape,
@@ -125,6 +133,11 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
     handler: async (rawArgs, context) => {
       const args = input.parse(rawArgs);
       assertOrdered(args.shots, 'shots');
+      const last = args.shots.at(-1)!;
+      if (last.endFrame > args.frameCount)
+        throw new Error(
+          `shots[${args.shots.length - 1}].endFrame is past the video's last frame (frameCount ${args.frameCount}).`,
+        );
       const signal = context?.signal;
       const base = baseGeneration.parse(
         await http.request('get', `/v2/generate/${args.generationId}`, { signal }),
@@ -136,6 +149,16 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
       if (base.segments?.length || base.speakers?.length)
         throw new Error(
           'This generation was made from timeline clips or several speakers. Render its shots again with lipsync_create-timeline instead.',
+        );
+      // A take is rendered on the untouched video, so it lines up with the first render
+      // only when that render kept the video's length.
+      const videoSeconds = args.frameCount / args.fps;
+      if (
+        base.outputDuration != null &&
+        Math.abs(base.outputDuration - videoSeconds) > Math.max(2 / args.fps, 0.1)
+      )
+        throw new Error(
+          `The first render runs ${base.outputDuration} s but the video runs ${Number(videoSeconds.toFixed(3))} s: its audio and video differed in length, so the video was cut, looped or retimed and a new take would not line up with it. Redo the whole lipsync instead.`,
         );
       const videoInput = base.input.find((item) => item.type === 'video');
       const video = videoInput && source(videoInput);
@@ -160,9 +183,10 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
             { type: 'audio', ...audio, refId: 'audio' },
           ],
           // Frames the segments leave out keep the source picture; only these are billed.
+          // A segment's endFrame is inclusive, unlike a shot's; its audio end is a time.
           segments: args.shots.map((shot) => ({
             startFrame: shot.startFrame,
-            endFrame: shot.endFrame,
+            endFrame: shot.endFrame - 1,
             audioInput: {
               refId: 'audio',
               startTime: shot.startFrame / args.fps,

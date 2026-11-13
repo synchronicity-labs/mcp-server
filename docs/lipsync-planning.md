@@ -79,19 +79,27 @@ only those shots again and then builds one final video. Both tools are listed wi
 `lipsync_planning`, like `faces_get-timeline`, and never to ChatGPT.
 
 1. `shots_regenerate` takes the first render's id, the shots to redo (the same
-   boundaries the first render used, `endFrame` exclusive) and the video's `fps`. It
-   reads the first render, then starts a `segments` generation on the same video and
-   audio in the same project. For a dub the audio is its dubbed track
-   (`dubAudioAssetId`), not the source speech its audio input holds. Per shot,
-   `detectSpeaker` and `occlusionDetection` become that segment's options. Only the
-   listed shots are billed. The result is a whole-length take with the unsynced source
-   everywhere else, so it is never the final video.
+   boundaries the first render used, `endFrame` exclusive) and the video's `fps` and
+   `frameCount`. It reads the first render, then starts a `segments` generation on the
+   same video and audio in the same project. A segment's `endFrame` is inclusive, so
+   the tool sends each shot's `endFrame - 1`, with the audio cut at the shot's own
+   times. For a dub the audio is its dubbed track (`dubAudioAssetId`), not the source
+   speech its audio input holds. Per shot, `detectSpeaker` and `occlusionDetection`
+   become that segment's options. Only the listed shots are billed. The result is a
+   whole-length take with the unsynced source everywhere else, so it is never the
+   final video.
 2. `shots_splice` takes the first render's id and one range per accepted take. It calls
    `POST /v2/generate/{id}/splice`, which is internal and behind the same flag, and
    polls `GET` on that path with `wait: true`. The result is a new VIDEO asset.
 
 `shots_regenerate` refuses, before anything is created, a render that is not
-COMPLETED, one made from timeline clips or several speakers, and one with no saved
-audio (made from a script). Both tools refuse ranges out of order or overlapping and
-name the first one. `fps` is an input because no route gives it to every credential;
-an agent has it from the tool that gave it the shots.
+COMPLETED, one made from timeline clips or several speakers, one with no saved audio
+(made from a script), and one whose length differs from the video's
+(`frameCount / fps` against its `outputDuration`): its audio and video differed in
+length, so the video was cut, looped or retimed, and a take on the untouched video
+would not line up with it. Both tools refuse ranges out of order or overlapping and
+name the first one. `fps` and `frameCount` are inputs because no route gives them to
+every credential; an agent has them from the tool that gave it the shots.
+
+A take is remembered as the conversation's latest generation, so `feedback_send`
+without a `generationId` is about the take.

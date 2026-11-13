@@ -85,6 +85,7 @@ const firstRender = (extra: Record<string, unknown> = {}) => ({
     { type: 'audio', assetId: SOURCE_AUDIO, url: 'https://storage.sync.so/org/audio.wav' },
   ],
   dubAudioAssetId: null,
+  outputDuration: 36,
   segments: null,
   ...extra,
 });
@@ -127,6 +128,7 @@ describe('shots_regenerate', () => {
     const result = await call('shots_regenerate', {
       generationId: FIRST,
       fps: 24,
+      frameCount: 864,
       idempotencyKey: 'take-2',
       shots: [
         { startFrame: 50, endFrame: 278, occlusionDetection: true },
@@ -146,21 +148,22 @@ describe('shots_regenerate', () => {
         { type: 'audio', assetId: DUB_AUDIO, refId: 'audio' },
       ],
       segments: [
+        // A segment's endFrame is inclusive; its audio still ends where the shot ends.
         {
           startFrame: 50,
-          endFrame: 278,
+          endFrame: 277,
           audioInput: { refId: 'audio', startTime: 50 / 24, endTime: 278 / 24 },
           optionsOverride: { occlusion_detection_enabled: true },
         },
         {
           startFrame: 376,
-          endFrame: 730,
+          endFrame: 729,
           audioInput: { refId: 'audio', startTime: 376 / 24, endTime: 730 / 24 },
           optionsOverride: { active_speaker_detection: { auto_detect: true } },
         },
         {
           startFrame: 838,
-          endFrame: 864,
+          endFrame: 863,
           audioInput: { refId: 'audio', startTime: 838 / 24, endTime: 36 },
           optionsOverride: {},
         },
@@ -175,6 +178,7 @@ describe('shots_regenerate', () => {
     await call('shots_regenerate', {
       generationId: FIRST,
       fps: 25,
+      frameCount: 900,
       shots: [{ startFrame: 0, endFrame: 50 }],
     });
 
@@ -199,12 +203,19 @@ describe('shots_regenerate', () => {
       firstRender({ input: [{ type: 'video', assetId: VIDEO }, { type: 'text' }] }),
       'no saved audio',
     ],
+    // Its audio was shorter than the video, so the render was cut and a take would not line up.
+    [
+      'a render shorter than its video',
+      firstRender({ outputDuration: 21.5 }),
+      'The first render runs 21.5 s but the video runs 36 s',
+    ],
   ])('starts nothing for %s', async (_case, generation, message) => {
     const { call, calls } = await setup(serveFirst(generation));
 
     const result = await call('shots_regenerate', {
       generationId: FIRST,
       fps: 24,
+      frameCount: 864,
       shots: [{ startFrame: 0, endFrame: 50 }],
     });
 
@@ -213,22 +224,23 @@ describe('shots_regenerate', () => {
     expect(calls.map((c) => c.method)).toEqual(['GET']);
   });
 
-  it('names the first shot out of order before reading anything', async () => {
+  it('names a shot out of order or past the last frame before reading anything', async () => {
     const { call, calls } = await setup(serveFirst(firstRender()));
+    const regenerate = (shots: { startFrame: number; endFrame: number }[]) =>
+      call('shots_regenerate', { generationId: FIRST, fps: 24, frameCount: 864, shots });
 
-    const result = await call('shots_regenerate', {
-      generationId: FIRST,
-      fps: 24,
-      shots: [
-        { startFrame: 50, endFrame: 278 },
-        { startFrame: 200, endFrame: 300 },
-      ],
-    });
+    const overlapping = await regenerate([
+      { startFrame: 50, endFrame: 278 },
+      { startFrame: 200, endFrame: 300 },
+    ]);
+    const pastTheEnd = await regenerate([{ startFrame: 838, endFrame: 865 }]);
 
-    expect(result.isError).toBe(true);
-    expect(errorText(result)).toContain(
+    expect(overlapping.isError).toBe(true);
+    expect(errorText(overlapping)).toContain(
       'shots[1].startFrame must be at or after the previous endFrame (278)',
     );
+    expect(pastTheEnd.isError).toBe(true);
+    expect(errorText(pastTheEnd)).toContain('shots[0].endFrame is past the video');
     expect(calls).toEqual([]);
   });
 });
