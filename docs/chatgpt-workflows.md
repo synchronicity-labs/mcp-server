@@ -119,13 +119,18 @@ bridge keep a bounded read timeout and a usable Check status action after errors
 
 Each check passes `include=progress`, so the API adds `progress` and `summary`
 and `generations_get` lists both in its output schema; a field missing from that
-schema never reaches the card. The card shows the job's title, a preview of the
-input, a summary line (dub languages, input duration, model) and a progress bar
-with "N of M steps done". Those steps are controller tasks, not camera shots.
-Every one of these fields is optional, so an API that predates them leaves the
-card at its status and estimate. The preview loads from the same
-`SYNC_CHATGPT_APP_RESOURCE_DOMAINS` origins as playback; an asset thumbnail on
-another origin is blocked by the host and the card shows its placeholder.
+schema never reaches the card. The card shows the input's picture with the job's
+title and facts over it (dub languages, length, model), a step track from
+`progress.phase` (queued, dubbing, visually dubbing, finishing; a lipsync skips
+dubbing and reads lip syncing) and a progress bar with "N of M steps done" that
+breaks down into done, processing and queued on hover. Those steps are
+controller tasks, not camera shots. A finished generation plays in the card,
+beside its original when the input was a video, with its recorded cost from
+`generations_get-costs`. Every one of these fields is optional, so an API that
+predates them leaves the card at its status and estimate. The preview loads from
+the same `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` origins as playback; an asset
+thumbnail on another origin is blocked by the host and the card shows its
+placeholder.
 
 Time remaining is derived from `generationEstimate.estimatedFinishAt` and the
 returned `serverTime`, advancing with a monotonic clock. Missing/invalid estimates
@@ -189,3 +194,40 @@ accepted requests, signed URLs and recovery receipts are not editable through
 the chat draft patch. Appearance and timeline editing remain excluded.
 Synchronization tools are advertised only when the companion API capability is
 available; older API releases retain local Studio editing.
+
+## Cards
+
+`src/cards.ts` lists the other cards a chat shows inline. They are the same
+packaged bundle as the generation status card (`deploy/generation-status`), each
+served under its own resource (`ui://sync/card-<name>-v1.html`) with a
+`sync-card` meta tag that tells the bundle which card to be. Every profile with
+`supportsStatusCard` lists and reads them; a client that renders no card sees
+neither the resources nor the tools that only show one.
+
+| Card | Opens from | Calls |
+| --- | --- | --- |
+| price check | `generations_estimate-cost` | `account_get-usage`, then the create tool |
+| jobs | `jobs_create-many` | `jobs_get-many` |
+| translated audio preview | `translation-previews_create` | `translation-previews_get` |
+| usage and balance | `account_show-usage` | `account_get-usage` |
+| voices | `voices_show` | none |
+| recent videos | `generations_show-recent` | none |
+
+A card opens only from a tool whose result the person asked to see. The model
+calls `account_get-usage`, `voices_list` and `generations_list` for its own
+checks, often several times in a turn, so those stay without a card; the three
+`*_show` tools read exactly the same data under a name the model calls only when
+the person asks to see it.
+
+`generations_estimate-cost` repeats what it priced as `request`, and takes an
+optional `create`: the create call the quote is for, without `idempotencyKey`.
+The price check card's Create button runs that call with one key for the life of
+the card, hands the result to the status card, and tells the model the
+generation's id so it is not created twice. A quote without `create`, which is
+what a chat with the previous schema sends, leaves the button asking the chat to
+create it. `create` never reaches the API.
+
+A card calls tools itself, so on card-only clients the tools in
+`CARD_CALLED_TOOLS` carry `ui.visibility: ['model', 'app']`; app profiles reach
+them through `WIDGET_CALLABLE_HOSTED_TOOLS`.
+

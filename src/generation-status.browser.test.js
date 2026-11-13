@@ -7,6 +7,7 @@ import { expect as browserExpect, chromium } from '@playwright/test';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createMcpServerFactory } from './server.js';
 import { mountCard } from './test-fixtures/card-host-page.js';
+import { estimateFrom } from './test-fixtures/status-card-estimate.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -30,23 +31,7 @@ it.each([
     const generationId = '00000000-0000-4000-8000-000000000003';
     const projectId = '00000000-0000-4000-8000-000000000001';
     const serverNow = Date.parse('2026-10-28T12:00:00Z');
-    const estimate = {
-      estimatedDurationSeconds: 125,
-      estimatedAt: new Date(serverNow).toISOString(),
-      calibrationAsOf: new Date(serverNow).toISOString(),
-      supportAt: new Date(serverNow + 1200000).toISOString(),
-      estimatorVersion: 'fixture',
-      confidence: 'fallback',
-      source: 'fallback',
-      sampleCount: 0,
-      scope: 'non_studio',
-      durationBand: 'fixture',
-      resolutionBand: 'fixture',
-      resolutionSource: 'unknown',
-      serverTime: new Date(serverNow).toISOString(),
-      estimatedFinishAt: new Date(serverNow + 125000).toISOString(),
-      delayedAt: new Date(serverNow + 600000).toISOString(),
-    };
+    const estimate = estimateFrom(serverNow);
     const signedUrl = 'https://fixture.invalid/result.mp4?Signature=a%2Fb%2Bc&Expires=123';
     const thumbnailUrl = 'https://fixture.invalid/keynote.jpg';
     const inputVideoUrl = 'https://fixture.invalid/keynote.mp4';
@@ -65,7 +50,7 @@ it.each([
       generationEstimate: estimate,
     };
     // What the API adds to a read with include=progress; {} is an API that predates it.
-    let display = { progress: { stage: 'queued' }, summary: still };
+    let display = { progress: { stage: 'queued', phase: 'queued' }, summary: still };
     let refused = false;
     let malformed = false;
     let refuseLinks = false;
@@ -244,9 +229,10 @@ it.each([
       const badge = frame.locator('output[aria-live="polite"]');
       await browserExpect(badge).toHaveText('Queued');
       await browserExpect(frame.getByRole('heading', { name: 'Keynote in German' })).toBeVisible();
-      await browserExpect(frame.getByLabel('Generation summary')).toHaveText(
-        'English to German · 0:42 · sync-3',
-      );
+      const facts = frame.getByRole('list', { name: 'Generation summary' }).getByRole('listitem');
+      await browserExpect(facts).toHaveText(['English to German', '0:42', 'sync-3']);
+      const step = frame.locator('[aria-current="step"]');
+      await browserExpect(step).toHaveText('Queued');
       // Queued work has no measured progress yet, so there is no bar to show.
       await browserExpect(frame.getByRole('progressbar')).toHaveCount(0);
 
@@ -276,6 +262,7 @@ it.each([
       display = {
         progress: {
           stage: 'processing',
+          phase: 'rendering',
           percent: 40,
           completedTasks: 17,
           runningTasks: 4,
@@ -286,8 +273,14 @@ it.each([
       };
       await check.click();
       await browserExpect(badge).toHaveText('Processing');
+      // A dub's render is the visual half of the dub.
+      await browserExpect(step).toHaveText('Visually dubbing');
       await browserExpect(frame.getByText('17 of 43 steps done')).toBeVisible();
       await browserExpect(frame.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
+      await browserExpect(frame.getByRole('progressbar')).toHaveAttribute(
+        'aria-valuetext',
+        '17 done, 4 processing, 22 queued',
+      );
       await loaded('main video', 'videoWidth');
       await browserExpect(frame.getByRole('link', { name: 'Open in Sync' })).toHaveAttribute(
         'href',
@@ -316,6 +309,7 @@ it.each([
         ...display,
         progress: {
           stage: 'processing',
+          phase: 'rendering',
           percent: 70,
           completedTasks: 30,
           runningTasks: 4,

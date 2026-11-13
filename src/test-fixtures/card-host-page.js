@@ -62,8 +62,12 @@ export const mountCard = ({ html, toolResult, hostBridge, fontSources }) => {
       window.open(message.params.url, '_blank', 'noopener,noreferrer');
       event.source.postMessage({ jsonrpc: '2.0', id: message.id, result: {} }, '*');
     } else if (message.method === 'tools/call') {
-      const result = await window.callSync(message.params);
-      event.source.postMessage({ jsonrpc: '2.0', id: message.id, result }, '*');
+      // A host answers a call the server refuses, such as an unknown tool, with an error.
+      const reply = await window.callSync(message.params).then(
+        (result) => ({ result }),
+        (error) => ({ error: { code: -32602, message: String(error?.message ?? error) } }),
+      );
+      event.source.postMessage({ jsonrpc: '2.0', id: message.id, ...reply }, '*');
     }
   };
   window.addEventListener('message', (event) => {
