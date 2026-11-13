@@ -100,6 +100,30 @@ describe('lipsync_create speakers', () => {
       'speakers[0] needs exactly one of audioUrl or audioAssetId',
     ],
     [
+      'the id "default"',
+      { speakers: [{ id: 'default', audioAssetId: 'a', face: point }] },
+      'speakers[0].id cannot be "default"',
+    ],
+    [
+      'a speaker with two audio sources',
+      {
+        speakers: [
+          {
+            id: 'left',
+            audioAssetId: 'a',
+            audioUrl: 'https://media.example.test/a.wav',
+            face: point,
+          },
+        ],
+      },
+      'speakers[0] needs exactly one of audioUrl or audioAssetId',
+    ],
+    [
+      'a face given in no way',
+      { speakers: [{ id: 'left', audioAssetId: 'a', face: {} }] },
+      'speakers[0].face needs exactly one of',
+    ],
+    [
       'a face given two ways',
       { speakers: [{ id: 'left', audioAssetId: 'a', face: { ...point, boxes: [null] } }] },
       'speakers[0].face needs exactly one of',
