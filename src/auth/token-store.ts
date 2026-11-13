@@ -83,23 +83,26 @@ export async function clearToken(): Promise<void> {
 }
 
 const quietly = (work: Promise<unknown>) => work.catch(() => undefined);
+const done = (work: Promise<unknown>) =>
+  work.then(
+    () => true,
+    () => false,
+  );
 
 /**
  * Clears what a crashed holder left, without ever touching a live lock. A stale
  * holder's file is removed by its own name, which no later holder shares, and a
- * directory is removed only while empty, which a held lock never is.
+ * directory is removed only while empty, which a held lock never is. True when
+ * this call removed something, so the lock is worth trying again at once.
  */
 async function clearAbandoned(lock: string): Promise<boolean> {
   const [holder] = await fs.readdir(lock).catch(() => []);
-  if (!holder) {
-    await quietly(fs.rmdir(lock));
-    return true;
-  }
+  if (!holder) return done(fs.rmdir(lock));
   const held = await fs.stat(path.join(lock, holder)).catch(() => null);
   if (held && Date.now() - held.mtimeMs <= LOCK_STALE_MS) return false;
-  await quietly(fs.rm(path.join(lock, holder), { force: true }));
+  const removed = await done(fs.rm(path.join(lock, holder)));
   await quietly(fs.rmdir(lock));
-  return true;
+  return removed;
 }
 
 /**
@@ -115,17 +118,20 @@ async function takeLock(lock: string): Promise<string> {
   const deadline = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
+      // The hold is timed from when it is taken, not from when the wait began.
+      const now = new Date();
+      await fs.utimes(path.join(prepared, holder), now, now);
       await fs.rename(prepared, lock);
       return path.join(lock, holder);
     } catch {
       // Held, or left behind: look, then try again.
     }
-    if (await clearAbandoned(lock)) continue;
+    const cleared = await clearAbandoned(lock);
     if (Date.now() > deadline) {
       await quietly(fs.rm(prepared, { recursive: true, force: true }));
       throw new Error('Timed out waiting for another sync. process to finish with the sign-in.');
     }
-    await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+    if (!cleared) await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
   }
 }
 

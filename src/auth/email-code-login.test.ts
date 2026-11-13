@@ -133,6 +133,31 @@ describe('signing in by emailed code', () => {
     expect(await exists(pendingFile())).toBe(false);
   });
 
+  it('leaves a newer sign-in waiting when an older one finishes after it started', async () => {
+    let request = 0;
+    api({
+      '/register': registered,
+      '/v2/oauth/email-code': () => ({
+        body: { request_id: `request-${++request}`, expires_in: 600 },
+      }),
+      '/v2/oauth/email-code/token': async () => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return tokens('first');
+      },
+    });
+    await start();
+
+    const finishing = finishEmailLogin({ baseUrl: API, code: '123456' });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await start({ email: 'other@example.com' });
+    await finishing;
+
+    expect(JSON.parse(await fs.readFile(pendingFile(), 'utf-8'))).toMatchObject({
+      requestId: 'request-2',
+      email: 'other@example.com',
+    });
+  });
+
   it('reuses its client on the next sign-in instead of registering again', async () => {
     api({
       '/register': registered,

@@ -49,6 +49,19 @@ describe('the sign-in lock', () => {
     expect(await fs.readdir(path.dirname(lock()))).toEqual([]);
   });
 
+  it('times a hold from when it is taken, not from when the wait began', async () => {
+    let waited: Promise<number> | undefined;
+    await withStoreLock(async () => {
+      waited = withStoreLock(async () => {
+        const [holder] = await fs.readdir(lock());
+        return Date.now() - (await fs.stat(path.join(lock(), holder as string))).mtimeMs;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    expect(await waited).toBeLessThan(200);
+  });
+
   it('is taken over from a crashed holder by one waiter at a time', async () => {
     await abandonLock();
 

@@ -200,7 +200,7 @@ export async function startEmailLogin(params: {
     const requestId = field(result.body, 'request_id');
     const expiresIn = Number((result.body as { expires_in?: unknown } | null)?.expires_in) || 600;
     if (!requestId) throw new LoginError('sync. did not start the sign-in. Try again.');
-    await writeStoreFile(PENDING_FILE, {
+    const pending: PendingLogin = {
       requestId,
       codeVerifier,
       clientId,
@@ -208,10 +208,22 @@ export async function startEmailLogin(params: {
       baseUrl,
       email,
       expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
-    } satisfies PendingLogin);
+    };
+    await withStoreLock(() => writeStoreFile(PENDING_FILE, pending));
     return { email, expiresInMinutes: Math.round(expiresIn / 60) };
   }
   throw new LoginError('sync. did not start the sign-in. Try again.');
+}
+
+/**
+ * Forgets a finished request, unless a newer sign-in has replaced it meanwhile: that
+ * one's code is still on its way to the person.
+ */
+function forget(finished: PendingLogin): Promise<void> {
+  return withStoreLock(async () => {
+    const current = await readStoreFile<PendingLogin>(PENDING_FILE);
+    if (current?.requestId === finished.requestId) await removeStoreFile(PENDING_FILE);
+  });
 }
 
 /** Exchanges the emailed code for the saved sign-in. A wrong code can be tried again. */
@@ -225,7 +237,7 @@ export async function finishEmailLogin(params: {
     throw new LoginError(`No sign-in is waiting for a code. ${START_AGAIN}`);
   }
   if (new Date(pending.expiresAt) <= new Date()) {
-    await removeStoreFile(PENDING_FILE);
+    await forget(pending);
     throw new LoginError(`That code has expired. ${START_AGAIN}`);
   }
   const result = await postJson(apiUrl(pending.baseUrl, 'v2/oauth/email-code/token'), {
@@ -241,7 +253,7 @@ export async function finishEmailLogin(params: {
       );
     }
     // Every other refusal ends the request, so the next step is a new code.
-    await removeStoreFile(PENDING_FILE);
+    await forget(pending);
     if (result.code === 'invalid_grant') {
       throw new LoginError(`That code expired or was already used. ${START_AGAIN}`);
     }
@@ -253,7 +265,7 @@ export async function finishEmailLogin(params: {
     throw sharedRefusal(result);
   }
   const login = issued(result.body, pending);
-  await removeStoreFile(PENDING_FILE);
+  await forget(pending);
   if (!login) throw new LoginError(`sync. did not finish the sign-in. ${START_AGAIN}`);
   // Under the lock, so a renewal another server has in flight cannot save over it.
   await withStoreLock(() => saveCredentials(login));
