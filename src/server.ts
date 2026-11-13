@@ -549,10 +549,15 @@ function toolConfig(tool: McpToolDefinition) {
 
 // One registration config per tool, not one per session: every session of a server builds
 // its tools from the same definitions. Keyed by the input shape those sessions share, and
-// reused only while everything else the config is built from is the same too.
+// reused only while everything else the config is built from is the same too. Only those
+// fields are kept: a session's own handler here would outlive its session.
+type ConfigSource = Pick<
+  McpToolDefinition,
+  'title' | 'description' | 'outputSchema' | 'annotations' | 'meta'
+>;
 const registeredConfigs = new WeakMap<
   Record<string, z.ZodType>,
-  { from: McpToolDefinition; config: ReturnType<typeof toolConfig> }
+  { from: ConfigSource; config: ReturnType<typeof toolConfig> }
 >();
 
 function registeredConfig(tool: McpToolDefinition): ReturnType<typeof toolConfig> {
@@ -567,7 +572,11 @@ function registeredConfig(tool: McpToolDefinition): ReturnType<typeof toolConfig
   )
     return kept.config;
   const config = toolConfig(tool);
-  registeredConfigs.set(tool.inputSchema, { from: tool, config });
+  const { title, description, outputSchema, annotations, meta } = tool;
+  registeredConfigs.set(tool.inputSchema, {
+    from: { title, description, outputSchema, annotations, meta },
+    config,
+  });
   return config;
 }
 

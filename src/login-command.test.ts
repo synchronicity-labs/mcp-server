@@ -117,6 +117,9 @@ describe('sync-mcp setup and login', () => {
       'Add the sync. skills, the step-by-step workflows, with:\n  npx -y skills add x',
     );
     expect(printed).toContain('## Tell the person now');
+    // The guide never says the skills are there: setup's own line above it does.
+    expect(printed).not.toMatch(/skills were installed/);
+    expect(printed.replace(/\s+/g, ' ')).toContain('If setup printed a command above');
   });
 
   it('setup says when the agent already had the server', async () => {

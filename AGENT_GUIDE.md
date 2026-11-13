@@ -8,7 +8,9 @@ prints it again. It is for coding agents, and it is not part of the sync. skills
 
 Say this once, briefly and in your own words, then wait for them.
 
-1. **Start a new session.** The sync. tools and skills load when a session starts.
+1. **Start a new session.** The sync. tools and skills load when a session starts. If
+   setup printed a command above instead of saying it added the server or the skills, run
+   that command first, or tell the person it is still to do.
 2. **What they can ask for then.** Give two or three of these as examples:
    - Lipsync a video: "Lipsync ./interview.mp4 to ./new-take.wav"
    - Make a photo talk: "Make this portrait say: welcome to the team"
@@ -23,11 +25,12 @@ Say this once, briefly and in your own words, then wait for them.
 
 ## In later sessions
 
-**What they can make.** The sync. skills were installed with this setup. Follow the skill
-that matches the request (`lipsync`, `talking-photo`, `translate-and-dub`, `edit-dialogue`,
-`localize-campaign`, `batch-lipsync`, `troubleshoot`, `sync-api`). When the person does not
-know where to start, run the `setup` skill: it reads their account and offers a first
-result.
+**What they can make.** The sync. skills hold the workflows; setup adds them when it can.
+With them installed, follow the skill that matches the request (`lipsync`,
+`talking-photo`, `translate-and-dub`, `edit-dialogue`, `localize-campaign`,
+`batch-lipsync`, `troubleshoot`, `sync-api`). When the person does not know where to
+start, run the `setup` skill: it reads their account and offers a first result. Without
+the skills the sync. tools still work, and their descriptions say how to use them.
 
 **Plans and paying.** The skills leave this to you.
 
