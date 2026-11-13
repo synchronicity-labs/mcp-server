@@ -306,13 +306,15 @@ describe('immutable client profiles', () => {
     await Promise.all(
       sessions.map(async ({ client }, index) => {
         const supportsUploads = index < 3;
-        // lipsync_create-timeline, jobs_create-many, jobs_get-many and billing-plans_list
-        // stay out of the ChatGPT app listing only.
+        // lipsync_create-timeline, jobs_create-many and jobs_get-many stay out of the
+        // ChatGPT app listing only; billing-plans_list also stays out of Codex's.
         const chatgpt = index < 2;
         const tools = currentTools((await client.listTools()).tools);
         // account_show-usage and voices_show are listed wherever a card can render.
         const cardTools = index < 4 ? 2 : 0;
-        expect(tools).toHaveLength((supportsUploads ? 14 : 10) + (chatgpt ? 0 : 4) + cardTools);
+        expect(tools).toHaveLength(
+          (supportsUploads ? 14 : 10) + (chatgpt ? 0 : 3) + (index > 2 ? 1 : 0) + cardTools,
+        );
         expect(tools.some((tool) => tool.name === 'lipsync_create-timeline')).toBe(!chatgpt);
         expect(tools.some((tool) => tool.name === 'assets_upload')).toBe(supportsUploads);
         expect(tools.some((tool) => tool.name === 'assets_open-upload-widget')).toBe(

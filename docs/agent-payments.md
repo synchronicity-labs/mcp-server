@@ -47,8 +47,9 @@ agent's sync. sign-in would put that sign-in in front of the model.
 
 `billing-plans_list` (`GET /v2/billing/plans`) lists what the organization can buy, with
 each price, so a person chooses in the chat instead of on the website. It only reads. It
-is listed wherever approval links are, which is every client but the ChatGPT app, and
-takes the same one-call `organizationId`. An API from before the route answers 404, and
+is listed to Claude and to coding agents, and not in the OpenAI listing (the ChatGPT app,
+and Codex through the same connector), where a price list would read as promoting plans.
+It takes the same one-call `organizationId` as the links. An API from before the route answers 404, and
 the tool then says to quote one plan with `billing-approval-links_create`.
 
 ## The guide a coding agent gets

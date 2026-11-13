@@ -299,8 +299,7 @@ export function serverDescription(spendConfirmation = true): string {
 }
 
 const JOB_SET_TOOLS = ['jobs_create-many', 'jobs_get-many'];
-// A person paying, and the price list they choose from; neither moves money itself.
-const APPROVAL_TOOLS = ['billing-approval-links_create', PLANS_TOOL];
+const APPROVAL_TOOLS = ['billing-approval-links_create'];
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
   'analytics_track-event',
@@ -897,6 +896,9 @@ function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean
   if ([...BATCH_TOOLS, ...JOB_SET_TOOLS, ...APPROVAL_TOOLS].includes(tool.name))
     return profile.name !== 'chatgpt';
   if (tool.name === PAYMENT_LINK_TOOL) return paysInClient(profile);
+  // A price list reads as promoting plans, which the reviewed OpenAI listing (the ChatGPT
+  // app, and Codex through the same connector) must not do.
+  if (tool.name === PLANS_TOOL) return profile.name !== 'chatgpt' && profile.name !== 'codex';
   // Not in the reviewed ChatGPT app listing yet; other profiles list them per account.
   if (isFeatureGatedTool(tool.name)) return profile.name !== 'chatgpt';
   if (['assets_upload', 'assets_open-upload-widget'].includes(tool.name))

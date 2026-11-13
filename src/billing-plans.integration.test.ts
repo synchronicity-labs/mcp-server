@@ -111,10 +111,11 @@ describe('billing-plans_list', () => {
     expect(askedFor).toEqual([undefined, OTHER_ORGANIZATION]);
   });
 
-  it('is listed wherever a person can be handed a link to pay, and not in the ChatGPT app', async () => {
+  it('is listed to Claude and coding agents, and not in the OpenAI listing', async () => {
     expect(await (await connect('claude-code')).lists()).toBe(true);
     expect(await (await connect('claude-ai')).lists()).toBe(true);
     expect(await (await connect('openai-mcp')).lists()).toBe(false);
+    expect(await (await connect('openai-mcp (Codex)')).lists()).toBe(false);
   });
 
   it('says how to get one price when the API is too old to list plans', async () => {
