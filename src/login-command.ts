@@ -1,8 +1,12 @@
-import { finishEmailLogin, LoginError, startEmailLogin } from './auth/email-code-login.js';
+import {
+  apiUrl,
+  finishEmailLogin,
+  LoginError,
+  packageCommand,
+  startEmailLogin,
+} from './auth/email-code-login.js';
 import { loadCredentials } from './auth/token-store.js';
 import { PACKAGE_VERSION } from './version.js';
-
-const COMMAND = 'npx -y @sync.so/mcp-server@latest';
 
 const USAGE = `Usage:
   sync-mcp login --email <address> [--agent <name>]   Email a sign-in code
@@ -21,7 +25,7 @@ function option(args: string[], name: string): string | undefined {
 async function describeAccount(baseUrl: string): Promise<string> {
   try {
     const credentials = await loadCredentials();
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v2/account`, {
+    const response = await fetch(apiUrl(baseUrl, 'v2/account'), {
       headers: {
         Authorization: `Bearer ${credentials?.token}`,
         'x-sync-source': 'mcp',
@@ -55,15 +59,16 @@ async function login(args: string[], baseUrl: string): Promise<string> {
     });
     return `Sent a sign-in code to ${started.email}. It expires in ${started.expiresInMinutes} minutes.
 Ask the person for the code in that email, then run:
-  ${COMMAND} login --code <code>
+  ${packageCommand(baseUrl, 'login --code <code>')}
 `;
   }
   if (code) {
     const finished = await finishEmailLogin({ baseUrl, code });
     const account = await describeAccount(baseUrl);
+    const server = packageCommand(baseUrl);
     return `Signed in to sync. as ${finished.email}${account ? ` (${account})` : ''}.
-If the sync. server is not added to your agent yet, add it with the command "${COMMAND}", for example:
-  claude mcp add sync -- ${COMMAND}
+If the sync. server is not added to your agent yet, add it with the command "${server}", for example:
+  claude mcp add sync -- ${server}
 Then start a new session so the sync. tools load.
 `;
   }

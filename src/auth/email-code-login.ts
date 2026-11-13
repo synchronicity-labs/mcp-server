@@ -52,8 +52,25 @@ type PendingLogin = {
 type TokenResponse = { access_token: string; refresh_token: string; expires_in: number };
 type Refusal = { status: number; code?: string; description?: string; retryAfterSeconds?: number };
 
+const withSlash = (url: string) => (url.endsWith('/') ? url : `${url}/`);
+
 const sameApi = (left: string | undefined, right: string) =>
-  left?.replace(/\/+$/, '') === right.replace(/\/+$/, '');
+  left !== undefined && withSlash(left) === withSlash(right);
+
+/** A path on the API, whether or not its base URL ends with a slash. */
+export const apiUrl = (baseUrl: string, path: string) => `${withSlash(baseUrl)}${path}`;
+
+/**
+ * This package's command line for the API in use, so a printed next step reaches the
+ * API the sign-in was made for and not production.
+ */
+export function packageCommand(baseUrl: string, args = ''): string {
+  const target = sameApi(DEFAULT_API_URL, baseUrl) ? '' : ` --base-url ${baseUrl}`;
+  return `${PACKAGE_COMMAND}${args ? ` ${args}` : ''}${target}`;
+}
+
+const startAgain = (baseUrl: string) =>
+  `Start again with: ${packageCommand(baseUrl, 'login --email <your email>')}`;
 
 function field(body: unknown, name: string): string | undefined {
   const value = body && typeof body === 'object' ? (body as Record<string, unknown>)[name] : null;
@@ -168,7 +185,7 @@ export async function startEmailLogin(params: {
     const clientId =
       reuse ??
       (await registerClient(registrationUrlFor(baseUrl, params.registrationUrl), clientName));
-    const result = await postJson(`${baseUrl.replace(/\/+$/, '')}/v2/oauth/email-code`, {
+    const result = await postJson(apiUrl(baseUrl, 'v2/oauth/email-code'), {
       client_id: clientId,
       email,
       code_challenge: createHash('sha256').update(codeVerifier).digest('base64url'),
@@ -197,13 +214,12 @@ export async function startEmailLogin(params: {
   throw new LoginError('sync. did not start the sign-in. Try again.');
 }
 
-const START_AGAIN = `Start again with: ${PACKAGE_COMMAND} login --email <your email>`;
-
 /** Exchanges the emailed code for the saved sign-in. A wrong code can be tried again. */
 export async function finishEmailLogin(params: {
   baseUrl: string;
   code: string;
 }): Promise<{ email: string }> {
+  const START_AGAIN = startAgain(params.baseUrl);
   const pending = await readStoreFile<PendingLogin>(PENDING_FILE);
   if (!pending?.requestId || !sameApi(pending.baseUrl, params.baseUrl)) {
     throw new LoginError(`No sign-in is waiting for a code. ${START_AGAIN}`);
@@ -212,19 +228,16 @@ export async function finishEmailLogin(params: {
     await removeStoreFile(PENDING_FILE);
     throw new LoginError(`That code has expired. ${START_AGAIN}`);
   }
-  const result = await postJson(
-    `${pending.baseUrl.replace(/\/+$/, '')}/v2/oauth/email-code/token`,
-    {
-      client_id: pending.clientId,
-      request_id: pending.requestId,
-      code: params.code.trim(),
-      code_verifier: pending.codeVerifier,
-    },
-  );
+  const result = await postJson(apiUrl(pending.baseUrl, 'v2/oauth/email-code/token'), {
+    client_id: pending.clientId,
+    request_id: pending.requestId,
+    code: params.code.trim(),
+    code_verifier: pending.codeVerifier,
+  });
   if (!('ok' in result)) {
     if (result.code === 'invalid_grant' && result.description === 'Incorrect code.') {
       throw new LoginError(
-        `That code is not right. Check the email and run: ${PACKAGE_COMMAND} login --code <code>`,
+        `That code is not right. Check the email and run: ${packageCommand(params.baseUrl, 'login --code <code>')}`,
       );
     }
     // Every other refusal ends the request, so the next step is a new code.
@@ -242,14 +255,15 @@ export async function finishEmailLogin(params: {
   const login = issued(result.body, pending);
   await removeStoreFile(PENDING_FILE);
   if (!login) throw new LoginError(`sync. did not finish the sign-in. ${START_AGAIN}`);
-  await saveCredentials(login);
+  // Under the lock, so a renewal another server has in flight cannot save over it.
+  await withStoreLock(() => saveCredentials(login));
   return { email: pending.email };
 }
 
 /** The sign-in to save from a token response, or null when the response is not one. */
 function issued(
   body: unknown,
-  login: Pick<StoredCredentials, 'clientId' | 'clientName' | 'baseUrl'>,
+  login: Pick<StoredCredentials, 'clientId' | 'clientName' | 'baseUrl' | 'email'>,
 ): StoredCredentials | null {
   const tokens = body as Partial<TokenResponse> | null;
   if (!tokens?.access_token || !tokens.refresh_token || !tokens.expires_in) return null;
@@ -259,6 +273,7 @@ function issued(
     expiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     clientId: login.clientId,
     clientName: login.clientName,
+    email: login.email,
     baseUrl: login.baseUrl,
   };
 }
@@ -276,12 +291,17 @@ export async function savedEmailLogin(baseUrl: string): Promise<EmailLogin | nul
 const fresh = (login: EmailLogin) =>
   !!login.expiresAt && new Date(login.expiresAt).getTime() - Date.now() > REFRESH_MARGIN_MS;
 
-const SIGNED_OUT = `The sync. sign-in was disconnected or has expired. Sign in again with: ${PACKAGE_COMMAND} login --email <your email>`;
+const signedOut = (baseUrl: string) =>
+  `The sync. sign-in was disconnected or has expired. Sign in again with: ${packageCommand(baseUrl, 'login --email <your email>')}`;
+
+// A running server keeps the account's tools and workspace, which a renewed token must match.
+const ACCOUNT_CHANGED =
+  'The sync. sign-in now belongs to another account. Restart the sync. server (start a new agent session) to use it.';
 
 async function refresh(login: EmailLogin): Promise<EmailLogin> {
   let result: Awaited<ReturnType<typeof postJson>>;
   try {
-    result = await postJson(`${login.baseUrl.replace(/\/+$/, '')}/v2/oauth/token`, {
+    result = await postJson(apiUrl(login.baseUrl, 'v2/oauth/token'), {
       grant_type: 'refresh_token',
       refresh_token: login.refreshToken,
       client_id: login.clientId,
@@ -299,35 +319,46 @@ async function refresh(login: EmailLogin): Promise<EmailLogin> {
   if (result.status >= 500 || result.status === 429) {
     throw new Error(`sync. could not renew the sign-in (${result.status}). Try again shortly.`);
   }
-  throw new Error(SIGNED_OUT);
+  throw new Error(signedOut(login.baseUrl));
 }
 
-async function currentHeaders(baseUrl: string): Promise<Record<string, string>> {
+/** The saved sign-in, while it is still the account this server started with. */
+async function sameLogin(baseUrl: string, email: string | undefined): Promise<EmailLogin> {
+  const saved = await savedEmailLogin(baseUrl);
+  if (!saved) throw new Error(signedOut(baseUrl));
+  if (saved.email !== email) throw new Error(ACCOUNT_CHANGED);
+  return saved;
+}
+
+async function currentHeaders(
+  baseUrl: string,
+  email: string | undefined,
+): Promise<Record<string, string>> {
   const bearer = (login: EmailLogin) => ({ Authorization: `Bearer ${login.token}` });
   // Read every time: another server sharing the file may have renewed the tokens.
-  const saved = await savedEmailLogin(baseUrl);
-  if (!saved) throw new Error(SIGNED_OUT);
+  const saved = await sameLogin(baseUrl, email);
   if (fresh(saved)) return bearer(saved);
   return withStoreLock(async () => {
-    const latest = await savedEmailLogin(baseUrl);
-    if (!latest) throw new Error(SIGNED_OUT);
+    const latest = await sameLogin(baseUrl, email);
     return bearer(fresh(latest) ? latest : await refresh(latest));
   });
 }
 
 /**
  * Auth headers for each API request from the saved sign-in, renewed before it expires,
- * with what to tell the person once sync. no longer accepts it.
+ * with what to tell the person once sync. no longer accepts it. It stays with the
+ * account it started as: signing in again as the same person carries on, and signing
+ * in as someone else asks for a restart.
  */
 export function emailLoginAuth(
-  baseUrl: string,
+  login: Pick<EmailLogin, 'baseUrl' | 'email'>,
 ): (() => Promise<Record<string, string>>) & { signedOutStep: string } {
   let pending: Promise<Record<string, string>> | undefined;
   const headers = () => {
-    pending ??= currentHeaders(baseUrl).finally(() => {
+    pending ??= currentHeaders(login.baseUrl, login.email).finally(() => {
       pending = undefined;
     });
     return pending;
   };
-  return Object.assign(headers, { signedOutStep: SIGNED_OUT });
+  return Object.assign(headers, { signedOutStep: signedOut(login.baseUrl) });
 }

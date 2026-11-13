@@ -14,11 +14,13 @@ export type StoredCredentials = {
   /** The OAuth client the refresh token belongs to, and the name it registered. */
   clientId?: string;
   clientName?: string;
+  /** The account's email, so a running server notices a sign-in as someone else. */
+  email?: string;
   /** The API these tokens are for, so they are never sent to another one. */
   baseUrl?: string;
 };
 
-// A refresh holds the lock for one bounded request, so a lock older than this is abandoned.
+// The holder does one bounded request, so a lock older than this was left by a crash.
 const LOCK_STALE_MS = 30_000;
 // Longer than that request may take, so a waiter outlasts a slow holder.
 const LOCK_WAIT_MS = 25_000;
@@ -80,26 +82,47 @@ export async function clearToken(): Promise<void> {
   await fs.rm(credentialsFile(), { force: true });
 }
 
-async function takeLock(lock: string): Promise<void> {
+const quietly = (work: Promise<unknown>) => work.catch(() => undefined);
+
+/**
+ * Clears what a crashed holder left, without ever touching a live lock. A stale
+ * holder's file is removed by its own name, which no later holder shares, and a
+ * directory is removed only while empty, which a held lock never is.
+ */
+async function clearAbandoned(lock: string): Promise<boolean> {
+  const [holder] = await fs.readdir(lock).catch(() => []);
+  if (!holder) {
+    await quietly(fs.rmdir(lock));
+    return true;
+  }
+  const held = await fs.stat(path.join(lock, holder)).catch(() => null);
+  if (held && Date.now() - held.mtimeMs <= LOCK_STALE_MS) return false;
+  await quietly(fs.rm(path.join(lock, holder), { force: true }));
+  await quietly(fs.rmdir(lock));
+  return true;
+}
+
+/**
+ * The lock is a directory holding one file named for its holder. It arrives whole,
+ * by renaming a prepared directory into place, which succeeds only while no holder
+ * is there. Returns the holder's file, which is all a release removes.
+ */
+async function takeLock(lock: string): Promise<string> {
+  const holder = randomUUID();
+  const prepared = `${lock}.${holder}`;
+  await fs.mkdir(prepared);
+  await fs.writeFile(path.join(prepared, holder), '');
   const deadline = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
-      await (await fs.open(lock, 'wx')).close();
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      await fs.rename(prepared, lock);
+      return path.join(lock, holder);
+    } catch {
+      // Held, or left behind: look, then try again.
     }
-    const held = await fs.stat(lock).catch(() => null);
-    if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS) {
-      // Renaming is atomic, so only one waiter clears a lock its holder left behind.
-      const abandoned = `${lock}.${randomUUID()}`;
-      await fs
-        .rename(lock, abandoned)
-        .then(() => fs.rm(abandoned, { force: true }))
-        .catch(() => undefined);
-      continue;
-    }
+    if (await clearAbandoned(lock)) continue;
     if (Date.now() > deadline) {
+      await quietly(fs.rm(prepared, { recursive: true, force: true }));
       throw new Error('Timed out waiting for another sync. process to finish with the sign-in.');
     }
     await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
@@ -113,10 +136,11 @@ async function takeLock(lock: string): Promise<void> {
 export async function withStoreLock<T>(task: () => Promise<T>): Promise<T> {
   const lock = storePath('mcp-credentials.lock');
   await fs.mkdir(path.dirname(lock), { recursive: true });
-  await takeLock(lock);
+  const held = await takeLock(lock);
   try {
     return await task();
   } finally {
-    await fs.rm(lock, { force: true });
+    await quietly(fs.rm(held, { force: true }));
+    await quietly(fs.rmdir(lock));
   }
 }

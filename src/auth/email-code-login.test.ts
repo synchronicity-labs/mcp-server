@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   emailLoginAuth,
   finishEmailLogin,
+  packageCommand,
   savedEmailLogin,
   startEmailLogin,
 } from './email-code-login.js';
@@ -55,6 +56,10 @@ const start = (overrides: Partial<Parameters<typeof startEmailLogin>[0]> = {}) =
     ...overrides,
   });
 
+const EMAIL = 'person@example.com';
+// One running server's view of the sign-in: the account it started with.
+const auth = () => emailLoginAuth({ baseUrl: API, email: EMAIL })();
+
 const expiredLogin = (baseUrl = API) =>
   saveCredentials({
     token: 'oat-old',
@@ -62,6 +67,7 @@ const expiredLogin = (baseUrl = API) =>
     expiresAt: new Date(Date.now() - 1000).toISOString(),
     clientId: 'client-1',
     clientName: 'Claude Code',
+    email: EMAIL,
     baseUrl,
   });
 
@@ -121,6 +127,7 @@ describe('signing in by emailed code', () => {
       token: 'oat-first',
       refreshToken: 'refresh-first',
       clientId: 'client-1',
+      email: EMAIL,
       baseUrl: API,
     });
     expect(await exists(pendingFile())).toBe(false);
@@ -168,8 +175,9 @@ describe('signing in by emailed code', () => {
     });
     await start();
 
+    // The next command names this API, so it does not reach production instead.
     await expect(finishEmailLogin({ baseUrl: API, code: '000000' })).rejects.toThrow(
-      'That code is not right',
+      `That code is not right. Check the email and run: ${packageCommand(API, 'login --code <code>')}`,
     );
     expect(await exists(pendingFile())).toBe(true);
     expect(await loadCredentials()).toBeNull();
@@ -227,6 +235,17 @@ describe('signing in by emailed code', () => {
   });
 });
 
+describe('the commands it prints', () => {
+  it('name the API only when it is not production', () => {
+    expect(packageCommand('https://api.sync.so/', 'login --code <code>')).toBe(
+      'npx -y @sync.so/mcp-server@latest login --code <code>',
+    );
+    expect(packageCommand('https://dev-api.sync.so')).toBe(
+      'npx -y @sync.so/mcp-server@latest --base-url https://dev-api.sync.so',
+    );
+  });
+});
+
 describe('the saved sign-in', () => {
   it('still reads a device-flow file, and never hands out a refreshable token as one', async () => {
     await saveToken('device-token', new Date(Date.now() + 60_000).toISOString());
@@ -241,7 +260,7 @@ describe('the saved sign-in', () => {
     await expiredLogin('https://other.test');
 
     expect(await savedEmailLogin(API)).toBeNull();
-    await expect(emailLoginAuth(API)()).rejects.toThrow('Sign in again');
+    await expect(auth()).rejects.toThrow('Sign in again');
   });
 
   it('uses the saved token while it is fresh', async () => {
@@ -251,10 +270,11 @@ describe('the saved sign-in', () => {
       refreshToken: 'refresh-fresh',
       expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
       clientId: 'client-1',
+      email: EMAIL,
       baseUrl: API,
     });
 
-    await expect(emailLoginAuth(API)()).resolves.toEqual({ Authorization: 'Bearer oat-fresh' });
+    await expect(auth()).resolves.toEqual({ Authorization: 'Bearer oat-fresh' });
     expect(calls).toHaveLength(0);
   });
 
@@ -262,7 +282,7 @@ describe('the saved sign-in', () => {
     await expiredLogin();
     api({ '/v2/oauth/token': tokens('new') });
 
-    await expect(emailLoginAuth(API)()).resolves.toEqual({ Authorization: 'Bearer oat-new' });
+    await expect(auth()).resolves.toEqual({ Authorization: 'Bearer oat-new' });
 
     expect(call(0).body).toEqual({
       grant_type: 'refresh_token',
@@ -287,7 +307,7 @@ describe('the saved sign-in', () => {
     });
 
     // Each server process holds its own source; only the file and its lock are shared.
-    const headers = await Promise.all([emailLoginAuth(API)(), emailLoginAuth(API)()]);
+    const headers = await Promise.all([auth(), auth()]);
 
     expect(headers).toEqual([
       { Authorization: 'Bearer oat-new' },
@@ -296,12 +316,52 @@ describe('the saved sign-in', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('is not overwritten by a renewal another server had in flight', async () => {
+    await expiredLogin();
+    api({
+      '/v2/oauth/token': async () => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return tokens('renewed-old-account');
+      },
+      '/register': registered,
+      '/v2/oauth/email-code': started,
+      '/v2/oauth/email-code/token': tokens('new-login'),
+    });
+    await start({ email: 'other@example.com' });
+
+    const renewal = auth();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await finishEmailLogin({ baseUrl: API, code: '123456' });
+    await renewal;
+
+    expect(await loadCredentials()).toMatchObject({
+      token: 'oat-new-login',
+      email: 'other@example.com',
+    });
+  });
+
+  it('asks for a restart once the file holds another account, and carries on for the same one', async () => {
+    await expiredLogin();
+    await saveCredentials({ ...(await loadCredentials()), token: 'oat-b', email: 'other@x.co' });
+    api({});
+    await expect(auth()).rejects.toThrow('Restart the sync. server');
+    expect(calls).toHaveLength(0);
+
+    await saveCredentials({
+      ...(await loadCredentials()),
+      token: 'oat-again',
+      email: EMAIL,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    await expect(auth()).resolves.toEqual({ Authorization: 'Bearer oat-again' });
+  });
+
   it('says to sign in again once the connection is gone, and keeps trying through an outage', async () => {
     await expiredLogin();
     api({ '/v2/oauth/token': { status: 503 } });
-    await expect(emailLoginAuth(API)()).rejects.toThrow('could not renew the sign-in (503)');
+    await expect(auth()).rejects.toThrow('could not renew the sign-in (503)');
 
     api({ '/v2/oauth/token': { status: 400, body: { error: 'invalid_grant' } } });
-    await expect(emailLoginAuth(API)()).rejects.toThrow('login --email');
+    await expect(auth()).rejects.toThrow('login --email');
   });
 });

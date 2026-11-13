@@ -1482,9 +1482,10 @@ async function resolveAuth(
 
   // An emailed-code sign-in stays signed in: a refusal mid-session says to sign in
   // again, where a device flow nobody is watching would only hang.
-  if (await savedEmailLogin(config.baseUrl)) {
+  const emailLogin = await savedEmailLogin(config.baseUrl);
+  if (emailLogin) {
     log('Using the saved sync. sign-in\n');
-    return emailLoginAuth(config.baseUrl);
+    return emailLoginAuth(emailLogin);
   }
 
   const cachedToken = await loadToken();
