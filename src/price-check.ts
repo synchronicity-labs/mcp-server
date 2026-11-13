@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { ClientProfile } from './client-profile.js';
-import { LIPSYNC_INPUTS_NOT_FROM_ASSETS } from './tools/app-tools.js';
 import type { McpToolDefinition } from './tools/generator.js';
 import { REASONING_MODELS } from './tools/model-options.js';
 import { projectIntentError, projectUseAllowed } from './tools/project-intent.js';
@@ -21,11 +20,7 @@ const createCall = z
  * keys are made here, with the quote: a card the host reloads sends the same ones, so a
  * retry can start neither a second video nor a second project.
  */
-function quotedCall(
-  call: z.infer<typeof createCall>,
-  priced: Record<string, unknown>,
-  profile: ClientProfile | undefined,
-) {
+function quotedCall(call: z.infer<typeof createCall>, priced: Record<string, unknown>) {
   const dub = priced.workflow === 'translate-and-dub';
   if (dub !== (call.tool === 'dubbing_create'))
     throw new Error(
@@ -55,19 +50,15 @@ function quotedCall(
     throw new Error(
       `create.arguments.organizationId is ${JSON.stringify(named)} but this quote runs in ${quoted ?? 'the session’s organization'}. Pass organizationId on the quote, and the same one or none in create.arguments.`,
     );
-  // The create tools refuse an existing project the person did not choose. The card may
-  // run this call through an entry point without that check, so it is made here.
-  const { projectIntent, ...fields } = call.arguments;
-  if (!projectUseAllowed(fields.projectId, projectIntent))
+  // The create tools refuse an existing project the person did not choose. Refused here
+  // too, before the person approves a price, not when they press Create.
+  if (!projectUseAllowed(call.arguments.projectId, call.arguments.projectIntent))
     throw projectIntentError('The quote was not made: ');
-  const tool = cardTool(call, profile);
-  if (!tool) return undefined;
-  const placed = 'projectId' in fields || 'projectCreationKey' in fields;
+  const placed = 'projectId' in call.arguments || 'projectCreationKey' in call.arguments;
   return {
-    tool,
+    tool: call.tool,
     arguments: {
-      // The saved-assets entry point has no projectIntent input; the others require it.
-      ...(tool === call.tool ? call.arguments : fields),
+      ...call.arguments,
       model,
       // A new project needs its own key, or a retry would make another project.
       ...(placed ? {} : { projectCreationKey: randomUUID() }),
@@ -77,17 +68,23 @@ function quotedCall(
 }
 
 /**
- * The tool a card on this client can call for the quoted job, if any. A host with the
- * Sync app refuses a card's call to lipsync_create, which takes attached files there, so
- * its cards start a lipsync through the entry point for saved assets. A lipsync that
- * needs an input that entry point does not take has no call a card can run: the quote
- * then carries none, and the card asks the chat to create it.
+ * Whether this client's price card runs the create call itself: only a client that shows
+ * cards without the Sync app. OpenAI's app review refuses a tool whose input names another
+ * tool and its arguments, so its clients list the quote tool without `create`, and their
+ * card's Create button asks the chat to create. A client with no card has no button.
  */
-function cardTool(call: z.infer<typeof createCall>, profile: ClientProfile | undefined) {
-  if (call.tool !== 'lipsync_create' || !profile?.supportsAppUi) return call.tool;
-  return LIPSYNC_INPUTS_NOT_FROM_ASSETS.some((key) => call.arguments[key] !== undefined)
-    ? undefined
-    : 'lipsync_create-from-assets';
+const cardRunsCreate = (profile: ClientProfile | undefined) =>
+  profile !== undefined && profile.supportsStatusCard && !profile.supportsAppUi;
+
+/** The quote tool as this client lists it: with `create` only where a card runs it. */
+export function presentPriceCheck(
+  tool: McpToolDefinition,
+  profile: ClientProfile,
+): McpToolDefinition {
+  if (tool.name !== 'generations_estimate-cost' || cardRunsCreate(profile)) return tool;
+  const inputSchema = { ...tool.inputSchema };
+  delete inputSchema.create;
+  return { ...tool, inputSchema };
 }
 
 /**
@@ -104,9 +101,9 @@ export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
     handler: async (args, context) => {
       const { create, ...priced } = args;
       const call =
-        create === undefined
+        create === undefined || !cardRunsCreate(context?.clientProfile)
           ? undefined
-          : quotedCall(createCall.parse(create), priced, context?.clientProfile);
+          : quotedCall(createCall.parse(create), priced);
       const result = await handler(priced, context);
       if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
       // The organization the quote ran in, so the card's call runs there too: neither a

@@ -15,7 +15,7 @@ const CARDS = [
     card: 'quote',
     title: 'Sync price check',
     description:
-      'What a Sync generation will cost before anything is charged, what is left afterwards, and a Create button that starts the quoted job when the person presses it.',
+      'What a Sync generation will cost before anything is charged, what is left afterwards, and a Create button the person presses to go ahead with the quoted job.',
     tools: ['generations_estimate-cost'],
   },
   {

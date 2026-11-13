@@ -64,7 +64,7 @@ import {
   runInOrganization,
   runInOrganizationSession,
 } from './organization-selection.js';
-import { withPriceCheck } from './price-check.js';
+import { presentPriceCheck, withPriceCheck } from './price-check.js';
 import { generationContextKey, rememberGeneration } from './recent-generations.js';
 import {
   applyEdits,
@@ -907,7 +907,8 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 /** Profile-specific descriptors and presentation. Authentication remains request-scoped. */
-function presentTool(tool: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
+function presentTool(listed: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
+  const tool = presentPriceCheck(listed, profile);
   if (profile.supportsUploads)
     return WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool;
   const inputSchema = { ...tool.inputSchema };

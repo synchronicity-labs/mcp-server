@@ -297,18 +297,44 @@ it('gives the card no call to run when the quote cannot name its organization', 
   }
 });
 
-it('hands a ChatGPT card the lipsync call it is allowed to make, or none', async () => {
-  const { client, close } = await connect('openai-mcp');
-  try {
-    const { tools } = await client.listTools();
-    // ChatGPT refuses a card's call to a tool that takes attached files.
-    expect(tools.find((tool) => tool.name === 'lipsync_create')?._meta).toHaveProperty(
-      'openai/fileParams',
-    );
-    const fromAssets = tools.find((tool) => tool.name === 'lipsync_create-from-assets')!;
-    expect(fromAssets._meta).not.toHaveProperty('openai/fileParams');
-    expect(fromAssets._meta).toMatchObject({ 'openai/widgetAccessible': true });
+it.each(['openai-mcp', 'openai-mcp (codex)', 'cursor-vscode'])(
+  'offers %s a quote without a create call, so its card asks the chat to create',
+  async (clientName) => {
+    const { client, close } = await connect(clientName);
+    try {
+      const { tools } = await client.listTools();
+      const estimate = tools.find((tool) => tool.name === 'generations_estimate-cost')!;
+      // OpenAI's app review refuses a tool whose input names another tool and its arguments.
+      expect(estimate.inputSchema.properties).toHaveProperty('duration');
+      expect(estimate.inputSchema.properties).not.toHaveProperty('create');
+      // A call that names one anyway is priced like any other and carries none back.
+      const quote = await client.callTool({
+        name: estimate.name,
+        arguments: {
+          model: 'sync-3',
+          duration: 222,
+          create: { tool: 'dubbing_create', arguments: { videoAssetId: 'video-1' } },
+        },
+      });
+      expect(quote.structuredContent).toMatchObject({
+        estimatedCredits: 84,
+        request: { model: 'sync-3', duration: 222 },
+      });
+      expect(quote.structuredContent).not.toHaveProperty('create');
+    } finally {
+      await close();
+    }
+  },
+);
 
+it('refuses a quote whose create call uses a project the person did not choose', async () => {
+  const { client, calls, close } = await connect('claude-ai');
+  try {
+    const project = {
+      videoAssetId: 'video-1',
+      audioAssetId: 'audio-1',
+      projectId: '00000000-0000-4000-8000-000000000009',
+    };
     const quote = (args: Record<string, unknown>) =>
       client.callTool({
         name: 'generations_estimate-cost',
@@ -318,34 +344,24 @@ it('hands a ChatGPT card the lipsync call it is allowed to make, or none', async
           create: { tool: 'lipsync_create', arguments: args },
         },
       });
-    // Saved assets: the same job through the entry point a card can call, with its keys.
-    const saved = { videoAssetId: 'video-1', audioAssetId: 'audio-1' };
-    expect((await quote(saved)).structuredContent).toMatchObject({
-      estimatedCredits: 84,
-      create: {
-        tool: 'lipsync_create-from-assets',
-        arguments: { ...saved, model: 'sync-3', projectCreationKey: expect.stringMatching(UUID) },
-        idempotencyKey: expect.stringMatching(UUID),
-      },
-    });
-    // That entry point does not check that the person chose an existing project, so the
-    // quote does: without the choice it is refused, and with it the marker is not passed on.
-    const project = { ...saved, projectId: '00000000-0000-4000-8000-000000000009' };
     const unchosen = await quote(project);
     expect(unchosen.isError).toBe(true);
     expect(JSON.stringify(unchosen.content)).toContain(
       'Existing project use requires an explicit user selection',
     );
+    expect(calls.some((call) => call.path === '/v2/generate/estimate-cost')).toBe(false);
+    // With the choice, the call goes back whole: lipsync_create checks the choice again.
     const chosen = await quote({ ...project, projectIntent: 'explicit' });
     expect((chosen.structuredContent as { create: unknown }).create).toEqual({
-      tool: 'lipsync_create-from-assets',
-      arguments: { ...project, model: 'sync-3', organizationId: ORGANIZATION },
+      tool: 'lipsync_create',
+      arguments: {
+        ...project,
+        projectIntent: 'explicit',
+        model: 'sync-3',
+        organizationId: ORGANIZATION,
+      },
       idempotencyKey: expect.stringMatching(UUID),
     });
-    // That entry point takes no link, so the quote carries no call and the card asks the chat.
-    const linked = await quote({ videoUrl: 'https://fixture.invalid/a.mp4', audioAssetId: 'a-1' });
-    expect(linked.structuredContent).toMatchObject({ estimatedCredits: 84 });
-    expect(linked.structuredContent).not.toHaveProperty('create');
   } finally {
     await close();
   }

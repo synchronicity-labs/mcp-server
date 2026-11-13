@@ -236,18 +236,19 @@ tells the model the generation's id. A quote without `create`, which is
 what a chat with the previous schema sends, leaves the button asking the chat to
 create it. `create` never reaches the API.
 
-ChatGPT refuses a card's call to a tool that takes attached files, and
-`lipsync_create` is one there. For a client with the Sync app, the quote
-therefore echoes a lipsync call as `lipsync_create-from-assets`, the same job
-through the entry point embedded views call. A lipsync that needs an input that
-entry point does not take (a link, an attached file, `shots`, `speakers` or
-`allowOverlappingFaces`) gets a quote without `create`, so the button asks the
-chat. Other clients keep `lipsync_create`.
+Only a client that shows cards without the Sync app (Claude) lists `create`.
+OpenAI's app review refuses a tool whose input names another tool and its
+arguments ("appears to execute operations that are not individually exposed"),
+and holds the whole rescan until it is gone. ChatGPT and Codex therefore list
+`generations_estimate-cost` without `create`, a `create` they send anyway is
+ignored, and their card's Create button asks the chat to create the quoted job,
+which the model then starts with `dubbing_create` or `lipsync_create`. Do not
+add an input there that carries another tool's name or a free-form arguments
+record. A client that shows no card lists no `create` either.
 
 A `create` call that names an existing `projectId` is held to the rule the create
 tools enforce: without `projectIntent=explicit`, or a project this user just
-created, the quote is refused. The saved-assets entry point has no such check of
-its own, so the quote is where it is made for a card.
+created, the quote is refused, before the person approves a price.
 
 The echoed call also carries the `organizationId` the quote ran in, whether the
 quote named one or used the session's, so the card's call spends in the

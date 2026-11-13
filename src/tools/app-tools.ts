@@ -42,7 +42,7 @@ function assertSingleSource(kind: MediaKind, count: number): void {
 }
 
 /** lipsync_create inputs that lipsync_create-from-assets, the entry point embedded views call, does not take. */
-export const LIPSYNC_INPUTS_NOT_FROM_ASSETS = [
+const LIPSYNC_INPUTS_NOT_FROM_ASSETS = [
   'video',
   'image',
   'audio',
