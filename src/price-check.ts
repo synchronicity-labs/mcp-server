@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpToolDefinition } from './tools/generator.js';
 
@@ -12,7 +13,8 @@ const createCall = z
 
 /**
  * Makes a quote self-describing for the price check card: the result repeats what was
- * priced, and carries the create call the card's button runs when the model supplied one.
+ * priced, and carries the create call the card's button runs when the model supplied one,
+ * with the idempotency key that call must use.
  */
 export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
   if (tool.name !== 'generations_estimate-cost' || tool.resultFormat === 'mcp') return tool;
@@ -28,7 +30,9 @@ export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
       return {
         ...result,
         request: { model: priced.model, duration: priced.duration, workflow: priced.workflow },
-        ...(call.success ? { create: call.data } : {}),
+        // The key is made with the quote, so a card the host reloads sends the same one
+        // and cannot start the video twice.
+        ...(call.success ? { create: { ...call.data, idempotencyKey: randomUUID() } } : {}),
       };
     },
   };
