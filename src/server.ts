@@ -520,6 +520,20 @@ function toolSchema(shape: Record<string, z.ZodType>): z.ZodObject {
   return schema;
 }
 
+// Like the validators above: one descriptor _meta per tool, not one per session.
+const NO_META = Object.freeze(createToolDescriptorMeta(undefined));
+const registeredMetas = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
+
+function registeredMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!meta) return NO_META;
+  let descriptorMeta = registeredMetas.get(meta);
+  if (!descriptorMeta) {
+    descriptorMeta = Object.freeze(createToolDescriptorMeta(meta));
+    registeredMetas.set(meta, descriptorMeta);
+  }
+  return descriptorMeta;
+}
+
 export function registerTools(
   server: McpServer,
   tools: McpToolDefinition[],
@@ -536,7 +550,7 @@ export function registerTools(
       inputSchema: toolInputSchema(tool.inputSchema),
       outputSchema: tool.outputSchema ? toolSchema(tool.outputSchema) : undefined,
       annotations: tool.annotations,
-      _meta: createToolDescriptorMeta(tool.meta),
+      _meta: registeredMeta(tool.meta),
     };
     const run = async (
       args: Record<string, unknown> | undefined,
