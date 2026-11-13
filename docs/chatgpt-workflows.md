@@ -212,6 +212,7 @@ neither the resources nor the tools that only show one.
 | usage and balance | `account_show-usage` | `account_get-usage` |
 | voices | `voices_show` | none |
 | recent videos | `generations_show-recent` | none |
+| shot review | `shots_review` | `shots_regenerate`, the status read, `shots_splice` |
 
 A card opens only from a tool whose result the person asked to see. The model
 calls `account_get-usage`, `voices_list` and `generations_list` for its own
@@ -226,6 +227,13 @@ the card, hands the result to the status card, and tells the model the
 generation's id so it is not created twice. A quote without `create`, which is
 what a chat with the previous schema sends, leaves the button asking the chat to
 create it. `create` never reaches the API.
+
+`shots_review` opens the shot review card on a completed generation. It only
+reads: it checks that the given shots cover the video from frame 0 to
+`frameCount` and returns the first render, its source video and the shots. The
+card keeps the review itself (flags, takes, picks) and tells the model each id
+as it starts a take or builds the final video. It is behind `lipsync_planning`
+like the other `shots_*` tools, so ChatGPT never lists it.
 
 A card calls tools itself, so on card-only clients the tools in
 `CARD_CALLED_TOOLS` carry `ui.visibility: ['model', 'app']`; app profiles reach

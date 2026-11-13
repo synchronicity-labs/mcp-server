@@ -7,6 +7,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const QUOTE = 'ui://sync/card-quote-v1.html';
 const USAGE = 'ui://sync/card-usage-v1.html';
+const GENERATION = '00000000-0000-4000-8000-000000000003';
 const billing = {
   plan: 'creator',
   canManageBilling: true,
@@ -43,6 +44,16 @@ async function connect(clientName: string) {
     if (url.pathname === '/v2/oauth/account')
       return Response.json({ organization: { id: 'org-1', name: 'Acme', role: 'owner' } });
     if (url.pathname === '/v2/billing') return Response.json(billing);
+    if (url.pathname === '/v2/account')
+      return Response.json({ plan: { id: 'pro', name: 'Pro' }, features: ['lipsync_planning'] });
+    if (url.pathname === `/v2/generate/${GENERATION}`)
+      return Response.json({
+        id: GENERATION,
+        status: 'COMPLETED',
+        outputUrl: 'https://fixture.invalid/result.mp4',
+        input: [{ type: 'video', url: 'https://fixture.invalid/source.mp4' }],
+        summary: { title: 'Keynote in German' },
+      });
     if (url.pathname === '/v2/generations') return Response.json([{ id: 'generation-1' }]);
     if (url.pathname === '/v2/generate/estimate-cost')
       return Response.json({ estimatedGenerationCost: 0.84, estimatedCredits: 84 });
@@ -152,6 +163,46 @@ it('hands the price check card the create call to run, without sending it to the
     const plain = await client.callTool({ name: estimate.name, arguments: priced });
     expect(plain.structuredContent).not.toHaveProperty('create');
     expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
+  } finally {
+    await close();
+  }
+});
+
+it('opens a shot review only on a finished generation whose shots cover the whole video', async () => {
+  const { client, calls, close } = await connect('claude-ai');
+  try {
+    const review = (shots: { startFrame: number; endFrame: number }[]) =>
+      client.callTool({
+        name: 'shots_review',
+        arguments: { generationId: GENERATION, shots, fps: 24, frameCount: 96 },
+      });
+    // A gap would leave frames the person could never flag.
+    const gap = await review([
+      { startFrame: 0, endFrame: 40 },
+      { startFrame: 48, endFrame: 96 },
+    ]);
+    expect(gap.isError).toBe(true);
+    expect(JSON.stringify(gap.content)).toContain('shots[1] must start at frame 40');
+    expect(calls.some((call) => call.path.startsWith('/v2/generate/'))).toBe(false);
+
+    const shots = [
+      { startFrame: 0, endFrame: 40 },
+      { startFrame: 40, endFrame: 96 },
+    ];
+    const opened = await review(shots);
+    expect(opened.structuredContent).toEqual({
+      generationId: GENERATION,
+      title: 'Keynote in German',
+      videoUrl: 'https://fixture.invalid/result.mp4',
+      sourceUrl: 'https://fixture.invalid/source.mp4',
+      fps: 24,
+      frameCount: 96,
+      shots,
+    });
+    // Reading is all it does: the card's buttons start the render and the final build.
+    expect(
+      calls.filter((call) => call.path.startsWith('/v2/generate')).map((call) => call.path),
+    ).toEqual([`/v2/generate/${GENERATION}`]);
   } finally {
     await close();
   }

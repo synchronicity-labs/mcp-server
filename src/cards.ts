@@ -19,6 +19,13 @@ const CARDS = [
     tools: ['generations_estimate-cost'],
   },
   {
+    card: 'shots',
+    title: 'Sync shot review',
+    description:
+      'A finished generation cut into its shots: the person flags the shots that look wrong, renders only those again, compares each new take with the first render and builds the final video.',
+    tools: ['shots_review'],
+  },
+  {
     card: 'jobs',
     title: 'Sync jobs',
     description:
@@ -85,6 +92,8 @@ const CARD_CALLED_TOOLS = new Set([
   'translation-previews_get',
   'dubbing_create',
   'lipsync_create',
+  'shots_regenerate',
+  'shots_splice',
 ]);
 
 /**
@@ -154,7 +163,10 @@ const SHOWN = [
 ] as const;
 
 /** Names of the tools that exist only to show a card. */
-export const CARD_TOOL_NAMES = new Set<string>(SHOWN.map((shown) => shown.name));
+export const CARD_TOOL_NAMES = new Set<string>([
+  ...SHOWN.map((shown) => shown.name),
+  'shots_review',
+]);
 
 /**
  * Tools that show a card: each reads exactly what its source tool reads, under a name the

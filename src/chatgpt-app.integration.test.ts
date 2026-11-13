@@ -245,6 +245,7 @@ it.each(['claude', 'unknown', 'openai-mcp (Codex).evil'])(
           ? [
               'sync-generation-status',
               'sync-card-quote',
+              'sync-card-shots',
               'sync-card-jobs',
               'sync-card-translation',
               'sync-card-usage',

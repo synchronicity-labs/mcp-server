@@ -66,13 +66,13 @@ const withFeatures = (features: string[]): Account => ({
 const gatedNames = async (client: Client) =>
   (await client.listTools()).tools.map((tool) => tool.name).filter((name) => GATED.includes(name));
 const SHOT_TOOLS = ['lipsync_create', 'lipsync_create-timeline'];
-// The lipsync tools that list the gated shots input, by name. shots_regenerate is itself a
-// gated tool, and shots is what it is for.
+// The lipsync tools that list the gated shots input, by name. The shots_* tools are
+// themselves gated, and shots is what they are for.
 const withShots = async (client: Client) =>
   (await client.listTools()).tools
     .filter(
       (tool) =>
-        tool.name !== 'shots_regenerate' &&
+        !tool.name.startsWith('shots_') &&
         Object.hasOwn(tool.inputSchema.properties ?? {}, 'shots'),
     )
     .map((tool) => tool.name);

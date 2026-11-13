@@ -125,6 +125,7 @@ import {
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { withProjectIntent } from './tools/project-intent.js';
+import { createShotReviewCardTool } from './tools/shot-review-card.js';
 import { createShotReviewTools } from './tools/shot-review.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
@@ -385,6 +386,8 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'jobs_get-many',
+  'shots_regenerate',
+  'shots_splice',
   'analytics_track-event',
   'studio-views_get',
   'studio-views_open-project',
@@ -832,7 +835,7 @@ function isAppOnlyTool(tool: McpToolDefinition): boolean {
 function isToolVisible(tool: McpToolDefinition, profile: ClientProfile): boolean {
   if (isAppOnlyTool(tool)) return profile.supportsAppUi;
   // A tool that only shows a card is noise for a client that renders none.
-  if (CARD_TOOL_NAMES.has(tool.name)) return profile.supportsStatusCard;
+  if (CARD_TOOL_NAMES.has(tool.name) && !profile.supportsStatusCard) return false;
   if (tool.name === 'lipsync_create-from-assets') return profile.supportsAppUi;
   // Kept out of the reviewed ChatGPT app listing; its embedded Studio has no timeline.
   if (tool.name === 'lipsync_create-timeline') return profile.name !== 'chatgpt';
@@ -1009,6 +1012,7 @@ function createTools(
     ...createAssetFacesTools(httpClient),
     createFacePeopleTool(httpClient),
     ...createShotReviewTools(httpClient),
+    createShotReviewCardTool(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
