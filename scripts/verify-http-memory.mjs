@@ -34,6 +34,12 @@ let now = 0;
 const owner = { sub: 'memory-fixture', clientId: 'memory-fixture', organizationId: null };
 const sessionConfig = getSessionRuntimeConfig({});
 const pastIdleTtl = sessionConfig.idleTtlMs + 1;
+// Both scenarios open one session per 375 ms. Each stays for the idle TTL, and a full
+// table reclaims the oldest idle one, so the table never exceeds this.
+const retentionBound = Math.min(
+  sessionConfig.maxSessions + 1,
+  Math.ceil(sessionConfig.idleTtlMs / 375) + 45,
+);
 const sessions = new SessionRegistry({
   idleTtlMs: sessionConfig.idleTtlMs,
   maxSessions: sessionConfig.maxSessions,
@@ -145,7 +151,7 @@ try {
       }
       if (iterations % 160 === 0) await readResource(reused[0], catalog.current);
       await sessions.sweep();
-      assert(sessions.size < 365 + reused.length);
+      assert(sessions.size < retentionBound + reused.length);
       assert.equal(sessions.stats().rejected, 0);
       if (Date.now() >= nextSample) {
         const growth = (await heap()) - baseline;
@@ -165,7 +171,8 @@ try {
       iterations++;
       await new Promise((done) => setTimeout(done, Math.max(0, 375 - (Date.now() - scheduled))));
     }
-    const steady = samples.slice(3);
+    // Samples are a minute apart; the table only plateaus once the first sessions expire.
+    const steady = samples.slice(Math.ceil(sessionConfig.idleTtlMs / 60_000) + 1);
     if (steady.length > 2)
       assert(
         Math.max(...steady) - Math.min(...steady) < 32 * 1024 ** 2,
@@ -208,11 +215,6 @@ try {
     // Model 45 minutes at 160 fresh sessions/minute (5x incident traffic), with
     // real HTTP initialization/discovery and no client DELETE. Virtual time keeps
     // this regression practical in CI; it is not a wall-clock production soak.
-    // One session per 375 ms stays for the idle TTL; a full table reclaims the oldest idle one.
-    const retentionBound = Math.min(
-      sessionConfig.maxSessions + 1,
-      Math.ceil(sessionConfig.idleTtlMs / 375) + 45,
-    );
     let peakHeapGrowth = 0;
     for (let index = 0; index < 7200; index++) {
       await initialize();
