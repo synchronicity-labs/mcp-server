@@ -1,6 +1,10 @@
 import type { ToolOverride } from './asset-overrides.js';
 import { WAIT_DESCRIPTION } from './job-wait.js';
-import { generationDtoOutputSchema, generationOutputSchema } from './output-schemas.js';
+import {
+  generationDtoOutputSchema,
+  generationOutputSchema,
+  generationReadOutputSchema,
+} from './output-schemas.js';
 
 const GENERATION_ID = 'Generation id returned by a create tool or generations_list.';
 
@@ -24,7 +28,7 @@ export const GENERATION_OVERRIDES: Record<string, ToolOverride> = {
       'Not for: finding a past id (generations_list, or projects_list-generations when available); what it cost (generations_get-costs when available); its inputs when the user explicitly continues it (generations_get-continuation).\n' +
       'Waiting: pass `wait: true` and leave out `timeout` to keep reading on the server for up to about 50 seconds; it returns once the generation is final, or its latest state. If it is still running, call again with the same id; never resubmit, since a new create starts a separate generation that is billed or counted against free limits.\n' +
       'Result: copy the exact `structuredContent.outputMediaUrl` string verbatim; it is signed, so it must not be reconstructed, shortened, or edited (`outputUrl` is a deprecated alias with the same value). On FAILED or REJECTED, tell the user the error and errorCode.',
-    outputSchema: generationOutputSchema,
+    outputSchema: generationReadOutputSchema,
     params: {
       id: GENERATION_ID,
       wait: WAIT_DESCRIPTION,

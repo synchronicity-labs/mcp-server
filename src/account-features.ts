@@ -19,6 +19,7 @@ const TOOL_FEATURES: Readonly<Record<string, string>> = {
   'faces_get-people': 'lipsync_planning',
   shots_regenerate: 'lipsync_planning',
   shots_splice: 'lipsync_planning',
+  shots_review: 'lipsync_planning',
 };
 
 /**

@@ -45,7 +45,7 @@ const media = z.object({
   assetId: z.uuid().nullish(),
   url: z.string().nullish(),
 });
-const baseGeneration = z.object({
+export const baseGeneration = z.object({
   id: z.uuid(),
   status: z.string(),
   model: z.string().min(1),
@@ -59,6 +59,48 @@ const baseGeneration = z.object({
 
 const source = (item: z.infer<typeof media>) =>
   item.assetId ? { assetId: item.assetId } : item.url ? { url: item.url } : undefined;
+
+/**
+ * The video and audio a new take of this generation is rendered from, or the reason it
+ * cannot have one. shots_review asks first, so nobody flags shots that cannot be redone.
+ */
+export function retakeSources(
+  base: z.infer<typeof baseGeneration>,
+  timing: { fps: number; frameCount: number },
+) {
+  if (base.status !== 'COMPLETED')
+    throw new Error(
+      `Generation ${base.id} is ${base.status}. Shots can be rendered again once it is COMPLETED.`,
+    );
+  if (base.segments?.length || base.speakers?.length)
+    throw new Error(
+      'This generation was made from timeline clips or several speakers. Render its shots again with lipsync_create-timeline instead.',
+    );
+  // A take is rendered on the untouched video, so it lines up with the first render
+  // only when that render kept the video's length. An unknown length is not a match.
+  const videoSeconds = timing.frameCount / timing.fps;
+  if (base.outputDuration == null)
+    throw new Error(
+      'Sync did not report how long the first render runs, so it cannot be checked against the video. Redo the whole lipsync instead.',
+    );
+  if (Math.abs(base.outputDuration - videoSeconds) > Math.max(2 / timing.fps, 0.1))
+    throw new Error(
+      `The first render runs ${base.outputDuration} s but the video runs ${Number(videoSeconds.toFixed(3))} s: its audio and video differed in length, so the video was cut, looped or retimed and a new take would not line up with it. Redo the whole lipsync instead.`,
+    );
+  const videoInput = base.input.find((item) => item.type === 'video');
+  const video = videoInput && source(videoInput);
+  if (!video) throw new Error('This generation has no video input to render shots from.');
+  const audioInput = base.input.find((item) => item.type === 'audio');
+  // A dub's own audio input is the source speech; its lipsync used the dubbed track.
+  const audio = base.dubAudioAssetId
+    ? { assetId: base.dubAudioAssetId }
+    : audioInput && source(audioInput);
+  if (!audio)
+    throw new Error(
+      'This generation has no saved audio to lipsync to (it was made from a script). Create the audio first, then use lipsync_create-timeline.',
+    );
+  return { video, audio };
+}
 
 function createRegenerateTool(http: HttpClient): McpToolDefinition {
   const input = z
@@ -142,37 +184,7 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
       const base = baseGeneration.parse(
         await http.request('get', `/v2/generate/${args.generationId}`, { signal }),
       );
-      if (base.status !== 'COMPLETED')
-        throw new Error(
-          `Generation ${base.id} is ${base.status}. Shots can be rendered again once it is COMPLETED.`,
-        );
-      if (base.segments?.length || base.speakers?.length)
-        throw new Error(
-          'This generation was made from timeline clips or several speakers. Render its shots again with lipsync_create-timeline instead.',
-        );
-      // A take is rendered on the untouched video, so it lines up with the first render
-      // only when that render kept the video's length. An unknown length is not a match.
-      const videoSeconds = args.frameCount / args.fps;
-      if (base.outputDuration == null)
-        throw new Error(
-          'Sync did not report how long the first render runs, so it cannot be checked against the video. Redo the whole lipsync instead.',
-        );
-      if (Math.abs(base.outputDuration - videoSeconds) > Math.max(2 / args.fps, 0.1))
-        throw new Error(
-          `The first render runs ${base.outputDuration} s but the video runs ${Number(videoSeconds.toFixed(3))} s: its audio and video differed in length, so the video was cut, looped or retimed and a new take would not line up with it. Redo the whole lipsync instead.`,
-        );
-      const videoInput = base.input.find((item) => item.type === 'video');
-      const video = videoInput && source(videoInput);
-      if (!video) throw new Error('This generation has no video input to render shots from.');
-      const audioInput = base.input.find((item) => item.type === 'audio');
-      // A dub's own audio input is the source speech; its lipsync used the dubbed track.
-      const audio = base.dubAudioAssetId
-        ? { assetId: base.dubAudioAssetId }
-        : audioInput && source(audioInput);
-      if (!audio)
-        throw new Error(
-          'This generation has no saved audio to lipsync to (it was made from a script). Create the audio first, then use lipsync_create-timeline.',
-        );
+      const { video, audio } = retakeSources(base, args);
       signal?.throwIfAborted();
       return http.request('post', '/v2/generate', {
         signal,

@@ -16,6 +16,7 @@ export const translationSpec = {
                   duration: { type: 'number', exclusiveMinimum: 0 },
                   fps: { type: 'number', exclusiveMinimum: 0 },
                   workflow: { type: 'string', enum: ['lipsync', 'translate-and-dub'] },
+                  reasoningEnabled: { type: 'boolean' },
                 },
               },
             },

@@ -99,10 +99,10 @@ it('discovers the canonical language enum and submits through the hosted MCP bou
   clients.push(client);
   await client.connect(clientTransport);
   const tools = currentTools((await client.listTools()).tools);
-  // Every registered tool but lipsync_create-timeline, the eight feature-gated tools
+  // Every registered tool but lipsync_create-timeline, the nine feature-gated tools
   // (scenes_detect, stems_separate, faces_*, shots_*) and jobs_create-many, kept out of the
   // ChatGPT app listing. Without generations_get in this spec there is no jobs_get-many.
-  expect(tools).toHaveLength(factory.toolCount - 10);
+  expect(tools).toHaveLength(factory.toolCount - 11);
   expect(tools.some((tool) => tool.name === 'generations_create')).toBe(false);
   const options = await client.callTool({ name: 'dubbing_get-options', arguments: {} });
   expect(options.structuredContent).toEqual({
@@ -165,7 +165,11 @@ it('carries the combined estimate through the authenticated MCP boundary without
     client.callTool({ name: tool.name, arguments: { ...args, projectIntent: 'explicit' } }),
   );
   expect(result.isError).not.toBe(true);
-  expect(result.structuredContent).toEqual(externalEstimate);
+  // The quote repeats what it priced, for the price check card.
+  expect(result.structuredContent).toEqual({
+    ...externalEstimate,
+    request: { model: 'sync-3', duration: 12, workflow: 'translate-and-dub' },
+  });
   expect(calls).toEqual([
     {
       path: '/v2/generate/estimate-cost',
