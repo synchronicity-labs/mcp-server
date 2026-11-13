@@ -20,9 +20,12 @@ const GENERATION_TOOLS = new Set([
   'dubbing_create',
   'dialogue-videos_create',
   'generations_create',
+  'shots_regenerate',
   'generations_get',
   'generations_get-continuation',
 ]);
+
+const ANSWERS_WITH_GENERATION = new Set(['generations_get', 'shots_regenerate']);
 
 const entries = new Map<string, { id: string; at: number }>();
 
@@ -52,8 +55,8 @@ function generationIn(tool: string, result: unknown): string | undefined {
   if (!GENERATION_TOOLS.has(tool)) return undefined;
   const facets = resultFacets(tool, result);
   if (typeof facets.generation_id === 'string') return facets.generation_id;
-  // generations_get answers with the generation itself.
-  if (tool !== 'generations_get' || !result || typeof result !== 'object') return undefined;
+  // These answer with the generation itself: the one read, or the new take.
+  if (!ANSWERS_WITH_GENERATION.has(tool) || !result || typeof result !== 'object') return undefined;
   const body = result as { id?: unknown; structuredContent?: { id?: unknown } };
   const id = body.structuredContent?.id ?? body.id;
   return typeof id === 'string' && UUID.test(id) ? id : undefined;

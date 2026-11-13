@@ -249,6 +249,39 @@ describe('immutable client profiles', () => {
     );
   });
 
+  it('logs each status card read, served or refused, with the client that asked', async () => {
+    fakeApi();
+    const lines: Record<string, unknown>[] = [];
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      for (const text of String(chunk).split('\n').filter(Boolean)) {
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        if (parsed.event === 'ui_resource_read') lines.push(parsed);
+      }
+      return true;
+    });
+    const factory = await createMcpServerFactory(config);
+    const claude = await connect(factory, 'Anthropic/ClaudeAI');
+    await claude.client.readResource({ uri: GENERATION_STATUS_URI });
+    const unknown = await connect(factory, 'unverified-muse');
+    await expect(unknown.client.readResource({ uri: GENERATION_STATUS_URI })).rejects.toThrow();
+    expect(lines).toEqual([
+      expect.objectContaining({
+        resource: GENERATION_STATUS_URI,
+        clientProfile: 'claude',
+        clientName: 'Anthropic/ClaudeAI',
+        outcome: 'served',
+        bytes: expect.any(Number),
+      }),
+      expect.objectContaining({
+        resource: GENERATION_STATUS_URI,
+        clientProfile: 'generic',
+        clientName: 'unverified-muse',
+        outcome: 'refused',
+        reason: 'no_status_card',
+      }),
+    ]);
+  });
+
   it.each(['chatgpt', 'openai-mcp (Codex)', 'claude-ai', 'unknown'])(
     'tells %s to wait for a generation in the same reply',
     async (name) => {
@@ -687,9 +720,9 @@ it.each([0, 1, 2])(
     const factory = await createMcpServerFactory(config);
     // jobs_create-many runs lipsync_create; jobs_get-many reads through generations_get.
     const jobTools = count === 2 ? 2 : 1;
-    // Includes scenes_detect, stems_separate and the four faces_* tools, which only accounts
-    // with their features list.
-    expect(factory.toolCount).toBe(19 + count + jobTools);
+    // Includes scenes_detect, stems_separate, the four faces_* tools and the two shots_*
+    // tools, which only accounts with their features list.
+    expect(factory.toolCount).toBe(21 + count + jobTools);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = currentTools((await chatgpt.client.listTools()).tools);

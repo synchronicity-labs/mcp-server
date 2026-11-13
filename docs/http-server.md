@@ -20,7 +20,7 @@ runs. Moved out of the README, which covers connecting a client.
 | `SYNC_CHATGPT_APP_RESOURCE_DOMAINS` | JSON array of exact HTTPS origins used for media playback | `[]` |
 | `MCP_ISSUER_URL` | OAuth issuer URL (HTTP transport only) | — |
 | `OAUTH_REGISTRATION_SECRET` | Shared secret for client registration (HTTP transport only) | — |
-| `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `120000` (2 min) |
+| `MCP_SESSION_IDLE_TTL_MS` | Idle time before an inactive HTTP session is closed | `600000` (10 min) |
 | `MCP_MAX_SESSIONS` | Maximum active and initializing HTTP sessions | `1000` |
 | `MCP_SESSION_SWEEP_INTERVAL_MS` | Interval for idle-session cleanup | `15000` (15 sec) |
 | `MCP_SHUTDOWN_GRACE_MS` | Time to drain active requests before forced shutdown cleanup | `10000` (10 sec) |
@@ -75,3 +75,24 @@ Host-provided upload source URLs must use HTTP(S) on the protocol default port, 
 Re-hosted uploads are streamed through bounded temporary files before durable asset registration. The deployment needs writable temporary disk sized for `MCP_UPLOAD_MAX_BYTES * MCP_UPLOAD_CONCURRENCY`; a memory-backed temporary directory defeats the memory bound. When upload capacity is exhausted, excess work fails with the retryable `UPLOAD_CAPACITY_EXCEEDED` code instead of increasing process memory pressure.
 
 The HTTP server writes newline-delimited JSON diagnostics to stderr. Lifecycle events distinguish graceful pod termination from abrupt process loss, request logs include latency and abort state, and `mcp_runtime` heartbeats include memory, CPU, event-loop delay, session totals, pending transports, aggregate HTTP status counts, and upload activity, queue, rejection, and byte counters.
+
+### When a widget doesn't load
+
+Every widget read (status card, upload widget, Studio app) writes one `ui_resource_read` line with `resource`, `clientProfile`, `clientName` and `outcome`: `served` with `bytes`, `refused` with a `reason` (`no_status_card`, `no_uploads`, `no_app_ui`), or `failed`. A refusal reaches the client as a JSON-RPC error inside an HTTP 200, so request logs alone don't show it.
+
+When a client says it couldn't load the status card:
+
+- An `mcp_session_not_found` near the create call, from the same `clientName`: the host sent the card's request on a session the server had already closed. Claude.ai has been seen reading a widget through its discovery session, not the session that called the tool, and that session can idle out while the turn runs. `cause` says why the session was gone and `closedAgoMs` how long ago.
+- No `ui_resource_read` for `ui://sync/generation-status-v1.html` near the create call, and no `mcp_session_not_found`: the client never asked for the card, so the host rejected it before reading it.
+- `refused`: the session resolved to a profile without the card; `clientName` shows what the client called itself.
+- `served`, then no `mcp_rpc_request` with `tool: "generate_get-generation"` from that session: the card arrived but failed in the client's frame. A running card checks through that tool, so its absence means the card never started. Look at the client's developer console.
+
+### When a client gets 404 Session not found
+
+The server writes one `mcp_session_not_found` line per 404 with `sessionRef`, `httpMethod`, `rpcMethods` (with `tool` or `resource` for a single call or read) and `cause`:
+
+- `expired`, `client_delete`, `evicted`, `shutdown` or `initialization_failed`: the session closed for that reason `closedAgoMs` ago. `clientName` and `clientProfile` are the closed session's. The `sessionRef` matches that session's `mcp_session_closed` line.
+- `other_owner`: the session is live but belongs to another user, OAuth client or organization.
+- `unknown`: this process never had the session, or closed it over an hour ago. Requests from before a deploy look like this.
+
+Hosts must initialize a new session after a 404. One that keeps sending the same `sessionRef` doesn't.

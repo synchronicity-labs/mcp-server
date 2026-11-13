@@ -18,6 +18,9 @@ const CLIENTS = new Set([
   'mcp',
 ]);
 const PROTOCOL = /^\d{4}-\d{2}-\d{2}$/;
+/** How many closed sessions, and for how long, a 404 can still be explained by. */
+const RECENTLY_CLOSED_LIMIT = 5_000;
+const RECENTLY_CLOSED_MS = 60 * 60_000;
 
 /** Process-local pseudonyms: never emit bearer/session IDs, user IDs or arguments. */
 export class SessionTelemetry {
@@ -34,6 +37,11 @@ export class SessionTelemetry {
       profile: string;
       protocol: string;
     }
+  >();
+  /** Keyed by sessionRef, oldest first, so no raw session ID outlives its session. */
+  readonly #recentlyClosed = new Map<
+    string,
+    { reason: string; closedAt: number; client: string; profile: string }
   >();
   constructor(
     private readonly emit: (event: string, data: Record<string, unknown>) => void,
@@ -94,5 +102,50 @@ export class SessionTelemetry {
       lifetimeMs: this.now() - entry.started,
       idleMs: this.now() - entry.lastRequest,
     });
+    this.#rememberClosed(this.reference(id), {
+      reason,
+      closedAt: this.now(),
+      client: entry.client,
+      profile: entry.profile,
+    });
+  }
+  /**
+   * Why a request named a session it can't use, for the 404 it gets. `other_owner`: the
+   * session is live but belongs to another user, client or organization. A close reason
+   * (`expired`, `client_delete`, `evicted`, ...): it closed `closedAgoMs` ago. `unknown`:
+   * this process never had it, or closed it over an hour ago; a restart looks the same.
+   */
+  notFound(id: string): Record<string, unknown> {
+    const sessionRef = this.reference(id);
+    const live = this.#entries.get(id);
+    if (live)
+      return {
+        sessionRef,
+        cause: 'other_owner',
+        clientName: live.client,
+        clientProfile: live.profile,
+      };
+    const closed = this.#recentlyClosed.get(sessionRef);
+    if (!closed || this.now() - closed.closedAt > RECENTLY_CLOSED_MS)
+      return { sessionRef, cause: 'unknown' };
+    return {
+      sessionRef,
+      cause: closed.reason,
+      closedAgoMs: this.now() - closed.closedAt,
+      clientName: closed.client,
+      clientProfile: closed.profile,
+    };
+  }
+  #rememberClosed(
+    sessionRef: string,
+    record: { reason: string; closedAt: number; client: string; profile: string },
+  ): void {
+    this.#recentlyClosed.delete(sessionRef);
+    this.#recentlyClosed.set(sessionRef, record);
+    for (const [ref, old] of this.#recentlyClosed) {
+      const stale = record.closedAt - old.closedAt > RECENTLY_CLOSED_MS;
+      if (!stale && this.#recentlyClosed.size <= RECENTLY_CLOSED_LIMIT) break;
+      this.#recentlyClosed.delete(ref);
+    }
   }
 }

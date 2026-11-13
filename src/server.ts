@@ -112,6 +112,7 @@ import {
 import { createPlaybackMetadataTool } from './tools/playback-metadata.js';
 import { createProjectHistoryTools } from './tools/project-history.js';
 import { withProjectIntent } from './tools/project-intent.js';
+import { createShotReviewTools } from './tools/shot-review.js';
 import { createSpeechTools, speechOperations } from './tools/speech.js';
 import { createStudioDraftTools, supportsStudioDrafts } from './tools/studio-draft.js';
 import { createStudioViewTools, supportsStudioViews } from './tools/studio-view.js';
@@ -127,6 +128,7 @@ import {
 import { createTranslationTools, translationOperation } from './tools/translation.js';
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 import { toolsetIncludes, toolsetInstruction } from './toolsets.js';
+import { readUiResource } from './ui-resource-log.js';
 import {
   type AvailableUpdate,
   type UpdateCheck,
@@ -364,6 +366,8 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'faces_get',
   'faces_get-timeline',
   'faces_get-people',
+  'shots_regenerate',
+  'shots_splice',
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'analytics_track-event',
@@ -987,6 +991,7 @@ function createTools(
     ...createAssetAnalysisTools(httpClient),
     ...createAssetFacesTools(httpClient),
     createFacePeopleTool(httpClient),
+    ...createShotReviewTools(httpClient),
     ...generatedTools.map((tool) =>
       config.chatgptApp?.uploadStorageOrigin
         ? relayUploadTool(tool, config.chatgptApp.domain, config.chatgptApp.uploadStorageOrigin)
@@ -1163,14 +1168,17 @@ function createProfiledServer(
     uri: GENERATION_STATUS_URI,
     ...statusMetadata,
   });
-  server.registerResource(
-    'sync-generation-status',
-    GENERATION_STATUS_URI,
-    statusMetadata,
-    async () => {
-      if (!getProfile().supportsStatusCard)
-        throw new Error('This interface requires an app-compatible client.');
-      return {
+  const appOnly = 'This interface requires an app-compatible client.';
+  const uiRead = (resource: string, refused: false | string, message = appOnly) => ({
+    resource,
+    profile: getProfile(),
+    clientName,
+    refusal: refused === false ? undefined : { reason: refused, message },
+  });
+  server.registerResource('sync-generation-status', GENERATION_STATUS_URI, statusMetadata, () =>
+    readUiResource(
+      uiRead(GENERATION_STATUS_URI, !getProfile().supportsStatusCard && 'no_status_card'),
+      () => ({
         contents: [
           {
             uri: GENERATION_STATUS_URI,
@@ -1179,16 +1187,22 @@ function createProfiledServer(
             _meta: statusMetadata._meta,
           },
         ],
-      };
-    },
+      }),
+    ),
   );
   registerUploadWidgetResource({
     registerResource: (name, uri, metadata, read) => {
       resources.push({ name, uri, ...metadata });
-      return server.registerResource(name, uri, metadata, async (url, ctx) => {
-        if (!getProfile().supportsUploads) throw new Error(UNSUPPORTED_UPLOAD_MESSAGE);
-        return read(url, ctx);
-      });
+      return server.registerResource(name, uri, metadata, (url, ctx) =>
+        readUiResource(
+          uiRead(
+            url.toString(),
+            !getProfile().supportsUploads && 'no_uploads',
+            UNSUPPORTED_UPLOAD_MESSAGE,
+          ),
+          () => read(url, ctx),
+        ),
+      );
     },
   });
   for (const [index, app] of (chatgptApp ? [chatgptApp, ...previousApps] : []).entries()) {
@@ -1197,13 +1211,8 @@ function createProfiledServer(
       index === 0 ? 'sync-app' : `sync-app-previous-${index}`,
       app.uri,
       app.metadata,
-      async () => {
-        if (!getProfile().supportsAppUi)
-          throw new Error('This interface requires an app-compatible client.');
-        process.stderr.write(
-          `${JSON.stringify({ event: 'app_resource_served', timestamp: new Date().toISOString(), clientProfile: getProfile().name, resource: app.uri, bytes: Buffer.byteLength(app.html) })}\n`,
-        );
-        return {
+      () =>
+        readUiResource(uiRead(app.uri, !getProfile().supportsAppUi && 'no_app_ui'), () => ({
           contents: [
             {
               uri: app.uri,
@@ -1212,8 +1221,7 @@ function createProfiledServer(
               _meta: app.metadata._meta,
             },
           ],
-        };
-      },
+        })),
     );
   }
   let descriptors: Tool[] = [];

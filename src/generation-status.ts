@@ -12,6 +12,7 @@ const submissionTools = new Set([
   'dubbing_create',
   'dialogue-videos_create',
   'generations_create',
+  'shots_regenerate',
 ]);
 
 export function withGenerationStatusCard(tool: McpToolDefinition): McpToolDefinition {
