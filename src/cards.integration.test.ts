@@ -121,7 +121,9 @@ it('keeps the tools that only show a card, and the cards, from a client that ren
 it('shows the newest generations unless the model asks for another number', async () => {
   const { client, calls, close } = await connect('claude-ai');
   try {
-    await client.callTool({ name: 'generations_show-recent', arguments: {} });
+    const shown = await client.callTool({ name: 'generations_show-recent', arguments: {} });
+    // A named list, so the entries reach a card as structured content on every host.
+    expect(shown.structuredContent).toEqual({ generations: [{ id: 'generation-1' }] });
     await client.callTool({ name: 'generations_show-recent', arguments: { limit: 3 } });
     expect(
       calls.filter((call) => call.path === '/v2/generations').map((call) => call.search),

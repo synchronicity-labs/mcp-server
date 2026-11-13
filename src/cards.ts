@@ -142,6 +142,8 @@ const SHOWN = [
   {
     from: 'account_get-usage',
     name: 'account_show-usage',
+    list: undefined,
+    defaults: {},
     title: 'Show Sync usage and balance',
     description:
       'Show the person what their sync. organization has left to spend, as a card in the chat: credits, free allowances or the period’s metered spend. Use it only when the person asks to see their balance, usage, credits or plan. For your own checks before paid work, use account_get-usage, which returns the same fields without showing anything. Read-only: buys no credits, changes no plan and starts no generation.',
@@ -149,6 +151,8 @@ const SHOWN = [
   {
     from: 'voices_list',
     name: 'voices_show',
+    list: 'voices',
+    defaults: {},
     title: 'Show Sync voices',
     description:
       'Show the person the voices this organization can use, as a card where they can play each sample and pick one. Use it only when the person asks to see, hear, browse or choose a voice. To look a voice up yourself, use voices_list, which returns the same list without showing anything. When the person picks a voice, the card sends its name and id as their next message; pass that id as voiceId. Read-only.',
@@ -156,6 +160,8 @@ const SHOWN = [
   {
     from: 'generations_list',
     name: 'generations_show-recent',
+    list: 'generations',
+    defaults: { limit: 12 },
     title: 'Show recent Sync videos',
     description:
       'Show the person the organization’s most recent generations as a card of previews that open in Sync. Use it only when the person asks to see their recent videos, generations or history. To find a generation id or check what is running yourself, use generations_list, which returns the same entries without showing anything. Returns the newest 12 unless limit says otherwise. Read-only.',
@@ -178,16 +184,18 @@ export function createCardTools(tools: McpToolDefinition[]): McpToolDefinition[]
     const source = tools.find((tool) => tool.name === shown.from);
     if (!source || source.resultFormat === 'mcp') return [];
     const { handler } = source;
+    const { list, defaults } = shown;
     return [
       {
         ...source,
         name: shown.name,
         title: shown.title,
         description: shown.description,
-        handler:
-          shown.name === 'generations_show-recent'
-            ? (args, context) => handler({ limit: 12, ...args }, context)
-            : handler,
+        handler: async (args, context) => {
+          const result = await handler({ ...defaults, ...args }, context);
+          // A bare list has no structured content, which is all some hosts hand a card.
+          return list && Array.isArray(result) ? { [list]: result } : result;
+        },
       },
     ];
   });
