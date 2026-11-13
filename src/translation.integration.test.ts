@@ -165,7 +165,11 @@ it('carries the combined estimate through the authenticated MCP boundary without
     client.callTool({ name: tool.name, arguments: { ...args, projectIntent: 'explicit' } }),
   );
   expect(result.isError).not.toBe(true);
-  expect(result.structuredContent).toEqual(externalEstimate);
+  // The quote repeats what it priced, for the price check card.
+  expect(result.structuredContent).toEqual({
+    ...externalEstimate,
+    request: { model: 'sync-3', duration: 12, workflow: 'translate-and-dub' },
+  });
   expect(calls).toEqual([
     {
       path: '/v2/generate/estimate-cost',

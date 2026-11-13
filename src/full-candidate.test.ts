@@ -375,15 +375,18 @@ it('preserves profiles, authenticated writes and signed results across concurren
     ['chatgpt', 'claude', 'unknown'].map(async (name, index) => {
       const client = await connect(name);
       const tools = currentTools((await client.listTools()).tools);
-      // jobs_create-many and jobs_get-many stay out of the ChatGPT app listing.
-      expect(tools).toHaveLength(index === 0 ? 24 : 23);
+      // jobs_create-many and jobs_get-many stay out of the ChatGPT app listing; the three
+      // tools that show a card are listed only where a card can render.
+      expect(tools).toHaveLength([27, 26, 23][index]);
       expect(tools.some((tool) => tool.name === 'assets_list-creators')).toBe(index === 0);
       const create = tools.find((tool) => tool.name === 'lipsync_create')!;
       expect(Boolean(create._meta?.['openai/fileParams'])).toBe(index === 0);
       const resources = (await client.listResources()).resources.map((resource) => resource.name);
-      // Claude renders the generation status card, and only that card.
+      // Claude renders the cards, and nothing else from the app.
       expect(resources.includes('sync-generation-status')).toBe(index < 2);
-      expect(resources.some((entry) => entry !== 'sync-generation-status')).toBe(index === 0);
+      expect(resources.some((entry) => !/^sync-(generation-status|card-)/.test(entry))).toBe(
+        index === 0,
+      );
       expect(
         JSON.stringify(await client.callTool({ name: 'voices_list', arguments: {} })),
       ).toContain('fixture-voice');
@@ -602,13 +605,25 @@ it.each([
     const client = await connect('chatgpt', `catalog-${name}`);
     const descriptor = (await client.listTools()).tools.find((tool) => tool.name === name);
     expect(descriptor?.annotations?.readOnlyHint).toBe(true);
-    expect(descriptor?._meta?.ui).toEqual({ visibility: ['model', 'app'] });
+    // A quote opens the price check card.
+    expect(descriptor?._meta?.ui).toEqual({
+      ...(name === 'generations_estimate-cost'
+        ? { resourceUri: 'ui://sync/card-quote-v1.html' }
+        : {}),
+      visibility: ['model', 'app'],
+    });
     const result = await client.callTool({
       name,
       arguments: { ...args, projectIntent: 'explicit' },
     });
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toEqual({ path, query, body });
+    // A quote also repeats what it priced, for the price check card.
+    expect(result.structuredContent).toEqual({
+      path,
+      query,
+      body,
+      ...(name === 'generations_estimate-cost' ? { request: expect.any(Object) } : {}),
+    });
     expect(
       calls.find((call) => call.token === `Bearer catalog-${name}` && call.path === path),
     ).toMatchObject({ query, body });

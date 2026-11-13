@@ -31,17 +31,6 @@ export function withGenerationStatusCard(tool: McpToolDefinition): McpToolDefini
 }
 
 /**
- * The card's own descriptor metadata, for clients that render only the card: the standard
- * MCP Apps resourceUri, without ChatGPT's openai/* keys or any other ui setting.
- */
-export function statusCardMeta(meta: Record<string, unknown> | undefined) {
-  const ui = meta?.ui as { resourceUri?: unknown } | undefined;
-  return ui?.resourceUri === GENERATION_STATUS_URI
-    ? { ui: { resourceUri: GENERATION_STATUS_URI } }
-    : {};
-}
-
-/**
  * The card checks a generation through generations_get's previous name, and MCP Apps hosts
  * let a card call only listed tools that include app in ui.visibility. App profiles list
  * that name already (withLegacyAppDescriptors); a card-only client gets it here, app-only,
