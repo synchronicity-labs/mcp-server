@@ -59,8 +59,21 @@ export const mountCard = ({ html, toolResult, hostBridge, fontSources }) => {
         );
         return;
       }
-      window.open(message.params.url, '_blank', 'noopener,noreferrer');
-      event.source.postMessage({ jsonrpc: '2.0', id: message.id, result: {} }, '*');
+      // Like a real host, open only what the card is expected to link to.
+      const link = new URL(message.params.url);
+      const expected =
+        link.protocol === 'https:' && ['sync.so', 'fixture.invalid'].includes(link.hostname);
+      if (expected) window.open(link.href, '_blank', 'noopener,noreferrer');
+      event.source.postMessage(
+        expected
+          ? { jsonrpc: '2.0', id: message.id, result: {} }
+          : {
+              jsonrpc: '2.0',
+              id: message.id,
+              error: { code: -32000, message: 'Fixture host does not open this link' },
+            },
+        '*',
+      );
     } else if (message.method === 'tools/call') {
       // A host answers a call the server refuses, such as an unknown tool, with an error.
       const reply = await window.callSync(message.params).then(
