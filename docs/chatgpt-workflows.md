@@ -222,14 +222,22 @@ the person asks to see it.
 
 `generations_estimate-cost` repeats what it priced as `request`, and takes an
 optional `create`: the create call the quote is for, without `idempotencyKey`.
-The quote echoes that call with an `idempotencyKey` made for it. The price check
+The call must be the job the quote prices, or the quote is refused:
+`dubbing_create` only with `workflow=translate-and-dub`, `lipsync_create` only
+without it, and the same model (a call that names none gets the quoted one). The
+quote echoes the call with an `idempotencyKey` made for it and, when it names no
+project, a `projectCreationKey`, so a retry makes neither a second video nor a
+second project. The price check
 card's Create button runs the call with that key, so a card the host reloads can
 never start the video twice; it then hands the result to the status card and
 tells the model the generation's id. A quote without `create`, which is
 what a chat with the previous schema sends, leaves the button asking the chat to
 create it. `create` never reaches the API.
 
-`shots_review` opens the shot review card on a completed generation. It only
+`shots_review` opens the shot review card on a completed generation. It refuses
+what `shots_regenerate` would refuse (timeline clips, several speakers, a script,
+a length that differs from the video's), so nobody flags shots that cannot be
+rendered again. It only
 reads: it checks that the given shots cover the video from frame 0 to
 `frameCount` and returns the first render, its source video and the shots. The
 card keeps the review itself (flags, takes, picks) and tells the model each id

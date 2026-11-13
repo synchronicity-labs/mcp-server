@@ -8,8 +8,38 @@ const createCall = z
     arguments: z.record(z.string(), z.unknown()),
   })
   .describe(
-    'Optional. The exact create call this quote is for: the tool and its arguments, complete and final, without idempotencyKey. When given, the price card in the chat gets a Create button that starts that paid job itself when the person presses it, and then tells you its generation id. Pass it only for a job the person asked for, once every input is saved and settled. Never call the create tool yourself for the same job after the card reports it started.',
+    'Optional. The exact create call this quote is for: the tool and its arguments, complete and final, without idempotencyKey or projectCreationKey (the quote makes both). It must be the job priced here: dubbing_create only with workflow=translate-and-dub, lipsync_create only without it, and the same model. When given, the price card in the chat gets a Create button that starts that paid job itself when the person presses it, and then tells you its generation id. Pass it only for a job the person asked for, once every input is saved and settled. Never call the create tool yourself for the same job after the card reports it started.',
   );
+
+/**
+ * The create call as the card will run it, or the reason it is not the job this quote
+ * prices. The person approves a price, so the call must be for that workflow and model. Its
+ * keys are made here, with the quote: a card the host reloads sends the same ones, so a
+ * retry can start neither a second video nor a second project.
+ */
+function quotedCall(call: z.infer<typeof createCall>, priced: Record<string, unknown>) {
+  const dub = priced.workflow === 'translate-and-dub';
+  if (dub !== (call.tool === 'dubbing_create'))
+    throw new Error(
+      `create.tool is ${call.tool} but this quote prices ${dub ? 'a translate-and-dub' : 'a lipsync'}. Quote with workflow=translate-and-dub for dubbing_create, and without it for lipsync_create.`,
+    );
+  const model = call.arguments.model ?? priced.model;
+  if (model !== priced.model)
+    throw new Error(
+      `create.arguments.model is ${String(model)} but this quote prices ${String(priced.model)}. Quote the model the job will use.`,
+    );
+  const placed = 'projectId' in call.arguments || 'projectCreationKey' in call.arguments;
+  return {
+    tool: call.tool,
+    arguments: {
+      ...call.arguments,
+      model,
+      // A new project needs its own key, or a retry would make another project.
+      ...(placed ? {} : { projectCreationKey: randomUUID() }),
+    },
+    idempotencyKey: randomUUID(),
+  };
+}
 
 /**
  * Makes a quote self-describing for the price check card: the result repeats what was
@@ -24,15 +54,13 @@ export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
     inputSchema: { ...tool.inputSchema, create: createCall.optional() },
     handler: async (args, context) => {
       const { create, ...priced } = args;
+      const call = create === undefined ? undefined : quotedCall(createCall.parse(create), priced);
       const result = await handler(priced, context);
       if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
-      const call = createCall.safeParse(create);
       return {
         ...result,
         request: { model: priced.model, duration: priced.duration, workflow: priced.workflow },
-        // The key is made with the quote, so a card the host reloads sends the same one
-        // and cannot start the video twice.
-        ...(call.success ? { create: { ...call.data, idempotencyKey: randomUUID() } } : {}),
+        ...(call ? { create: call } : {}),
       };
     },
   };

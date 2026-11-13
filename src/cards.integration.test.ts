@@ -6,8 +6,10 @@ import { translationSpec } from './test-fixtures/translation.js';
 afterEach(() => vi.unstubAllGlobals());
 
 const QUOTE = 'ui://sync/card-quote-v1.html';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const USAGE = 'ui://sync/card-usage-v1.html';
 const GENERATION = '00000000-0000-4000-8000-000000000003';
+const TIMELINE = '00000000-0000-4000-8000-000000000004';
 const billing = {
   plan: 'creator',
   canManageBilling: true,
@@ -46,13 +48,23 @@ async function connect(clientName: string) {
     if (url.pathname === '/v2/billing') return Response.json(billing);
     if (url.pathname === '/v2/account')
       return Response.json({ plan: { id: 'pro', name: 'Pro' }, features: ['lipsync_planning'] });
-    if (url.pathname === `/v2/generate/${GENERATION}`)
+    if (
+      url.pathname === `/v2/generate/${GENERATION}` ||
+      url.pathname === `/v2/generate/${TIMELINE}`
+    )
       return Response.json({
-        id: GENERATION,
+        id: url.pathname.split('/').at(-1),
         status: 'COMPLETED',
+        model: 'sync-3',
         outputUrl: 'https://fixture.invalid/result.mp4',
-        input: [{ type: 'video', url: 'https://fixture.invalid/source.mp4' }],
+        // Four seconds, like the 96 frames at 24 a second the review is opened with.
+        outputDuration: 4,
+        input: [
+          { type: 'video', url: 'https://fixture.invalid/source.mp4' },
+          { type: 'audio', url: 'https://fixture.invalid/voice.wav' },
+        ],
         summary: { title: 'Keynote in German' },
+        ...(url.pathname.endsWith(TIMELINE) ? { segments: [{ startFrame: 0, endFrame: 47 }] } : {}),
       });
     if (url.pathname === '/v2/generations') return Response.json([{ id: 'generation-1' }]);
     if (url.pathname === '/v2/generate/estimate-cost')
@@ -157,14 +169,38 @@ it('hands the price check card the create call to run, without sending it to the
     expect(quote.structuredContent).toMatchObject({
       estimatedCredits: 84,
       request: priced,
-      // The quote mints the key its create call must use, however often the card reloads.
-      create: { ...create, idempotencyKey: expect.stringMatching(/^[A-Za-z0-9._~-]{1,128}$/) },
+      // The quote mints the keys its create call must use, however often the card reloads:
+      // one for the generation, and one for the new project it goes into.
+      create: {
+        tool: create.tool,
+        arguments: { ...create.arguments, projectCreationKey: expect.stringMatching(UUID) },
+        idempotencyKey: expect.stringMatching(UUID),
+      },
     });
     expect(calls.find((call) => call.path === '/v2/generate/estimate-cost')?.body).toEqual(priced);
 
-    // A quote with no create call, or a malformed one, offers the card nothing to run.
+    // A quote with no create call offers the card nothing to run.
     const plain = await client.callTool({ name: estimate.name, arguments: priced });
     expect(plain.structuredContent).not.toHaveProperty('create');
+
+    // The person approves a price, so a call for other work than the quote prices is
+    // refused before anything is quoted: another workflow, or another model.
+    const quotes = calls.filter((call) => call.path === '/v2/generate/estimate-cost').length;
+    const lipsyncQuote = await client.callTool({
+      name: estimate.name,
+      arguments: { model: 'sync-3', duration: 222, create },
+    });
+    expect(JSON.stringify(lipsyncQuote.content)).toContain(
+      'create.tool is dubbing_create but this quote prices a lipsync',
+    );
+    const otherModel = await client.callTool({
+      name: estimate.name,
+      arguments: { ...priced, model: 'lipsync-2-pro', create },
+    });
+    expect(JSON.stringify(otherModel.content)).toContain(
+      'create.arguments.model is sync-3 but this quote prices lipsync-2-pro',
+    );
+    expect(calls.filter((call) => call.path === '/v2/generate/estimate-cost')).toHaveLength(quotes);
     expect(calls.some((call) => call.path === '/v2/generate')).toBe(false);
   } finally {
     await close();
@@ -203,10 +239,19 @@ it('opens a shot review only on a finished generation whose shots cover the whol
       frameCount: 96,
       shots,
     });
+    // A generation whose shots cannot be rendered again is refused with the way to redo
+    // it, before anyone flags a shot.
+    const timeline = await client.callTool({
+      name: 'shots_review',
+      arguments: { generationId: TIMELINE, shots, fps: 24, frameCount: 96 },
+    });
+    expect(timeline.isError).toBe(true);
+    expect(JSON.stringify(timeline.content)).toContain('lipsync_create-timeline');
+
     // Reading is all it does: the card's buttons start the render and the final build.
     expect(
       calls.filter((call) => call.path.startsWith('/v2/generate')).map((call) => call.path),
-    ).toEqual([`/v2/generate/${GENERATION}`]);
+    ).toEqual([`/v2/generate/${GENERATION}`, `/v2/generate/${TIMELINE}`]);
   } finally {
     await close();
   }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { HttpClient } from '../http-client.js';
 import { whenEnabled } from './asset-analysis.js';
 import type { McpToolDefinition } from './generator.js';
+import { baseGeneration, retakeSources } from './shot-review.js';
 
 const shot = z
   .object({
@@ -15,13 +16,10 @@ const shot = z
   })
   .strict();
 
-// The fields of GET /v2/generate/{id}?include=progress the review card shows.
-const reviewed = z.object({
-  id: z.uuid(),
-  status: z.string(),
+// What a take is built from, plus the fields of include=progress the review card shows.
+const reviewed = baseGeneration.extend({
   outputUrl: z.string().nullish(),
   outputMediaUrl: z.string().nullish(),
-  input: z.array(z.object({ type: z.string(), url: z.string().nullish() })).optional(),
   summary: z.object({ title: z.string().optional() }).optional().catch(undefined),
 });
 
@@ -60,7 +58,7 @@ export function createShotReviewCardTool(http: HttpClient): McpToolDefinition {
     name: 'shots_review',
     title: 'Review a generation shot by shot',
     description:
-      'Show the person a finished lipsync or dub cut into its shots, as a card where they play each shot, flag the ones that look wrong and say why, render only those again, compare each new take with the first render, and build the final video. Use it when the person says a finished video looks wrong in places or asks to review, fix or redo parts of it. Get the shots, fps and frameCount first from faces_get-timeline (after faces_detect) or scenes_detect on the generation’s video. This tool only reads and opens the card: the card’s own buttons start the paid render of the flagged shots and the free final build, and each time it tells you the ids, so never call shots_regenerate or shots_splice yourself for a review the card is running. Returns the generation’s video, its source video, and the shots as given.',
+      'Show the person a finished lipsync or dub cut into its shots, as a card where they play each shot, flag the ones that look wrong and say why, render only those again, compare each new take with the first render, and build the final video. Use it when the person says a finished video looks wrong in places or asks to review, fix or redo parts of it. It refuses, with the reason and the alternative, a generation whose shots cannot be rendered again: one that is not COMPLETED, was made from timeline clips, several speakers or a script, or whose length differs from the video’s. Get the shots, fps and frameCount first from faces_get-timeline (after faces_detect) or scenes_detect on the generation’s video. This tool only reads and opens the card: the card’s own buttons start the paid render of the flagged shots and the free final build, and each time it tells you the ids, so never call shots_regenerate or shots_splice yourself for a review the card is running. Returns the generation’s video, its source video, and the shots as given.',
     inputSchema: input.shape,
     outputSchema: {
       reviewId: z
@@ -103,12 +101,12 @@ export function createShotReviewCardTool(http: HttpClient): McpToolDefinition {
             signal: context?.signal,
           }),
         );
+        // The card's paid step is shots_regenerate. Refuse here what it would refuse, with
+        // its reason, before anyone spends time flagging shots that cannot be redone.
+        retakeSources(generation, args);
         const videoUrl = generation.outputMediaUrl ?? generation.outputUrl;
-        if (generation.status !== 'COMPLETED' || !videoUrl)
-          throw new Error(
-            `Generation ${generation.id} is ${generation.status}. It can be reviewed once it is COMPLETED.`,
-          );
-        const sourceUrl = generation.input?.find((item) => item.type === 'video')?.url;
+        if (!videoUrl) throw new Error(`Generation ${generation.id} has no video to review.`);
+        const sourceUrl = generation.input.find((item) => item.type === 'video')?.url;
         return {
           reviewId: randomUUID(),
           generationId: generation.id,
