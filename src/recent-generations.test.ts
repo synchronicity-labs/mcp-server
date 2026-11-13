@@ -40,6 +40,9 @@ describe('recent generations', () => {
     // The raw generations_create (stdio's all toolset) creates one too.
     rememberGeneration('k2', 'generations_create', { id: ID, status: 'PENDING' }, 0);
     expect(recentGeneration('k2', 1000)).toBe(ID);
+    // A re-rendered shot is a new output, so feedback without an id is about that take.
+    rememberGeneration('k3', 'shots_regenerate', { structuredContent: { id: ID } }, 0);
+    expect(recentGeneration('k3', 1000)).toBe(ID);
     // A translation preview's id is a job, not a generation.
     rememberGeneration(key, 'translation-previews_create', { structuredContent: { id: ID } }, 4500);
     expect(recentGeneration(key, 5000)).toBe(OTHER);
