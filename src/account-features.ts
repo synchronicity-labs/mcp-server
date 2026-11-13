@@ -20,6 +20,8 @@ const TOOL_FEATURES: Readonly<Record<string, string>> = {
   shots_regenerate: 'lipsync_planning',
   shots_splice: 'lipsync_planning',
   shots_review: 'lipsync_planning',
+  // Not a flag: the API lists it where its deployment takes agent payments.
+  'billing-payment-links_create': 'agent_payments',
 };
 
 /**

@@ -736,11 +736,11 @@ it.each([0, 1, 2])(
     const factory = await createMcpServerFactory(config);
     // jobs_create-many runs lipsync_create; jobs_get-many reads through generations_get.
     const jobTools = count === 2 ? 2 : 1;
-    // Includes scenes_detect, stems_separate, the four faces_* tools and the three shots_*
-    // tools, which only accounts with their features list.
+    // Includes scenes_detect, stems_separate, the four faces_* tools, the three shots_*
+    // tools and billing-payment-links_create, which only accounts with their features list.
     // account_show-usage always; voices_show once its source operation is generated.
     const cardTools = count === 0 ? 1 : 2;
-    expect(factory.toolCount).toBe(22 + count + jobTools + cardTools);
+    expect(factory.toolCount).toBe(23 + count + jobTools + cardTools);
     const chatgpt = await connect(factory, 'chatgpt');
     const claude = await connect(factory, 'claude');
     const chatTools = currentTools((await chatgpt.client.listTools()).tools);
