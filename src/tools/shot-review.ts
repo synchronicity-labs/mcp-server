@@ -55,6 +55,7 @@ export const baseGeneration = z.object({
   outputDuration: z.number().nullish(),
   segments: z.array(z.unknown()).nullish(),
   speakers: z.array(z.unknown()).nullish(),
+  options: z.record(z.string(), z.unknown()).nullish(),
 });
 
 const source = (item: z.infer<typeof media>) =>
@@ -100,6 +101,34 @@ export function retakeSources(
       'This generation has no saved audio to lipsync to (it was made from a script). Create the audio first, then use lipsync_create-timeline.',
     );
   return { video, audio };
+}
+
+// The model controls a take repeats from the first render, so a retaken shot is the same
+// kind of render as the shots around it. The controller applies them to every segment and
+// tracks a picked face over the whole video, so the pick needs no change per shot. Left
+// out: sync_mode, since each shot's audio is cut to the shot's own length and fitting it
+// again could change the frame count; shots, which segments refuse; and options only the
+// first request could send.
+const REPEATED_OPTIONS = [
+  'active_speaker_detection',
+  'model_mode',
+  'temperature',
+  'occlusion_detection_enabled',
+  'reasoning_enabled',
+  'refinement_enabled',
+  'blending_mode',
+] as const;
+
+function retakeOptions(base: z.infer<typeof baseGeneration>): Record<string, unknown> | undefined {
+  const options: Record<string, unknown> = {};
+  for (const key of REPEATED_OPTIONS) {
+    const value = base.options?.[key];
+    if (value != null) options[key] = value;
+  }
+  // Older renders stored speaker detection as a flag; a request takes an object.
+  if (typeof options.active_speaker_detection === 'boolean')
+    options.active_speaker_detection = { auto_detect: options.active_speaker_detection };
+  return Object.keys(options).length > 0 ? options : undefined;
 }
 
 function createRegenerateTool(http: HttpClient): McpToolDefinition {
@@ -161,7 +190,7 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
     title: 'Render shots of a generation again',
     description: [
       'Render some shots of a finished lipsync or dub again, when the user says which shots look wrong. It lipsyncs only those shots, from the same video and the same audio as the first render (the dubbed track, for a dub), and returns a new generation: a whole-length video with the new shots in place and the original, unsynced picture everywhere else. That video is one take, not the result: once the user picked the takes, build the final video with shots_splice.',
-      'Give each shot the frames the first render used and say what was wrong with it: detectSpeaker when the wrong person’s mouth moved, occlusionDetection when something crossed the mouth. A shot with neither is simply rendered again. Works on a generation made from one video and one audio, or a dub; one made from a script, a timeline or several speakers cannot be re-rendered this way. The first render must run as long as the video: when its audio was shorter or longer, the video was cut, looped or retimed, a new take would not line up with it, and the tool starts nothing.',
+      'Give each shot the frames the first render used and say what was wrong with it: detectSpeaker when the wrong person’s mouth moved, occlusionDetection when something crossed the mouth. A shot with neither is simply rendered again. Every shot keeps the first render’s model controls (the face it picked or its speaker detection, model mode, temperature, occlusion detection, reasoning), so only what you set on a shot changes. Works on a generation made from one video and one audio, or a dub; one made from a script, a timeline or several speakers cannot be re-rendered this way. The first render must run as long as the video: when its audio was shorter or longer, the video was cut, looped or retimed, a new take would not line up with it, and the tool starts nothing.',
       'Paid generation, billed for the listed shots only, not the whole video. Estimate and confirm before creating; this starts an asynchronous generation in the first render’s project and returns its id and status. Poll that id with generations_get and wait: true.',
     ].join('\n\n'),
     inputSchema: input.shape,
@@ -185,6 +214,7 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
         await http.request('get', `/v2/generate/${args.generationId}`, { signal }),
       );
       const { video, audio } = retakeSources(base, args);
+      const options = retakeOptions(base);
       signal?.throwIfAborted();
       return http.request('post', '/v2/generate', {
         signal,
@@ -195,6 +225,7 @@ function createRegenerateTool(http: HttpClient): McpToolDefinition {
             { type: 'video', ...video },
             { type: 'audio', ...audio, refId: 'audio' },
           ],
+          ...(options ? { options } : {}),
           // Frames the segments leave out keep the source picture; only these are billed.
           // A segment's endFrame is inclusive, unlike a shot's; its audio end is a time.
           segments: args.shots.map((shot) => ({

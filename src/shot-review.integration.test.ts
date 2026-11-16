@@ -172,6 +172,46 @@ describe('shots_regenerate', () => {
     });
   });
 
+  it('repeats the first render’s model controls, and a shot’s own fix wins over them', async () => {
+    const { call, calls } = await setup(
+      serveFirst(
+        firstRender({
+          options: {
+            // Stored as a flag by older renders; a request takes an object.
+            active_speaker_detection: true,
+            model_mode: 'lips',
+            temperature: 0.7,
+            reasoning_enabled: true,
+            occlusion_detection_enabled: false,
+            // Not repeated: each shot's audio already has the shot's length, segments
+            // refuse shots, and the bucket is not the caller's to set.
+            sync_mode: 'cut_off',
+            shots: [{ start_frame: 0, end_frame: 864 }],
+            output_bucket_name: 'internal',
+            blending_mode: null,
+          },
+        }),
+      ),
+    );
+
+    await call('shots_regenerate', {
+      generationId: FIRST,
+      fps: 24,
+      frameCount: 864,
+      shots: [{ startFrame: 50, endFrame: 278, occlusionDetection: true }],
+    });
+
+    const body = calls[1]?.body as { options: unknown; segments: { optionsOverride: unknown }[] };
+    expect(body.options).toEqual({
+      active_speaker_detection: { auto_detect: true },
+      model_mode: 'lips',
+      temperature: 0.7,
+      reasoning_enabled: true,
+      occlusion_detection_enabled: false,
+    });
+    expect(body.segments[0]?.optionsOverride).toEqual({ occlusion_detection_enabled: true });
+  });
+
   it('uses the audio input of a plain lipsync', async () => {
     const { call, calls } = await setup(serveFirst(firstRender()));
 
@@ -189,6 +229,8 @@ describe('shots_regenerate', () => {
       ],
     });
     expect(calls[1]?.idempotencyKey).toBeUndefined();
+    // A first render with default options sends none.
+    expect(calls[1]?.body).not.toHaveProperty('options');
   });
 
   it.each([
