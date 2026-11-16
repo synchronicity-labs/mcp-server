@@ -132,13 +132,21 @@ declares becomes one entry:
 | Local file path | `path` |
 | Other text | `text:` and its length range: `1-20`, `21-100`, `101-500`, `501-2000` or `2001+` |
 | List | `array:` and its length |
-| Object | `object` |
+| Object | `object`; when it fails its schema, `object:` and what failed, joined by `+` (see below) |
 
 A recorded value must be one token of at most 64 characters, with no spaces, URL scheme,
 `@` or file extension (dots only before a digit, as in a version). Anything else is recorded
 by its kind, and the API refuses a batch that breaks this. Fields the tool does not declare
 are not recorded. Hosts other than the listed ones
 become `other`, so a customer's own domain never appears.
+
+An object that fails its schema, such as `lipsync_create` `options`, says what failed, one
+level deep: an undeclared key in a strict object by name, `key:null` for a null the field
+refuses, `key:invalid` for any other bad value and `parent/key` inside a nested object, for
+example `object:fps+sync_mode:null` or `object:active_speaker_detection/box`. Undeclared keys
+are named only from a fixed list (the generation API's own options and likely face and
+speaker names); any other becomes `other`. When the list does not fit in 64 characters it
+ends with `+more`.
 
 ## Directory referrals
 
@@ -362,4 +370,15 @@ FROM events
 WHERE event = 'mcp_tool_called' AND properties.outcome = 'invalid_arguments'
   AND timestamp > now() - INTERVAL 7 DAY
 GROUP BY tool, field, client ORDER BY n DESC LIMIT 40
+```
+
+What is wrong inside `lipsync_create` options:
+
+```sql
+SELECT properties.args.options AS options, properties.client_name AS client,
+  count() AS n, count(DISTINCT person_id) AS people
+FROM events
+WHERE event = 'mcp_tool_called' AND properties.tool_name = 'lipsync_create'
+  AND properties.outcome = 'invalid_arguments' AND timestamp > now() - INTERVAL 7 DAY
+GROUP BY options, client ORDER BY n DESC LIMIT 20
 ```

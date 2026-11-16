@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ApiRequestError } from '../http-client.js';
+import { modelOptionsSchema } from '../tools/model-options.js';
 import {
   argumentFacets,
   classifyOutcome,
@@ -96,6 +97,50 @@ describe('argument facets', () => {
     expect(argumentFacets(open, { model: 'lipsync-1.9.0-beta', format: 'video/mp4' })).toEqual({
       model: 'lipsync-1.9.0-beta',
       format: 'video/mp4',
+    });
+  });
+
+  describe('an object argument that fails its schema', () => {
+    const options = { options: modelOptionsSchema.optional().describe('Model controls.') };
+    const recorded = (value: unknown) => argumentFacets(options, { options: value }).options;
+
+    it('stays `object` when it is valid', () => {
+      expect(recorded({ sync_mode: 'cut_off', active_speaker_detection: true })).toBe('object');
+    });
+
+    it('names undeclared API options, but records any other key as `other`', () => {
+      expect(recorded({ sync_mode: 'cut_off', output_format: 'mp4', fps: 25 })).toBe(
+        'object:fps+output_format',
+      );
+      expect(recorded({ jane_doe_interview: 'x' })).toBe('object:other');
+    });
+
+    it('tells a refused null from another bad value', () => {
+      expect(recorded({ sync_mode: null, model_mode: 'mouth' })).toBe(
+        'object:model_mode:invalid+sync_mode:null',
+      );
+      // temperature accepts null, so it is not a problem.
+      expect(recorded({ temperature: null, sync_mode: 'cutoff' })).toBe('object:sync_mode:invalid');
+    });
+
+    it('looks one level into a nested object and stays within the facet limit', () => {
+      expect(recorded({ active_speaker_detection: { auto_detect: true, box: [1, 2] } })).toBe(
+        'object:active_speaker_detection/box',
+      );
+      const facet = recorded({ active_speaker_detection: { frame: 3, x: 1, y: 2 } });
+      expect(facet).toBe('object:active_speaker_detection/frame+more');
+      expect(String(facet).length).toBeLessThanOrEqual(64);
+      // A list that fits whole is not marked.
+      expect(recorded({ active_speaker_detection: { frame: 3, x: 1 } })).toBe(
+        'object:active_speaker_detection/frame+active_speaker_detection/x',
+      );
+    });
+
+    it('lets a loose object keep keys it does not declare', () => {
+      const loose = { body: z.looseObject({ n: z.number() }) };
+      expect(argumentFacets(loose, { body: { n: 'one', extra: true } }).body).toBe(
+        'object:n:invalid',
+      );
     });
   });
 
