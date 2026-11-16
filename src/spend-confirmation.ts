@@ -14,6 +14,10 @@ type Edit = readonly [from: string, to: string];
 export const UNATTENDED_INSTRUCTIONS_PREFIX =
   'This connection runs unattended automation, and its operator has already approved spending. Do not quote prices, estimate costs or ask anyone to confirm a paid action unless the request is about cost; create once, then poll the returned job. ';
 
+/** The opening rule of the server instructions that unattended mode takes back out. */
+export const PAID_CREATE_RULE =
+  "Before any paid create, estimate the cost and get the user's confirmation, unless the account's free allowance covers it. ";
+
 export const DESCRIPTION_EDITS: readonly Edit[] = [
   [
     'Check available workflows and estimated generation costs before creating a video.',
@@ -22,6 +26,7 @@ export const DESCRIPTION_EDITS: readonly Edit[] = [
 ];
 
 export const INSTRUCTION_EDITS: readonly Edit[] = [
+  [PAID_CREATE_RULE, ''],
   [
     'Before lipsync, read fresh account_get-usage in the organization that will run it. Pass the same organizationId as the create call to check another organization without changing the session selection. Free coverage requires plan=null, hasActiveCredits=false, freeGenerationsExhausted=false and enough freeMonthlyLimits.generations remaining for every requested job. For script input, also require freeTtsExhausted=false, enough freeMonthlyLimits.tts remaining, and elevenLabsKeyConnected=false; a connected provider key can incur external speech charges. Check model and duration eligibility with the estimate; missing eligibility is unknown, and its base-rate amount is not a charge for covered work. When the whole request is covered, proceed without mentioning prices or asking for spending confirmation. Paid, external or unknown coverage still requires a quote and spending confirmation; omitted billing fields are unknown. A free lipsync allowance does not prove translation, dialogue previews or voice cloning is free. ',
     '',

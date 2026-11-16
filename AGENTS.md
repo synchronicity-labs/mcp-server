@@ -79,6 +79,7 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 - **Sessions, upload tickets and token caches live in one process.** Do not add replicas without cross-pod routing.
 - **Skills live in synchronicity-labs/skills, not here.** Change a skill there, then bump the pin with `pnpm run skills:update`. Never add `SKILL.md` content to this repository.
 - **Keep `undici` on the same major as Node's bundled undici.** The upload path hands an undici dispatcher to Node's built-in `fetch`.
+- **Server instructions are read from the top, and clients cut them.** ChatGPT and Codex are sure to have only the first 512 characters; Claude Code cuts at 4,096 (2,048 before v2.1.296). Keep `INSTRUCTIONS_OPENING` self-contained and under 512, rules that span tools in `INSTRUCTION_PARTS`, and guidance for one tool in that tool's description, not in `INSTRUCTION_TAIL`. `src/instruction-budget.test.ts` holds the limits.
 - **Fix lint findings rather than disabling them.** Unused disable directives fail lint. Files with their own complexity cap in `.oxlintrc.json` must not grow; split them instead, and remove a cap once the file meets the default of 20.
 
 ## Verifying a change
