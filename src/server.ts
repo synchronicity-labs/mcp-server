@@ -172,7 +172,7 @@ const SERVER_DESCRIPTION =
 export const INSTRUCTIONS_OPENING =
   "Sync lipsyncs video to audio or a script, makes photos talk, translates and dubs video, and edits spoken words in the speaker's voice. " +
   PAID_CREATE_RULE +
-  'Create once: poll the id a create returns, and never create again to retry or check. Start each new request in a new project. When a tool error has nextAction, follow it first. ';
+  'Create once: poll the id a create returns, and never create again to retry or check. Start new work in a new project; use an existing one only when the user picks it or continues a generation in it. When a tool error has nextAction, follow it first. ';
 
 // Paragraphs marked appOnly apply only inside the ChatGPT app and its Studio bridge;
 // notChatgpt ones cover tools the ChatGPT app does not list. chatgptOnly ones replace a

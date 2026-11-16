@@ -32,9 +32,11 @@ describe('server instructions fit what clients keep', () => {
       const waits = endOf(instructions, 'never say you will watch the job or report back');
       expect(waits, client).toBeGreaterThan(0);
       expect(waits, client).toBeLessThan(OLDER_CLAUDE_CODE);
-      expect(endOf(instructions, 'not in a page you write.'), client).toBeLessThan(
-        OLDER_CLAUDE_CODE,
-      );
+      // The ChatGPT app lists no shot review, so it is not sent the paragraph.
+      if (client === 'openai-mcp') continue;
+      const reviews = endOf(instructions, 'not in a page you write.');
+      expect(reviews, client).toBeGreaterThan(0);
+      expect(reviews, client).toBeLessThan(OLDER_CLAUDE_CODE);
     }
   });
 
