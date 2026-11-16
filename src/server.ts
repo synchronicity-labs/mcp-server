@@ -181,6 +181,13 @@ const INSTRUCTION_PARTS: {
   },
   { text: ASSET_THUMBNAIL_INSTRUCTIONS },
   {
+    // Placed early: clients cut long instructions short (Claude Code keeps about the first
+    // 6,000 characters). Without it a chat that has the shots builds a page of its own,
+    // which can neither play a Sync video nor start a take.
+    text: 'When shots_review is available and the user wants to review, check, fix or redo parts of a finished lipsync or dub, call shots_review with every shot of its video (from faces_get-timeline or scenes_detect): it opens the Sync shot review card, where the user plays each shot, flags the ones that look wrong, renders them again and builds the final video. Never build your own page, player, table or widget to review shots or to play a Sync video: Sync media plays in Sync cards or from its link, not in a page you write. ',
+    notChatgpt: true,
+  },
+  {
     text: 'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new lipsync_create or dubbing_create calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ',
   },
   {
