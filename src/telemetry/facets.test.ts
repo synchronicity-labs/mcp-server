@@ -128,8 +128,12 @@ describe('argument facets', () => {
         'object:active_speaker_detection/box',
       );
       const facet = recorded({ active_speaker_detection: { frame: 3, x: 1, y: 2 } });
-      expect(facet).toBe('object:active_speaker_detection/frame+active_speaker_detection/x');
+      expect(facet).toBe('object:active_speaker_detection/frame+more');
       expect(String(facet).length).toBeLessThanOrEqual(64);
+      // A list that fits whole is not marked.
+      expect(recorded({ active_speaker_detection: { frame: 3, x: 1 } })).toBe(
+        'object:active_speaker_detection/frame+active_speaker_detection/x',
+      );
     });
 
     it('lets a loose object keep keys it does not declare', () => {

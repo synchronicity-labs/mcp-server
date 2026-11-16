@@ -203,16 +203,15 @@ function objectFacet(value: object, schema: z.ZodType | undefined): Facet {
   if (!object || object.safeParse(value).success) return 'object';
   const problems = objectProblems(value, object);
   if (problems.length === 0) return 'object:invalid';
-  let recorded = 'object';
+  const all = `object:${problems.join('+')}`;
+  if (isFacetValue(all)) return all;
+  // Too long: keep what fits alongside `+more`, so a shortened list always says so.
+  const kept: string[] = [];
   for (const problem of problems) {
-    const next = `${recorded}${recorded === 'object' ? ':' : '+'}${problem}`;
-    if (!isFacetValue(next)) {
-      if (recorded === 'object') return 'object:invalid';
-      return isFacetValue(`${recorded}+more`) ? `${recorded}+more` : recorded;
-    }
-    recorded = next;
+    if (!isFacetValue(`object:${[...kept, problem, 'more'].join('+')}`)) break;
+    kept.push(problem);
   }
-  return recorded;
+  return kept.length > 0 ? `object:${[...kept, 'more'].join('+')}` : 'object:invalid';
 }
 
 function facet(key: string, value: unknown, schema: z.ZodType | undefined): Facet | undefined {
