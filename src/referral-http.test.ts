@@ -232,3 +232,31 @@ it.each([
     });
   }
 });
+
+// A hosted session's later requests run on servers that never see the handshake, so what
+// the client declared at initialize has to travel with the session.
+it('keeps the cards for a session whose client declared at initialize that it renders them', async () => {
+  const listedCards = async (capabilities: Record<string, unknown>) => {
+    const response = await rpc({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-03-26',
+        capabilities,
+        clientInfo: { name: 'claude-code', version: '2.1.326' },
+      },
+    });
+    const sessionId = z.string().min(1).parse(response.headers['mcp-session-id']);
+    await rpc({ jsonrpc: '2.0', method: 'notifications/initialized' }, sessionId);
+    const listed = await rpc({ jsonrpc: '2.0', id: 2, method: 'resources/list' }, sessionId);
+    const { resources } = z
+      .object({ result: z.object({ resources: z.array(z.object({ uri: z.string() })) }) })
+      .parse(JSON.parse(listed.body)).result;
+    return resources.filter((resource) => resource.uri.startsWith('ui://sync/')).length;
+  };
+
+  const ui = { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } };
+  expect(await listedCards({ extensions: ui })).toBeGreaterThan(0);
+  expect(await listedCards({})).toBe(0);
+});

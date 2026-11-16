@@ -29,6 +29,7 @@ import {
 } from './auth/oauth-diagnostics.js';
 import { createOAuthProvider } from './auth/oauth-provider.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
+import { declaresCards } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
 import { HttpSession, isSessionControlRequest } from './http-session.js';
 import { readOAuthResponseText } from './oauth-response.js';
@@ -353,6 +354,7 @@ export async function startHttpServer(
       handshakeClientName?: string,
       telemetry?: TelemetrySession,
       mcpSessionId?: string,
+      rendersCards?: boolean,
     ) => McpServer;
     toolCount: number;
     telemetry?: TelemetryQueue;
@@ -805,11 +807,19 @@ export async function startHttpServer(
           init.data.params,
           req.headers['x-mcp-referral'],
         );
+        // Declared once, here: the session's later requests carry no handshake.
+        const rendersCards = declaresCards(init.data.params.capabilities);
         recordInitialization = usage.record;
         session = new HttpSession(
           init.data.params.clientInfo.name.slice(0, 160),
           (clientName, handshakeClientName) =>
-            serverFactory.createServer(clientName, handshakeClientName, usage.session, id),
+            serverFactory.createServer(
+              clientName,
+              handshakeClientName,
+              usage.session,
+              id,
+              rendersCards,
+            ),
           (version) => sessionTelemetry.protocol(id, version),
           (details) =>
             logEvent('mcp_rpc_error', {
