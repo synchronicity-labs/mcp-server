@@ -298,9 +298,17 @@ const forEveryClient: Audience = (part) => !part.chatgptOnly;
 const forModelOnly: Audience = (part) => !part.appOnly && !part.chatgptOnly;
 const forChatgptApp: Audience = (part) => !part.notChatgpt;
 
-export const SERVER_INSTRUCTIONS =
-  instructionText(INSTRUCTION_PARTS, forEveryClient) +
-  instructionText(INSTRUCTION_TAIL, forEveryClient);
+// Built once: every hosted session of a profile shares one string, not a copy each.
+const instructionsFor = (audience: Audience) => {
+  const head = instructionText(INSTRUCTION_PARTS, audience);
+  const tail = instructionText(INSTRUCTION_TAIL, audience);
+  return { head, tail, whole: head + tail };
+};
+const FOR_EVERY_CLIENT = instructionsFor(forEveryClient);
+const FOR_MODEL_ONLY = instructionsFor(forModelOnly);
+const FOR_CHATGPT_APP = instructionsFor(forChatgptApp);
+
+export const SERVER_INSTRUCTIONS = FOR_EVERY_CLIENT.whole;
 
 export function serverInstructions(
   profile: ClientProfile,
@@ -309,12 +317,12 @@ export function serverInstructions(
   update?: AvailableUpdate,
   toolsetNote = '',
 ): string {
-  const audience =
+  const { head, tail, whole } =
     profile.name === 'chatgpt'
-      ? forChatgptApp
+      ? FOR_CHATGPT_APP
       : profile.supportsAppUi
-        ? forEveryClient
-        : forModelOnly;
+        ? FOR_EVERY_CLIENT
+        : FOR_MODEL_ONLY;
   // A note about this connection goes before the tail, where a client that cuts still reads it.
   const notes = [
     update && updateInstruction(update),
@@ -324,10 +332,7 @@ export function serverInstructions(
     .filter(Boolean)
     .map((note) => `${String(note)} `)
     .join('');
-  const instructions =
-    instructionText(INSTRUCTION_PARTS, audience) +
-    notes +
-    instructionText(INSTRUCTION_TAIL, audience);
+  const instructions = notes ? head + notes + tail : whole;
   return spendConfirmation
     ? instructions
     : UNATTENDED_INSTRUCTIONS_PREFIX + applyEdits(instructions, INSTRUCTION_EDITS);
