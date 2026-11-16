@@ -72,9 +72,8 @@ describe('update notice', () => {
   it('tells the agent in the instructions and the first tool result only', async () => {
     fakeApi();
     const client = await connect(await stdioServer(fakeUpdateCheck(UPDATE).check));
-    expect(client.getInstructions()).toMatch(
-      new RegExp(`same value\\. ${escape(toolsetInstruction(undefined))} ${escape(INSTRUCTION)}$`),
-    );
+    // Both notes sit before the paragraphs a client may cut, the update first.
+    expect(client.getInstructions()).toContain(`${INSTRUCTION} ${toolsetInstruction(undefined)} `);
 
     const first = await texts(client);
     expect(first.texts).toHaveLength(2);
@@ -164,7 +163,3 @@ describe('MCP version headers', () => {
     expect(unnamed?.headers).not.toHaveProperty('x-sync-mcp-client');
   });
 });
-
-function escape(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
