@@ -17,9 +17,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export const resultRow = z.object({
   requestId: z.string(),
-  status: z.string().describe('The generation status: COMPLETED, FAILED or REJECTED.'),
+  status: z
+    .string()
+    .describe(
+      'The generation status: COMPLETED, NO_OP (finished but lip-synced no frame; error says why), FAILED or REJECTED.',
+    ),
   generationId: z.string().optional().describe('Read it with generations_get.'),
-  outputMediaUrl: z.string().optional().describe('The finished video; return it verbatim.'),
+  outputMediaUrl: z
+    .string()
+    .optional()
+    .describe(
+      'The finished video; return it verbatim. For NO_OP it is the unchanged input, not a lipsync result.',
+    ),
   error: z.unknown().optional(),
 });
 type ResultRow = z.infer<typeof resultRow>;
@@ -89,7 +98,8 @@ async function readResults(
     .filter((row): row is ResultRow => row !== undefined);
 }
 
-const FAILED_ROW = new Set(['FAILED', 'REJECTED']);
+// A NO_OP row lip-synced nothing, so it is not a successful item.
+const FAILED_ROW = new Set(['FAILED', 'REJECTED', 'NO_OP']);
 
 export async function withResults(
   batch: Record<string, unknown>,

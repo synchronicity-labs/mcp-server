@@ -151,7 +151,7 @@ const getInput = z
       .enum(['all', 'failed', 'none'])
       .optional()
       .describe(
-        'Once the batch finishes, which result rows to return: all (default), failed (FAILED or REJECTED only) or none.',
+        'Once the batch finishes, which result rows to return: all (default), failed (FAILED, REJECTED or NO_OP only) or none.',
       ),
   })
   .strict();

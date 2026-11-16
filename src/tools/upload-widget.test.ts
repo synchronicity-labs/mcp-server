@@ -94,8 +94,8 @@ describe('UPLOAD_WIDGET_HTML', () => {
 });
 
 // Runs the widget's own result readers, as the ChatGPT iframe would.
-function widgetFunction(name: string): (value: unknown) => string {
-  const source = ['parseJson', 'payloadFromToolResult', 'findStringByKeys', name]
+function widgetFunction(name: string, helpers: string[] = []): (value: unknown) => string {
+  const source = ['parseJson', 'payloadFromToolResult', 'findStringByKeys', ...helpers, name]
     .map((fn) => {
       const start = UPLOAD_WIDGET_HTML.indexOf(`        function ${fn}(`);
       const end = UPLOAD_WIDGET_HTML.indexOf('\n        }\n', start);
@@ -132,6 +132,28 @@ describe('widget generation result', () => {
   it('tells the model the API name', () => {
     expect(UPLOAD_WIDGET_HTML).toContain('"; outputMediaUrl: " + outputUrl');
     expect(UPLOAD_WIDGET_HTML).not.toContain('"; outputUrl: "');
+  });
+});
+
+describe('widget generation that lip-synced no frame', () => {
+  const noLipsyncReason = widgetFunction('noLipsyncReason', ['generationStatusFrom']);
+
+  it('gives the reason for NO_OP, so the card shows No lip sync instead of Completed', () => {
+    const generation = {
+      status: 'NO_OP',
+      error: 'No face was detected.',
+      errorCode: 'generation_lipsync_skipped_no_face',
+      outputMediaUrl: 'https://fixture.invalid/input.mp4',
+    };
+    expect(noLipsyncReason({ structuredContent: generation })).toBe('No face was detected.');
+    expect(noLipsyncReason({ structuredContent: { status: 'NO_OP' } })).toBe(
+      'No frame was lip-synced.',
+    );
+    expect(noLipsyncReason({ structuredContent: { status: 'COMPLETED', error: 'x' } })).toBe('');
+    expect(UPLOAD_WIDGET_HTML).toContain('setStatus("No lip sync", noLipsync');
+    expect(UPLOAD_WIDGET_HTML.indexOf('if (noLipsync)')).toBeLessThan(
+      UPLOAD_WIDGET_HTML.indexOf('if (statusText === "COMPLETED" || outputUrl)'),
+    );
   });
 });
 

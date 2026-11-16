@@ -60,6 +60,13 @@ const RESULT_LINES = [
     error: { code: 'INVALID_INPUT', message: 'no face' },
     response: null,
   },
+  {
+    request_id: 'item-3',
+    endpoint: '/v2/generate',
+    status: 'NO_OP',
+    error: { code: 'generation_lipsync_skipped_no_face', message: 'No face was detected.' },
+    response: { id: 'g-3', status: 'NO_OP', outputMediaUrl: 'https://cdn.test/in3.mp4' },
+  },
 ];
 
 type Route = (req: IncomingMessage, res: ServerResponse) => Promise<boolean> | boolean;
