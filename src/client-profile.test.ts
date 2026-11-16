@@ -77,13 +77,14 @@ async function connect(
   factory: Awaited<ReturnType<typeof createMcpServerFactory>>,
   name: string,
   overHttp = false,
+  capabilities: Record<string, unknown> = {},
 ) {
   const server = factory.createServer();
   connections.push(server);
   const callback = server.server.oninitialized;
   const onInitialized = vi.fn(() => callback?.());
   server.server.oninitialized = onInitialized;
-  const client = new Client({ name, version: 'test' });
+  const client = new Client({ name, version: 'test' }, { capabilities });
   connections.push(client);
   if (overHttp) {
     const session = new HttpSession(name, factory.createServer, () => {});
@@ -251,6 +252,34 @@ describe('immutable client profiles', () => {
     await expect(client.readResource({ uri: GENERATION_STATUS_URI })).rejects.toThrow(
       'app-compatible client',
     );
+  });
+
+  // Claude Code's desktop and web surfaces, Cursor and VS Code announce names we do not
+  // map to a profile, and declare the MCP Apps UI extension when they render cards.
+  it('gives the cards to a client that declares it renders them, whatever its name', async () => {
+    fakeApi();
+    const factory = await createMcpServerFactory(config);
+    const ui = {
+      extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } },
+    };
+    const { client } = await connect(factory, 'claude-code', false, ui);
+    const { tools } = await client.listTools();
+    expect(tools.find((tool) => tool.name === 'lipsync_create')?._meta?.ui).toEqual({
+      resourceUri: GENERATION_STATUS_URI,
+      visibility: ['model', 'app'],
+    });
+    expect(tools.some((tool) => tool.name === 'account_show-usage')).toBe(true);
+    // Still a generic client otherwise: no ChatGPT keys, no upload widget.
+    expect(JSON.stringify(tools)).not.toContain('openai/');
+    const card = await client.readResource({ uri: GENERATION_STATUS_URI });
+    expect(card.contents[0]).toMatchObject({ uri: GENERATION_STATUS_URI });
+    await expect(client.readResource({ uri: UPLOAD_WIDGET_URI })).rejects.toThrow();
+
+    // The same name without the declaration is a terminal, and keeps the plain listing.
+    const terminal = await connect(factory, 'claude-code');
+    const plain = (await terminal.client.listTools()).tools;
+    expect(JSON.stringify(plain)).not.toContain(GENERATION_STATUS_URI);
+    expect(plain.some((tool) => tool.name === 'account_show-usage')).toBe(false);
   });
 
   it('logs each status card read, served or refused, with the client that asked', async () => {

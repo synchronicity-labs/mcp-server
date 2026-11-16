@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import { getAuthOwner, getAuthToken } from '../auth/async-context.js';
-import { resolveClientProfile } from '../client-profile.js';
+import { declaresCards, resolveClientProfile } from '../client-profile.js';
 import { REVISION } from '../revision.js';
 import { PACKAGE_VERSION } from '../version.js';
 import { argumentFacets, invalidFields, type OutcomeFacets, resultFacets } from './facets.js';
@@ -32,8 +32,7 @@ function clientCapabilities(capabilities: unknown): string[] {
   if (!capabilities || typeof capabilities !== 'object') return [];
   const declared = capabilities as Record<string, unknown>;
   const names: string[] = CAPABILITIES.filter((name) => declared[name] !== undefined);
-  // MCP Apps hosts declare the UI extension; its exact home has moved between drafts.
-  if (/io\.modelcontextprotocol\/ui/.test(JSON.stringify(capabilities))) names.push('ui');
+  if (declaresCards(capabilities)) names.push('ui');
   return names;
 }
 

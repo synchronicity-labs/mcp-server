@@ -22,7 +22,7 @@ published version, so bump both versions in any PR that edits `server.json`.
 | Path | Owns |
 | --- | --- |
 | `src/server.ts` | Tool assembly, `HOSTED_HTTP_TOOL_ALLOWLIST`, per-profile visibility (`isAppOnlyTool`), instructions (`INSTRUCTION_PARTS`), `tools/list` descriptors |
-| `src/client-profile.ts` | Maps the handshake client name to a presentation profile (chatgpt, codex, claude, generic). Presentation only, never permissions |
+| `src/client-profile.ts` | Maps the handshake client name to a presentation profile (chatgpt, codex, claude, generic). A client it does not know that declares the MCP Apps UI extension at initialize still gets the cards. Presentation only, never permissions |
 | `src/tools/` | Hand-written tools; `generator.ts` turns public OpenAPI operations into generated tools |
 | `src/openapi/` | Fetches and parses `api.sync.so/api-json` at startup |
 | `src/http-server.ts`, `src/http-session.ts`, `src/session-registry.ts` | Express app, OAuth proxy routes, `/mcp`, `/health`, request-scoped MCP sessions |

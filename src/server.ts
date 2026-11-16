@@ -35,6 +35,7 @@ import {
 import { type ChatgptApp, createOpenSyncAppTool, loadChatgptAppReleases } from './chatgpt-app.js';
 import {
   type ClientProfile,
+  declaresCards,
   resolveClientProfile,
   UNSUPPORTED_UPLOAD_MESSAGE,
 } from './client-profile.js';
@@ -992,6 +993,10 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+/** One listing per profile; a generic client that renders cards lists more than one that does not. */
+const profileKey = (profile: ClientProfile) =>
+  profile.name === 'generic' && profile.supportsStatusCard ? 'generic+cards' : profile.name;
+
 /** Profile-specific descriptors and presentation. Authentication remains request-scoped. */
 function presentTool(listed: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
   const tool = presentPriceCheck(listed, profile);
@@ -1195,7 +1200,7 @@ function createProfiledServer(
   previousApps: ChatgptApp[] = [],
   sharedCatalog?: {
     tools: McpToolDefinition[];
-    descriptors: Map<ClientProfile['name'], Tool[]>;
+    descriptors: Map<string, Tool[]>;
   },
   httpClientName?: string,
   // An initialize request resolves the profile through the handshake, but its
@@ -1205,6 +1210,9 @@ function createProfiledServer(
   telemetry?: TelemetrySession,
   // The hosted MCP session; scopes per-conversation state when telemetry is off.
   mcpSessionId?: string,
+  // What a hosted session's client declared at initialize; later requests of that session
+  // run on servers that never see the handshake. Unset, the handshake itself answers.
+  rendersCards?: boolean,
 ): McpServer {
   let profile: ClientProfile | undefined;
   let clientName: string | undefined = httpClientName;
@@ -1414,9 +1422,13 @@ function createProfiledServer(
   server.server.oninitialized = () => {
     if (!profile) {
       clientName ??= server.server.getClientVersion()?.name;
-      const initializedProfile = resolveClientProfile(clientName);
+      const initializedProfile = resolveClientProfile(
+        clientName,
+        rendersCards ?? declaresCards(server.server.getClientCapabilities()),
+      );
       profile = initializedProfile;
-      const cached = sharedCatalog?.descriptors.get(initializedProfile.name);
+      const catalogKey = profileKey(initializedProfile);
+      const cached = sharedCatalog?.descriptors.get(catalogKey);
       if (cached) {
         descriptors = cached;
         onInitialized?.();
@@ -1455,7 +1467,7 @@ function createProfiledServer(
         descriptors = descriptors.map((tool) => withoutGatedParameters(tool));
       if (initializedProfile.supportsAppUi) descriptors = withLegacyAppDescriptors(descriptors);
       else if (initializedProfile.supportsStatusCard) descriptors = withStatusCardTool(descriptors);
-      sharedCatalog?.descriptors.set(initializedProfile.name, descriptors);
+      sharedCatalog?.descriptors.set(catalogKey, descriptors);
     }
     onInitialized?.();
   };
@@ -1584,6 +1596,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
     handshakeClientName?: string,
     telemetry?: TelemetrySession,
     mcpSessionId?: string,
+    rendersCards?: boolean,
   ) => McpServer;
   toolCount: number;
   /** Undefined when telemetry is off; inactive until the API collects MCP events. */
@@ -1618,10 +1631,10 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
     chatgptApp,
   );
 
-  // Four presentation profiles at most; never key this by untrusted client names.
+  // Five presentation profiles at most (profileKey); never key this by untrusted client names.
   const sharedCatalog = {
     tools,
-    descriptors: new Map<ClientProfile['name'], Tool[]>(),
+    descriptors: new Map<string, Tool[]>(),
   };
   return {
     // Number registered across hosted profiles, not each client's visible catalog.
@@ -1632,7 +1645,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
       createHttpClient(config.baseUrl),
       collectorCheck(config.baseUrl),
     ),
-    createServer: (clientName, handshakeClientName, telemetry, mcpSessionId) =>
+    createServer: (clientName, handshakeClientName, telemetry, mcpSessionId, rendersCards) =>
       createProfiledServer(
         config,
         operations,
@@ -1645,6 +1658,7 @@ export async function createMcpServerFactory(config: SyncMcpConfig): Promise<{
         undefined,
         telemetry,
         mcpSessionId,
+        rendersCards,
       ),
   };
 }
