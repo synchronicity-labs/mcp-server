@@ -128,6 +128,93 @@ function arrayFacet(key: string, value: unknown[]): Facet {
   return `array:${value.length}`;
 }
 
+// Keys an agent may put in an object the tool does not declare there: the generation
+// API's own options, and face and speaker names agents might guess. Any other undeclared key
+// is recorded as `other`, so a key that holds content never reaches telemetry.
+const KNOWN_UNDECLARED_KEYS = new Set([
+  'active_speaker',
+  'allow_overlapping_boxes',
+  'bbox',
+  'blending_mode',
+  'bounding_boxes',
+  'box',
+  'boxes',
+  'face_boxes_url',
+  'face_index',
+  'fps',
+  'frame',
+  'i2v_prompt',
+  'output_bucket_name',
+  'output_format',
+  'output_resolution',
+  'pads',
+  'prompt',
+  'prompt_image_uris',
+  'refinement_enabled',
+  'segments',
+  'shots',
+  'speaker',
+  'speakers',
+  'speedup',
+  'track_id',
+  'x',
+  'y',
+]);
+
+/** The object an optional, nullable, defaulted or union schema accepts, if any. */
+function objectSchema(schema: z.ZodType | undefined, depth = 0): z.ZodObject | undefined {
+  if (!schema || depth > 4) return undefined;
+  if (schema instanceof z.ZodObject) return schema;
+  const def = schema.def as { type?: string; innerType?: z.ZodType; options?: z.ZodType[] };
+  if (def.innerType) return objectSchema(def.innerType, depth + 1);
+  if (def.type !== 'union') return undefined;
+  for (const option of def.options ?? []) {
+    const object = objectSchema(option, depth + 1);
+    if (object) return object;
+  }
+  return undefined;
+}
+
+/**
+ * What in an object argument fails its schema, one level deep: an undeclared key by name
+ * (or `other`), `key:null` for a null the field refuses, `key:invalid` for any other bad
+ * value, and `parent/key` inside a nested object. Values are never read beyond the check.
+ */
+function objectProblems(value: object, schema: z.ZodObject, prefix = ''): string[] {
+  const shape = schema.shape as Record<string, z.ZodType>;
+  // A strict object refuses undeclared keys; any other object lets them through.
+  const catchall = schema.def.catchall as z.ZodType | undefined;
+  const strict = catchall instanceof z.ZodNever;
+  const problems = Object.entries(value).flatMap(([key, item]): string[] => {
+    const field = Object.hasOwn(shape, key) ? shape[key] : undefined;
+    if (!field) return strict ? [`${prefix}${KNOWN_UNDECLARED_KEYS.has(key) ? key : 'other'}`] : [];
+    if (field.safeParse(item).success) return [];
+    if (item === null) return [`${prefix}${key}:null`];
+    const nested =
+      !prefix && typeof item === 'object' && !Array.isArray(item) ? objectSchema(field) : undefined;
+    const inner = nested ? objectProblems(item as object, nested, `${key}/`) : [];
+    return inner.length > 0 ? inner : [`${prefix}${key}:invalid`];
+  });
+  return [...new Set(problems)].sort();
+}
+
+function objectFacet(value: object, schema: z.ZodType | undefined): Facet {
+  const object = objectSchema(schema);
+  if (!object || object.safeParse(value).success) return 'object';
+  const problems = objectProblems(value, object);
+  if (problems.length === 0) return 'object:invalid';
+  let recorded = 'object';
+  for (const problem of problems) {
+    const next = `${recorded}${recorded === 'object' ? ':' : '+'}${problem}`;
+    if (!isFacetValue(next)) {
+      if (recorded === 'object') return 'object:invalid';
+      return isFacetValue(`${recorded}+more`) ? `${recorded}+more` : recorded;
+    }
+    recorded = next;
+  }
+  return recorded;
+}
+
 function facet(key: string, value: unknown, schema: z.ZodType | undefined): Facet | undefined {
   if (value === undefined) return undefined;
   if (value === null) return 'null';
@@ -136,7 +223,7 @@ function facet(key: string, value: unknown, schema: z.ZodType | undefined): Face
     return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : 'nan';
   if (typeof value === 'string') return stringFacet(key, value, schema);
   if (Array.isArray(value)) return arrayFacet(key, value);
-  return typeof value === 'object' ? 'object' : undefined;
+  return typeof value === 'object' ? objectFacet(value, schema) : undefined;
 }
 
 /** Facets of the fields the tool declares. Undeclared fields are never read. */
