@@ -70,6 +70,7 @@ import {
   applyEdits,
   DESCRIPTION_EDITS,
   INSTRUCTION_EDITS,
+  PAID_CREATE_RULE,
   UNATTENDED_INSTRUCTIONS_PREFIX,
   withoutSpendConfirmation,
 } from './spend-confirmation.js';
@@ -164,34 +165,40 @@ const SERVER_DESCRIPTION =
   'Sync makes photos talk, lipsyncs videos to audio or a script, translates and dubs videos into another language, and edits spoken words while keeping the original speaker voice. ' +
   'Use existing media or upload your own. Check available workflows and estimated generation costs before creating a video.';
 
+/**
+ * What every client reads first, whatever it cuts: what Sync does and the rules that cost
+ * money or duplicate work when missed. It names no tool, so it holds for every toolset.
+ */
+export const INSTRUCTIONS_OPENING =
+  "Sync lipsyncs video to audio or a script, makes photos talk, translates and dubs video, and edits spoken words in the speaker's voice. " +
+  PAID_CREATE_RULE +
+  'Create once: poll the id a create returns, and never create again to retry or check. Start new work in a new project; use an existing one only when the user picks it or continues a generation in it. When a tool error has nextAction, follow it first. ';
+
 // Paragraphs marked appOnly apply only inside the ChatGPT app and its Studio bridge;
 // notChatgpt ones cover tools the ChatGPT app does not list. chatgptOnly ones replace a
 // notChatgpt part for the ChatGPT app, whose listing may not sell plans or credits.
-const INSTRUCTION_PARTS: {
+type InstructionPart = {
   text: string;
   appOnly?: boolean;
   notChatgpt?: boolean;
   chatgptOnly?: boolean;
-}[] = [
+};
+const INSTRUCTION_PARTS: InstructionPart[] = [
+  // The opening stands alone: ChatGPT and Codex are sure to have only the first 512
+  // characters when they decide how to use the server.
+  { text: INSTRUCTIONS_OPENING },
+  // Rules that span tools, costliest to miss first. Claude Code cuts instructions at 4,096
+  // characters, so everything through the tone paragraphs has to fit before that.
   {
-    text: 'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. Write lipsync as one word, without a hyphen. ',
+    // Nothing reaches the model after its reply ends, so a job it hands back is one no one
+    // reports on until the user asks again.
+    text: 'After a create returns a generation id, call generations_get with wait: true. While it is still running, keep waiting in this same reply for up to about 15 minutes in total: tell the user once that you are waiting, call generations_get with wait: true again each time it returns unfinished, then give the finished result. Hand back sooner only when generationEstimate expects it to take longer than that or the user asks not to wait; then give the id and say they can ask you to check it. Nothing notifies you after your reply ends, so never say you will watch the job or report back on your own. ',
   },
   {
-    text: 'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ',
-  },
-  { text: ASSET_THUMBNAIL_INSTRUCTIONS },
-  {
-    // Placed early: clients cut long instructions short (Claude Code keeps about the first
-    // 6,000 characters). Without it a chat that has the shots builds a page of its own,
-    // which can neither play a Sync video nor start a take.
+    // Without it a chat that has the shots builds a page of its own, which can neither
+    // play a Sync video nor start a take.
     text: 'When shots_review is available and the user wants to review, check, fix or redo parts of a finished lipsync or dub, call shots_review with every shot of its video (from faces_get-timeline or scenes_detect): it opens the Sync shot review card, where the user plays each shot, flags the ones that look wrong, renders them again and builds the final video. Never build your own page, player, table or widget to review shots or to play a Sync video: Sync media plays in Sync cards or from its link, not in a page you write. ',
     notChatgpt: true,
-  },
-  {
-    text: 'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new lipsync_create or dubbing_create calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ',
-  },
-  {
-    text: 'Every call runs in one Sync organization, and paid work is created and billed there. account_get-context names it and says how it was chosen. When organizations_list is available and the user names an organization or team, list the organizations and use the matching id; ask if several match. To work in another organization for the rest of the conversation, call organizations_select. To run one paid create in another organization without switching, pass organizationId on that create and on its estimate; reads of the ids it returns stay in that organization. Name the organization when confirming paid work if the user belongs to more than one. A Sync app connection acts only in the organizations ticked when it was connected; when a switch is refused for that, tell the user to reconnect Sync and tick that organization. API keys are bound to one organization and cannot switch. ',
   },
   {
     text: 'When a Sync tool error has nextAction, read it before anything else in the error: its type says what changes the outcome. retry_later: wait retryAfterSeconds, then send the same request once. reduce_input: shorten or shrink the input. upgrade_plan (requiredPlan names the plan), buy_credits, pay_invoice, update_payment_method, confirm_payment and manage_integration need a person: give them the link (nextAction.url) and do not retry until they say it is done. contact_support: stop and tell them to contact sync. support. Never resend a refused request unchanged. ',
@@ -204,6 +211,27 @@ const INSTRUCTION_PARTS: {
   {
     text: "Images ChatGPT generates in this conversation do not reach Sync tools: assets_upload takes only a file the user attached, and Sync does not generate images. When the user wants to use a generated image (for example as the face for lipsync_create), ask them to download it and attach it to the chat, then upload it with assets_upload. Do not pass a sandbox path or a generated image's link instead. ",
     chatgptOnly: true,
+  },
+  {
+    text: 'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ',
+  },
+  {
+    text: 'When helping with Sync, use concise, friendly, lowercase prose. Preserve the exact case of URLs, IDs, code, filenames and quoted user text; follow explicit user style requests. Write lipsync as one word, without a hyphen. ',
+  },
+  {
+    text: 'After successfully answering or completing the request, optionally suggest at most one useful next step tied to the film or project the user has described. Suggest only capabilities supported by tools available in this connection, skip generic or repeated promotions, and do not perform the suggested action unless the user requests it. ',
+  },
+];
+
+// Past the cut for a client that shortens long instructions, which may see none of these.
+// They back up what the tools' own descriptions say.
+const INSTRUCTION_TAIL: InstructionPart[] = [
+  {
+    text: 'New workflow requests always start a NEW project. Workflow labels such as Translate and Dub are actions, never project references. Never search for or reuse a project by matching its name, or modify the active project merely because it is open. Use an existing project only when the user explicitly requests an update to that project or selects it in the interface; clarify an ambiguous existing-project reference before any write. For social URLs, first create a fresh project with projects_create, a fresh UUID id and the matching defaultWorkflow (translate_and_dub for translation), then use that returned projectId throughout import and generation with projectIntent=explicit. Persist the UUID and reuse it only for retries of this same creation. A project just created for this request is an intentional destination. For new lipsync_create or dubbing_create calls with saved assets, omit projectId and supply a fresh projectCreationKey, preserving it on retries. Other new workflows and preparation tools require projects_create first, with the matching defaultWorkflow, then the returned projectId and projectIntent=explicit. ',
+  },
+  { text: ASSET_THUMBNAIL_INSTRUCTIONS },
+  {
+    text: 'Every call runs in one Sync organization, and paid work is created and billed there. account_get-context names it and says how it was chosen. When organizations_list is available and the user names an organization or team, list the organizations and use the matching id; ask if several match. To work in another organization for the rest of the conversation, call organizations_select. To run one paid create in another organization without switching, pass organizationId on that create and on its estimate; reads of the ids it returns stay in that organization. Name the organization when confirming paid work if the user belongs to more than one. A Sync app connection acts only in the organizations ticked when it was connected; when a switch is refused for that, tell the user to reconnect Sync and tick that organization. API keys are bound to one organization and cannot switch. ',
   },
   {
     text: 'When billing-approval-links_create is available and nextAction is upgrade_plan or buy_credits, or the user asks to upgrade or buy credits, create an approval link with the requiredPlan or requiredCredits, and the same organizationId if the refused request used one, and give the person its url; it charges nothing, and they approve and pay on sync.so. Afterwards account_get-context shows the new plan and account_get-usage the new balance; check before retrying. ',
@@ -230,9 +258,6 @@ const INSTRUCTION_PARTS: {
     notChatgpt: true,
   },
   {
-    text: 'Do not offer Sync video workflows for subtitle-only output, text translation, standalone MP3 voiceovers, or timeline editing such as trimming and mixing background music. Explain the supported scope; only offer another capability if a corresponding tool is actually available. ',
-  },
-  {
     text: 'Edit Dialogue supports targeted edits/removals of existing timed transcript words, with an audio preview in the original speaker voice followed by dialogue-videos_create. It does not support replacing every line with an arbitrary new script. Explain this limit when whole-script replacement is requested; do not promise it or bypass it by splitting the new script into word edits. Do not substitute full-script TTS. Use the dedicated dialogue tools when available; if a required tool is unavailable, explain that the workflow cannot be completed in this connection. ',
   },
   {
@@ -240,11 +265,6 @@ const INSTRUCTION_PARTS: {
   },
   {
     text: 'When dubbing_create is available, use it for translating speech and lipsyncing a saved video. Before confirming the paid action, use generations_estimate-cost with workflow=translate-and-dub if its schema supports that option. Show the combined Sync estimate and disclose excluded external provider charges. Without that option or the returned breakdown, the estimate covers lipsync only; do not present it as the full workflow cost. Confirm the target language and configuration. Reuse its generation id for status polling. ',
-  },
-  {
-    // Nothing reaches the model after its reply ends, so a job it hands back is one no one
-    // reports on until the user asks again.
-    text: 'After a create returns a generation id, call generations_get with wait: true. While it is still running, keep waiting in this same reply for up to about 15 minutes in total: tell the user once that you are waiting, call generations_get with wait: true again each time it returns unfinished, then give the finished result. Hand back sooner only when generationEstimate expects it to take longer than that or the user asks not to wait; then give the id and say they can ask you to check it. Nothing notifies you after your reply ends, so never say you will watch the job or report back on your own. ',
   },
   {
     text: 'When standalone translation-preview tools are available, the app can translate saved audio before final lipsync. Confirm the source audio, language and quote before translation-previews_create. Persist one UUID key and immutable request; poll the same job, and treat recoveryRequired as unresolved acceptance. Never redub because attaching the output failed. After a translated audio preview is saved, check coverage for a separate lipsync_create-from-assets using that audio; quote and confirm only when it is not fully covered. Do not send it through dubbing_create again. ',
@@ -268,17 +288,27 @@ const INSTRUCTION_PARTS: {
   },
 ];
 
-export const SERVER_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.chatgptOnly)
-  .map((part) => part.text)
-  .join('');
-const MODEL_ONLY_INSTRUCTIONS = INSTRUCTION_PARTS.filter(
-  (part) => !part.appOnly && !part.chatgptOnly,
-)
-  .map((part) => part.text)
-  .join('');
-const CHATGPT_INSTRUCTIONS = INSTRUCTION_PARTS.filter((part) => !part.notChatgpt)
-  .map((part) => part.text)
-  .join('');
+type Audience = (part: InstructionPart) => boolean;
+const instructionText = (parts: InstructionPart[], audience: Audience) =>
+  parts
+    .filter(audience)
+    .map((part) => part.text)
+    .join('');
+const forEveryClient: Audience = (part) => !part.chatgptOnly;
+const forModelOnly: Audience = (part) => !part.appOnly && !part.chatgptOnly;
+const forChatgptApp: Audience = (part) => !part.notChatgpt;
+
+// Built once: every hosted session of a profile shares one string, not a copy each.
+const instructionsFor = (audience: Audience) => {
+  const head = instructionText(INSTRUCTION_PARTS, audience);
+  const tail = instructionText(INSTRUCTION_TAIL, audience);
+  return { head, tail, whole: head + tail };
+};
+const FOR_EVERY_CLIENT = instructionsFor(forEveryClient);
+const FOR_MODEL_ONLY = instructionsFor(forModelOnly);
+const FOR_CHATGPT_APP = instructionsFor(forChatgptApp);
+
+export const SERVER_INSTRUCTIONS = FOR_EVERY_CLIENT.whole;
 
 export function serverInstructions(
   profile: ClientProfile,
@@ -287,15 +317,22 @@ export function serverInstructions(
   update?: AvailableUpdate,
   toolsetNote = '',
 ): string {
-  const instructions =
-    (profile.name === 'chatgpt'
-      ? CHATGPT_INSTRUCTIONS
+  const { head, tail, whole } =
+    profile.name === 'chatgpt'
+      ? FOR_CHATGPT_APP
       : profile.supportsAppUi
-        ? SERVER_INSTRUCTIONS
-        : MODEL_ONLY_INSTRUCTIONS) +
-    (feedback ? ` ${FEEDBACK_INSTRUCTIONS.trimEnd()}` : '') +
-    (toolsetNote ? ` ${toolsetNote}` : '') +
-    (update ? ` ${updateInstruction(update)}` : '');
+        ? FOR_EVERY_CLIENT
+        : FOR_MODEL_ONLY;
+  // A note about this connection goes before the tail, where a client that cuts still reads it.
+  const notes = [
+    update && updateInstruction(update),
+    toolsetNote,
+    feedback && FEEDBACK_INSTRUCTIONS.trimEnd(),
+  ]
+    .filter(Boolean)
+    .map((note) => `${String(note)} `)
+    .join('');
+  const instructions = notes ? head + notes + tail : whole;
   return spendConfirmation
     ? instructions
     : UNATTENDED_INSTRUCTIONS_PREFIX + applyEdits(instructions, INSTRUCTION_EDITS);
