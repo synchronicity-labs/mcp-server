@@ -75,6 +75,10 @@ export function resolveClientProfile(name?: string, rendersCards = false): Clien
     case 'claude-ai':
     // Claude.ai's hosted connector, as production logs record it (2026-11-06).
     case 'anthropic/claudeai':
+    // Anthropic's fetch of a connector's tools, which connects beside each
+    // anthropic/claudeai session and declares no capabilities (2026-11-16). The tool list a
+    // Claude chat searches comes from it, so it has to list what Claude can show.
+    case 'anthropic/toolbox':
       return CLAUDE;
     // Muse remains generic until Meta documentation or a real handshake verifies its alias.
     default:

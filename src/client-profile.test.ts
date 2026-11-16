@@ -140,7 +140,7 @@ describe('immutable client profiles', () => {
       expect(resolveClientProfile(name).name).toBe('chatgpt');
     },
   );
-  it.each(['claude', 'claude-ai', 'Claude', 'Anthropic/ClaudeAI'])(
+  it.each(['claude', 'claude-ai', 'Claude', 'Anthropic/ClaudeAI', 'Anthropic/Toolbox'])(
     'recognizes exact Claude alias %s',
     (name) => {
       expect(resolveClientProfile(name).name).toBe('claude');
