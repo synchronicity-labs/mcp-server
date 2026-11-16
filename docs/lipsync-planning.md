@@ -101,7 +101,14 @@ only those shots again and then builds one final video. Both tools are listed wi
    speech its audio input holds. Per shot, `detectSpeaker` and `occlusionDetection`
    become that segment's options. Only the listed shots are billed. The result is a
    whole-length take with the unsynced source everywhere else, so it is never the
-   final video.
+   final video. The take repeats the first render's model controls as its own
+   `options` (`active_speaker_detection`, `model_mode`, `temperature`,
+   `occlusion_detection_enabled`, `reasoning_enabled`, `refinement_enabled`,
+   `blending_mode`), so a retaken shot is the same kind of render as the shots around
+   it and a shot's own fix is the only difference. The controller applies job options
+   to every segment and tracks a picked face over the whole video, so its
+   `frame_number` stays counted from the video's first frame. `sync_mode` is not
+   repeated: each shot's audio is already cut to the shot's length.
 2. `shots_splice` takes the first render's id and one range per accepted take. It calls
    `POST /v2/generate/{id}/splice`, which is internal and behind the same flag, and
    polls `GET` on that path with `wait: true`. The result is a new VIDEO asset.
