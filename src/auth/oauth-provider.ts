@@ -1,5 +1,6 @@
 import type { AuthInfo, OAuthClientInformationFull } from '@modelcontextprotocol/server';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/server-legacy/auth';
+import { restrictRegistration } from './client-registration.js';
 import { createTokenVerifier } from './verification-cache.js';
 
 const CONFIDENTIAL_CLIENT_AUTH_METHOD = 'client_secret_post';
@@ -145,7 +146,9 @@ export function createOAuthProvider(
         getClient: resolveClient,
         ...(originalRegister && {
           registerClient: async (client: OAuthClientInformationFull) => {
-            const registered = normalizeClientInfo(await originalRegister(forRegistration(client)));
+            const registered = normalizeClientInfo(
+              await originalRegister(forRegistration(restrictRegistration(client))),
+            );
             clientCache.set(registered.client_id, registered);
             return registered;
           },

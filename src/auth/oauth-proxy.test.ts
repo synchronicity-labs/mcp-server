@@ -16,7 +16,12 @@ let upstreamStatus = 200;
 let upstreamBody: string | undefined;
 let dropUpstreamResponse = false;
 let userinfoStatus = 200;
-const calls: Array<{ path: string; body: URLSearchParams; authorization: string | undefined }> = [];
+const calls: Array<{
+  path: string;
+  body: URLSearchParams;
+  raw: string;
+  authorization: string | undefined;
+}> = [];
 const logs: string[] = [];
 const apiPrefix = '/api-proxy';
 const browserAuthorizationUrl = 'https://studio.fixture/api-proxy/v2/oauth/authorize';
@@ -37,6 +42,7 @@ beforeAll(async () => {
       calls.push({
         path: req.url ?? '',
         body: new URLSearchParams(body),
+        raw: body,
         authorization: req.headers.authorization,
       });
       if (dropUpstreamResponse) {
@@ -79,6 +85,7 @@ beforeAll(async () => {
     return hosted;
   });
   vi.stubEnv('SYNC_OAUTH_AUTHORIZATION_URL', browserAuthorizationUrl);
+  vi.stubEnv('OAUTH_REGISTRATION_SECRET', 'fixture-registration-secret');
   await startHttpServer(
     { toolCount: 0, createServer: () => new McpServer({ name: 'auth-fixture', version: '1' }) },
     resolveConfig({
@@ -302,6 +309,7 @@ it.each([
     expect(() => resolveConfig()).toThrow();
   } finally {
     vi.stubEnv('SYNC_OAUTH_AUTHORIZATION_URL', browserAuthorizationUrl);
+    vi.stubEnv('OAUTH_REGISTRATION_SECRET', 'fixture-registration-secret');
   }
 });
 it('advertises only the two supported confidential methods', async () => {
@@ -596,4 +604,53 @@ it('registers a public client and exchanges its code without a secret', async ()
   expect(token.status).toBe(200);
   expect(calls).toHaveLength(before + 1);
   expect(calls.at(-1)?.body.has('client_secret')).toBe(false);
+});
+
+it('refuses a registration with a callback outside the rules, without asking the API', async () => {
+  const before = calls.length;
+  const response = await fetch(`${url}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_name: 'Claude', redirect_uris: ['http://evil.example/cb'] }),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: 'invalid_redirect_uri' });
+  expect(calls).toHaveLength(before);
+});
+
+it('forwards only checked registration fields, with the registration secret', async () => {
+  const received: unknown[] = [];
+  upstreamBody = JSON.stringify({
+    client_id: 'cursor-client',
+    client_secret: 'issued-secret',
+    redirect_uris: ['cursor://anysphere.cursor-mcp/oauth/callback'],
+  });
+  try {
+    const response = await fetch(`${url}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Cursor\u202E',
+        redirect_uris: ['cursor://anysphere.cursor-mcp/oauth/callback'],
+        grant_types: ['authorization_code', 'refresh_token', 'client_credentials'],
+        logo_uri: 'https://evil.example/logo.png',
+        client_uri: 'https://evil.example',
+        scope: 'admin',
+      }),
+    });
+    expect(response.status).toBe(201);
+    const upstreamCall = calls.at(-1);
+    expect(upstreamCall?.path).toBe(`${apiPrefix}/v2/oauth/register`);
+    expect(upstreamCall?.authorization).toBe('Bearer fixture-registration-secret');
+    received.push(JSON.parse(upstreamCall?.raw ?? '{}'));
+  } finally {
+    upstreamBody = undefined;
+  }
+  expect(received[0]).toEqual({
+    client_id: expect.any(String),
+    client_name: 'Cursor',
+    redirect_uris: ['cursor://anysphere.cursor-mcp/oauth/callback'],
+    grant_types: ['authorization_code', 'refresh_token'],
+    token_endpoint_auth_method: 'client_secret_post',
+  });
 });
