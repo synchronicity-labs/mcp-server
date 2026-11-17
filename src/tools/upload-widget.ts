@@ -566,7 +566,7 @@ export const UPLOAD_WIDGET_HTML = `
               generationId: generationId,
               lipsyncStarted: true,
             });
-            var generation = await openai.callTool("generations_get", { id: generationId });
+            var generation = await openai.callTool("generations_get", { id: generationId, wait: false });
             var statusText = generationStatusFrom(generation).toUpperCase();
             var outputUrl = outputUrlFrom(generation);
             var noLipsync = noLipsyncReason(generation);

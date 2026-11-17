@@ -38,6 +38,12 @@ export const generationOutputSchema = {
  */
 export const generationReadOutputSchema = {
   ...generationOutputSchema,
+  stalled: z
+    .object({ since: z.string(), nextStep: z.string() })
+    .optional()
+    .describe(
+      'Only while it still runs past generationEstimate.supportAt (since): it is delayed and may be stuck. Follow nextStep: stop waiting, tell the user, and never create it again.',
+    ),
   progress: z
     .record(z.string(), z.unknown())
     .optional()

@@ -90,8 +90,9 @@ const KINDS: Record<AnyJobKind, KindSpec> = {
     read: async (tool, input, context, signal) => {
       // include=progress adds the worker's percent; the API's own long-poll would drop it.
       const progressQuery = 'include' in tool.inputSchema ? { include: 'progress' } : {};
+      // generations_get waits unless told not to; jobs_get reads once and jobs_wait polls.
       const payload = await tool.handler(
-        { id: input.id, ...progressQuery },
+        { id: input.id, wait: false, ...progressQuery },
         { ...context, signal },
       );
       const raw = isRecord(payload) ? payload : {};
@@ -199,9 +200,16 @@ const KINDS: Record<AnyJobKind, KindSpec> = {
   },
 };
 
-/** Whether waiting longer can change this job: final, or a translation needing recovery. */
+/**
+ * Whether waiting longer can change this job: final, a translation needing recovery, or a
+ * generation generations_get marks stalled (still running past its support time).
+ */
 export function jobSettled(job: JobState): boolean {
-  return isTerminal(job.status) || job.result.recoveryRequired === true;
+  return (
+    isTerminal(job.status) ||
+    job.result.recoveryRequired === true ||
+    job.result.stalled !== undefined
+  );
 }
 
 /** The kinds this server can read, and one read that goes through the kind's own tool. */
