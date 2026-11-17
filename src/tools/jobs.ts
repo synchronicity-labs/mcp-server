@@ -200,9 +200,16 @@ const KINDS: Record<AnyJobKind, KindSpec> = {
   },
 };
 
-/** Whether waiting longer can change this job: final, or a translation needing recovery. */
+/**
+ * Whether waiting longer can change this job: final, a translation needing recovery, or a
+ * generation generations_get marks stalled (still running past its support time).
+ */
 export function jobSettled(job: JobState): boolean {
-  return isTerminal(job.status) || job.result.recoveryRequired === true;
+  return (
+    isTerminal(job.status) ||
+    job.result.recoveryRequired === true ||
+    job.result.stalled !== undefined
+  );
 }
 
 /** The kinds this server can read, and one read that goes through the kind's own tool. */

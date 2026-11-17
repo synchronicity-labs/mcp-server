@@ -165,6 +165,21 @@ describe('jobs_get and jobs_wait', () => {
     expect(generation.handler).toHaveBeenCalledTimes(2);
   });
 
+  it('stops waiting on a generation marked stalled, keeping the mark', async () => {
+    const stalled = {
+      id: 'g-5',
+      status: 'PROCESSING',
+      stalled: { since: '2026-11-17T10:00:00.000Z', nextStep: 'Stop waiting.' },
+    };
+    const generation = tool('generations_get', [stalled]);
+    const { waitFor } = jobs([generation]);
+    expect(await waitFor({ kind: 'generation', id: 'g-5' }).result).toMatchObject({
+      status: 'PROCESSING',
+      result: { stalled: stalled.stalled },
+    });
+    expect(generation.handler).toHaveBeenCalledOnce();
+  });
+
   it('waits for a transcription', async () => {
     const transcription = tool('transcriptions_get', [
       { id: 't-1', status: 'PENDING' },
