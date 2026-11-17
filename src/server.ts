@@ -75,6 +75,7 @@ import {
   UNATTENDED_INSTRUCTIONS_PREFIX,
   withoutSpendConfirmation,
 } from './spend-confirmation.js';
+import { APPROVAL_TIMEOUT_MS, type SpendGate, spendGateFor } from './spend-gate.js';
 import {
   createTelemetryQueue,
   isMcpEventsOperation,
@@ -632,6 +633,8 @@ export function registerTools(
   onToolError?: (tool: string, error: unknown) => void,
   decorateResult: (result: CallToolResult) => CallToolResult = (result) => result,
   isChatgptApp: () => boolean = () => false,
+  // Asks the person before a client's paid call (spend-gate.ts); nested calls skip it.
+  beforeCall?: SpendGate,
 ): void {
   const names = new Set(tools.map((tool) => tool.name));
   for (const tool of tools) {
@@ -651,6 +654,10 @@ export function registerTools(
         ),
       };
       try {
+        const refused = await beforeCall?.(tool.name, args ?? {}, (params) =>
+          ctx.mcpReq.elicitInput(params, { timeout: APPROVAL_TIMEOUT_MS }),
+        );
+        if (refused) return decorateResult(refused);
         if (tool.resultFormat === 'mcp') {
           return decorateResult(
             await tool.handler((args ?? {}) as Record<string, unknown>, context),
@@ -1226,6 +1233,11 @@ function createProfiledServer(
     sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
   // Hosted sessions supply theirs per request (HttpSession); stdio keeps one for the process.
   const ownOrganizationSession = new OrganizationSession();
+  const spendGate = spendGateFor(config, {
+    http: httpClient,
+    session: ownOrganizationSession,
+    canAsk: () => server.server.getClientCapabilities()?.elicitation !== undefined,
+  });
   const analytics = toolAnalyticsSupport(operations);
   const server = new McpServer(
     {
@@ -1332,6 +1344,7 @@ function createProfiledServer(
     config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,
     config.transport === 'stdio' && updateCheck ? withUpdateNotice(updateCheck) : undefined,
     () => getProfile().name === 'chatgpt',
+    spendGate,
   );
   observeRejectedCalls(server, telemetry, () => toolsByCallableName(sessionTools));
   const resources: Resource[] = [];
