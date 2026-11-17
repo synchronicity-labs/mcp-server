@@ -78,7 +78,41 @@ const billingSchema = z.object({
     })
     .nullable(),
 });
-const optionsSchema = billingSchema.extend({ available: z.literal(true) });
+/**
+ * The API's free text-to-speech cap (sync-api-v2 FREE_TIER_MONTHLY_LIMITS.elevenLabs and
+ * tts-input.ts): it estimates speech from the script at 160 words a minute, or 16 letters
+ * and digits a second when that is longer, and refuses more than 20 seconds, or more than
+ * 320 characters, with generation_plan_duration_exceeded. A free lipsync then takes at most
+ * 15 seconds of audio (FREE_TIER_MONTHLY_LIMITS.generations). Credits and paid plans have no
+ * cap. Agents only learned this by failing: 81 refusals for 57 people in the week of
+ * 2026-11-10, and 44 of 52 scripts over 500 characters.
+ */
+export const FREE_SCRIPT_LIMIT = {
+  maxSeconds: 20,
+  maxCharacters: 320,
+  wordsPerMinute: 160,
+  lipsyncMaxSeconds: 15,
+} as const;
+
+export function freeScriptLimit(billing: z.infer<typeof billingSchema>) {
+  const free = !billing.plan || billing.plan === 'noplan';
+  return free && !billing.hasActiveCredits ? FREE_SCRIPT_LIMIT : null;
+}
+
+const optionsSchema = billingSchema.extend({
+  available: z.literal(true),
+  freeScriptLimit: z
+    .object({
+      maxSeconds: z.number(),
+      maxCharacters: z.number(),
+      wordsPerMinute: z.number(),
+      lipsyncMaxSeconds: z.number(),
+    })
+    .nullable()
+    .describe(
+      'Set on the free plan without credits, null otherwise (no duration limit; every script still has the 5,000-character limit). The API estimates speech from the script at wordsPerMinute and refuses a script over maxSeconds or maxCharacters with generation_plan_duration_exceeded; a free lipsync takes at most lipsyncMaxSeconds of audio. Keep the script within these before creating, or split it into several previews.',
+    ),
+});
 const readHints = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 
 export function createSpeechTools(
@@ -105,7 +139,7 @@ export function createSpeechTools(
       name: 'speech-previews_get-options',
       title: 'Check speech preview availability',
       description:
-        "Preflight one speech preview before speech-previews_create: confirm you can read projectId, then read the organization's text-to-speech billing state. It returns no price, so use it to tell the user before creating whether the preview fits the free monthly allowance (freeMonthlyLimits.tts used against max, when freeMonthlyLimits is not null) or will draw on paid usage, judged from hasActiveCredits, plan and billingVersion. If freeTtsExhausted or paymentFailureCountExceededLimit is true, tell the user to check their plan or billing in Studio instead of creating. Ignore freeGenerationsExhausted and the generations and sync3 counters; they cover other generations, not speech. available is always true when the call succeeds; if the project check or billing read fails, the call returns an error and no billing fields. Not for overall balance or spend (account_get-usage) or choosing a voice (voices_list). Does not synthesize or bill.",
+        "Preflight one speech preview before speech-previews_create: confirm you can read projectId, then read the organization's text-to-speech billing state. It returns no price, so use it to tell the user before creating whether the preview fits the free monthly allowance (freeMonthlyLimits.tts used against max, when freeMonthlyLimits is not null) or will draw on paid usage, judged from hasActiveCredits, plan and billingVersion. If freeTtsExhausted or paymentFailureCountExceededLimit is true, tell the user to check their plan or billing in Studio instead of creating. Ignore freeGenerationsExhausted and the generations and sync3 counters; they cover other generations, not speech. freeScriptLimit, when set, is the free plan's script length limit: check the script against it before creating. available is always true when the call succeeds; if the project check or billing read fails, the call returns an error and no billing fields. Not for overall balance or spend (account_get-usage) or choosing a voice (voices_list). Does not synthesize or bill.",
       inputSchema: projectSchema.shape,
       outputSchema: optionsSchema.shape,
       annotations: readHints,
@@ -114,14 +148,14 @@ export function createSpeechTools(
         const billing = billingSchema.parse(
           await httpClient.request('get', '/v2/billing', { signal: context?.signal }),
         );
-        return { ...billing, available: true };
+        return { ...billing, available: true, freeScriptLimit: freeScriptLimit(billing) };
       },
     },
     {
       name: 'speech-previews_create',
       title: 'Generate a speech preview',
       description:
-        'Synthesize a confirmed script in a voice from voices_list into one standalone speech audio job (ElevenLabs), after verifying access to projectId. This is a potentially paid action. Check speech-previews_get-options first, persist idempotencyKey before calling, and after an uncertain response retry only with that same key and identical input; a new key can bill again. Returns the job: status PENDING, PROCESSING, SUCCESS or FAILED, with url and duration filled only on SUCCESS, so poll speech-previews_get by the returned id (jobs_get and jobs_wait do not cover speech jobs). Never create again because attaching the resulting audio failed. An inaccessible project or a malformed idempotencyKey fails before anything is synthesized. Not for lipsyncing a script directly (lipsync_create with script and voiceId), editing words in a video in the original speaker voice (dialogue-previews_create) or translating audio (translation-previews_create). Pass projectIntent=explicit with projectId only for a project the user explicitly chose or one just created for this request, never because its name matches or it is open; default new work to a new project.',
+        'Synthesize a confirmed script in a voice from voices_list into one standalone speech audio job (ElevenLabs), after verifying access to projectId. This is a potentially paid action. Check speech-previews_get-options first. On the free plan (its freeScriptLimit is set) the API refuses speech it estimates at over 20 seconds (160 words a minute) or over 320 characters, and a free lipsync takes at most 15 seconds, so keep a script you will lipsync to about 40 words, and split longer text into several previews; paid plans and credits have no duration limit, only the 5,000-character script limit. Persist idempotencyKey before calling, and after an uncertain response retry only with that same key and identical input; a new key can bill again. Returns the job: status PENDING, PROCESSING, SUCCESS or FAILED, with url and duration filled only on SUCCESS, so poll speech-previews_get by the returned id (jobs_get and jobs_wait do not cover speech jobs). Never create again because attaching the resulting audio failed. An inaccessible project or a malformed idempotencyKey fails before anything is synthesized. Not for lipsyncing a script directly (lipsync_create with script and voiceId), editing words in a video in the original speaker voice (dialogue-previews_create) or translating audio (translation-previews_create). Pass projectIntent=explicit with projectId only for a project the user explicitly chose or one just created for this request, never because its name matches or it is open; default new work to a new project.',
       inputSchema: requestSchema.shape,
       outputSchema: jobSchema.shape,
       annotations: {

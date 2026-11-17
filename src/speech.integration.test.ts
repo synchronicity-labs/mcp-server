@@ -157,6 +157,7 @@ it('admits a durable speech preview with caller identity, then polls that job wi
     plan: 'scale',
     freeGenerationsExhausted: false,
     freeMonthlyLimits: { generations: { used: 2, max: 3 }, sync3: { used: 1, max: 1 } },
+    freeScriptLimit: null,
   });
   expect(JSON.stringify(options)).not.toContain('private-billing-field');
   expect((await call('speech-previews_create', input)).structuredContent).toMatchObject({
