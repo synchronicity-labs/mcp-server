@@ -148,6 +148,9 @@ and streams only to the configured HTTPS storage origin under the existing uploa
 concurrency and timeout limits. Browser relay uploads support the API single-PUT
 maximum of 5 GiB; the 512 MiB download limit still applies to rehosting ChatGPT
 attachments. Legacy presign responses without an expiry receive a five-minute ticket.
+A pod holds at most 128 open tickets, and at most 16 for one signed-in user,
+OAuth client and organization, so one caller cannot use up the pod's uploads.
+Expired tickets stop counting.
 Tickets are process-local: the MCP session and its upload must reach the same instance.
 A restart invalidates outstanding tickets; the client can request a new upload. Multi-instance
 release routing must account for this before enabling the relay in production. The widget

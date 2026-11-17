@@ -3,7 +3,12 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { appUploadHandler, relayUploadTool } from './app-upload-relay.js';
+import {
+  appUploadHandler,
+  MAX_UPLOAD_TICKETS_PER_OWNER,
+  relayUploadTool,
+} from './app-upload-relay.js';
+import { runWithAuth } from './auth/async-context.js';
 
 const upstreamAddress = vi.hoisted(() => ({ port: 0 }));
 vi.mock('node:https', async () => {
@@ -141,4 +146,39 @@ it.each([
     /^https:\/\/app\.fixture\.invalid\/app-upload\?ticket=[a-f0-9]{64}$/,
   );
   expect(grant.expiresIn).toBe(expiresIn ?? 300);
+});
+
+it('limits open upload tickets per owner, so one caller cannot fill the pod', async () => {
+  const tool = relayUploadTool(
+    {
+      name: 'assets_create-upload-url',
+      inputSchema: {},
+      description: '',
+      handler: async () => ({
+        uploadUrl: 'https://storage.fixture.invalid/signed',
+        url: 'https://cdn.fixture.invalid/file',
+        expiresIn: 60,
+      }),
+    },
+    'https://mcp.fixture.invalid',
+    'https://storage.fixture.invalid',
+  );
+  const grant = (owner: string) =>
+    runWithAuth(
+      'token',
+      undefined,
+      () => tool.handler({ size: 5, contentType: 'video/mp4' }),
+      owner,
+    );
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    for (let i = 0; i < MAX_UPLOAD_TICKETS_PER_OWNER; i++) await grant('owner-a');
+    await expect(grant('owner-a')).rejects.toThrow('Too many uploads are waiting to start');
+    await expect(grant('owner-b')).resolves.toMatchObject({ uploadUrl: expect.any(String) });
+    // Expired tickets stop counting.
+    vi.setSystemTime(Date.now() + 61_000);
+    await expect(grant('owner-a')).resolves.toMatchObject({ uploadUrl: expect.any(String) });
+  } finally {
+    vi.useRealTimers();
+  }
 });

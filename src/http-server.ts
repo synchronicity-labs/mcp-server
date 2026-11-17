@@ -31,6 +31,7 @@ import { createOAuthProvider } from './auth/oauth-provider.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { declaresCards } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
+import { finalErrorHandler, requireStatusToken } from './http-errors.js';
 import { HttpSession, isSessionControlRequest } from './http-session.js';
 import { readOAuthResponseText } from './oauth-response.js';
 import {
@@ -656,7 +657,9 @@ export async function startHttpServer(
 
   const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
   eventLoopDelay.enable();
-  app.get('/status', mcpRejectedCredentialLimit, bearerAuth, mcpUserLimit, (_req, res) => {
+  // Operators only: a signed-in user's token does not open it (http-errors.ts).
+  const statusAccess = requireStatusToken(process.env.MCP_STATUS_TOKEN);
+  app.get('/status', mcpRejectedCredentialLimit, statusAccess, (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       sessions: sessions.stats(),
@@ -932,6 +935,8 @@ export async function startHttpServer(
     process.off('warning', onWarning);
     process.off('exit', onExit);
   };
+  app.use(finalErrorHandler(logEvent));
+
   const httpServer = await listenWithCleanup(
     () => app.listen(config.port),
     async (server) => {

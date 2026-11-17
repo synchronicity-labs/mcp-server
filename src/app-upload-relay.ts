@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import cors from 'cors';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
+import { getAuthOwner } from './auth/async-context.js';
 import type { McpToolDefinition } from './tools/generator.js';
 import { uploadRuntime } from './upload-runtime.js';
 
@@ -27,8 +28,18 @@ const inputSchema = z.object({
   contentType: z.string().regex(/^(video|audio|image)\/[\w.+-]+$/),
   size: z.number().int().positive(),
 });
-type Ticket = { destination: string; contentType: string; size: number; expiresAt: number };
+type Ticket = {
+  destination: string;
+  contentType: string;
+  size: number;
+  expiresAt: number;
+  owner: string;
+};
 const tickets = new Map<string, Ticket>();
+/** Open tickets on this pod, across everyone. */
+export const MAX_UPLOAD_TICKETS = 128;
+/** Open tickets for one signed-in user, OAuth client and organization, so one cannot fill the pod. */
+export const MAX_UPLOAD_TICKETS_PER_OWNER = 16;
 
 /** A ticket grants one bounded PUT to one server-issued storage URL, never arbitrary proxying. */
 export function relayUploadTool(
@@ -44,7 +55,15 @@ export function relayUploadTool(
       if (input.size > 5 * 1024 ** 3)
         throw new Error(`This server supports uploads up to ${5 * 1024} MB.`);
       for (const [key, ticket] of tickets) if (ticket.expiresAt <= Date.now()) tickets.delete(key);
-      if (tickets.size >= 128) throw new Error('Upload capacity is full. Try again shortly.');
+      if (tickets.size >= MAX_UPLOAD_TICKETS)
+        throw new Error('Upload capacity is full. Try again shortly.');
+      const owner = getAuthOwner() ?? 'unknown';
+      let open = 0;
+      for (const ticket of tickets.values()) if (ticket.owner === owner) open++;
+      if (open >= MAX_UPLOAD_TICKETS_PER_OWNER)
+        throw new Error(
+          'Too many uploads are waiting to start. Finish or cancel some, then try again in a few minutes.',
+        );
       const signed = grantSchema.parse(await tool.handler(args, context));
       const destination = new URL(signed.uploadUrl);
       if (
@@ -67,6 +86,7 @@ export function relayUploadTool(
         destination: signed.uploadUrl,
         ...input,
         expiresAt: Date.now() + expiresIn * 1000,
+        owner,
       });
       return { ...signed, expiresIn, uploadUrl: `${origin}/app-upload?ticket=${token}` };
     },

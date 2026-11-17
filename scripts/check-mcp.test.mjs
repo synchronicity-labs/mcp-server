@@ -20,8 +20,13 @@ void test('monitor detects tool failure inside HTTP 200 and closes its session o
   let deleted = 0;
   const server = createServer(
     asyncRequestListener(async (req, res) => {
-      assert.equal(req.headers.authorization, 'Bearer fixture');
       res.setHeader('Content-Type', 'application/json');
+      if (req.url === '/status') {
+        // The operator token, never the account's OAuth token.
+        assert.equal(req.headers.authorization, 'Bearer status-fixture');
+      } else {
+        assert.equal(req.headers.authorization, 'Bearer fixture');
+      }
       if (req.method === 'GET' && req.url === '/mcp') {
         res.statusCode = 405;
         res.end();
@@ -79,10 +84,10 @@ void test('monitor detects tool failure inside HTTP 200 and closes its session o
   await once(server, 'listening');
   const url = `http://127.0.0.1:${server.address().port}/mcp`;
   try {
-    assert.equal((await checkMcp(url, 'fixture')).active, 1);
+    assert.equal((await checkMcp(url, 'fixture', 'status-fixture')).active, 1);
     assert.equal(deleted, 1);
     toolFails = true;
-    await assert.rejects(checkMcp(url, 'fixture'), {
+    await assert.rejects(checkMcp(url, 'fixture', 'status-fixture'), {
       message: 'MCP availability check failed at read-only tool',
     });
     assert.equal(deleted, 2);
@@ -93,16 +98,25 @@ void test('monitor detects tool failure inside HTTP 200 and closes its session o
 });
 
 void test('monitor refuses unsafe targets before connecting', async () => {
-  await assert.rejects(checkMcp('https://user:pass@mcp.example.test/mcp', 'fixture'), {
-    message: 'MCP monitor URL must not contain credentials, query or fragment',
-  });
-  await assert.rejects(checkMcp('https://mcp.example.test/mcp?debug=1', 'fixture'), {
-    message: 'MCP monitor URL must not contain credentials, query or fragment',
-  });
-  await assert.rejects(checkMcp('http://mcp.example.test/mcp', 'fixture'), {
+  await assert.rejects(
+    checkMcp('https://user:pass@mcp.example.test/mcp', 'fixture', 'status-fixture'),
+    {
+      message: 'MCP monitor URL must not contain credentials, query or fragment',
+    },
+  );
+  await assert.rejects(
+    checkMcp('https://mcp.example.test/mcp?debug=1', 'fixture', 'status-fixture'),
+    {
+      message: 'MCP monitor URL must not contain credentials, query or fragment',
+    },
+  );
+  await assert.rejects(checkMcp('http://mcp.example.test/mcp', 'fixture', 'status-fixture'), {
     message: 'MCP monitor requires HTTPS outside loopback',
   });
-  await assert.rejects(checkMcp('https://mcp.example.test/mcp', ''), {
+  await assert.rejects(checkMcp('https://mcp.example.test/mcp', '', 'status-fixture'), {
     message: 'MCP_MONITOR_ACCESS_TOKEN is required',
+  });
+  await assert.rejects(checkMcp('https://mcp.example.test/mcp', 'fixture'), {
+    message: 'MCP_MONITOR_STATUS_TOKEN is required',
   });
 });
