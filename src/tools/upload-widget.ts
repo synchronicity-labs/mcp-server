@@ -479,6 +479,13 @@ export const UPLOAD_WIDGET_HTML = `
           return findStringByKeys(payloadFromToolResult(value), ["outputMediaUrl", "outputUrl", "output_url"], 0);
         }
 
+        function noLipsyncReason(value) {
+          // NO_OP: finished, but no frame was lip-synced; its output is the unchanged input.
+          if (generationStatusFrom(value).toUpperCase() !== "NO_OP") return "";
+          var payload = payloadFromToolResult(value);
+          return findStringByKeys(payload, ["error", "errorCode"], 0) || "No frame was lip-synced.";
+        }
+
         function voiceFromToolResult(value) {
           return findVoice(payloadFromToolResult(value), 0);
         }
@@ -562,6 +569,24 @@ export const UPLOAD_WIDGET_HTML = `
             var generation = await openai.callTool("generations_get", { id: generationId });
             var statusText = generationStatusFrom(generation).toUpperCase();
             var outputUrl = outputUrlFrom(generation);
+            var noLipsync = noLipsyncReason(generation);
+            if (noLipsync) {
+              setStatus("No lip sync", noLipsync, {
+                assetId: assetId,
+                mediaType: mediaType,
+                script: script,
+                voiceId: voice.id,
+                generationId: generationId,
+                lipsyncStarted: true,
+                modelContent:
+                  "Sync generation " +
+                  generationId +
+                  " finished as NO_OP: nothing was lip-synced (" +
+                  noLipsync +
+                  "). Its outputMediaUrl is the unchanged input, not a lipsync result; lipsync was not charged.",
+              });
+              return;
+            }
             if (statusText === "COMPLETED" || outputUrl) {
               setStatus("Completed", outputUrl || generationId, {
                 assetId: assetId,

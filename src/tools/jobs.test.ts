@@ -146,6 +146,25 @@ describe('jobs_get and jobs_wait', () => {
     });
   });
 
+  it('stops waiting on a generation that lip-synced no frame, keeping its own NO_OP', async () => {
+    const noOp = {
+      id: 'g-4',
+      status: 'NO_OP',
+      error: 'No face was detected.',
+      errorCode: 'generation_lipsync_skipped_no_face',
+      outputMediaUrl: 'https://cdn.test/input.mp4',
+    };
+    const generation = tool('generations_get', [{ id: 'g-4', status: 'PROCESSING' }, noOp]);
+    const { waitFor } = jobs([generation]);
+    expect(await waitFor({ kind: 'generation', id: 'g-4' }).result).toEqual({
+      kind: 'generation',
+      id: 'g-4',
+      status: 'FAILED',
+      result: noOp,
+    });
+    expect(generation.handler).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for a transcription', async () => {
     const transcription = tool('transcriptions_get', [
       { id: 't-1', status: 'PENDING' },

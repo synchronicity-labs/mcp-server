@@ -58,9 +58,14 @@ The kind's own read tools keep working as before, including their `wait: true`.
 | `PENDING` | `PENDING` | `PENDING` | | `PENDING` | 409 `import_in_progress` with `importStatus: queued` | `PENDING` |
 | `PROCESSING` | `PROCESSING` | `PROCESSING` | `processing` | `PROCESSING`, `COMPLETING` | 409 `import_in_progress` (downloading, processing) | `JOBS_CREATED`, `PROCESSING`, `FINISHING` |
 | `COMPLETED` | `COMPLETED` | `COMPLETED` | `completed` | `COMPLETED` | the asset is returned | `COMPLETED` |
-| `FAILED` | `FAILED` | `FAILED` | `unavailable` | `FAILED` | `import_failed`, `import_download_failed`, `import_upload_failed`, `import_processing_failed` | `FAILED` |
+| `FAILED` | `FAILED`, `NO_OP` | `FAILED` | `unavailable` | `FAILED` | `import_failed`, `import_download_failed`, `import_upload_failed`, `import_processing_failed` | `FAILED` |
 | `REJECTED` | `REJECTED` | | | | `import_not_enabled`, `import_unavailable`, `import_daily_limit_reached`, `import_invalid_url`, `import_unsupported_platform`, any other `import_*` code | |
 | `CANCELED` | `CANCELED`, `CANCELLED` | | | | `import_cancelled_by_user` | |
+
+A `NO_OP` generation finished but lip-synced no frame, such as when no face was found.
+Its `error` and `errorCode` say why, and its `outputMediaUrl` is the input video
+unchanged, with any generated speech or dub audio. Lipsync is not charged for it. The API
+sends `NO_OP` only to MCP releases that handle it; older releases get `COMPLETED`.
 
 Statuses are matched without regard to case. An unknown status counts as `PROCESSING`,
 so a wait keeps going rather than reporting a result that may not exist. A payload with

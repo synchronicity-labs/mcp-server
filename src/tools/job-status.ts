@@ -50,6 +50,8 @@ const ALIASES: Record<string, JobStatus> = {
   COMPLETED_PARTIAL: 'COMPLETED',
   // Speaker analysis that cannot run for this source (no faces, too long, audio only).
   UNAVAILABLE: 'FAILED',
+  // A generation that finished without lip-syncing a frame, such as when no face was found.
+  NO_OP: 'FAILED',
 };
 
 /** The API's own status string on a job payload, if it has one. */

@@ -2,13 +2,13 @@ import { createHash } from 'node:crypto';
 import { getAuthOwner, getAuthToken } from '../auth/async-context.js';
 import { ApiRequestError, type HttpClient } from '../http-client.js';
 import { chosenOrganization } from '../organization-selection.js';
+import { isTerminal, jobStatus, rawStatus } from './job-status.js';
 
 // Agents resubmit a request every few seconds while its generation is still rendering,
 // uploading the same files again each time. A free plan runs one generation at a time,
 // so every resubmission failed with concurrency_limit_reached. Answer an identical
 // request from the same user with the generation that is still running instead.
 const REMEMBER_MS = 30 * 60_000;
-const TERMINAL_STATUSES = new Set(['COMPLETED', 'FAILED', 'REJECTED', 'CANCELED', 'CANCELLED']);
 
 type Entry = { expires: number } & (
   | { submitting: Promise<unknown>; id?: never }
@@ -54,8 +54,9 @@ export function createRunningSubmissions(http: HttpClient): RunningSubmissions {
       const generation = await http.request('get', `/v2/generate/${encodeURIComponent(id)}`, {
         signal,
       });
-      const status = (generation as { status?: unknown } | null)?.status;
-      return typeof status === 'string' && !TERMINAL_STATUSES.has(status) ? generation : undefined;
+      return rawStatus(generation) !== undefined && !isTerminal(jobStatus(generation))
+        ? generation
+        : undefined;
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 404) return undefined;
       throw error;

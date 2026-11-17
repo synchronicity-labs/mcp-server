@@ -26,7 +26,7 @@ const audioRange = z.object({
 const generation = z.object({
   id: z.uuid(),
   projectId: z.uuid(),
-  status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REJECTED']),
+  status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'NO_OP', 'FAILED', 'REJECTED']),
   workflow: z
     .enum([
       'lipsync',
