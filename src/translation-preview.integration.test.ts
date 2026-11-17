@@ -11,6 +11,7 @@ const projectId = '00000000-0000-4000-8000-000000000001';
 const audioAssetId = '00000000-0000-4000-8000-000000000002';
 const jobId = '00000000-0000-4000-8000-000000000003';
 const idempotencyKey = '00000000-0000-4000-8000-000000000004';
+const outputAssetId = '00000000-0000-4000-8000-000000000005';
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   const pending = cleanups.splice(0);
@@ -23,7 +24,9 @@ async function fixture({
   incomplete,
   transport = 'http',
   preview = { sourceDurationSeconds: 120, quotedDurationSeconds: 120, limitSeconds: null },
+  outputAudioAssetId = outputAssetId,
 }: {
+  outputAudioAssetId?: string | null;
   available?: boolean;
   legacy?: boolean;
   incomplete?: 'header' | 'project' | 'version' | 'source';
@@ -43,6 +46,19 @@ async function fixture({
 } = {}) {
   const calls: { path: string; key?: string; token?: string; body?: unknown }[] = [];
   let readStatus = 'COMPLETED';
+  // A create returns the running job; a read returns it with its output once finished.
+  const started = {
+    status: 'PROCESSING',
+    outputMediaUrl: null,
+    outputDurationSec: null,
+    outputAudioAssetId: null,
+  };
+  const finished = () => ({
+    status: readStatus,
+    outputMediaUrl: 'https://media.example.test/translated.wav',
+    outputDurationSec: 2,
+    outputAudioAssetId,
+  });
   const upstream = createServer(
     asyncRequestListener(async (req, res) => {
       res.setHeader('content-type', 'application/json');
@@ -172,13 +188,10 @@ async function fixture({
           JSON.stringify({
             id: jobId,
             projectId,
-            status: req.method === 'GET' ? readStatus : 'PROCESSING',
             sourceLang: 'auto',
             targetLang: 'es',
             cloningStrength: 7,
-            outputMediaUrl:
-              req.method === 'GET' ? 'https://media.example.test/translated.wav' : null,
-            outputDurationSec: req.method === 'GET' ? 2 : null,
+            ...(req.method === 'GET' ? finished() : started),
             error: null,
             createdAt: '2026-10-15T12:00:00.000Z',
             recoveryRequired: false,
@@ -259,6 +272,8 @@ it.each(['http', 'stdio'] as const)(
       // DubbingGenerationDto returns cloningStrength; the job no longer drops it.
       cloningStrength: 7,
       outputMediaUrl: 'https://media.example.test/translated.wav',
+      // The API saved the translated audio as an asset; agents reuse it instead of registering it again.
+      outputAudioAssetId: outputAssetId,
     });
     expect(JSON.stringify(completed)).not.toContain('must-not-leak');
     expect(calls).toEqual([
@@ -389,4 +404,18 @@ it.each([
   expect(catalog.some((t) => t.name === 'translation-previews_create')).toBe(false);
   expect(catalog.filter((t) => t.name.startsWith('dubbing_'))).toEqual([]);
   expect(calls).toHaveLength(0);
+});
+it('keeps a null outputAudioAssetId when the API saved no asset, and lists the field', async () => {
+  const { client, call } = await fixture({ outputAudioAssetId: null });
+  const create = (await client.listTools()).tools.find(
+    (t) => t.name === 'translation-previews_create',
+  );
+  // jobs_get and jobs_wait keep only the fields this output schema names.
+  expect(JSON.stringify(create?.outputSchema)).toContain('"outputAudioAssetId"');
+  const completed = await call('translation-previews_get', { projectId, id: jobId });
+  expect(completed.structuredContent).toMatchObject({
+    status: 'COMPLETED',
+    outputMediaUrl: 'https://media.example.test/translated.wav',
+    outputAudioAssetId: null,
+  });
 });
