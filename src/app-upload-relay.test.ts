@@ -182,3 +182,39 @@ it('limits open upload tickets per owner, so one caller cannot fill the pod', as
     vi.useRealTimers();
   }
 });
+
+it('counts grants still waiting on the API, so overlapping calls cannot pass the limit', async () => {
+  let release!: () => void;
+  const signing = new Promise<void>((resolve) => (release = resolve));
+  const tool = relayUploadTool(
+    {
+      name: 'assets_create-upload-url',
+      inputSchema: {},
+      description: '',
+      handler: async () => {
+        await signing;
+        return {
+          uploadUrl: 'https://storage.fixture.invalid/signed',
+          url: 'https://cdn.fixture.invalid/file',
+          expiresIn: 60,
+        };
+      },
+    },
+    'https://mcp.fixture.invalid',
+    'https://storage.fixture.invalid',
+  );
+  const calls = Array.from({ length: MAX_UPLOAD_TICKETS_PER_OWNER + 4 }, () =>
+    runWithAuth(
+      'token',
+      undefined,
+      () => tool.handler({ size: 5, contentType: 'video/mp4' }),
+      'owner-overlap',
+    ),
+  );
+  release();
+  const settled = await Promise.allSettled(calls);
+  expect(settled.filter((result) => result.status === 'fulfilled')).toHaveLength(
+    MAX_UPLOAD_TICKETS_PER_OWNER,
+  );
+  expect(settled.filter((result) => result.status === 'rejected')).toHaveLength(4);
+});
