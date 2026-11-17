@@ -36,25 +36,40 @@ const UNTRUSTED_FIELDS = new Set([
   'occlusion_prompt',
 ]);
 
-// Results can be large (transcripts, history pages); stop looking well before the end.
-const MAX_VISITS = 20_000;
+// Results can be large (transcripts, unpaged history). Every inspected entry counts, and
+// a scan that runs out of budget or depth assumes the result carries such text.
+const MAX_ENTRIES = 20_000;
 const MAX_DEPTH = 32;
 
-/** Whether a value holds a non-empty string under one of the fields above. */
+/** Whether a value holds a non-blank string under one of the fields above. */
 export function containsUntrustedText(value: unknown): boolean {
-  let visits = 0;
-  const visit = (node: unknown, depth: number): boolean => {
-    if (++visits > MAX_VISITS || depth > MAX_DEPTH) return false;
-    if (Array.isArray(node)) return node.some((item) => visit(item, depth + 1));
+  let budget = MAX_ENTRIES;
+  const stack: Array<[node: object, depth: number]> = [];
+  const push = (node: unknown, depth: number): boolean => {
     if (node === null || typeof node !== 'object') return false;
-    for (const [key, child] of Object.entries(node)) {
-      if (typeof child === 'string') {
-        if (child.trim() && UNTRUSTED_FIELDS.has(key.toLowerCase())) return true;
-      } else if (visit(child, depth + 1)) return true;
-    }
+    if (depth > MAX_DEPTH) return true;
+    stack.push([node, depth]);
     return false;
   };
-  return visit(value, 0);
+  if (push(value, 0)) return true;
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop()!;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        if (--budget < 0 || push(item, depth + 1)) return true;
+      }
+      continue;
+    }
+    for (const key in node) {
+      if (!Object.hasOwn(node, key)) continue;
+      if (--budget < 0) return true;
+      const child = (node as Record<string, unknown>)[key];
+      if (typeof child === 'string') {
+        if (UNTRUSTED_FIELDS.has(key.toLowerCase()) && /\S/.test(child)) return true;
+      } else if (push(child, depth + 1)) return true;
+    }
+  }
+  return false;
 }
 
 function parsedTextBlocks(result: CallToolResult): unknown[] {

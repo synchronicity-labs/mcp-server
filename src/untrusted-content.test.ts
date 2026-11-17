@@ -34,10 +34,25 @@ describe('containsUntrustedText', () => {
     expect(containsUntrustedText(value)).toBe(false);
   });
 
-  it('stops on very deep values without throwing', () => {
-    let deep: Record<string, unknown> = { text: injected };
+  it('assumes untrusted text in values too deep to finish, without throwing', () => {
+    let deep: Record<string, unknown> = { id: 'x' };
     for (let i = 0; i < 1_000; i++) deep = { child: deep };
-    expect(containsUntrustedText(deep)).toBe(false);
+    expect(containsUntrustedText(deep)).toBe(true);
+  });
+
+  it('stops at its budget on a large result, and assumes untrusted text', () => {
+    const items = Array.from({ length: 50_000 }, (_, i) => ({ id: `gen-${i}`, status: 'OK' }));
+    let reads = 0;
+    const counted = new Proxy(items, {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) reads++;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    expect(containsUntrustedText(counted)).toBe(true);
+    expect(reads).toBeLessThanOrEqual(20_001);
+    // Small results without such fields are still read to the end.
+    expect(containsUntrustedText(items.slice(0, 1_000))).toBe(false);
   });
 });
 
