@@ -1,5 +1,21 @@
 # ChatGPT frontend release
 
+## NO_OP status release
+
+Source commit `4980ed36f4a2b664aa11d94803872fca3b30fe97`, tree `df60befa0e48a659e3cc4412754e78c336e77b36`.
+UI SHA256: `727f187d878028135019e8ce59421f6af5987e31eea59807b916ebf20ca8317e` (3411077 uncompressed bytes).
+Two builds produced identical HTML and manifest bytes. This bundle reads the
+`NO_OP` generation status as final and unsuccessful: the take shows "No lip
+sync" with its reason, where the previous bundle kept it as processing. It
+also carries every other `apps/chatgpt` change merged since the previous
+release (`48ec5669…`).
+
+The previous release `f993bf1f…` is retained as the first previous resource.
+The oldest retained resource `7f9934a6…` moves intact to `deploy/chatgpt-retired/`.
+
+Refresh publisher tool metadata and open a fresh widget after release;
+production deployment and ChatGPT host acceptance are separate checks.
+
 ## Project destination safety candidate
 
 Source commit `e8b10e31ca1348ab46d77243c70d9fedbe039bbb`, tree `b3f897463dbebca91a18abccbb16651884440a21` ([UI follow-up #7486](https://github.com/synchronicity-labs/sync-api-v2/pull/7486), after merged [#7455](https://github.com/synchronicity-labs/sync-api-v2/pull/7455)).
