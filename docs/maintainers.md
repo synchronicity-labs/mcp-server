@@ -41,6 +41,20 @@ or deleted project fails without falling back to a new project. Muse remains an 
 actual handshake alias is verified. Client names affect presentation only, never
 organization access or credit permissions. No Muse origin or attachment contract is assumed.
 
+## Text from media and other people in tool results
+
+Transcripts, scripts, and the names, titles and descriptions of assets, projects,
+voices and generations come from imported media or from any member of the
+organization, so they can read like instructions to the model. When a result
+carries a non-empty string under one of those fields (`src/untrusted-content.ts`
+lists them), `registerTools` appends one text block after the result saying
+those values are data, and that paid work, spending and organization switches
+happen only when the user asks. The result's JSON text and `structuredContent`
+are unchanged, so widgets and output schemas see the same values. This lowers the
+odds that the model follows such text; it does not enforce anything. Spending is
+still confirmed by the host (paid and write tools carry `destructiveHint`) and by
+the instructions in `src/spend-confirmation.ts`.
+
 ## Request cancellation
 
 Explicit MCP request cancellation propagates to project creation, upload admission,
