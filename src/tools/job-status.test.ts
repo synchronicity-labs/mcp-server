@@ -15,6 +15,8 @@ describe('unified job status', () => {
     ['REJECTED', 'REJECTED'],
     ['CANCELED', 'CANCELED'],
     ['CANCELLED', 'CANCELED'],
+    // finished, but lip-synced no frame
+    ['NO_OP', 'FAILED'],
     // translation preview (/v2/integrations/dubbing/{id})
     ['COMPLETING', 'PROCESSING'],
     // speaker analysis, lowercase
@@ -38,6 +40,7 @@ describe('unified job status', () => {
   it('stops waiting on terminal states and on a translation needing recovery', () => {
     expect(jobSettled({ status: 'PROCESSING' })).toBe(false);
     expect(jobSettled({ status: 'REJECTED' })).toBe(true);
+    expect(jobSettled({ status: 'NO_OP' })).toBe(true);
     expect(jobSettled({ status: 'unavailable' })).toBe(true);
     expect(jobSettled({ status: 'PROCESSING', recoveryRequired: true })).toBe(true);
   });

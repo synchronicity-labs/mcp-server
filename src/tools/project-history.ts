@@ -29,12 +29,12 @@ export function createProjectHistoryTools(
       name: 'projects_list-generations',
       title: 'Read project history',
       description:
-        "List the generations in one sync. project you can access, after first checking your access to that project. Use it for a project's history; for the whole organization, or without a projectId, use generations_list, and for one generation whose id you have use generations_get. A missing or inaccessible project fails with an error instead of returning an empty list. Always pass limit to get newest first; without it every generation in the project comes back unpaged in no guaranteed order. For the next page pass the last returned id as cursor with the same limit. Each entry has id, status, model, createdAt, projectId, input, options, outputMediaUrl once COMPLETED (outputUrl is a deprecated alias with the same value), and error and errorCode on failure.",
+        "List the generations in one sync. project you can access, after first checking your access to that project. Use it for a project's history; for the whole organization, or without a projectId, use generations_list, and for one generation whose id you have use generations_get. A missing or inaccessible project fails with an error instead of returning an empty list. Always pass limit to get newest first; without it every generation in the project comes back unpaged in no guaranteed order. For the next page pass the last returned id as cursor with the same limit. Each entry has id, status, model, createdAt, projectId, input, options, outputMediaUrl once COMPLETED (outputUrl is a deprecated alias with the same value), and error and errorCode on failure. A NO_OP entry finished but lip-synced no frame (error and errorCode say why); its outputMediaUrl is the unchanged input, not a lipsync result.",
       inputSchema: {
         ...history.inputSchema,
         ...(history.inputSchema.status && {
           status: history.inputSchema.status.describe(
-            'Only generations in this status: PENDING, PROCESSING, COMPLETED, FAILED or REJECTED.',
+            'Only generations in this status: PENDING, PROCESSING, COMPLETED, NO_OP, FAILED or REJECTED.',
           ),
         }),
         projectId: history.inputSchema

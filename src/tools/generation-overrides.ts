@@ -23,11 +23,12 @@ export const GENERATION_OVERRIDES: Record<string, ToolOverride> = {
   generations_get: {
     title: 'Get a generation',
     description:
-      'Read one sync. generation by id: its status (PENDING or PROCESSING while it runs; COMPLETED, FAILED or REJECTED when final), outputMediaUrl once COMPLETED, and error and errorCode after FAILED or REJECTED.\n' +
+      'Read one sync. generation by id: its status (PENDING or PROCESSING while it runs; COMPLETED, NO_OP, FAILED or REJECTED when final), outputMediaUrl once COMPLETED, and error and errorCode after NO_OP, FAILED or REJECTED.\n' +
       'Use it to follow a generation by the id its create call returned (lipsync_create, dubbing_create, lipsync_create-timeline or dialogue-videos_create, when available). jobs_get and jobs_wait, when available, read the same generation in a generic job shape that can add a completion percent while it runs.\n' +
       'Not for: finding a past id (generations_list, or projects_list-generations when available); what it cost (generations_get-costs when available); its inputs when the user explicitly continues it (generations_get-continuation).\n' +
       'Waiting: pass `wait: true` and leave out `timeout` to keep reading on the server for up to about 50 seconds; it returns once the generation is final, or its latest state. If it is still running, call again with the same id; never resubmit, since a new create starts a separate generation that is billed or counted against free limits.\n' +
-      'Result: copy the exact `structuredContent.outputMediaUrl` string verbatim; it is signed, so it must not be reconstructed, shortened, or edited (`outputUrl` is a deprecated alias with the same value). On FAILED or REJECTED, tell the user the error and errorCode.',
+      'Result: copy the exact `structuredContent.outputMediaUrl` string verbatim; it is signed, so it must not be reconstructed, shortened, or edited (`outputUrl` is a deprecated alias with the same value). On FAILED or REJECTED, tell the user the error and errorCode.\n' +
+      "NO_OP: it finished but lip-synced no frame, such as when no face was found; error and errorCode say why. Its outputMediaUrl is the input video unchanged, with any generated speech or dub audio, so never present it as a lipsync result. Lipsync was not charged; generated speech or dubbing was. Suggest a video where the speaker's face is clearly visible, or choosing the speaker explicitly.",
     outputSchema: generationReadOutputSchema,
     params: {
       id: GENERATION_ID,
@@ -39,11 +40,11 @@ export const GENERATION_OVERRIDES: Record<string, ToolOverride> = {
   generations_list: {
     title: 'List generations',
     description:
-      'List generations across the current sync. organization, from every member and API key, to find a generation id or see which are still running. For one known id use generations_get. Pass projectId to narrow to one project; projects_list-generations, when available, does the same but fails on a project you cannot access, while this tool returns an empty list. Always pass limit to get newest first; without it every matching generation comes back unpaged in no guaranteed order. For the next page pass the last returned id as cursor with the same limit. Each entry has id, status, model, createdAt, projectId, input, options, outputMediaUrl once COMPLETED, and error and errorCode on failure.',
+      'List generations across the current sync. organization, from every member and API key, to find a generation id or see which are still running. For one known id use generations_get. Pass projectId to narrow to one project; projects_list-generations, when available, does the same but fails on a project you cannot access, while this tool returns an empty list. Always pass limit to get newest first; without it every matching generation comes back unpaged in no guaranteed order. For the next page pass the last returned id as cursor with the same limit. Each entry has id, status, model, createdAt, projectId, input, options, outputMediaUrl once COMPLETED, and error and errorCode on failure. A NO_OP entry finished but lip-synced no frame (error and errorCode say why); its outputMediaUrl is the unchanged input, not a lipsync result.',
     params: {
       projectId: 'Only generations in this project, from projects_list or projects_create.',
       status:
-        'Only generations in this status: PENDING, PROCESSING, COMPLETED, FAILED or REJECTED. PENDING (queued) and PROCESSING both mean still running, so check both before concluding nothing is in progress.',
+        'Only generations in this status: PENDING, PROCESSING, COMPLETED, NO_OP, FAILED or REJECTED. PENDING (queued) and PROCESSING both mean still running, so check both before concluding nothing is in progress.',
     },
   },
   'generations_estimate-cost': {
@@ -60,13 +61,13 @@ export const GENERATION_OVERRIDES: Record<string, ToolOverride> = {
   },
   'generations_get-details': {
     description:
-      'Get a generation by id (organization-scoped). Returns status and, when COMPLETED, `outputMediaUrl` (`outputUrl` is a deprecated alias).',
+      'Get a generation by id (organization-scoped). Returns status and, when COMPLETED, `outputMediaUrl` (`outputUrl` is a deprecated alias). NO_OP means it finished but lip-synced no frame; error and errorCode say why.',
     outputSchema: generationDtoOutputSchema,
     params: { id: GENERATION_ID },
   },
   generations_delete: {
     description:
-      'Delete a generation by id. Only terminal generations (COMPLETED/FAILED/REJECTED) can be deleted; deleting one that is still processing returns 409.',
+      'Delete a generation by id. Only terminal generations (COMPLETED/NO_OP/FAILED/REJECTED) can be deleted; deleting one that is still processing returns 409.',
     params: { id: GENERATION_ID },
   },
   generations_estimate: {

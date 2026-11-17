@@ -256,6 +256,7 @@ describe('batches_get and jobs_wait', () => {
           outputMediaUrl: 'https://cdn.test/out1.mp4',
         },
         { requestId: 'item-2', status: 'FAILED', error: { code: 'INVALID_INPUT' } },
+        { requestId: 'item-3', status: 'NO_OP', generationId: 'g-3' },
       ],
     });
     expect(progress).toEqual([
@@ -275,7 +276,7 @@ describe('batches_get and jobs_wait', () => {
     ).toEqual([false, false]);
   });
 
-  it('returns only failed rows, or none, when asked', async () => {
+  it('returns only unsuccessful rows, NO_OP included, or none, when asked', async () => {
     const { client } = await stdio();
     await client.callTool({ name: 'batches_get', arguments: { id: 'b-1' } });
     const failed = await client.callTool({
@@ -284,6 +285,7 @@ describe('batches_get and jobs_wait', () => {
     });
     expect((failed.structuredContent as { results: unknown[] }).results).toEqual([
       expect.objectContaining({ requestId: 'item-2' }),
+      expect.objectContaining({ requestId: 'item-3', status: 'NO_OP' }),
     ]);
     const none = await client.callTool({
       name: 'batches_get',
@@ -332,7 +334,11 @@ describe('batches_get and jobs_wait', () => {
       status: 'COMPLETED',
       result: {
         status: 'COMPLETED',
-        results: [expect.objectContaining({ generationId: 'g-1' }), expect.anything()],
+        results: [
+          expect.objectContaining({ generationId: 'g-1' }),
+          expect.anything(),
+          expect.anything(),
+        ],
       },
     });
     expect(progress).toEqual(['batch processing 25%']);

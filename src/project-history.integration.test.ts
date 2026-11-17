@@ -33,6 +33,7 @@ async function fixture(
     basePath?: string;
     sourceDenied?: boolean;
     wrongGeneration?: boolean;
+    status?: string;
   } = {},
 ) {
   const calls: Array<{ path: string; query: Record<string, string> }> = [];
@@ -108,7 +109,7 @@ async function fixture(
             {
               id: options.wrongGeneration ? otherProjectId : generationId,
               projectId: options.ignoresFilter ? otherProjectId : projectId,
-              status: 'COMPLETED',
+              status: options.status ?? 'COMPLETED',
               workflow: 'edit_dialogue',
               modelName: 'sync-3',
               options: {
@@ -302,6 +303,18 @@ it.each(['', '/api-proxy'])(
     ]);
   },
 );
+
+it('reads continuation inputs of a generation that lip-synced no frame', async () => {
+  const { client } = await fixture({ status: 'NO_OP' });
+  const result = await client.callTool({
+    name: 'generations_get-continuation',
+    arguments: { projectId, id: generationId },
+  });
+  expect(result.isError).not.toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    generation: { id: generationId, status: 'NO_OP' },
+  });
+});
 
 it.each(['denied', 'ignoresFilter', 'wrongGeneration', 'sourceDenied'] as const)(
   'refuses unsafe continuation read %s without leaking source or output',

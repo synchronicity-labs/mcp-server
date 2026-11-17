@@ -302,6 +302,14 @@ describe('createAppTools — lipsync_create', () => {
     expect(posts(request)).toHaveLength(1);
   });
 
+  it('submits again once the identical generation finished without lip-syncing a frame', async () => {
+    const { tool, request } = setup();
+    await tool.handler(scriptOnImage);
+    request.mockResolvedValueOnce({ id: 'gen-1', status: 'NO_OP' });
+    await tool.handler(scriptOnImage);
+    expect(posts(request)).toHaveLength(2);
+  });
+
   it('gives a waiting identical call the first attempt failure without submitting again', async () => {
     const { tool, request } = setup();
     const answer = request.getMockImplementation()!;

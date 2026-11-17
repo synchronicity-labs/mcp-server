@@ -146,6 +146,25 @@ describe('jobs_get and jobs_wait', () => {
     });
   });
 
+  it('stops waiting on a generation that lip-synced no frame, keeping its own NO_OP', async () => {
+    const noOp = {
+      id: 'g-4',
+      status: 'NO_OP',
+      error: 'No face was detected.',
+      errorCode: 'generation_lipsync_skipped_no_face',
+      outputMediaUrl: 'https://cdn.test/input.mp4',
+    };
+    const generation = tool('generations_get', [{ id: 'g-4', status: 'PROCESSING' }, noOp]);
+    const { waitFor } = jobs([generation]);
+    expect(await waitFor({ kind: 'generation', id: 'g-4' }).result).toEqual({
+      kind: 'generation',
+      id: 'g-4',
+      status: 'FAILED',
+      result: noOp,
+    });
+    expect(generation.handler).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for a transcription', async () => {
     const transcription = tool('transcriptions_get', [
       { id: 't-1', status: 'PENDING' },
@@ -172,6 +191,22 @@ describe('jobs_get and jobs_wait', () => {
       id: 't-1',
       status: 'FAILED',
       result: { status: 'unavailable', unavailableReason: 'no_faces', speakers: [] },
+    });
+  });
+
+  it('passes a finished translation preview through with its saved audio asset', async () => {
+    const assetId = '00000000-0000-4000-8000-000000000005';
+    const preview = tool(
+      'translation-previews_get',
+      [{ id: 'p-1', status: 'COMPLETED', outputAudioAssetId: assetId, internal: 'dropped' }],
+      { outputSchema: { id: z.string(), status: z.string(), outputAudioAssetId: z.string() } },
+    );
+    const { read } = jobs([preview]);
+    expect(
+      await read({ kind: 'translation_preview', id: 'p-1', projectId: 'project-1' }).result,
+    ).toMatchObject({
+      status: 'COMPLETED',
+      result: { id: 'p-1', status: 'COMPLETED', outputAudioAssetId: assetId },
     });
   });
 
