@@ -169,6 +169,32 @@ describe('the organizations a call runs in', () => {
     expect(() => assertCheckedOrganization(session)).not.toThrow();
   });
 
+  it('keeps an approved call running when the session only learns its default organization', async () => {
+    const { check, session } = gate({}, { ...free, plan: 'creator' });
+    const decision = await check(
+      'jobs_create-many',
+      { tool: 'lipsync_create', items: [{}, {}] },
+      approve(),
+    );
+    if (!decision || !('within' in decision)) throw new Error('expected approval');
+    // The first item reads the credential's default; that is not a switch.
+    session.rememberDefault({ id: 'default-org', name: 'Default' });
+    expect(() => decision.within(() => assertCheckedOrganization(session))).not.toThrow();
+  });
+
+  it('treats selecting the organization already selected as no switch', async () => {
+    const { check, session } = gate({}, { ...free, plan: 'creator' });
+    session.select({ id: 'a', name: 'A' }, undefined);
+    const decision = await check('lipsync_create', {}, approve());
+    if (!decision || !('within' in decision)) throw new Error('expected approval');
+    session.select({ id: 'a', name: 'A' }, undefined);
+    expect(() => decision.within(() => assertCheckedOrganization(session))).not.toThrow();
+    session.select({ id: 'b', name: 'B' }, undefined);
+    expect(() => decision.within(() => assertCheckedOrganization(session))).toThrow(
+      OrganizationChangedError,
+    );
+  });
+
   it('stops when the call is cancelled during the account read, instead of asking', async () => {
     const controller = new AbortController();
     const http = {

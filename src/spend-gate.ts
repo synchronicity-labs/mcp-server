@@ -150,9 +150,10 @@ export type SpendGate = (
   signal?: AbortSignal,
 ) => Promise<GateDecision | undefined>;
 
-// The session organization a paid call was checked (and approved) in. A switch that lands
-// while the person is being asked must not move the approved work to another organization.
-const checkedIn = new AsyncLocalStorage<{ organizationId: string | undefined }>();
+// The organization the session had selected when a paid call was checked (and approved). A
+// switch that lands while the person is being asked must not move the approved work. Only
+// organizations_select changes the selection; learning the credential's default does not.
+const checkedIn = new AsyncLocalStorage<{ selectedId: string | undefined }>();
 
 export class OrganizationChangedError extends Error {
   constructor() {
@@ -165,8 +166,7 @@ export class OrganizationChangedError extends Error {
 /** Throws when the session switched organization since this call's spending check. */
 export function assertCheckedOrganization(session: OrganizationSession): void {
   const checked = checkedIn.getStore();
-  if (checked && checked.organizationId !== session.activeOrganizationId())
-    throw new OrganizationChangedError();
+  if (checked && checked.selectedId !== session.selected?.id) throw new OrganizationChangedError();
 }
 
 /** Undefined lets the call run; a result refuses it with nothing started. */
@@ -231,7 +231,7 @@ export function createSpendGate({
 
     const describe = PAID_TOOLS[tool];
     if (!describe || (tool === 'batches_create' && args.dryRun === true)) return undefined;
-    const sessionOrganization = { organizationId: session.activeOrganizationId() };
+    const sessionOrganization = { selectedId: session.selected?.id };
     const within = <T>(run: () => T) => checkedIn.run(sessionOrganization, run);
     const organizations = organizationsOf(tool, args);
     const charged = (
