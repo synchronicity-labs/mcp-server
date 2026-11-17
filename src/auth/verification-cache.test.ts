@@ -153,6 +153,41 @@ it('does not let a request after a revocation join a check that started before i
   await expect(provider.verifyAccessToken('one')).rejects.toBeTruthy();
 });
 
+it('keeps counting checks a revocation detached, and stops them when their caller leaves', async () => {
+  const signals: AbortSignal[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          signals.push(init!.signal!);
+          init!.signal!.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    ),
+  );
+  const provider = createOAuthProvider('https://fixture.invalid');
+  const callers = Array.from({ length: 128 }, (_, i) => {
+    const controller = new AbortController();
+    const result = provider.verifyAccessToken(`held-${i}`, controller.signal).catch((e) => e);
+    return { controller, result };
+  });
+  await vi.waitFor(() => expect(signals).toHaveLength(128));
+  provider.clearVerificationCache('client');
+  // Detached checks still run, so the limit still holds.
+  await expect(provider.verifyAccessToken('one-more')).rejects.toMatchObject({ status: 503 });
+  // A detached check stops when its only caller goes away, freeing its place.
+  callers[0]!.controller.abort();
+  await callers[0]!.result;
+  expect(signals[0]!.aborted).toBe(true);
+  await vi.waitFor(async () => {
+    const next = provider.verifyAccessToken('after-free', AbortSignal.timeout(50));
+    await expect(next).rejects.toMatchObject({ status: 503 });
+    expect(signals).toHaveLength(129);
+  });
+  for (const caller of callers) caller.controller.abort();
+  await Promise.all(callers.map((caller) => caller.result));
+});
+
 describe('audience', () => {
   const server = createOAuthProvider('https://fixture.invalid', undefined, {
     audiences: ['https://mcp.sync.so/mcp', 'https://mcp.sync.so'],
