@@ -76,6 +76,12 @@ import {
   withoutSpendConfirmation,
 } from './spend-confirmation.js';
 import {
+  APPROVAL_TIMEOUT_MS,
+  assertCheckedOrganization,
+  type SpendGate,
+  spendGateFor,
+} from './spend-gate.js';
+import {
   createTelemetryQueue,
   isMcpEventsOperation,
   type TelemetryQueue,
@@ -633,6 +639,8 @@ export function registerTools(
   onToolError?: (tool: string, error: unknown) => void,
   decorateResult: (result: CallToolResult) => CallToolResult = (result) => result,
   isChatgptApp: () => boolean = () => false,
+  // Asks the person before a client's paid call (spend-gate.ts); nested calls skip it.
+  beforeCall?: SpendGate,
 ): void {
   const names = new Set(tools.map((tool) => tool.name));
   const finish = (result: CallToolResult) => decorateResult(markUntrustedContent(result));
@@ -653,10 +661,26 @@ export function registerTools(
         ),
       };
       try {
+        const decision = await beforeCall?.(
+          tool.name,
+          args ?? {},
+          (params) =>
+            ctx.mcpReq.elicitInput(params, {
+              timeout: APPROVAL_TIMEOUT_MS,
+              signal: ctx.mcpReq.signal,
+            }),
+          ctx.mcpReq.signal,
+        );
+        if (decision && 'refusal' in decision) return finish(decision.refusal);
+        const within = decision?.within ?? (<T>(call: () => T) => call());
         if (tool.resultFormat === 'mcp') {
-          return finish(await tool.handler((args ?? {}) as Record<string, unknown>, context));
+          return finish(
+            await within(() => tool.handler((args ?? {}) as Record<string, unknown>, context)),
+          );
         }
-        const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
+        const result = await within(() =>
+          tool.handler((args ?? {}) as Record<string, unknown>, context),
+        );
         return finish(createJsonToolResult(result, tool.outputSchema));
       } catch (error) {
         onToolError?.(tool.name, error);
@@ -1226,6 +1250,11 @@ function createProfiledServer(
     sharedCatalog?.tools ?? createTools(config, operations, httpClient, getProfile, chatgptApp);
   // Hosted sessions supply theirs per request (HttpSession); stdio keeps one for the process.
   const ownOrganizationSession = new OrganizationSession();
+  const spendGate = spendGateFor(config, {
+    http: httpClient,
+    session: ownOrganizationSession,
+    canAsk: () => server.server.getClientCapabilities()?.elicitation !== undefined,
+  });
   const analytics = toolAnalyticsSupport(operations);
   const server = new McpServer(
     {
@@ -1286,6 +1315,7 @@ function createProfiledServer(
     }
     const activeProfile = profile;
     const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
+    assertCheckedOrganization(organizationSession);
     // A nested call (jobs_create-many's items) keeps the key of the call that made it.
     const generationKey =
       parameters[1]?.generationKey ??
@@ -1332,6 +1362,7 @@ function createProfiledServer(
     config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,
     config.transport === 'stdio' && updateCheck ? withUpdateNotice(updateCheck) : undefined,
     () => getProfile().name === 'chatgpt',
+    spendGate,
   );
   observeRejectedCalls(server, telemetry, () => toolsByCallableName(sessionTools));
   const resources: Resource[] = [];

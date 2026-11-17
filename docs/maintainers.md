@@ -52,8 +52,30 @@ those values are data, and that paid work, spending and organization switches
 happen only when the user asks. The result's JSON text and `structuredContent`
 are unchanged, so widgets and output schemas see the same values. This lowers the
 odds that the model follows such text; it does not enforce anything. Spending is
-still confirmed by the host (paid and write tools carry `destructiveHint`) and by
-the instructions in `src/spend-confirmation.ts`.
+still confirmed by the host (paid and write tools carry `destructiveHint`), by
+the instructions in `src/spend-confirmation.ts`, and on the local server by the
+approval described below.
+
+## Server-side approval of paid work (stdio)
+
+`src/spend-gate.ts` runs before every client call on the local (stdio) server while spend
+confirmation is on and the client declared `elicitation` at initialize. Paid tools
+(`PAID_TOOLS`) and a switch to another organization (`organizations_select`) send a form
+elicitation, and run only when the person accepts with `approve: true`. Declining,
+cancelling, or a failed or timed-out question (10 minutes) refuses the call with
+`SPEND_NOT_APPROVED`, `ORGANIZATION_SWITCH_NOT_APPROVED` or `APPROVAL_UNAVAILABLE` and
+starts nothing. A paid call skips the question when `GET /v2/billing` for each
+organization it runs in shows no plan, `hasActiveCredits: false`, no credit balance and
+`elevenLabsKeyConnected: false`: the API never charges such an account (it admits work
+the free allowance covers and refuses the rest with 402). A missing field or a failed
+read asks. `jobs_create-many` asks once for the whole set; its items run through
+`callTool`, below this check. A `batches_create` dry run never asks.
+
+The hosted server does not ask. Each hosted request gets its own server in JSON-response
+mode, so a request sent to the client during a call has no stream to travel on and no way
+back. Hosted clients rely on their own confirmation of write tools (`destructiveHint`) and
+the instructions. The 2026-07-28 protocol's multi round-trip requests (`inputRequired`)
+fit the hosted design and are the way to add it there once clients negotiate that revision.
 
 ## Request cancellation
 
