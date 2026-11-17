@@ -194,6 +194,22 @@ describe('jobs_get and jobs_wait', () => {
     });
   });
 
+  it('passes a finished translation preview through with its saved audio asset', async () => {
+    const assetId = '00000000-0000-4000-8000-000000000005';
+    const preview = tool(
+      'translation-previews_get',
+      [{ id: 'p-1', status: 'COMPLETED', outputAudioAssetId: assetId, internal: 'dropped' }],
+      { outputSchema: { id: z.string(), status: z.string(), outputAudioAssetId: z.string() } },
+    );
+    const { read } = jobs([preview]);
+    expect(
+      await read({ kind: 'translation_preview', id: 'p-1', projectId: 'project-1' }).result,
+    ).toMatchObject({
+      status: 'COMPLETED',
+      result: { id: 'p-1', status: 'COMPLETED', outputAudioAssetId: assetId },
+    });
+  });
+
   it('reads a translation preview in its project and stops when it needs recovery', async () => {
     const preview = tool('translation-previews_get', [
       { id: 'p-1', status: 'COMPLETING', recoveryRequired: true },
