@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createOAuthProvider } from './oauth-provider.js';
+import {
+  CLIENT_CACHE_MAX_ENTRIES,
+  CLIENT_CACHE_TTL_MS,
+  createOAuthProvider,
+} from './oauth-provider.js';
 
 const API = 'https://api.sync.so';
 
@@ -196,5 +200,51 @@ describe('createOAuthProvider — public clients', () => {
     const client = await createOAuthProvider(API).clientsStore.getClient('client-123');
 
     expect(client).toMatchObject({ token_endpoint_auth_method: 'none' });
+  });
+});
+
+describe('createOAuthProvider — client cache', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  function stubClients() {
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => ({
+        client_id: decodeURIComponent(url.split('/').at(-1) ?? ''),
+        redirect_uris: ['https://x/cb'],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('reads a client from the API again once its entry expires', async () => {
+    vi.useFakeTimers();
+    const fetchMock = stubClients();
+    const provider = createOAuthProvider(API);
+    await provider.clientsStore.getClient('client-1');
+    await vi.advanceTimersByTimeAsync(CLIENT_CACHE_TTL_MS - 1);
+    await provider.clientsStore.getClient('client-1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await provider.clientsStore.getClient('client-1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps at most a fixed number of clients, dropping the least recently used', async () => {
+    const fetchMock = stubClients();
+    const provider = createOAuthProvider(API);
+    for (let i = 0; i < CLIENT_CACHE_MAX_ENTRIES; i++)
+      await provider.clientsStore.getClient(`client-${i}`);
+    await provider.clientsStore.getClient('client-0'); // now the most recently used
+    await provider.clientsStore.getClient('one-more'); // evicts client-1
+    const before = fetchMock.mock.calls.length;
+    await provider.clientsStore.getClient('client-0');
+    expect(fetchMock).toHaveBeenCalledTimes(before);
+    await provider.clientsStore.getClient('client-1');
+    expect(fetchMock).toHaveBeenCalledTimes(before + 1);
   });
 });

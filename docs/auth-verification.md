@@ -59,3 +59,22 @@ The PR57 fixture rate-limit findings are fixed with explicit rateLimit middlewar
 before verification, plus a regression proving a rejected request does not verify.
 Existing full-body deadline, cancellation, retryable errors and SDK adapter tests
 remain required on every revised head.
+
+## Caches, revocation and audience (CRAFT-8233)
+
+- **Verified tokens** are cached per pod for at most 15 seconds, or until the token
+  expires if that is sooner (`src/auth/verification-cache.ts`). A successful `/revoke`
+  forgets the revoking client's cached tokens, not every client's. A token revoked
+  elsewhere (Settings › Agents & MCP, or `/revoke` on another pod during a rolling
+  deploy) can still open MCP sessions on a pod for up to 15 seconds. That window is
+  accepted: every tool call sends the token to the API, which refuses a revoked token at
+  once, so during the window a session can list tools but cannot read or change data.
+  A shorter cache is not worth it while the API limits `/v2/oauth/userinfo` per calling
+  address, because every MCP user shares that one allowance.
+- **Registered clients** are cached for 10 minutes, at most 1,000, least recently used
+  dropped first (`createClientCache` in `src/auth/oauth-provider.ts`). A miss reads the
+  client back from the API.
+- **Audience:** the API does not yet issue resource-bound tokens; userinfo reports no
+  `aud`. When it does, a token is accepted only if `aud` names `<issuer>/mcp` or the
+  issuer origin (`audienceMatches` in `src/auth/token-verification.ts`). Tokens without
+  `aud` are accepted, as all tokens are today.

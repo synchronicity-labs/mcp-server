@@ -393,7 +393,10 @@ export async function startHttpServer(
   });
 
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
-  const oauthProvider = createOAuthProvider(config.baseUrl, config.oauthAuthorizationUrl);
+  // Once the API reports a token's audience, only tokens issued for this server pass.
+  const oauthProvider = createOAuthProvider(config.baseUrl, config.oauthAuthorizationUrl, {
+    audiences: [new URL('/mcp', issuerUrl).href, issuerUrl.origin],
+  });
 
   if (config.chatgptApp?.uploadStorageOrigin) {
     app.use(
@@ -559,8 +562,11 @@ export async function startHttpServer(
       }
       const contentType = upstream.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
-      // Revoking a refresh token can invalidate its entire access-token family.
-      if (path === 'revoke' && upstream.ok) oauthProvider.clearVerificationCache();
+      // Revoking a refresh token can invalidate its client's entire access-token family.
+      if (path === 'revoke' && upstream.ok)
+        oauthProvider.clearVerificationCache(
+          typeof credentials.client_id === 'string' ? credentials.client_id : undefined,
+        );
       res.status(upstream.status).send(responseBody);
     } catch (error) {
       if (res.destroyed) return;

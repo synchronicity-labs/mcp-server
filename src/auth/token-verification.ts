@@ -34,12 +34,40 @@ const userInfoSchema = z.object({
     .string()
     .refine((value) => value.trim().length > 0)
     .optional(),
+  // RFC 8707 / RFC 9068 audience. The API does not report one yet; see audienceMatches.
+  aud: z.union([z.string(), z.array(z.string())]).optional(),
 });
+
+function normalizeAudience(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    // Only a trailing slash is ignored; a query or fragment names a different resource.
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}${url.search}${url.hash}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether a token may be used here. A token whose userinfo names no audience is accepted,
+ * as every token is today; once the API reports `aud`, a token must name this server.
+ */
+export function audienceMatches(
+  aud: string | readonly string[] | undefined,
+  accepted: readonly string[],
+): boolean {
+  if (aud === undefined || accepted.length === 0) return true;
+  const wanted = new Set(accepted.map(normalizeAudience));
+  return (typeof aud === 'string' ? [aud] : aud).some((value) =>
+    wanted.has(normalizeAudience(value)),
+  );
+}
 
 export async function verifySyncAccessToken(
   apiBaseUrl: string,
   token: string,
   signal?: AbortSignal,
+  audiences: readonly string[] = [],
 ): Promise<AuthInfo> {
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -76,6 +104,9 @@ export async function verifySyncAccessToken(
         }
         const parsed = userInfoSchema.safeParse(await res.json());
         if (!parsed.success) throw new VerificationUnavailableError(502);
+        if (!audienceMatches(parsed.data.aud, audiences)) {
+          throw new InvalidTokenError('Token was not issued for this server');
+        }
         return {
           token,
           clientId: parsed.data.client_id,
