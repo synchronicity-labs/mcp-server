@@ -160,6 +160,7 @@ import { createTranslationTools, translationOperation } from './tools/translatio
 import { createUploadWidgetTool, registerUploadWidgetResource } from './tools/upload-widget.js';
 import { toolsetIncludes, toolsetInstruction } from './toolsets.js';
 import { readUiResource } from './ui-resource-log.js';
+import { markUntrustedContent } from './untrusted-content.js';
 import {
   type AvailableUpdate,
   type UpdateCheck,
@@ -642,6 +643,7 @@ export function registerTools(
   beforeCall?: SpendGate,
 ): void {
   const names = new Set(tools.map((tool) => tool.name));
+  const finish = (result: CallToolResult) => decorateResult(markUntrustedContent(result));
   for (const tool of tools) {
     const config = registeredConfig(tool);
     const run = async (
@@ -669,20 +671,20 @@ export function registerTools(
             }),
           ctx.mcpReq.signal,
         );
-        if (decision && 'refusal' in decision) return decorateResult(decision.refusal);
+        if (decision && 'refusal' in decision) return finish(decision.refusal);
         const within = decision?.within ?? (<T>(call: () => T) => call());
         if (tool.resultFormat === 'mcp') {
-          return decorateResult(
+          return finish(
             await within(() => tool.handler((args ?? {}) as Record<string, unknown>, context)),
           );
         }
         const result = await within(() =>
           tool.handler((args ?? {}) as Record<string, unknown>, context),
         );
-        return decorateResult(createJsonToolResult(result, tool.outputSchema));
+        return finish(createJsonToolResult(result, tool.outputSchema));
       } catch (error) {
         onToolError?.(tool.name, error);
-        return decorateResult(createToolErrorResult(error, authMetadataUrl, isChatgptApp()));
+        return finish(createToolErrorResult(error, authMetadataUrl, isChatgptApp()));
       }
     };
     server.registerTool(tool.name, config, run);

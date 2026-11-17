@@ -8,17 +8,33 @@ const MAX_PENDING = 128;
 type Pending = { promise: Promise<AuthInfo>; controller: AbortController; waiters: number };
 
 /** Provider-scoped cache: successful checks only, bounded by both TTL and token expiry. */
-export function createTokenVerifier(apiBaseUrl: string) {
+export function createTokenVerifier(apiBaseUrl: string, audiences: readonly string[] = []) {
   const cache = new Map<string, { info: AuthInfo; until: number }>();
+  // Checks a request may join, by token. A revocation detaches them from here so a later
+  // request checks again; `running` keeps every check until it settles, for the limit and
+  // cancellation.
   const pending = new Map<string, Pending>();
+  const running = new Set<Pending>();
   let epoch = 0;
   const cooldowns = new Map<string, number>();
 
-  function clear() {
+  /**
+   * Forgets verified tokens. Given a client ID, only that client's cached tokens: revoking
+   * one of its tokens can end its whole grant, but no other client's. Checks still in
+   * flight started before the revocation, and their client is not known yet, so none of
+   * them is cached or joined by a later request; that request checks again. A full clear
+   * also cancels them; a scoped one lets their current callers finish.
+   */
+  function clear(clientId?: string) {
     epoch++;
-    cache.clear();
+    // Backoffs after a 429 name no client and last at most fifteen seconds.
     cooldowns.clear();
-    for (const entry of pending.values()) entry.controller.abort();
+    if (clientId === undefined) {
+      cache.clear();
+      for (const entry of running) entry.controller.abort();
+    } else {
+      for (const [key, value] of cache) if (value.info.clientId === clientId) cache.delete(key);
+    }
     pending.clear();
   }
 
@@ -39,12 +55,12 @@ export function createTokenVerifier(apiBaseUrl: string) {
     cooldowns.delete(key);
     let entry = pending.get(key);
     if (!entry) {
-      if (pending.size >= MAX_PENDING) throw new VerificationUnavailableError(503, '1');
+      if (running.size >= MAX_PENDING) throw new VerificationUnavailableError(503, '1');
       const controller = new AbortController();
       const startedEpoch = epoch;
       entry = { controller, waiters: 0, promise: Promise.resolve({} as AuthInfo) };
       const current = entry;
-      entry.promise = verifySyncAccessToken(apiBaseUrl, token, controller.signal)
+      entry.promise = verifySyncAccessToken(apiBaseUrl, token, controller.signal, audiences)
         .then((info) => {
           const until = Math.min(now + VERIFICATION_CACHE_MS, (info.expiresAt ?? 0) * 1000);
           if (!controller.signal.aborted && epoch === startedEpoch && until > Date.now()) {
@@ -73,9 +89,11 @@ export function createTokenVerifier(apiBaseUrl: string) {
           throw error;
         })
         .finally(() => {
+          running.delete(current);
           if (pending.get(key) === current) pending.delete(key);
         });
       pending.set(key, entry);
+      running.add(entry);
     }
     // Cancelling one HTTP request must not cancel another caller's shared check.
     entry.waiters++;
@@ -87,8 +105,9 @@ export function createTokenVerifier(apiBaseUrl: string) {
         settled = true;
         signal?.removeEventListener('abort', abort);
         current.waiters--;
-        if (current.waiters === 0 && pending.get(key) === current) {
-          pending.delete(key);
+        // The last caller gone: stop the check, joinable or detached by a revocation.
+        if (current.waiters === 0) {
+          if (pending.get(key) === current) pending.delete(key);
           current.controller.abort();
         }
         if (error) reject(error);

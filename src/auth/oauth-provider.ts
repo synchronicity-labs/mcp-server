@@ -1,5 +1,6 @@
 import type { AuthInfo, OAuthClientInformationFull } from '@modelcontextprotocol/server';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/server-legacy/auth';
+import { restrictRegistration } from './client-registration.js';
 import { createTokenVerifier } from './verification-cache.js';
 
 const CONFIDENTIAL_CLIENT_AUTH_METHOD = 'client_secret_post';
@@ -49,6 +50,32 @@ function forRegistration(client: OAuthClientInformationFull): OAuthClientInforma
     : { ...client, token_endpoint_auth_method: CONFIDENTIAL_CLIENT_AUTH_METHOD };
 }
 
+export const CLIENT_CACHE_MAX_ENTRIES = 1_000;
+export const CLIENT_CACHE_TTL_MS = 10 * 60_000;
+
+/**
+ * Registered clients, least recently used first. Entries expire so a client the API
+ * changes or deletes is read again, and the cap bounds memory however many register.
+ */
+function createClientCache(now = Date.now) {
+  const entries = new Map<string, { client: OAuthClientInformationFull; until: number }>();
+  return {
+    get(clientId: string): OAuthClientInformationFull | undefined {
+      const entry = entries.get(clientId);
+      if (!entry) return undefined;
+      entries.delete(clientId);
+      if (entry.until <= now()) return undefined;
+      entries.set(clientId, entry);
+      return entry.client;
+    },
+    set(clientId: string, client: OAuthClientInformationFull): void {
+      entries.delete(clientId);
+      entries.set(clientId, { client, until: now() + CLIENT_CACHE_TTL_MS });
+      while (entries.size > CLIENT_CACHE_MAX_ENTRIES) entries.delete(entries.keys().next().value!);
+    },
+  };
+}
+
 /**
  * Creates an OAuth provider that proxies to the Sync API's OAuth endpoints.
  *
@@ -61,12 +88,13 @@ function forRegistration(client: OAuthClientInformationFull): OAuthClientInforma
 export function createOAuthProvider(
   apiBaseUrl: string,
   authorizationUrl = `${apiBaseUrl}/v2/oauth/authorize`,
+  { audiences = [] }: { audiences?: readonly string[] } = {},
 ): ProxyOAuthServerProvider & {
   verifyAccessToken(token: string, signal?: AbortSignal): Promise<AuthInfo>;
-  clearVerificationCache(): void;
+  clearVerificationCache(clientId?: string): void;
 } {
-  const verifier = createTokenVerifier(apiBaseUrl);
-  const clientCache = new Map<string, OAuthClientInformationFull>();
+  const verifier = createTokenVerifier(apiBaseUrl, audiences);
+  const clientCache = createClientCache();
   const registrationSecret = process.env.OAUTH_REGISTRATION_SECRET;
 
   const registrationUrl = `${apiBaseUrl}/v2/oauth/register`;
@@ -145,7 +173,9 @@ export function createOAuthProvider(
         getClient: resolveClient,
         ...(originalRegister && {
           registerClient: async (client: OAuthClientInformationFull) => {
-            const registered = normalizeClientInfo(await originalRegister(forRegistration(client)));
+            const registered = normalizeClientInfo(
+              await originalRegister(forRegistration(restrictRegistration(client))),
+            );
             clientCache.set(registered.client_id, registered);
             return registered;
           },

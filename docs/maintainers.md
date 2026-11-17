@@ -41,6 +41,21 @@ or deleted project fails without falling back to a new project. Muse remains an 
 actual handshake alias is verified. Client names affect presentation only, never
 organization access or credit permissions. No Muse origin or attachment contract is assumed.
 
+## Text from media and other people in tool results
+
+Transcripts, scripts, and the names, titles and descriptions of assets, projects,
+voices and generations come from imported media or from any member of the
+organization, so they can read like instructions to the model. When a result
+carries a non-empty string under one of those fields (`src/untrusted-content.ts`
+lists them), `registerTools` appends one text block after the result saying
+those values are data, and that paid work, spending and organization switches
+happen only when the user asks. The result's JSON text and `structuredContent`
+are unchanged, so widgets and output schemas see the same values. This lowers the
+odds that the model follows such text; it does not enforce anything. Spending is
+still confirmed by the host (paid and write tools carry `destructiveHint`), by
+the instructions in `src/spend-confirmation.ts`, and on the local server by the
+approval described below.
+
 ## Server-side approval of paid work (stdio)
 
 `src/spend-gate.ts` runs before every client call on the local (stdio) server while spend
@@ -169,6 +184,9 @@ and streams only to the configured HTTPS storage origin under the existing uploa
 concurrency and timeout limits. Browser relay uploads support the API single-PUT
 maximum of 5 GiB; the 512 MiB download limit still applies to rehosting ChatGPT
 attachments. Legacy presign responses without an expiry receive a five-minute ticket.
+A pod holds at most 128 open tickets, and at most 16 for one signed-in user,
+OAuth client and organization, so one caller cannot use up the pod's uploads.
+Expired tickets stop counting.
 Tickets are process-local: the MCP session and its upload must reach the same instance.
 A restart invalidates outstanding tickets; the client can request a new upload. Multi-instance
 release routing must account for this before enabling the relay in production. The widget

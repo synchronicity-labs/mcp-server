@@ -17,6 +17,35 @@ the API decide: it requires a secret only from a client that has one. A secret
 that is sent must not be empty. Metadata still advertises only the two secret
 methods; Gemini clients send `none` regardless.
 
+## What a client may register (CRAFT-8233)
+
+Registration is open and this server forwards it to the API with the registration
+secret, so `src/auth/client-registration.ts` checks each request first and refuses
+it with `invalid_redirect_uri` or `invalid_client_metadata`, without calling the API:
+
+- Redirect URIs use `https`, or `http` on a loopback address (`127.0.0.1`, `[::1]`,
+  `localhost`, any port, RFC 8252). The private-use schemes `cursor:`, `vscode:` and
+  `vscode-insiders:` are allowed for Cursor and VS Code extensions. User information and
+  fragments are refused, and one refused URI refuses the whole registration. At most 20.
+- Grant types are cut down to `authorization_code` and `refresh_token`; a client that
+  cannot use `authorization_code` is refused. `response_types` must include `code`.
+- `client_name` loses control and formatting characters and is cut to 100 characters.
+- Only `client_name`, `redirect_uris`, `grant_types` and `token_endpoint_auth_method`
+  reach the API. Logos, homepages, contacts, policy links and `scope` are dropped; the
+  API defines no scopes and never enforced a registered one.
+
+Callbacks checked against real clients: the Claude apps (`claude.ai`, `claude.com`),
+ChatGPT (connector redirect and app callback), Claude Code, Codex, Gemini CLI, the
+sync. CLI (loopback), Cursor (`cursor://`, its `https` callback and loopback), and
+VS Code (`vscode.dev` and loopback). A new native client with another private-use
+scheme needs its scheme added to `NATIVE_APP_SCHEMES`.
+
+Limits (`createRegistrationLimits` in `src/rate-limits.ts`, per pod, per hour):
+registrations naming only the hosted Claude and ChatGPT callbacks get 300 per address,
+because those apps register every connection from a few shared addresses and a code
+sent there reaches only them. Any other registration gets 10 per address and 1,000
+across all addresses.
+
 ## Diagnosing a publisher connection
 
 Both `/token` and `/revoke` emit `oauth_exchange_rejected` on failure and

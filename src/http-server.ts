@@ -22,6 +22,7 @@ import {
   ClientAuthenticationError,
   mergeBasicClientCredentials,
 } from './auth/client-credentials.js';
+import { namesOnlyHostedAgentCallbacks } from './auth/client-registration.js';
 import {
   oauthFailureDiagnostics,
   oauthGrantType,
@@ -31,6 +32,7 @@ import { createOAuthProvider } from './auth/oauth-provider.js';
 import { resourceMetadataUrl } from './auth/resource-metadata.js';
 import { declaresCards } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
+import { finalErrorHandler, requireStatusToken } from './http-errors.js';
 import { HttpSession, isSessionControlRequest } from './http-session.js';
 import { readOAuthResponseText } from './oauth-response.js';
 import {
@@ -38,6 +40,7 @@ import {
   createMcpUserLimit,
   createOAuthClientLimit,
   createOAuthRejectedRequestLimit,
+  createRegistrationLimits,
 } from './rate-limits.js';
 import { REVISION } from './revision.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
@@ -391,7 +394,10 @@ export async function startHttpServer(
   });
 
   const issuerUrl = new URL(process.env.MCP_ISSUER_URL || `http://localhost:${config.port}`);
-  const oauthProvider = createOAuthProvider(config.baseUrl, config.oauthAuthorizationUrl);
+  // Once the API reports a token's audience, only tokens issued for this server pass.
+  const oauthProvider = createOAuthProvider(config.baseUrl, config.oauthAuthorizationUrl, {
+    audiences: [new URL('/mcp', issuerUrl).href, issuerUrl.origin],
+  });
 
   if (config.chatgptApp?.uploadStorageOrigin) {
     app.use(
@@ -557,8 +563,11 @@ export async function startHttpServer(
       }
       const contentType = upstream.headers.get('content-type');
       if (contentType) res.setHeader('Content-Type', contentType);
-      // Revoking a refresh token can invalidate its entire access-token family.
-      if (path === 'revoke' && upstream.ok) oauthProvider.clearVerificationCache();
+      // Revoking a refresh token can invalidate its client's entire access-token family.
+      if (path === 'revoke' && upstream.ok)
+        oauthProvider.clearVerificationCache(
+          typeof credentials.client_id === 'string' ? credentials.client_id : undefined,
+        );
       res.status(upstream.status).send(responseBody);
     } catch (error) {
       if (res.destroyed) return;
@@ -622,12 +631,24 @@ export async function startHttpServer(
     res.json(confidentialOAuthMetadata);
   });
 
+  // Registration limits replace the SDK's single per-address limit (rate-limits.ts).
+  app.post(
+    '/register',
+    express.json({ limit: '32kb' }),
+    createRegistrationLimits((req) =>
+      namesOnlyHostedAgentCallbacks(
+        (req.body as { redirect_uris?: unknown } | undefined)?.redirect_uris,
+      ),
+    ),
+  );
+
   app.use(
     mcpAuthRouter({
       provider: oauthProvider,
       issuerUrl,
       resourceServerUrl: mcpEndpointUrl,
       serviceDocumentationUrl,
+      clientRegistrationOptions: { rateLimit: false },
     }),
   );
 
@@ -656,7 +677,9 @@ export async function startHttpServer(
 
   const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
   eventLoopDelay.enable();
-  app.get('/status', mcpRejectedCredentialLimit, bearerAuth, mcpUserLimit, (_req, res) => {
+  // Operators only: a signed-in user's token does not open it (http-errors.ts).
+  const statusAccess = requireStatusToken(process.env.MCP_STATUS_TOKEN);
+  app.get('/status', mcpRejectedCredentialLimit, statusAccess, (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       sessions: sessions.stats(),
@@ -932,6 +955,8 @@ export async function startHttpServer(
     process.off('warning', onWarning);
     process.off('exit', onExit);
   };
+  app.use(finalErrorHandler(logEvent));
+
   const httpServer = await listenWithCleanup(
     () => app.listen(config.port),
     async (server) => {
