@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import cors from 'cors';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
+import { getAuthOwner } from './auth/async-context.js';
 import type { McpToolDefinition } from './tools/generator.js';
 import { uploadRuntime } from './upload-runtime.js';
 
@@ -27,8 +28,29 @@ const inputSchema = z.object({
   contentType: z.string().regex(/^(video|audio|image)\/[\w.+-]+$/),
   size: z.number().int().positive(),
 });
-type Ticket = { destination: string; contentType: string; size: number; expiresAt: number };
+type Ticket = {
+  destination: string;
+  contentType: string;
+  size: number;
+  expiresAt: number;
+  owner: string;
+};
 const tickets = new Map<string, Ticket>();
+/** Open tickets on this pod, across everyone. */
+export const MAX_UPLOAD_TICKETS = 128;
+/** Open tickets for one signed-in user, OAuth client and organization, so one cannot fill the pod. */
+export const MAX_UPLOAD_TICKETS_PER_OWNER = 16;
+/** Grants checked against the limits but still waiting on the API for a signed URL. */
+const reservations = {
+  total: 0,
+  byOwner: new Map<string, number>(),
+  add(owner: string, change: number) {
+    this.total += change;
+    const count = (this.byOwner.get(owner) ?? 0) + change;
+    if (count > 0) this.byOwner.set(owner, count);
+    else this.byOwner.delete(owner);
+  },
+};
 
 /** A ticket grants one bounded PUT to one server-issued storage URL, never arbitrary proxying. */
 export function relayUploadTool(
@@ -44,31 +66,46 @@ export function relayUploadTool(
       if (input.size > 5 * 1024 ** 3)
         throw new Error(`This server supports uploads up to ${5 * 1024} MB.`);
       for (const [key, ticket] of tickets) if (ticket.expiresAt <= Date.now()) tickets.delete(key);
-      if (tickets.size >= 128) throw new Error('Upload capacity is full. Try again shortly.');
-      const signed = grantSchema.parse(await tool.handler(args, context));
-      const destination = new URL(signed.uploadUrl);
-      if (
-        destination.protocol !== 'https:' ||
-        destination.origin !== storageOrigin ||
-        destination.username ||
-        destination.password
-      )
-        throw new Error('Unexpected storage upload destination.');
-      const token = randomBytes(32).toString('hex');
-      const expiresIn = Math.min(signed.expiresIn ?? 300, 300);
-      process.stderr.write(
-        JSON.stringify({
-          event: 'app_upload_grant',
-          storageOrigin: destination.origin,
-          bytes: input.size,
-        }) + '\n',
-      );
-      tickets.set(token, {
-        destination: signed.uploadUrl,
-        ...input,
-        expiresAt: Date.now() + expiresIn * 1000,
-      });
-      return { ...signed, expiresIn, uploadUrl: `${origin}/app-upload?ticket=${token}` };
+      const owner = getAuthOwner() ?? 'unknown';
+      // Count grants still waiting on the API too, so overlapping calls cannot pass together.
+      if (tickets.size + reservations.total >= MAX_UPLOAD_TICKETS)
+        throw new Error('Upload capacity is full. Try again shortly.');
+      let open = reservations.byOwner.get(owner) ?? 0;
+      for (const ticket of tickets.values()) if (ticket.owner === owner) open++;
+      if (open >= MAX_UPLOAD_TICKETS_PER_OWNER)
+        throw new Error(
+          'Too many uploads are waiting to start. Finish or cancel some, then try again in a few minutes.',
+        );
+      reservations.add(owner, 1);
+      try {
+        const signed = grantSchema.parse(await tool.handler(args, context));
+        const destination = new URL(signed.uploadUrl);
+        if (
+          destination.protocol !== 'https:' ||
+          destination.origin !== storageOrigin ||
+          destination.username ||
+          destination.password
+        )
+          throw new Error('Unexpected storage upload destination.');
+        const token = randomBytes(32).toString('hex');
+        const expiresIn = Math.min(signed.expiresIn ?? 300, 300);
+        process.stderr.write(
+          JSON.stringify({
+            event: 'app_upload_grant',
+            storageOrigin: destination.origin,
+            bytes: input.size,
+          }) + '\n',
+        );
+        tickets.set(token, {
+          destination: signed.uploadUrl,
+          ...input,
+          expiresAt: Date.now() + expiresIn * 1000,
+          owner,
+        });
+        return { ...signed, expiresIn, uploadUrl: `${origin}/app-upload?ticket=${token}` };
+      } finally {
+        reservations.add(owner, -1);
+      }
     },
   } as McpToolDefinition;
 }

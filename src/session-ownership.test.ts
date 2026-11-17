@@ -33,6 +33,7 @@ let clockOffset = 0;
 let release = deferred<void>();
 beforeAll(async () => {
   vi.stubEnv('MCP_MAX_IN_FLIGHT_REQUESTS', '2');
+  vi.stubEnv('MCP_STATUS_TOKEN', 'operator-status-token');
   const realNow = Date.now;
   vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffset);
   for (const event of events) previous.set(event, emitter.listeners(event));
@@ -288,10 +289,16 @@ it('returns retryable 503 before allocation under heap pressure, and refuses new
   }
 });
 
-it('exposes authenticated aggregate capacity without leaking session identities', async () => {
+it('exposes aggregate capacity to the operator token only, without session identities', async () => {
   const endpoint = url.replace(/\/mcp$/, '/status');
   expect((await fetch(endpoint)).status).toBe(401);
-  const response = await fetch(endpoint, { headers: { Authorization: 'Bearer owner' } });
+  // A signed-in user's valid OAuth token does not open it.
+  const user = await fetch(endpoint, { headers: { Authorization: 'Bearer owner' } });
+  expect(user.status).toBe(401);
+  expect(await user.json()).toEqual({ error: 'invalid_token' });
+  const response = await fetch(endpoint, {
+    headers: { Authorization: 'Bearer operator-status-token' },
+  });
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('no-store');
   const status = await response.json();
@@ -350,7 +357,7 @@ it('expires abandoned HTTP sessions while preserving a running tool and allowing
 it('does not allocate sessions for invalid initialization or unsolicited streams', async () => {
   const stats = async () => {
     const response = await fetch(new URL('/status', url), {
-      headers: { Authorization: 'Bearer owner' },
+      headers: { Authorization: 'Bearer operator-status-token' },
     });
     return z
       .object({ sessions: z.object({ created: z.number(), inFlight: z.number() }) })
@@ -416,4 +423,17 @@ it('bounds concurrent request graphs without aborting work already admitted', as
     await Promise.all(pending);
     await (await request(id, 'owner', 'DELETE')).text();
   }
+});
+
+it('answers a malformed /mcp body with JSON, not an HTML stack trace', async () => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer owner' },
+    body: '{"jsonrpc":',
+  });
+  expect(response.status).toBe(400);
+  expect(response.headers.get('content-type')).toContain('application/json');
+  const text = await response.text();
+  expect(text).not.toMatch(/<pre>|node_modules|at /);
+  expect(JSON.parse(text)).toMatchObject({ error: 'invalid_request' });
 });

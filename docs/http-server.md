@@ -96,3 +96,12 @@ The server writes one `mcp_session_not_found` line per 404 with `sessionRef`, `h
 - `unknown`: this process never had the session, or closed it over an hour ago. Requests from before a deploy look like this.
 
 Hosts must initialize a new session after a 404. One that keeps sending the same `sessionRef` doesn't.
+
+## Errors and production mode
+
+The image sets `NODE_ENV=production`. The last Express handler (`finalErrorHandler` in
+`src/http-errors.ts`) answers any error no route handled, such as a malformed JSON or
+form body or a body over its limit, with JSON:
+`{"error":"invalid_request"}` with the error's own 4xx status, otherwise
+`{"error":"server_error"}` with 500. It never sends a stack trace. The detail goes to
+the `http_unhandled_error` log event.

@@ -3,18 +3,20 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 
 // The scheduler supplies a fresh OAuth access token. Never persist credentials,
 // log account results, or invoke a configurable (potentially paid) tool.
-function assertMonitorTarget(endpoint, token) {
+function assertMonitorTarget(endpoint, token, statusToken) {
   if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash)
     throw new Error('MCP monitor URL must not contain credentials, query or fragment');
   if (endpoint.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(endpoint.hostname))
     throw new Error('MCP monitor requires HTTPS outside loopback');
   if (!token) throw new Error('MCP_MONITOR_ACCESS_TOKEN is required');
+  if (!statusToken) throw new Error('MCP_MONITOR_STATUS_TOKEN is required');
 }
 
-/** Session, request and heap capacity from the authenticated `/status` endpoint. */
-async function readCapacity(endpoint, requestInit) {
+/** Session, request and heap capacity from `/status`, which takes the server's MCP_STATUS_TOKEN. */
+async function readCapacity(endpoint, statusToken) {
   const response = await fetch(new URL('/status', endpoint), {
-    ...requestInit,
+    headers: { Authorization: `Bearer ${statusToken}` },
+    redirect: 'error',
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error('Capacity read failed');
@@ -55,9 +57,9 @@ async function readCapacity(endpoint, requestInit) {
   };
 }
 
-export async function checkMcp(url, token) {
+export async function checkMcp(url, token, statusToken) {
   const endpoint = new URL(url);
-  assertMonitorTarget(endpoint, token);
+  assertMonitorTarget(endpoint, token, statusToken);
   const requestInit = { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' };
   const transport = new StreamableHTTPClientTransport(endpoint, {
     requestInit,
@@ -85,7 +87,7 @@ export async function checkMcp(url, token) {
     const result = await client.callTool({ name: 'account_get-context', arguments: {} }, options);
     if (result.isError) throw new Error('Account read failed');
     stage = 'capacity';
-    capacity = await readCapacity(endpoint, requestInit);
+    capacity = await readCapacity(endpoint, statusToken);
   } catch {
     // Upstream exceptions may contain authorization headers or private data.
     failure = new Error(`MCP availability check failed at ${stage}`);
@@ -112,6 +114,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const capacity = await checkMcp(
       process.env.MCP_MONITOR_URL ?? 'https://mcp.sync.so/mcp',
       process.env.MCP_MONITOR_ACCESS_TOKEN,
+      process.env.MCP_MONITOR_STATUS_TOKEN,
     );
     console.log(JSON.stringify({ event: 'mcp_availability', ok: true, ...capacity }));
     if (
