@@ -75,7 +75,12 @@ import {
   UNATTENDED_INSTRUCTIONS_PREFIX,
   withoutSpendConfirmation,
 } from './spend-confirmation.js';
-import { APPROVAL_TIMEOUT_MS, type SpendGate, spendGateFor } from './spend-gate.js';
+import {
+  APPROVAL_TIMEOUT_MS,
+  assertCheckedOrganization,
+  type SpendGate,
+  spendGateFor,
+} from './spend-gate.js';
 import {
   createTelemetryQueue,
   isMcpEventsOperation,
@@ -654,16 +659,26 @@ export function registerTools(
         ),
       };
       try {
-        const refused = await beforeCall?.(tool.name, args ?? {}, (params) =>
-          ctx.mcpReq.elicitInput(params, { timeout: APPROVAL_TIMEOUT_MS }),
+        const decision = await beforeCall?.(
+          tool.name,
+          args ?? {},
+          (params) =>
+            ctx.mcpReq.elicitInput(params, {
+              timeout: APPROVAL_TIMEOUT_MS,
+              signal: ctx.mcpReq.signal,
+            }),
+          ctx.mcpReq.signal,
         );
-        if (refused) return decorateResult(refused);
+        if (decision && 'refusal' in decision) return decorateResult(decision.refusal);
+        const within = decision?.within ?? (<T>(call: () => T) => call());
         if (tool.resultFormat === 'mcp') {
           return decorateResult(
-            await tool.handler((args ?? {}) as Record<string, unknown>, context),
+            await within(() => tool.handler((args ?? {}) as Record<string, unknown>, context)),
           );
         }
-        const result = await tool.handler((args ?? {}) as Record<string, unknown>, context);
+        const result = await within(() =>
+          tool.handler((args ?? {}) as Record<string, unknown>, context),
+        );
         return decorateResult(createJsonToolResult(result, tool.outputSchema));
       } catch (error) {
         onToolError?.(tool.name, error);
@@ -1298,6 +1313,7 @@ function createProfiledServer(
     }
     const activeProfile = profile;
     const organizationSession = currentOrganizationSession() ?? ownOrganizationSession;
+    assertCheckedOrganization(organizationSession);
     // A nested call (jobs_create-many's items) keeps the key of the call that made it.
     const generationKey =
       parameters[1]?.generationKey ??

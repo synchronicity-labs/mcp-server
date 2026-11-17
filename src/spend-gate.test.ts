@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from './http-client.js';
 import { chosenOrganization, OrganizationSession } from './organization-selection.js';
-import { type AskUser, canBeCharged, createSpendGate } from './spend-gate.js';
+import {
+  type AskUser,
+  assertCheckedOrganization,
+  canBeCharged,
+  createSpendGate,
+  OrganizationChangedError,
+} from './spend-gate.js';
 
 const free = { plan: null, hasActiveCredits: false, elevenLabsKeyConnected: false, credits: null };
 
@@ -11,13 +17,27 @@ describe('canBeCharged', () => {
     expect(canBeCharged({ ...free, credits: { balance: 0 } })).toBe(false);
   });
 
+  it("is false for the API's free-tier answer, which has no credits block at all", () => {
+    // sync-api-v2 billing.controller.ts: "The `credits` block is intentionally absent".
+    expect(
+      canBeCharged({
+        plan: null,
+        hasActiveCredits: false,
+        elevenLabsKeyConnected: false,
+        freeGenerationsExhausted: false,
+        freeMonthlyLimits: { generations: { used: 1, max: 3 } },
+      }),
+    ).toBe(false);
+  });
+
   it.each([
     ['a plan', { ...free, plan: 'creator' }],
     ['active credits', { ...free, hasActiveCredits: true }],
     ['a credit balance', { ...free, credits: { balance: 12 } }],
     ['a connected provider key', { ...free, elevenLabsKeyConnected: true }],
-    ['no credits field', { plan: null, elevenLabsKeyConnected: false }],
+    ['no hasActiveCredits field', { plan: null, elevenLabsKeyConnected: false }],
     ['no provider key field', { plan: null, hasActiveCredits: false }],
+    ['no plan field', { hasActiveCredits: false, elevenLabsKeyConnected: false }],
     ['an unreadable answer', 'oops'],
   ])('is true with %s', (_label, account) => {
     expect(canBeCharged(account)).toBe(true);
@@ -46,14 +66,14 @@ describe('paid tools', () => {
   it('lets free-tier work run without asking', async () => {
     const { check } = gate();
     const ask = approve();
-    expect(await check('lipsync_create', {}, ask)).toBeUndefined();
+    expect(await check('lipsync_create', {}, ask)).toMatchObject({ within: expect.any(Function) });
     expect(ask).not.toHaveBeenCalled();
   });
 
   it('asks before chargeable work and runs it once approved', async () => {
     const { check } = gate({}, { ...free, plan: 'creator' });
     const ask = approve();
-    expect(await check('lipsync_create', {}, ask)).toBeUndefined();
+    expect(await check('lipsync_create', {}, ask)).toMatchObject({ within: expect.any(Function) });
     expect(ask).toHaveBeenCalledTimes(1);
     expect(ask.mock.calls[0]![0].message).toContain('a lipsync generation');
   });
@@ -66,8 +86,7 @@ describe('paid tools', () => {
     const { check } = gate({}, { ...free, plan: 'creator' });
     const result = await check('voices_clone', {}, asked(answer));
     expect(result).toMatchObject({
-      isError: true,
-      structuredContent: { error: { code: 'SPEND_NOT_APPROVED' } },
+      refusal: { isError: true, structuredContent: { error: { code: 'SPEND_NOT_APPROVED' } } },
     });
   });
 
@@ -77,7 +96,7 @@ describe('paid tools', () => {
       throw new Error('timed out');
     });
     expect(result).toMatchObject({
-      structuredContent: { error: { code: 'APPROVAL_UNAVAILABLE' } },
+      refusal: { structuredContent: { error: { code: 'APPROVAL_UNAVAILABLE' } } },
     });
   });
 
@@ -121,6 +140,52 @@ describe('paid tools', () => {
   });
 });
 
+describe('the organizations a call runs in', () => {
+  it('checks only the organizations a job set names, not the session it was sent from', async () => {
+    const freeOrg = '00000000-0000-4000-8000-0000000000dd';
+    const { check, reads, session } = gate({ paid: { ...free, plan: 'scale' } });
+    session.select({ id: 'paid', name: 'Paid' }, undefined);
+    const ask = approve();
+    await check(
+      'jobs_create-many',
+      { tool: 'lipsync_create', items: [{ organizationId: freeOrg }, { organizationId: freeOrg }] },
+      ask,
+    );
+    expect(reads).toEqual([freeOrg]);
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('refuses to run approved work after the session switched organization', async () => {
+    const { check, session } = gate({}, { ...free, plan: 'creator' });
+    session.select({ id: 'approved', name: 'Approved' }, undefined);
+    const decision = await check('lipsync_create', {}, approve());
+    if (!decision || !('within' in decision)) throw new Error('expected approval');
+    expect(() => decision.within(() => assertCheckedOrganization(session))).not.toThrow();
+    session.select({ id: 'other', name: 'Other' }, undefined);
+    expect(() => decision.within(() => assertCheckedOrganization(session))).toThrow(
+      OrganizationChangedError,
+    );
+    // Outside a checked call there is nothing to compare against.
+    expect(() => assertCheckedOrganization(session)).not.toThrow();
+  });
+
+  it('stops when the call is cancelled during the account read, instead of asking', async () => {
+    const controller = new AbortController();
+    const http = {
+      request: vi.fn(async (_method: string, _path: string, options?: { signal?: AbortSignal }) => {
+        controller.abort();
+        options?.signal?.throwIfAborted();
+        return free;
+      }),
+    } as unknown as HttpClient;
+    const check = createSpendGate({ http, session: new OrganizationSession() });
+    const ask = approve();
+    await expect(check('lipsync_create', {}, ask, controller.signal)).rejects.toThrow();
+    expect(http.request).toHaveBeenCalledWith('get', '/v2/billing', { signal: controller.signal });
+    expect(ask).not.toHaveBeenCalled();
+  });
+});
+
 describe('organization switch', () => {
   const other = '00000000-0000-4000-8000-0000000000cc';
 
@@ -140,7 +205,7 @@ describe('organization switch', () => {
       asked({ action: 'decline' }),
     );
     expect(result).toMatchObject({
-      structuredContent: { error: { code: 'ORGANIZATION_SWITCH_NOT_APPROVED' } },
+      refusal: { structuredContent: { error: { code: 'ORGANIZATION_SWITCH_NOT_APPROVED' } } },
     });
   });
 

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { HttpClient } from './http-client.js';
@@ -60,6 +61,9 @@ type ElicitParams = {
 type ElicitResult = { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, unknown> };
 export type AskUser = (params: ElicitParams) => Promise<ElicitResult>;
 
+// The free-tier answer has no credits block at all (sync-api-v2 billing.controller.ts says it
+// is intentionally absent); purchased credits come with one. So a missing block is the free
+// tier, while a missing plan, hasActiveCredits or provider-key field is unknown.
 const billing = z.object({
   plan: z.string().nullable(),
   hasActiveCredits: z.boolean().optional(),
@@ -85,7 +89,7 @@ export function canBeCharged(account: unknown): boolean {
   );
 }
 
-function refusal(code: string, message: string): CallToolResult {
+function refusalOf(code: string, message: string): GateDecision {
   const structuredContent = {
     error: {
       message,
@@ -94,9 +98,11 @@ function refusal(code: string, message: string): CallToolResult {
     },
   };
   return {
-    content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
-    structuredContent,
-    isError: true,
+    refusal: {
+      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      structuredContent,
+      isError: true,
+    },
   };
 }
 
@@ -135,11 +141,33 @@ function label(organization: OrganizationSummary | undefined): string {
     : `the sync. organization ${organization.id}`;
 }
 
+/** Refuse with `refusal`, or run the call inside `within`; undefined runs it as it is. */
+export type GateDecision = { refusal: CallToolResult } | { within: <T>(run: () => T) => T };
 export type SpendGate = (
   tool: string,
   args: Record<string, unknown>,
   ask: AskUser,
-) => Promise<CallToolResult | undefined>;
+  signal?: AbortSignal,
+) => Promise<GateDecision | undefined>;
+
+// The session organization a paid call was checked (and approved) in. A switch that lands
+// while the person is being asked must not move the approved work to another organization.
+const checkedIn = new AsyncLocalStorage<{ organizationId: string | undefined }>();
+
+export class OrganizationChangedError extends Error {
+  constructor() {
+    super(
+      'The sync. organization changed while this paid action was being checked or approved. Nothing was started; call it again to be asked about the organization now in use.',
+    );
+  }
+}
+
+/** Throws when the session switched organization since this call's spending check. */
+export function assertCheckedOrganization(session: OrganizationSession): void {
+  const checked = checkedIn.getStore();
+  if (checked && checked.organizationId !== session.activeOrganizationId())
+    throw new OrganizationChangedError();
+}
 
 /** Undefined lets the call run; a result refuses it with nothing started. */
 export function createSpendGate({
@@ -153,26 +181,35 @@ export function createSpendGate({
     const selected = session.selected;
     const pinned = (value: unknown): OrganizationSummary | undefined =>
       typeof value === 'string' && value ? { id: value, name: null } : selected;
-    const organizations = [pinned(args.organizationId)];
-    if (tool === 'jobs_create-many' && Array.isArray(args.items))
-      for (const item of args.items as Array<Record<string, unknown> | null>)
-        organizations.push(pinned(item?.organizationId ?? args.organizationId));
+    // A job set runs where its items say; the call's own organization only fills the gaps.
+    const items =
+      tool === 'jobs_create-many' && Array.isArray(args.items) && args.items.length > 0
+        ? (args.items as Array<Record<string, unknown> | null>)
+        : undefined;
+    const organizations = items
+      ? items.map((item) => pinned(item?.organizationId ?? args.organizationId))
+      : [pinned(args.organizationId)];
     const unique = new Map(organizations.map((organization) => [organization?.id, organization]));
     return [...unique.values()];
   };
 
-  const chargeable = async (organization: OrganizationSummary | undefined) => {
+  const chargeable = async (
+    organization: OrganizationSummary | undefined,
+    signal: AbortSignal | undefined,
+  ) => {
     try {
       const account = await runInOrganizationSession(session, () =>
-        runInOrganization(organization, () => http.request('get', '/v2/billing')),
+        runInOrganization(organization, () => http.request('get', '/v2/billing', { signal })),
       );
       return canBeCharged(account);
-    } catch {
+    } catch (error) {
+      // A cancelled call stops here; any other failed read means unknown, so ask.
+      if (signal?.aborted) throw error;
       return true;
     }
   };
 
-  return async (tool, args, ask) => {
+  return async (tool, args, ask, signal) => {
     if (tool === ORGANIZATION_SWITCH_TOOL) {
       const target = typeof args.organizationId === 'string' ? args.organizationId : undefined;
       if (!target || target === session.activeOrganizationId()) return undefined;
@@ -184,7 +221,7 @@ export function createSpendGate({
         ),
       );
       if (answer === true) return undefined;
-      return refusal(
+      return refusalOf(
         answer instanceof Error ? 'APPROVAL_UNAVAILABLE' : 'ORGANIZATION_SWITCH_NOT_APPROVED',
         answer instanceof Error
           ? `Could not ask the user to approve switching organization: ${answer.message}`
@@ -194,9 +231,13 @@ export function createSpendGate({
 
     const describe = PAID_TOOLS[tool];
     if (!describe || (tool === 'batches_create' && args.dryRun === true)) return undefined;
+    const sessionOrganization = { organizationId: session.activeOrganizationId() };
+    const within = <T>(run: () => T) => checkedIn.run(sessionOrganization, run);
     const organizations = organizationsOf(tool, args);
-    const charged = (await Promise.all(organizations.map(chargeable))).some(Boolean);
-    if (!charged) return undefined;
+    const charged = (
+      await Promise.all(organizations.map((organization) => chargeable(organization, signal)))
+    ).some(Boolean);
+    if (!charged) return { within };
     const where = organizations.map(label).join(', ');
     const answer = await approved(
       ask,
@@ -205,8 +246,8 @@ export function createSpendGate({
         'Approve this paid action',
       ),
     );
-    if (answer === true) return undefined;
-    return refusal(
+    if (answer === true) return { within };
+    return refusalOf(
       answer instanceof Error ? 'APPROVAL_UNAVAILABLE' : 'SPEND_NOT_APPROVED',
       answer instanceof Error
         ? `Could not ask the user to approve this paid action: ${answer.message}`
@@ -226,5 +267,5 @@ export function spendGateFor(
   // Unset means on, as everywhere else spend confirmation is read.
   if (config.transport !== 'stdio' || config.spendConfirmation === false) return undefined;
   const gate = createSpendGate(dependencies);
-  return async (tool, args, ask) => (canAsk() ? gate(tool, args, ask) : undefined);
+  return async (tool, args, ask, signal) => (canAsk() ? gate(tool, args, ask, signal) : undefined);
 }
