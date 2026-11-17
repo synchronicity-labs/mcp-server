@@ -41,7 +41,8 @@ const userInfoSchema = z.object({
 function normalizeAudience(value: string): string | undefined {
   try {
     const url = new URL(value);
-    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+    // Only a trailing slash is ignored; a query or fragment names a different resource.
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}${url.search}${url.hash}`;
   } catch {
     return undefined;
   }

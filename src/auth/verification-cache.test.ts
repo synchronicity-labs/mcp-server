@@ -129,6 +129,30 @@ it("forgets only the revoking client's tokens when a client ID is given", async 
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
+it('does not let a request after a revocation join a check that started before it', async () => {
+  let approve!: () => void;
+  const fetchMock = vi
+    .fn()
+    .mockImplementationOnce(
+      () => new Promise<Response>((resolve) => (approve = () => resolve(Response.json(valid)))),
+    )
+    .mockResolvedValueOnce(new Response('', { status: 401 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const provider = createOAuthProvider('https://fixture.invalid');
+  const before = provider.verifyAccessToken('one');
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  provider.clearVerificationCache('client');
+  const after = provider.verifyAccessToken('one');
+  approve();
+  // The caller that was already waiting gets the answer it was waiting for...
+  await expect(before).resolves.toMatchObject({ clientId: 'client' });
+  // ...but the request made after the revocation checks again and is refused.
+  await expect(after).rejects.toMatchObject({ errorCode: 'invalid_token' });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  // The early answer was not cached either.
+  await expect(provider.verifyAccessToken('one')).rejects.toBeTruthy();
+});
+
 describe('audience', () => {
   const server = createOAuthProvider('https://fixture.invalid', undefined, {
     audiences: ['https://mcp.sync.so/mcp', 'https://mcp.sync.so'],
@@ -155,6 +179,8 @@ describe('audience', () => {
     ['a look-alike host', 'https://mcp.sync.so.evil.example/mcp'],
     ['an empty list', []],
     ['not a URL', 'mcp'],
+    ['this server with a query', 'https://mcp.sync.so/mcp?resource=other'],
+    ['this server with a fragment', 'https://mcp.sync.so/mcp#other'],
   ])('refuses a token for %s', async (_label, aud) => {
     vi.stubGlobal(
       'fetch',

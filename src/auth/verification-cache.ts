@@ -15,9 +15,11 @@ export function createTokenVerifier(apiBaseUrl: string, audiences: readonly stri
   const cooldowns = new Map<string, number>();
 
   /**
-   * Forgets verified tokens. Given a client ID, only that client's: revoking one of its
-   * tokens can end its whole grant, but no other client's. Checks still in flight are not
-   * cached either way.
+   * Forgets verified tokens. Given a client ID, only that client's cached tokens: revoking
+   * one of its tokens can end its whole grant, but no other client's. Checks still in
+   * flight started before the revocation, and their client is not known yet, so none of
+   * them is cached or joined by a later request; that request checks again. A full clear
+   * also cancels them; a scoped one lets their current callers finish.
    */
   function clear(clientId?: string) {
     epoch++;
@@ -26,10 +28,10 @@ export function createTokenVerifier(apiBaseUrl: string, audiences: readonly stri
     if (clientId === undefined) {
       cache.clear();
       for (const entry of pending.values()) entry.controller.abort();
-      pending.clear();
-      return;
+    } else {
+      for (const [key, value] of cache) if (value.info.clientId === clientId) cache.delete(key);
     }
-    for (const [key, value] of cache) if (value.info.clientId === clientId) cache.delete(key);
+    pending.clear();
   }
 
   async function verify(token: string, signal?: AbortSignal): Promise<AuthInfo> {
