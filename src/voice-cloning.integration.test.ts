@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { runWithAuth } from './auth/async-context.js';
 import { createMcpServerFactory } from './server.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
+import { UNTRUSTED_CONTENT_NOTICE } from './untrusted-content.js';
 
 const assetId = '00000000-0000-4000-8000-000000000001';
 const voiceId = '00000000-0000-4000-8000-000000000002';
@@ -269,6 +270,8 @@ it('does not repeat a clone when the API receives the write but loses its respon
       type: 'text',
       text: JSON.stringify([{ id: voiceId, name: input.name, provider: 'elevenlabs' }], null, 2),
     },
+    // A voice name is set by a person, so the result says it is data.
+    { type: 'text', text: UNTRUSTED_CONTENT_NOTICE },
   ]);
   expect(calls.filter((request) => request.method === 'POST')).toHaveLength(1);
 });
