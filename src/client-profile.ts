@@ -42,8 +42,27 @@ const CLAUDE: ClientProfile = Object.freeze({
   defaultProjectName: 'Claude generations',
 });
 
-/** Presentation only. These untrusted handshake names never grant permissions. */
-export function resolveClientProfile(name?: string): ClientProfile {
+// A client we do not know by name that says it renders MCP Apps UI: it gets the cards and
+// the tools that open them, and nothing else that depends on who it is.
+const GENERIC_WITH_CARDS: ClientProfile = Object.freeze({ ...GENERIC, supportsStatusCard: true });
+
+/**
+ * Whether the capabilities a client sent at initialize include the MCP Apps UI extension.
+ * Its exact home has moved between drafts, so the name is looked for anywhere in them.
+ */
+export function declaresCards(capabilities: unknown): boolean {
+  return (
+    typeof capabilities === 'object' &&
+    capabilities !== null &&
+    JSON.stringify(capabilities).includes('io.modelcontextprotocol/ui')
+  );
+}
+
+/**
+ * Presentation only. These untrusted handshake names never grant permissions. `rendersCards`
+ * is what the client declared (declaresCards); it matters only for a name we do not know.
+ */
+export function resolveClientProfile(name?: string, rendersCards = false): ClientProfile {
   switch ((name ?? '').toLowerCase()) {
     case 'chatgpt':
     case 'openai':
@@ -56,10 +75,14 @@ export function resolveClientProfile(name?: string): ClientProfile {
     case 'claude-ai':
     // Claude.ai's hosted connector, as production logs record it (2026-11-06).
     case 'anthropic/claudeai':
+    // Anthropic's fetch of a connector's tools, which connects beside each
+    // anthropic/claudeai session and declares no capabilities (2026-11-16). The tool list a
+    // Claude chat searches comes from it, so it has to list what Claude can show.
+    case 'anthropic/toolbox':
       return CLAUDE;
     // Muse remains generic until Meta documentation or a real handshake verifies its alias.
     default:
-      return GENERIC;
+      return rendersCards ? GENERIC_WITH_CARDS : GENERIC;
   }
 }
 

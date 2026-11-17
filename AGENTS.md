@@ -22,7 +22,7 @@ published version, so bump both versions in any PR that edits `server.json`.
 | Path | Owns |
 | --- | --- |
 | `src/server.ts` | Tool assembly, `HOSTED_HTTP_TOOL_ALLOWLIST`, per-profile visibility (`isAppOnlyTool`), instructions (`INSTRUCTION_PARTS`), `tools/list` descriptors |
-| `src/client-profile.ts` | Maps the handshake client name to a presentation profile (chatgpt, codex, claude, generic). Presentation only, never permissions |
+| `src/client-profile.ts` | Maps the handshake client name to a presentation profile (chatgpt, codex, claude, generic). A client it does not know that declares the MCP Apps UI extension at initialize still gets the cards. Presentation only, never permissions |
 | `src/tools/` | Hand-written tools; `generator.ts` turns public OpenAPI operations into generated tools |
 | `src/openapi/` | Fetches and parses `api.sync.so/api-json` at startup |
 | `src/http-server.ts`, `src/http-session.ts`, `src/session-registry.ts` | Express app, OAuth proxy routes, `/mcp`, `/health`, request-scoped MCP sessions |
@@ -79,6 +79,7 @@ already that large at `HEAD`. Lockfiles, snapshots, generated files and
 - **Sessions, upload tickets and token caches live in one process.** Do not add replicas without cross-pod routing.
 - **Skills live in synchronicity-labs/skills, not here.** Change a skill there, then bump the pin with `pnpm run skills:update`. Never add `SKILL.md` content to this repository.
 - **Keep `undici` on the same major as Node's bundled undici.** The upload path hands an undici dispatcher to Node's built-in `fetch`.
+- **Server instructions are read from the top, and clients cut them.** ChatGPT and Codex are sure to have only the first 512 characters; Claude Code cuts at 4,096 (2,048 before v2.1.296). Keep `INSTRUCTIONS_OPENING` self-contained and under 512, rules that span tools in `INSTRUCTION_PARTS`, and guidance for one tool in that tool's description, not in `INSTRUCTION_TAIL`. `src/instruction-budget.test.ts` holds the limits.
 - **Fix lint findings rather than disabling them.** Unused disable directives fail lint. Files with their own complexity cap in `.oxlintrc.json` must not grow; split them instead, and remove a cap once the file meets the default of 20.
 
 ## Verifying a change
