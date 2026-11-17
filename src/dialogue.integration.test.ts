@@ -66,7 +66,13 @@ it.each([undefined, 'COMPLETED', 'COMPLETED_PARTIAL'] as const)(
       projectId,
       maxSourceSeconds: 600,
     });
-    const preview = await call('dialogue-previews_create', { ...source, transcriptionId, edits });
+    const preserveBackgroundAudio = previewStatus === 'COMPLETED';
+    const preview = await call('dialogue-previews_create', {
+      ...source,
+      transcriptionId,
+      edits,
+      preserveBackgroundAudio,
+    });
     expect(preview.isError).not.toBe(true);
     const recovered = await call('dialogue-previews_get', { ...source, id: dialogueEditId });
     expect(recovered.isError).not.toBe(true);
@@ -81,6 +87,7 @@ it.each([undefined, 'COMPLETED', 'COMPLETED_PARTIAL'] as const)(
       transcript,
       edits,
       transcriptionJobId: transcriptionId,
+      preserveBackgroundAudio,
     });
     const input = {
       ...source,

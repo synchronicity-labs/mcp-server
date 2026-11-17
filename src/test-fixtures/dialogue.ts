@@ -40,6 +40,7 @@ const bodies = {
     voiceId: { type: 'string' },
     rerunOfJobId: { type: 'string' },
     transcriptionJobId: { type: 'string' },
+    preserveBackgroundAudio: { type: 'boolean' },
   },
 };
 const spec = {
