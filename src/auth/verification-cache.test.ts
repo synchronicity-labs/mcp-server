@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOAuthProvider } from './oauth-provider.js';
 import { VERIFICATION_CACHE_MS } from './verification-cache.js';
 
@@ -109,4 +109,69 @@ it('cancels individual waiters independently and aborts upstream when none remai
   lastController.abort();
   await lastAssertion;
   expect(upstreamSignal?.aborted).toBe(true);
+});
+
+it("forgets only the revoking client's tokens when a client ID is given", async () => {
+  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+    const token = new Headers(init?.headers).get('authorization')?.slice('Bearer '.length);
+    return Response.json({
+      ...valid,
+      client_id: token?.startsWith('a-') ? 'client-a' : 'client-b',
+    });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const provider = createOAuthProvider('https://fixture.invalid');
+  await provider.verifyAccessToken('a-1');
+  await provider.verifyAccessToken('b-1');
+  provider.clearVerificationCache('client-a');
+  await provider.verifyAccessToken('a-1');
+  await provider.verifyAccessToken('b-1');
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+describe('audience', () => {
+  const server = createOAuthProvider('https://fixture.invalid', undefined, {
+    audiences: ['https://mcp.sync.so/mcp', 'https://mcp.sync.so'],
+  });
+
+  it.each([
+    ['no audience (the API today)', undefined],
+    ['this server', 'https://mcp.sync.so/mcp'],
+    ['this server with a trailing slash', 'https://mcp.sync.so/mcp/'],
+    ['this server by origin', 'https://mcp.sync.so'],
+    ['a list that names this server', ['https://api.sync.so', 'https://mcp.sync.so/mcp']],
+  ])('accepts a token for %s', async (_label, aud) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ ...valid, aud })),
+    );
+    await expect(server.verifyAccessToken(`token-${JSON.stringify(aud)}`)).resolves.toMatchObject({
+      clientId: 'client',
+    });
+  });
+
+  it.each([
+    ['another resource', 'https://api.sync.so'],
+    ['a look-alike host', 'https://mcp.sync.so.evil.example/mcp'],
+    ['an empty list', []],
+    ['not a URL', 'mcp'],
+  ])('refuses a token for %s', async (_label, aud) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ ...valid, aud })),
+    );
+    await expect(server.verifyAccessToken(`token-${JSON.stringify(aud)}`)).rejects.toMatchObject({
+      errorCode: 'invalid_token',
+    });
+  });
+
+  it('checks nothing when no audience is configured', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ ...valid, aud: 'https://other' })),
+    );
+    await expect(
+      createOAuthProvider('https://fixture.invalid').verifyAccessToken('any'),
+    ).resolves.toBeTruthy();
+  });
 });

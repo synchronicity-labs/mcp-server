@@ -8,18 +8,28 @@ const MAX_PENDING = 128;
 type Pending = { promise: Promise<AuthInfo>; controller: AbortController; waiters: number };
 
 /** Provider-scoped cache: successful checks only, bounded by both TTL and token expiry. */
-export function createTokenVerifier(apiBaseUrl: string) {
+export function createTokenVerifier(apiBaseUrl: string, audiences: readonly string[] = []) {
   const cache = new Map<string, { info: AuthInfo; until: number }>();
   const pending = new Map<string, Pending>();
   let epoch = 0;
   const cooldowns = new Map<string, number>();
 
-  function clear() {
+  /**
+   * Forgets verified tokens. Given a client ID, only that client's: revoking one of its
+   * tokens can end its whole grant, but no other client's. Checks still in flight are not
+   * cached either way.
+   */
+  function clear(clientId?: string) {
     epoch++;
-    cache.clear();
+    // Backoffs after a 429 name no client and last at most fifteen seconds.
     cooldowns.clear();
-    for (const entry of pending.values()) entry.controller.abort();
-    pending.clear();
+    if (clientId === undefined) {
+      cache.clear();
+      for (const entry of pending.values()) entry.controller.abort();
+      pending.clear();
+      return;
+    }
+    for (const [key, value] of cache) if (value.info.clientId === clientId) cache.delete(key);
   }
 
   async function verify(token: string, signal?: AbortSignal): Promise<AuthInfo> {
@@ -44,7 +54,7 @@ export function createTokenVerifier(apiBaseUrl: string) {
       const startedEpoch = epoch;
       entry = { controller, waiters: 0, promise: Promise.resolve({} as AuthInfo) };
       const current = entry;
-      entry.promise = verifySyncAccessToken(apiBaseUrl, token, controller.signal)
+      entry.promise = verifySyncAccessToken(apiBaseUrl, token, controller.signal, audiences)
         .then((info) => {
           const until = Math.min(now + VERIFICATION_CACHE_MS, (info.expiresAt ?? 0) * 1000);
           if (!controller.signal.aborted && epoch === startedEpoch && until > Date.now()) {
