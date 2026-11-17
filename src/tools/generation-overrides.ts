@@ -1,5 +1,4 @@
 import type { ToolOverride } from './asset-overrides.js';
-import { WAIT_DESCRIPTION } from './job-wait.js';
 import {
   generationDtoOutputSchema,
   generationOutputSchema,
@@ -26,15 +25,15 @@ export const GENERATION_OVERRIDES: Record<string, ToolOverride> = {
       'Read one sync. generation by id: its status (PENDING or PROCESSING while it runs; COMPLETED, NO_OP, FAILED or REJECTED when final), outputMediaUrl once COMPLETED, and error and errorCode after NO_OP, FAILED or REJECTED.\n' +
       'Use it to follow a generation by the id its create call returned (lipsync_create, dubbing_create, lipsync_create-timeline or dialogue-videos_create, when available). jobs_get and jobs_wait, when available, read the same generation in a generic job shape that can add a completion percent while it runs.\n' +
       'Not for: finding a past id (generations_list, or projects_list-generations when available); what it cost (generations_get-costs when available); its inputs when the user explicitly continues it (generations_get-continuation).\n' +
-      'Waiting: pass `wait: true` and leave out `timeout` to keep reading on the server for up to about 50 seconds; it returns once the generation is final, or its latest state. If it is still running, call again with the same id; never resubmit, since a new create starts a separate generation that is billed or counted against free limits.\n' +
+      'Waiting: it keeps reading on the server for up to about 50 seconds unless you pass `wait: false`, and returns once the generation is final, or its latest state; leave out `timeout`. If it is still running, call again with the same id; never resubmit, since a new create starts a separate generation that is billed or counted against free limits. If the result has `stalled`, it is past its support time: follow stalled.nextStep and stop waiting.\n' +
       'Result: copy the exact `structuredContent.outputMediaUrl` string verbatim; it is signed, so it must not be reconstructed, shortened, or edited (`outputUrl` is a deprecated alias with the same value). On FAILED or REJECTED, tell the user the error and errorCode.\n' +
       "NO_OP: it finished but lip-synced no frame, such as when no face was found; error and errorCode say why. Its outputMediaUrl is the input video unchanged, with any generated speech or dub audio, so never present it as a lipsync result. Lipsync was not charged; generated speech or dubbing was. Suggest a video where the speaker's face is clearly visible, or choosing the speaker explicitly.",
     outputSchema: generationReadOutputSchema,
     params: {
       id: GENERATION_ID,
-      wait: WAIT_DESCRIPTION,
+      wait: 'Defaults to true: wait on the server until the generation finishes or about 50 seconds pass, then return its latest state. Pass false only for one immediate read. If it is still running, call again instead of sleeping.',
       timeout:
-        'Seconds each read holds (1-10). Leave it out; wait: true reads for about 50 seconds.',
+        'Seconds each read holds (1-10). Leave it out; a waiting read lasts about 50 seconds.',
     },
   },
   generations_list: {

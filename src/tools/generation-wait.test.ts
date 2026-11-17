@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
-import { adaptGeneratedTool } from './generated-adapters.js';
+import { runWithToolAnalytics } from '../tool-analytics-context.js';
+import { adaptGeneratedTool, STALLED_NEXT_STEP, stalledSince } from './generated-adapters.js';
 import { generateTools } from './generator.js';
 import { WAIT_BUDGET_MS } from './job-wait.js';
 
@@ -69,15 +70,85 @@ describe('generations_get wait', () => {
     expect(request.mock.calls[1]?.[2]?.query).toEqual({ include: 'progress' });
   });
 
-  it('reads once without wait', async () => {
+  it('reads once with wait: false', async () => {
     const request = vi.fn<HttpClient['request']>(async () => ({
       id: 'generation',
       status: 'PROCESSING',
     }));
-    await expect(generationsGet(request).handler({ id: 'generation' })).resolves.toMatchObject({
-      status: 'PROCESSING',
-    });
+    await expect(
+      generationsGet(request).handler({ id: 'generation', wait: false }),
+    ).resolves.toMatchObject({ status: 'PROCESSING' });
     expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0]?.[2]?.query).toBeUndefined();
+  });
+
+  it('waits when the agent leaves wait out', async () => {
+    const statuses = ['PROCESSING', 'COMPLETED'];
+    const request = vi.fn<HttpClient['request']>(async () => ({
+      id: 'generation',
+      status: statuses.shift(),
+    }));
+    vi.useFakeTimers();
+    const result = generationsGet(request).handler({ id: 'generation' });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(result).resolves.toMatchObject({ status: 'COMPLETED' });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0]?.[2]?.query).toEqual({ wait: 'true' });
+  });
+
+  it('reads once for the status card, which calls the old name', async () => {
+    const request = vi.fn<HttpClient['request']>(async () => ({
+      id: 'generation',
+      status: 'PROCESSING',
+    }));
+    await generationsGet(request).handler(
+      { id: 'generation' },
+      { calledAs: 'generate_get-generation' },
+    );
+    expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0]?.[2]?.query).toBeUndefined();
+  });
+
+  it('reads once for a widget call ChatGPT tags', async () => {
+    const request = vi.fn<HttpClient['request']>(async () => ({
+      id: 'generation',
+      status: 'PROCESSING',
+    }));
+    await runWithToolAnalytics({ version: 1, invocation_source: 'background' }, () =>
+      generationsGet(request).handler({ id: 'generation' }),
+    );
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it('stops waiting and says so once a generation runs past supportAt', async () => {
+    const request = vi.fn<HttpClient['request']>(async () => ({
+      id: 'generation',
+      status: 'PROCESSING',
+      generationEstimate: {
+        supportAt: '2026-11-17T10:00:00.000Z',
+        serverTime: '2026-11-17T10:30:00.000Z',
+      },
+    }));
+    const result = await generationsGet(request).handler({ id: 'generation' });
+    expect(request).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      status: 'PROCESSING',
+      stalled: { since: '2026-11-17T10:00:00.000Z', nextStep: STALLED_NEXT_STEP },
+    });
+  });
+
+  it('does not flag a generation before supportAt or once it is final', () => {
+    const estimate = (serverTime: string) => ({
+      supportAt: '2026-11-17T10:00:00.000Z',
+      serverTime,
+    });
+    expect(
+      stalledSince({ status: 'PROCESSING', generationEstimate: estimate('2026-11-17T09:59:00Z') }),
+    ).toBeUndefined();
+    expect(
+      stalledSince({ status: 'COMPLETED', generationEstimate: estimate('2026-11-17T11:00:00Z') }),
+    ).toBeUndefined();
+    expect(stalledSince({ status: 'PENDING' })).toBeUndefined();
   });
 
   it('returns the latest state once the wait budget runs out', async () => {

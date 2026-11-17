@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ApiRequestError, HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
+import { getToolAnalytics } from '../tool-analytics-context.js';
 import type { McpToolDefinition, ToolRequestContext } from './generator.js';
 import { isImportInProgress, jobSettled, rawStatus } from './job-status.js';
 import { pollUntil, waitInput } from './job-wait.js';
@@ -116,26 +117,80 @@ function withJobWait(tool: JsonTool, label: string): JsonTool {
 /**
  * The API holds one generation read for at most 10 seconds (its timeout input, 1-10,
  * default 5), so waiting out an 11-minute dub took about 90 calls, more than a chat turn
- * allows. With wait: true, keep reading on the server like jobs_wait: each read still
- * long-polls the API, and the call returns once the generation settles or about 50
- * seconds pass. The generated input is unchanged, so every earlier call still works.
+ * allows. Waiting, the call keeps reading on the server like jobs_wait: each read still
+ * long-polls the API, and it returns once the generation settles or about 50 seconds pass.
+ *
+ * Agents left wait out on about 70% of reads (week of 2026-11-10), each returning in
+ * about 40 ms and mostly unfinished, so an agent's read now waits unless it passes
+ * wait: false. Reads that want an immediate answer keep it: include=progress (jobs_get),
+ * the old name the status card and Studio check with, and widget calls ChatGPT tags.
+ * The generated input is unchanged, so every earlier call still works.
  */
 function withGenerationWait(tool: JsonTool): JsonTool {
   const handler = tool.handler;
+  // Without the API's wait input (an older spec), only an explicit wait: true can wait.
+  const waitsByDefault = 'wait' in tool.inputSchema;
   return {
     ...tool,
     handler: async (args, context) => {
-      if (args.wait !== true) return handler(args, context);
+      if (!waits(args, context, waitsByDefault)) {
+        // A single read leaves wait out: the API's default, and it refuses wait beside include.
+        const { wait: _wait, ...once } = args;
+        return markStalled(await handler(once, context));
+      }
       // The API refuses wait with include=progress (a bare 400). Waiting is what the
       // agent asked for, and the settled generation needs no progress, so drop include.
       const { include, ...rest } = args;
-      const waitArgs = include === 'progress' ? rest : args;
+      const waitArgs = { ...(include === 'progress' ? rest : args), wait: true };
       const read = (signal = context?.signal) => handler(waitArgs, { ...context, signal });
-      return pollUntil(read, jobSettled, context, {
-        describe: (job) => `generation ${String(rawStatus(job) ?? 'pending').toLowerCase()}`,
-      });
+      const last = await pollUntil(
+        read,
+        (job) => jobSettled(job) || stalledSince(job) !== undefined,
+        context,
+        {
+          describe: (job) => `generation ${String(rawStatus(job) ?? 'pending').toLowerCase()}`,
+        },
+      );
+      return markStalled(last);
     },
   };
+}
+
+function waits(
+  args: Record<string, unknown>,
+  context: ToolRequestContext | undefined,
+  byDefault: boolean,
+): boolean {
+  if (args.wait !== undefined) return args.wait === true;
+  if (!byDefault || args.include === 'progress' || context?.calledAs) return false;
+  const source = getToolAnalytics()?.invocation_source;
+  return source !== 'ui' && source !== 'background';
+}
+
+/**
+ * A generation still running past its generationEstimate.supportAt has outlived the
+ * time the API gives before support should look at it. Agents otherwise kept polling it
+ * for 20 minutes or more. Measured on the API's own clock (serverTime) when it sends one.
+ */
+export function stalledSince(job: unknown): string | undefined {
+  if (jobSettled(job) || !job || typeof job !== 'object') return undefined;
+  const estimate = (job as { generationEstimate?: unknown }).generationEstimate;
+  if (!estimate || typeof estimate !== 'object') return undefined;
+  const { supportAt, serverTime } = estimate as { supportAt?: unknown; serverTime?: unknown };
+  if (typeof supportAt !== 'string') return undefined;
+  const due = Date.parse(supportAt);
+  const server = typeof serverTime === 'string' ? Date.parse(serverTime) : Number.NaN;
+  const now = Number.isNaN(server) ? Date.now() : server;
+  return !Number.isNaN(due) && now >= due ? supportAt : undefined;
+}
+
+export const STALLED_NEXT_STEP =
+  'Still running past supportAt, so it is delayed beyond its expected time and may be stuck. Stop waiting in this reply: tell the user it is delayed, give them the generation id to share with sync. support, and never create it again. It can still finish, so they can ask you to check it later.';
+
+function markStalled(job: unknown): unknown {
+  const since = stalledSince(job);
+  if (since === undefined) return job;
+  return { ...(job as Record<string, unknown>), stalled: { since, nextStep: STALLED_NEXT_STEP } };
 }
 
 /** One import attempt: the saved asset, or the 409 that says it is still downloading. */

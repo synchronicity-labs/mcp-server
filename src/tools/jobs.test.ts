@@ -99,7 +99,7 @@ describe('jobs_get and jobs_wait', () => {
       },
     });
     expect(generation.handler).toHaveBeenCalledExactlyOnceWith(
-      { id: 'g-1', include: 'progress' },
+      { id: 'g-1', wait: false, include: 'progress' },
       expect.anything(),
     );
     expect(progress).not.toHaveBeenCalled();
@@ -119,8 +119,8 @@ describe('jobs_get and jobs_wait', () => {
       result: { id: 'g-1', status: 'COMPLETED', outputMediaUrl: 'https://cdn.test/out.mp4' },
     });
     expect(progress.mock.calls).toEqual([[1, 'generation processing 40%']]);
-    // Without an include input the read sends only the id.
-    expect(generation.handler.mock.calls[0]![0]).toEqual({ id: 'g-1' });
+    // Without an include input the read sends only the id, and reads once.
+    expect(generation.handler.mock.calls[0]![0]).toEqual({ id: 'g-1', wait: false });
   });
 
   it('returns a terminal failure at once, without waiting', async () => {
