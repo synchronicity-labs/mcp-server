@@ -5,6 +5,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import express from 'express';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { startHttpServer } from './http-server.js';
+import { REGISTRATIONS_PER_ADDRESS_PER_HOUR } from './rate-limits.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 const heap = vi.hoisted(() => ({ used_heap_size: 20, heap_size_limit: 100 }));
@@ -55,6 +56,13 @@ beforeAll(async () => {
         const rejected = params.get('client_id')?.startsWith('rejected-');
         res.statusCode = rejected ? 400 : 200;
         res.end(JSON.stringify(rejected ? { error: 'invalid_grant' } : { access_token: 'a' }));
+        return;
+      }
+      if (path === '/v2/oauth/register') {
+        res.statusCode = 201;
+        res.end(
+          JSON.stringify({ client_id: 'registered', redirect_uris: ['https://x.example/cb'] }),
+        );
         return;
       }
       res.statusCode = 404;
@@ -177,4 +185,35 @@ it('counts only rejected token requests against the address', async () => {
   const rejected = await repeat(150, () => exchangeToken('rejected-client'));
   expect(new Set(rejected)).toEqual(new Set([400]));
   expect(await exchangeToken('rejected-client')).toBe(429);
+});
+
+async function register(redirectUris: string[]) {
+  const res = await fetch(`${base}/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_name: 'fixture', redirect_uris: redirectUris }),
+  });
+  await res.arrayBuffer();
+  return res.status;
+}
+
+it('limits client registrations per address', async () => {
+  const first = await repeat(REGISTRATIONS_PER_ADDRESS_PER_HOUR, () =>
+    register(['http://localhost:7777/oauth/callback']),
+  );
+  expect(new Set(first)).toEqual(new Set([201]));
+  expect(await register(['https://app.example/cb'])).toBe(429);
+  // Refused callbacks still count, so probing for allowed ones is bounded too.
+  expect(await register(['http://evil.example/cb'])).toBe(429);
+});
+
+it('gives hosted Claude and ChatGPT registrations their own allowance on shared addresses', async () => {
+  const hostedAgents = await repeat(50, () =>
+    register(['https://claude.ai/api/mcp/auth_callback']),
+  );
+  expect(new Set(hostedAgents)).toEqual(new Set([201]));
+  // A hosted callback beside any other one is an ordinary registration.
+  expect(
+    await register(['https://claude.ai/api/mcp/auth_callback', 'https://app.example/cb']),
+  ).toBe(429);
 });

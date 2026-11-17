@@ -22,6 +22,7 @@ import {
   ClientAuthenticationError,
   mergeBasicClientCredentials,
 } from './auth/client-credentials.js';
+import { namesOnlyHostedAgentCallbacks } from './auth/client-registration.js';
 import {
   oauthFailureDiagnostics,
   oauthGrantType,
@@ -38,6 +39,7 @@ import {
   createMcpUserLimit,
   createOAuthClientLimit,
   createOAuthRejectedRequestLimit,
+  createRegistrationLimits,
 } from './rate-limits.js';
 import { REVISION } from './revision.js';
 import { HttpRequestMetrics, serializeError } from './runtime-diagnostics.js';
@@ -622,12 +624,24 @@ export async function startHttpServer(
     res.json(confidentialOAuthMetadata);
   });
 
+  // Registration limits replace the SDK's single per-address limit (rate-limits.ts).
+  app.post(
+    '/register',
+    express.json({ limit: '32kb' }),
+    createRegistrationLimits((req) =>
+      namesOnlyHostedAgentCallbacks(
+        (req.body as { redirect_uris?: unknown } | undefined)?.redirect_uris,
+      ),
+    ),
+  );
+
   app.use(
     mcpAuthRouter({
       provider: oauthProvider,
       issuerUrl,
       resourceServerUrl: mcpEndpointUrl,
       serviceDocumentationUrl,
+      clientRegistrationOptions: { rateLimit: false },
     }),
   );
 

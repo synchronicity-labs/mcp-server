@@ -75,3 +75,52 @@ export function createOAuthClientLimit() {
     },
   });
 }
+
+const HOUR_MS = 60 * 60_000;
+/** Registrations from one address that name a callback outside the hosted Claude and ChatGPT apps. */
+export const REGISTRATIONS_PER_ADDRESS_PER_HOUR = 10;
+/** Registrations from one address that name only hosted-app callbacks (shared egress). */
+export const HOSTED_AGENT_REGISTRATIONS_PER_ADDRESS_PER_HOUR = 300;
+/** Registrations on this pod, across addresses, that name a callback outside those apps. */
+export const REGISTRATIONS_PER_HOUR = 1_000;
+
+function registrationLimit(limit: number, keyGenerator?: (req: Request) => string) {
+  return rateLimit({
+    windowMs: HOUR_MS,
+    limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    ...(keyGenerator && { keyGenerator }),
+    message: {
+      error: 'too_many_requests',
+      error_description: 'Too many client registrations; try again later',
+    },
+  });
+}
+
+/**
+ * Client registration limits, mounted after the body is parsed. Registration has no
+ * signed-in user to limit by. The hosted Claude and ChatGPT apps register every
+ * connection from a few shared addresses, and a code sent to their callbacks reaches only
+ * them, so those registrations get a separate, larger allowance per address. Any other
+ * registration counts against a small allowance per address and a pod-wide one.
+ */
+export function createRegistrationLimits(isHostedAgent: (req: Request) => boolean) {
+  const hostedAgent = registrationLimit(HOSTED_AGENT_REGISTRATIONS_PER_ADDRESS_PER_HOUR, (req) =>
+    addressKey(req),
+  );
+  const perAddress = registrationLimit(REGISTRATIONS_PER_ADDRESS_PER_HOUR, (req) =>
+    addressKey(req),
+  );
+  const global = registrationLimit(REGISTRATIONS_PER_HOUR, () => 'registrations');
+  return (req: Request, res: Response, next: (error?: unknown) => void) => {
+    if (isHostedAgent(req)) {
+      void hostedAgent(req, res, next);
+      return;
+    }
+    void perAddress(req, res, (error?: unknown) => {
+      if (error) next(error);
+      else void global(req, res, next);
+    });
+  };
+}
