@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { runWithAuth } from './auth/async-context.js';
 import { HttpSession } from './http-session.js';
 import { createMcpServerFactory, createSyncMcpServer } from './server.js';
+import { descriptorSpec } from './test-fixtures/descriptor-spec.js';
 import { asyncRequestListener } from './test-fixtures/request-listener.js';
 
 // Feature-gated tools are listed only to accounts whose GET /v2/account features name
@@ -40,13 +41,15 @@ afterEach(async () => {
 });
 
 /** A stub API whose /v2/account answer depends on the caller's Authorization header. */
-async function stubApi(account: (auth: string | undefined) => Account) {
+async function stubApi(
+  account: (auth: string | undefined) => Account,
+  spec: object = { openapi: '3.0.0', paths: {} },
+) {
   const accountReads: (string | undefined)[] = [];
   const upstream = createServer(
     asyncRequestListener(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
-      if (req.url === '/api-json')
-        return void res.end(JSON.stringify({ openapi: '3.0.0', paths: {} }));
+      if (req.url === '/api-json') return void res.end(JSON.stringify(spec));
       if (req.url !== '/v2/account') {
         res.statusCode = 404;
         return void res.end(JSON.stringify({ message: 'Not Found', statusCode: 404 }));
@@ -79,8 +82,8 @@ const lipsyncInputs = async (client: Client) =>
       .properties ?? {},
   );
 
-async function stdio(account: (auth: string | undefined) => Account) {
-  const api = await stubApi(account);
+async function stdio(account: (auth: string | undefined) => Account, spec?: object) {
+  const api = await stubApi(account, spec);
   const server = await createSyncMcpServer({
     apiKey: 'test-key',
     baseUrl: api.baseUrl,
@@ -145,6 +148,22 @@ describe('feature-gated tools over stdio', () => {
     expect(inputs.includes('shots')).toBe(features.includes('lipsync_planning'));
     for (const name of ['speakers', 'allowOverlappingFaces'])
       expect(inputs.includes(name), name).toBe(features.includes('multispeaker'));
+  });
+
+  it('lists the translation preview transcript input only with dubbing_transcript', async () => {
+    const inputs = async (features: string[]) => {
+      const { client } = await stdio(() => withFeatures(features), descriptorSpec);
+      const tool = (await client.listTools()).tools.find(
+        (candidate) => candidate.name === 'translation-previews_create',
+      );
+      return Object.keys(tool?.inputSchema.properties ?? {});
+    };
+    const without = await inputs(ALL_FEATURES);
+    expect(without).toContain('audioAssetId');
+    expect(without).not.toContain('transcript');
+    const withFeature = await inputs(['dubbing_transcript']);
+    expect(withFeature).toContain('transcript');
+    expect(withFeature.filter((name) => name !== 'transcript')).toEqual(without);
   });
 
   it('lists the shot review tools only with lipsync_planning', async () => {

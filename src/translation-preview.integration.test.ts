@@ -304,6 +304,32 @@ it.each(['http', 'stdio'] as const)(
     ]);
   },
 );
+it('sends a supplied transcript and its source language as given', async () => {
+  const { client, call, calls } = await fixture();
+  await client.listTools();
+  const transcript = [
+    {
+      id: 'l000',
+      speakerId: 'host',
+      start: 0.4,
+      end: 2.1,
+      text: 'Good evening.',
+      translation: 'Buenas noches.',
+    },
+    { id: 'l001', speakerId: 'guest', start: 1.9, end: 3, text: 'Hi.', translation: 'Hola.' },
+  ];
+  const request = { projectId, audioAssetId, targetLang: 'es', sourceLang: 'en', transcript };
+  const created = await call('translation-previews_create', { ...request, idempotencyKey });
+  expect(created.structuredContent).toMatchObject({ id: jobId, status: 'PROCESSING' });
+  expect(calls.map((sent) => sent.body)).toEqual([request]);
+  const unknownField = await call('translation-previews_create', {
+    ...request,
+    transcript: [{ ...transcript[0], voice: 'deep' }],
+    idempotencyKey,
+  });
+  expect(unknownField.isError).toBe(true);
+  expect(calls).toHaveLength(1);
+});
 it('preserves the server preview cap and accepts an older uncapped quote without starting work', async () => {
   const limited = await fixture({
     preview: { sourceDurationSeconds: 120, quotedDurationSeconds: 20, limitSeconds: 20 },

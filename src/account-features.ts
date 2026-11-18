@@ -34,6 +34,7 @@ const PARAMETER_FEATURES: Readonly<Record<string, Readonly<Record<string, string
     speakers: 'multispeaker',
     allowOverlappingFaces: 'multispeaker',
   },
+  'translation-previews_create': { transcript: 'dubbing_transcript' },
 };
 
 export function isFeatureGatedTool(name: string): boolean {

@@ -87,6 +87,28 @@ const quoteSchema = z.object({
     .optional(),
 });
 
+// The API checks the provider's rules (order, lengths, overlaps); this only shapes the lines.
+const transcriptLine = z
+  .object({
+    id: z.string().min(1).describe('Your own id for the line, unique in the transcript.'),
+    speakerId: z
+      .string()
+      .min(1)
+      .describe('Who says it: the same id on every line of one person, who gets one voice.'),
+    start: z.number().nonnegative().describe('Seconds into the audio where the line starts.'),
+    end: z
+      .number()
+      .positive()
+      .describe('Seconds into the audio where the line ends, 0.1 to 25 seconds after start.'),
+    text: z.string().min(1).describe('The words as spoken, in the source language.'),
+    translation: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('The line in targetLang. Give it on every line or on none.'),
+  })
+  .strict();
+
 /** The existing translation API must advertise saved-source authorization and keyed recovery. */
 export function createTranslationPreviewTools(
   operations: ParsedOperation[],
@@ -127,6 +149,14 @@ export function createTranslationPreviewTools(
       .string()
       .optional()
       .describe('Optional and usually omitted: the source language is detected (sent as auto).'),
+    // Listed only to accounts with the dubbing_transcript feature (account-features.ts).
+    transcript: z
+      .array(transcriptLine)
+      .min(1)
+      .optional()
+      .describe(
+        'Optional: the lines to speak, in place of transcribing and translating the audio. Pass it only when the user supplies a transcript, or one you corrected for them, with who says each line and when. It needs sourceLang set to the language of text. Order lines by start; lines of one speaker must not overlap, lines of different speakers may. Without translation on the lines, text is translated into targetLang.',
+      ),
     idempotencyKey: z
       .uuid()
       .describe(
