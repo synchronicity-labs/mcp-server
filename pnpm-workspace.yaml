@@ -18,3 +18,11 @@ overrides:
   'ip-address': '^10.7.4'
   'path-to-regexp': '^8.4.2'
   'qs': '^6.15.2'
+
+# Advisories with no patched release that reach only development tools.
+# `pnpm audit --prod` still fails on any of them; drop each once a patch ships.
+auditConfig:
+  ignoreGhsas:
+    # picomatch ReDoS (<=4.0.7, no patch yet), only through knip, vitest and
+    # other dev tools that match this repository's own glob patterns.
+    - GHSA-fc5q-39xc-vjpf
