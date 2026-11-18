@@ -583,7 +583,7 @@ export const UPLOAD_WIDGET_HTML = `
                   generationId +
                   " finished as NO_OP: nothing was lip-synced (" +
                   noLipsync +
-                  "). Its outputMediaUrl is the unchanged input, not a lipsync result; lipsync was not charged.",
+                  "). Its outputMediaUrl is the unchanged input, not a lipsync result; lipsync was not charged. Tell the user why and offer to try again, reusing its generated audio as generations_get describes.",
               });
               return;
             }
