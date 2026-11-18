@@ -165,3 +165,13 @@ describe('generations_get wait', () => {
     expect(request.mock.calls.length).toBeLessThan(20);
   });
 });
+
+describe('generations_get on NO_OP', () => {
+  it('offers a retry that reuses the audio the take already paid for', () => {
+    const { description } = generationsGet(vi.fn());
+    expect(description).toContain('offer to try again');
+    expect(description).toContain('generations_get-continuation');
+    expect(description).toContain('never its script or dub request');
+    expect(description).toContain('Choose the tool from its segments');
+  });
+});
