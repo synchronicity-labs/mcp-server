@@ -3,6 +3,12 @@ import { z } from 'zod';
 // Public model controls accepted by the generation API. Do not expose service-only options.
 export const modelOptionsSchema = z
   .object({
+    preserve_background_audio: z
+      .boolean()
+      .optional()
+      .describe(
+        "Keep the source video's music and background sounds under the replacement speech.",
+      ),
     sync_mode: z
       .enum(['bounce', 'loop', 'cut_off', 'silence', 'remap'])
       .optional()
