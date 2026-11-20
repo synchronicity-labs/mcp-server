@@ -24,6 +24,14 @@ const link = {
   interval: 'month',
   currentPlan: { id: 'hobby', name: 'Hobby' },
 };
+// A first plan is paid without signing in, for 15 minutes. An API from before that
+// sends no expiresAt at all.
+const SIGNED_URL = 'https://sync.so/approve?token=payload.signature';
+const EXPIRES_AT = '2026-11-20T15:15:00.000Z';
+const linkByPlan: Record<string, Record<string, unknown>> = {
+  hobby: { url: SIGNED_URL, expiresAt: EXPIRES_AT, change: 'subscribe' },
+  'older-api': { expiresAt: undefined },
+};
 // Tagged as the API tags them: Billing is not a tag the parser generates tools from.
 const op = (operationId: string, tag: string) => ({ operationId, tags: [tag] });
 const spec = (approvals: boolean) => ({
@@ -82,7 +90,10 @@ const upstream = createServer(
     }
     if (req.method === 'POST' && req.url === '/v2/billing/approval-links') {
       res.statusCode = 201;
-      return void res.end(JSON.stringify({ ...link, internalNote: 'must-not-leak' }));
+      const plan = (JSON.parse(raw) as { plan?: string }).plan ?? '';
+      return void res.end(
+        JSON.stringify({ ...link, ...linkByPlan[plan], internalNote: 'must-not-leak' }),
+      );
     }
     if (req.url === '/v2/projects') return void res.end('[]');
     res.statusCode = 404;
@@ -167,6 +178,19 @@ describe('billing-approval-links_create', () => {
       { method: 'POST', path: '/v2/billing/approval-links', body: { plan: 'pro' } },
       { method: 'POST', path: '/v2/billing/approval-links', body: { credits: 800 } },
     ]);
+  });
+
+  it('tells a link paid without sign-in from one that needs it, and reads an older API as the latter', async () => {
+    const signed = await call('account-one', 'billing-approval-links_create', { plan: 'hobby' });
+    expect(signed.structuredContent).toMatchObject({ url: SIGNED_URL, expiresAt: EXPIRES_AT });
+    expect(JSON.stringify(signed.content)).toContain(EXPIRES_AT);
+
+    const older = await call('account-one', 'billing-approval-links_create', {
+      plan: 'older-api',
+    });
+    expect(older.isError).not.toBe(true);
+    expect(older.structuredContent).toMatchObject({ url: link.url });
+    expect(older.structuredContent).not.toHaveProperty('expiresAt');
   });
 
   it('takes a one-call organizationId, so a refused create elsewhere pays for that organization', async () => {
