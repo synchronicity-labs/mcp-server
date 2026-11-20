@@ -50,7 +50,13 @@ const link = z.object({
   url: z
     .string()
     .describe(
-      'Page on sync.so to give the person, verbatim. They sign in, review and pay there; it does not expire.',
+      'Page on sync.so to give the person, verbatim. They review and pay there, without signing in when expiresAt is set.',
+    ),
+  expiresAt: z
+    .string()
+    .nullish()
+    .describe(
+      'When url stops working, 15 minutes after it was made: a first paid plan, paid without signing in. Null or absent for a link that needs sign-in and does not expire.',
     ),
   organization: z
     .object({ id: z.string(), name: z.string().nullable() })
@@ -76,10 +82,13 @@ const DESCRIPTION =
   "Create a sync.so link where a person approves and pays for a plan or a credit top-up, because you cannot pay. It is for the session's organization unless you pass organizationId; when the refused request ran with a one-call organizationId, pass the same one so the payment unblocks that organization. " +
   'Use it when a Sync refusal has nextAction.type upgrade_plan (pass plan: its requiredPlan) or buy_credits (pass credits: requiredCredits), or when the user asks to upgrade their plan or buy credits. ' +
   'Not for an unpaid invoice, a declined card or a payment to confirm (give the person nextAction.url instead), and not to read the current plan or balance (account_get-context, account_get-usage).\n\n' +
-  'Effects: it creates no charge, subscription or payment and holds nothing. Each call returns a new link that does not expire, so reuse one you already have instead of creating another.\n\n' +
-  'Give url to the person verbatim: they open it in a browser, sign in, review the plan or credits, price and organization, and approve and pay there. Only owners and admins of the organization can approve. After they say they have approved, account_get-context shows the new plan and account_get-usage the new credit balance; check them before retrying the refused request.\n\n' +
+  'Effects: it creates no charge, subscription or payment and holds nothing. Each call returns a new link.\n\n' +
+  'Give url to the person verbatim: they open it in a browser, review the plan or credits, price and organization, and approve and pay there. ' +
+  'When expiresAt is set (a first paid plan), the page needs no sign-in and works until then, 15 minutes after the call: say so, give the link only to the person who should pay, and create a new one if it has expired. ' +
+  'When expiresAt is null, they sign in first, only owners and admins of the organization can approve, and the link does not expire, so reuse it instead of creating another. ' +
+  'After they say they have approved, account_get-context shows the new plan and account_get-usage the new credit balance; check them before retrying the refused request.\n\n' +
   'Send exactly one of plan or credits. Refusals: 409 already_on_plan (it already has that plan or a higher one, so nothing is due), approval_credits_unavailable (credits need a paid credit plan first) or billing_managed_by_sync (custom agreement: contact sync.); 400 approval_plan_unavailable (this organization cannot buy that plan); 402 account_on_hold.\n\n' +
-  'Returns: id, url, organization, kind, change (subscribe, upgrade or top_up), plan or credits, amountCents with currency, interval for a plan, and currentPlan.';
+  'Returns: id, url, expiresAt, organization, kind, change (subscribe, upgrade or top_up), plan or credits, amountCents with currency, interval for a plan, and currentPlan.';
 
 export function createBillingApprovalTools(
   operations: ParsedOperation[],
