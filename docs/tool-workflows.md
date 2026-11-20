@@ -253,9 +253,10 @@ An agent cannot pay, so for `upgrade_plan` and `buy_credits` it creates an appro
 with `billing-approval-links_create` (`POST /v2/billing/approval-links`), passing
 `requiredPlan` as `plan` or `requiredCredits` as `credits` (exactly one). The result
 quotes the price (`amountCents`, `currency`, `interval`), the change (`subscribe`,
-`upgrade` or `top_up`) and the organization, and gives a sync.so `url`. The person opens
-it in a browser, signs in, and approves and pays there; only owners and admins can.
-Creating a link stores nothing and charges nothing, and links do not expire. Afterwards
+`upgrade` or `top_up`) and the organization, and gives a sync.so `url` where the person
+pays. A first paid plan needs no sign-in and its link lasts 15 minutes (`expiresAt`).
+Any other link needs an owner or admin to sign in and never expires. A link charges
+nothing. Afterwards
 `account_get-context` shows the new plan and `account_get-usage` the new balance. A user
 can also ask for one directly ("upgrade us to Pro", "buy 1,000 credits").
 

@@ -13,6 +13,8 @@ const link = {
   id: '00000000-0000-4000-8000-0000000000a1',
   url: 'https://sync.so/checkout/approve?organizationId=org-1&plan=pro&linkId=00000000-0000-4000-8000-0000000000a1',
   organization: { id: '00000000-0000-4000-8000-0000000000b2', name: 'Acme' },
+  // An upgrade needs sign-in; a first plan's link carries its expiry here.
+  expiresAt: null,
   kind: 'plan',
   change: 'upgrade',
   plan: { id: 'pro', name: 'Pro' },
@@ -137,6 +139,8 @@ describe('billing-approval-links_create', () => {
     expect(tool?.description).toContain('account_get-context');
     expect(tool?.description).toContain('account_get-usage');
     expect(tool?.description).toMatch(/upgrade_plan.*buy_credits/);
+    // Whether the person signs in, and whether the link can be reused.
+    expect(tool?.description).toMatch(/expiresAt is set.*no sign-in.*15 minutes/);
     expect(claude.getInstructions()).toContain('billing-approval-links_create');
     expect(claude.getInstructions()).toContain('nextAction');
 
