@@ -122,6 +122,8 @@ const CATEGORY_BY_CONTROLLER: Record<string, Category> = {
   voices: 'voices',
   tts: 'voices',
   'tts-jobs': 'voices',
+  // Invitations email people outside the conversation, so they are admin tools.
+  invitations: 'admin',
 };
 
 // Deletes stay in admin whatever their controller.

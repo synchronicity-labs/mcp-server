@@ -203,24 +203,25 @@ The hosted server exposes a curated set of tools to every client:
 | Many jobs | `jobs_create-many`², `jobs_get-many`² |
 | Batches | `batches_create`², `batches_get`², `batches_list`² |
 | Account | `account_get-context`, `account_get-usage`, `organizations_list`, `organizations_select`, `billing-approval-links_create`³ |
+| Team | `invitations_*`: list, create, resend, delete ([docs](docs/team-invitations.md)) |
 
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
 ² Not in the ChatGPT app listing yet. `jobs_create-many` starts up to 50 independent jobs
-at once, such as one video dubbed into several languages, by running one create tool
+at once, such as one video in several languages, by running one create tool
 (`lipsync_create`, `dubbing_create`, `dialogue-videos_create` and others) once per item,
 with the same API, limits and billing as single calls on any plan; `jobs_get-many` follows
 the set. See [Jobs](docs/jobs.md#many-jobs-at-once). A batch is the API's separate queued
 pipeline for large runs (20 to 500 generations) on Scale plans and above that can wait
-hours. Where the account's plan doesn't include batch, the API answers 402 with
-`requiredPlan` and `billingUrl`, which the tools pass on.
+hours. Without batch on the plan, the API answers 402 with `requiredPlan` and
+`billingUrl`, which the tools pass on.
 
 ³ Not in the ChatGPT app listing yet, and listed only when the API publishes
 `POST /v2/billing/approval-links`. It returns a sync.so link where a person approves and
 pays for a plan or credits; creating it charges nothing. See
 [Billing refusals and approval links](docs/tool-workflows.md#billing-refusals-and-approval-links).
 
-Organizations with the matching feature also get `scenes_detect` (camera cuts in a
+Organizations with the feature also get `scenes_detect` (camera cuts in a
 video) and `stems_separate` (vocals and background audio), outside the ChatGPT
 app. They are in the `lipsync` and `assets` toolsets locally. The same goes for
 `faces_detect`, `faces_get` and `faces_get-timeline` (faces, shots and who talks in a
@@ -230,15 +231,14 @@ its `speakers` input (several people, each to their own audio, in one generation
 
 Clients with app support also get the tools behind the embedded Studio app:
 Studio views and drafts, the upload widget and app helpers. Those are clients
-whose MCP handshake name selects the ChatGPT or Codex app profile (`openai-mcp`,
-`openai-mcp (Codex)`; see `src/client-profile.ts`). Other clients don't see these
-tools, and their calls to them are refused.
+whose handshake name selects the ChatGPT or Codex app profile (`openai-mcp`,
+`openai-mcp (Codex)`; see `src/client-profile.ts`). Other clients don't see or call them.
 
 ### Local toolsets
 
 The local stdio server can also offer a tool for every other public API operation in
 the [OpenAPI spec](https://api.sync.so/api-json), 65+ in all. By default it lists the
-hosted set above, without its admin tools (`assets_delete` and `voices_clone`),
+hosted set above, without its admin tools (`assets_delete`, `voices_clone`, `invitations_*`),
 plus `jobs_get`, `jobs_wait` and the `transcriptions_*` tools, whose speaker face
 tracks feed `lipsync_create-timeline` clips.
 
@@ -253,8 +253,8 @@ To list more, set `SYNC_MCP_TOOLSETS` or pass `--toolsets` with a comma-separate
 | `projects` | `projects_*` (except deletes) and `projects_rename` |
 | `transcription` | `transcriptions_*` |
 | `voices` | `voices_*` (except cloning and deletes), speech previews and `tts_*` |
-| `admin` | Every delete (`assets_delete`, `projects_delete`, `generations_delete`, `voices_delete`) and `voices_clone` |
-| `all` | Every tool, as before this option existed |
+| `admin` | Every delete (`assets_delete`, `projects_delete`, `generations_delete`, `voices_delete`), `voices_clone` and `invitations_*` |
+| `all` | Every tool |
 
 Job, account and generation reads (`jobs_get`, `jobs_wait`, `jobs_get-many`,
 `generations_get`, `account_get-context`, `organizations_list`, `organizations_select` and

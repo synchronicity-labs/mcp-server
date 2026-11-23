@@ -351,6 +351,12 @@ export function serverDescription(spendConfirmation = true): string {
 }
 
 const JOB_SET_TOOLS = ['jobs_create-many', 'jobs_get-many'];
+const INVITATION_TOOLS = [
+  'invitations_list',
+  'invitations_create',
+  'invitations_resend',
+  'invitations_delete',
+];
 const APPROVAL_TOOLS = ['billing-approval-links_create'];
 const TOOL_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [] }] as const;
 const APP_UI_TOOLS = new Set([
@@ -446,6 +452,7 @@ export const HOSTED_HTTP_TOOL_ALLOWLIST = new Set([
   'faces_get-people',
   'shots_regenerate',
   'shots_splice',
+  ...INVITATION_TOOLS,
 ]);
 const WIDGET_CALLABLE_HOSTED_TOOLS = new Set([
   'jobs_get-many',

@@ -1,5 +1,6 @@
 import { ASSET_PROJECT_OVERRIDES, type ToolOverride } from './asset-overrides.js';
 import { GENERATION_OVERRIDES } from './generation-overrides.js';
+import { INVITATION_OVERRIDES } from './invitation-overrides.js';
 
 const TRANSCRIPTION_ID = 'Transcription id from transcriptions_create.';
 const SPEAKER_ANALYSIS_REVISION =
@@ -127,6 +128,9 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
 
 export function getOverride(toolName: string): ToolOverride | undefined {
   return (
-    TOOL_OVERRIDES[toolName] ?? GENERATION_OVERRIDES[toolName] ?? ASSET_PROJECT_OVERRIDES[toolName]
+    TOOL_OVERRIDES[toolName] ??
+    GENERATION_OVERRIDES[toolName] ??
+    ASSET_PROJECT_OVERRIDES[toolName] ??
+    INVITATION_OVERRIDES[toolName]
   );
 }

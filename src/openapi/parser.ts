@@ -23,6 +23,7 @@ const ALLOWED_TAGS = new Set([
   'dialogue edits',
   'dubbing',
   'audio trims',
+  'invitations',
   // Read by the curated batches_* tools; createTools generates none from it.
   'batch',
 ]);

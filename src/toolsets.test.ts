@@ -3,8 +3,9 @@ import { resolveConfig } from './config.js';
 import { HOSTED_HTTP_TOOL_ALLOWLIST } from './server.js';
 import { parseToolsets, type Toolset, toolCategory, toolsetIncludes } from './toolsets.js';
 
-// The local catalog against production api-json on 2026-11-05, plus the jobs tools and
-// the speaker tools the API has not published yet. Refresh it when the catalog grows.
+// The local catalog against production api-json on 2026-11-05, plus the jobs tools, the
+// speaker tools the API has not published yet and the invitation tools published on
+// 2026-11-23. Refresh it when the catalog grows.
 const PRODUCTION_STDIO_TOOLS = [
   'assets_count',
   'assets_create',
@@ -80,6 +81,10 @@ const PRODUCTION_STDIO_TOOLS = [
   'voices_delete',
   'voices_get',
   'voices_list',
+  'invitations_create',
+  'invitations_delete',
+  'invitations_list',
+  'invitations_resend',
 ];
 
 const listed = (selection?: Toolset[]) =>
@@ -120,7 +125,7 @@ describe('toolsets', () => {
     expect(PRODUCTION_STDIO_TOOLS.filter((name) => !categorized.includes(name))).toEqual([]);
   });
 
-  it('keeps deletes and voice cloning in admin only', () => {
+  it('keeps deletes, voice cloning and team invitations in admin only', () => {
     const admin = PRODUCTION_STDIO_TOOLS.filter((name) => toolCategory(name) === 'admin');
     expect(admin).toEqual([
       'assets_delete',
@@ -128,6 +133,10 @@ describe('toolsets', () => {
       'projects_delete',
       'voices_clone',
       'voices_delete',
+      'invitations_create',
+      'invitations_delete',
+      'invitations_list',
+      'invitations_resend',
     ]);
     for (const name of admin) expect(listed(), name).not.toContain(name);
   });
@@ -146,7 +155,14 @@ describe('toolsets', () => {
     const missing = PRODUCTION_STDIO_TOOLS.filter(
       (name) => HOSTED_HTTP_TOOL_ALLOWLIST.has(name) && !listed().includes(name),
     );
-    expect(missing).toEqual(['assets_delete', 'voices_clone']);
+    expect(missing).toEqual([
+      'assets_delete',
+      'voices_clone',
+      'invitations_create',
+      'invitations_delete',
+      'invitations_list',
+      'invitations_resend',
+    ]);
     expect(listed(['default'])).toEqual(listed());
     expect(listed([])).toEqual(listed());
   });
