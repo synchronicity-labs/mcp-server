@@ -418,6 +418,10 @@ credentials, query or fragment. Existing deployments need no new setting.
 
 6. Add `https://<ngrok-url>/mcp` as a custom connector in [Claude Web](https://claude.ai)
 
+## Security
+
+Report vulnerabilities privately using the instructions in [the security policy](https://github.com/synchronicity-labs/mcp-server/security/policy). Do not include real user data in a report.
+
 ## Learn More
 
 - [Tool workflows](docs/tool-workflows.md) — How multi-step and paid tools behave
