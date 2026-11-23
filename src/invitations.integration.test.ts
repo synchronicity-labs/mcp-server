@@ -130,6 +130,18 @@ async function api() {
             JSON.stringify({ statusCode: 400, message: 'Already a member: member@example.com' }),
           );
         }
+        if (sent.invitations.some((entry) => entry.email === 'bounce@example.com')) {
+          res.statusCode = 500;
+          return void res.end(
+            JSON.stringify({
+              statusCode: 500,
+              error: 'Internal Server Error',
+              message: "Couldn't send invitations to bounce@example.com. The others were sent.",
+              sentEmails: ['new.person@example.com'],
+              failedEmails: ['bounce@example.com'],
+            }),
+          );
+        }
         res.statusCode = 201;
         return void res.end(JSON.stringify([invitation]));
       }
@@ -243,6 +255,36 @@ describe('team invitation tools', () => {
     });
     expect(refused.isError).toBe(true);
     expect(text(refused)).toContain('Already a member: member@example.com');
+  });
+
+  it('says to invite failed addresses again, and once, after a partial send', async () => {
+    const { client, call, requests } = await hosted('claude-ai');
+    const tools = await invitationTools(client);
+    const descriptionOf = (name: string) => tools.find((tool) => tool.name === name)!.description;
+    expect(descriptionOf('invitations_create')).toContain(
+      'The failed addresses have no invitation, so call invitations_create again with only them, not invitations_resend.',
+    );
+    const partial = await call('invitations_create', {
+      invitations: [
+        { email: 'new.person@example.com', role: 'member' },
+        { email: 'bounce@example.com', role: 'member' },
+      ],
+    });
+    expect(partial.isError).toBe(true);
+    expect(text(partial)).toContain("Couldn't send invitations to bounce@example.com");
+    expect(requests.filter((request) => request.method === 'POST')).toHaveLength(1);
+  });
+
+  it('tells the agent a resend keeps the stored role', async () => {
+    const { client } = await hosted('claude-ai');
+    const tools = await invitationTools(client);
+    const descriptionOf = (name: string) => tools.find((tool) => tool.name === name)!.description;
+    expect(descriptionOf('invitations_resend')).toContain(
+      "It keeps the invitation's role: read the role with invitations_list and name it when confirming with the user. To change the role, cancel with invitations_delete and invite again with invitations_create.",
+    );
+    expect(descriptionOf('invitations_create')).toContain(
+      'resend with invitations_resend when it is the role the user asked for, otherwise cancel with invitations_delete and invite again.',
+    );
   });
 
   it('lists them locally only with the admin toolset', async () => {

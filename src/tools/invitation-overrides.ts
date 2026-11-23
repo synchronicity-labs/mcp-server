@@ -17,7 +17,7 @@ export const INVITATION_OVERRIDES: Record<string, ToolOverride> = {
   },
   invitations_create: {
     title: 'Invite people to the team',
-    description: `Email each address an invitation to join the current Sync organization as a member or an admin; the link works for seven days. ${ADMINS_ONLY} It emails real people and cannot be unsent, so confirm the addresses, roles and organization with the user first. Up to 100 addresses a call, 30 calls an hour.\nNothing is sent when any address is already a member or already has an invitation in any status, including an expired one; the error names them. Drop the members, use invitations_resend for the invited ones, and call again with the rest.\nRefused with team_seat_limit_reached when the plan has no seat for another member. On a plan that buys seats, accepting an invitation when every seat is taken adds a paid seat to the subscription; say so before inviting to a full team.\nIf some emails fail to send, the error names those addresses; their invitations exist, so send them with invitations_resend rather than inviting again.`,
+    description: `Email each address an invitation to join the current Sync organization as a member or an admin; the link works for seven days. ${ADMINS_ONLY} It emails real people and cannot be unsent, so confirm the addresses, roles and organization with the user first. Up to 100 addresses a call, 30 calls an hour.\nNothing is sent when any address is already a member or already has an invitation in any status, including an expired one; the error names them. Drop the members. For the invited ones, read their role with invitations_list: resend with invitations_resend when it is the role the user asked for, otherwise cancel with invitations_delete and invite again. Then call again with the rest.\nRefused with team_seat_limit_reached when the plan has no seat for another member. On a plan that buys seats, accepting an invitation when every seat is taken adds a paid seat to the subscription; say so before inviting to a full team.\nIf some emails fail to send, the call fails with a message naming those addresses and the others were sent. The failed addresses have no invitation, so call invitations_create again with only them, not invitations_resend.`,
     params: {
       invitations:
         'The people to invite, each { email, role }, where role is member or admin. Use the addresses the user gave, exactly.',
@@ -25,7 +25,7 @@ export const INVITATION_OVERRIDES: Record<string, ToolOverride> = {
   },
   invitations_resend: {
     title: 'Resend a team invitation',
-    description: `Email an invitation again and give it seven more days from now, including one that expired. ${ADMINS_ONLY} It emails the person again, so confirm with the user first. 10 resends an hour. Refused when the person is already a member, or with team_seat_limit_reached when the plan has no seat for another member.`,
+    description: `Email an invitation again and give it seven more days from now, including one that expired. It keeps the invitation's role: read the role with invitations_list and name it when confirming with the user. To change the role, cancel with invitations_delete and invite again with invitations_create. ${ADMINS_ONLY} It emails the person again, so confirm with the user first. 10 resends an hour. Refused when the person is already a member, or with team_seat_limit_reached when the plan has no seat for another member.`,
     params: { id: INVITATION_ID },
   },
   invitations_delete: {

@@ -18,11 +18,14 @@ organization (`account_get-context` names it; `organizations_select` changes it)
 Inviting, resending and cancelling are for owners and admins. An API key needs the
 `members:write` permission with admin access, which only an admin can turn on, and its
 invitations come from the member who owns the key. Nothing is sent when any address is
-already a member or already has an invitation in any status; the error names them, and
-an earlier invitation is resent rather than created again. `team_seat_limit_reached`
+already a member or already has an invitation in any status; the error names them. An
+earlier invitation is resent when its role is the one wanted, or cancelled and created
+again to change the role: a resend keeps the stored role, and the public API cannot
+change it. `team_seat_limit_reached`
 means the plan has no seat for another member. On a plan that buys seats, accepting an
-invitation when every seat is taken adds a paid seat. A partial send fails with the
-addresses that were not emailed; their invitations exist and can be resent.
+invitation when every seat is taken adds a paid seat. A partial send fails with a message
+naming the addresses that were not emailed. The API deletes those invitations and keeps
+the ones it sent, so the agent invites only the failed addresses again.
 
 The tool descriptions tell the agent to confirm addresses, roles and the organization
 before sending. The tools are listed on the hosted server to every client, ChatGPT and
