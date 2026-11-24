@@ -54,6 +54,7 @@ const planSchema = z.object({ id: z.string(), name: z.string() });
 const generationLimitsSchema = z.object({
   concurrency: z.number().finite().nonnegative(),
   maxOutputDurationSeconds: z.number().finite().nonnegative(),
+  watermark: z.boolean().optional(),
 });
 const accountOrganizationSchema = z.object({
   id: z.uuid(),
