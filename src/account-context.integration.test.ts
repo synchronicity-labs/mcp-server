@@ -70,7 +70,12 @@ it('projects the authenticated account and keeps API-key identity null across th
       res.end(
         JSON.stringify({
           plan: { id: 'scale', name: 'Scale', privateToken: 'must-not-leak' },
-          limits: { concurrency: 15, maxOutputDurationSeconds: 1800, maxFileSizeBytes: 1 },
+          limits: {
+            concurrency: 15,
+            maxOutputDurationSeconds: 1800,
+            maxFileSizeBytes: 1,
+            watermark: true,
+          },
           credits: { balance: 1 },
         }),
       );
@@ -124,7 +129,7 @@ it('projects the authenticated account and keeps API-key identity null across th
         organization: token === 'unnamed-user' ? { ...organization, name: null } : organization,
         limits: { seats: 3, voiceClone: 5 },
         plan: { id: 'scale', name: 'Scale' },
-        generationLimits: { concurrency: 15, maxOutputDurationSeconds: 1800 },
+        generationLimits: { concurrency: 15, maxOutputDurationSeconds: 1800, watermark: true },
         capabilities: { projectRenaming: true },
         organizationChoice: {
           selectedBy: 'credential',

@@ -34,6 +34,10 @@ const accountContext = z.object({
     .object({
       concurrency: z.number().finite().nonnegative(),
       maxOutputDurationSeconds: z.number().finite().nonnegative(),
+      watermark: z
+        .boolean()
+        .optional()
+        .describe('Whether this organization’s outputs carry the sync. watermark now.'),
     })
     .optional()
     .describe(

@@ -26,8 +26,16 @@ const plan = z.object({
     .object({
       maxOutputDurationSeconds: z.number().nullable().optional(),
       concurrency: z.number().int().nullable().optional(),
+      watermark: z
+        .boolean()
+        .optional()
+        .describe(
+          'Whether outputs carry the sync. watermark on this plan. A plan with false also clears it from earlier outputs.',
+        ),
     })
-    .describe('Longest output in seconds and generations at once on this plan.'),
+    .describe(
+      'Longest output in seconds, generations at once and whether outputs are watermarked on this plan.',
+    ),
   change: z
     .string()
     .describe(
@@ -72,6 +80,7 @@ const DESCRIPTION =
   'Not for the current plan or balance alone (account_get-context, account_get-usage), the cost of one generation (generations_estimate-cost), or what a past generation cost (generations_get-costs).\n\n' +
   'Effects: it only reads. Nothing is charged, held or changed.\n\n' +
   'Show the plans with change subscribe or upgrade, each with its price per interval, and say that a plan renews. Do not push a plan: answer what was asked, or name the cheapest one that unblocks a refused request. ' +
+  'When the person wants outputs without the watermark, offer only plans with limits.watermark false, and say so before they buy. ' +
   'To buy, after the person says yes: billing-payment-links_create when agentPayments is true and you have a payment wallet, otherwise billing-approval-links_create and give the person its url. Pass the plan id, or credits within minCredits and maxCredits.\n\n' +
   'Returns: organization, billingModel, currentPlan, plans (id, name, amountCents, currency, interval, monthlyCredits, limits, change, unavailableReason), credits and agentPayments.';
 
