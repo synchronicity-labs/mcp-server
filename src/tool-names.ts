@@ -75,6 +75,8 @@ export const RENAMED_TOOLS: Readonly<Record<string, string>> = {
   'update-studio-draft': 'studio-drafts_update',
   'save-studio-draft': 'studio-drafts_save',
   'ack-studio-draft': 'studio-drafts_ack',
+  'invitations_get-all': 'invitations_list',
+  invitations_invite: 'invitations_create',
 };
 
 // A tool renamed twice has two old names; the first is the original, which analytics report.

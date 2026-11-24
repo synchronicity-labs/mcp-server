@@ -229,6 +229,7 @@ const TOOL_AREAS = [
   'feedback',
   'generate',
   'generations',
+  'invitations',
   'jobs',
   'lipsync',
   'models',

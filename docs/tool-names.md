@@ -121,3 +121,5 @@ ChatGPT keeps an old widget, and after a Rescan, remove names from `OLD_NAME_ALI
 | `update-studio-draft` | `studio-drafts_update` | hosted |
 | `save-studio-draft` | `studio-drafts_save` | hosted |
 | `ack-studio-draft` | `studio-drafts_ack` | hosted |
+| `invitations_get-all` | `invitations_list` | hosted |
+| `invitations_invite` | `invitations_create` | hosted |
