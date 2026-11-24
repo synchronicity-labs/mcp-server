@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { combineSignals } from '../abort-signals.js';
 import type { ApiRequestError, HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import { getToolAnalytics } from '../tool-analytics-context.js';
@@ -130,6 +131,8 @@ function withJobWait(tool: JsonTool, label: string): JsonTool {
  * progress, so that caller still gets the percent and expected finish.
  * The generated input is unchanged, so every earlier call still works.
  */
+const PROGRESS_READ_MS = 5_000;
+
 function withGenerationWait(tool: JsonTool): JsonTool {
   const handler = tool.handler;
   // Without the API's wait input (an older spec), only an explicit wait: true can wait.
@@ -155,8 +158,25 @@ function withGenerationWait(tool: JsonTool): JsonTool {
           describe: (job) => `generation ${String(rawStatus(job) ?? 'pending').toLowerCase()}`,
         },
       );
-      if (include === 'progress' && !jobSettled(last))
-        return markStalled(await handler({ ...rest, include }, context));
+      if (include === 'progress' && !jobSettled(last)) {
+        // One quick read for the percent and expected finish, without wait (the API
+        // refuses it beside include) and within a few seconds; the wait's own last read
+        // stands if it cannot finish.
+        const { wait: _wait, ...once } = rest;
+        const deadline = combineSignals([
+          ...(context?.signal ? [context.signal] : []),
+          AbortSignal.timeout(PROGRESS_READ_MS),
+        ]);
+        try {
+          return markStalled(
+            await handler({ ...once, include }, { ...context, signal: deadline.signal }),
+          );
+        } catch (error) {
+          if (context?.signal?.aborted) throw error;
+        } finally {
+          deadline.dispose();
+        }
+      }
       return markStalled(last);
     },
   };
