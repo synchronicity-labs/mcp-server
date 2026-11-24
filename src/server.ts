@@ -1181,7 +1181,7 @@ function createTools(
     .map((tool) => withOrganizationChoice(tool, httpClient, credential))
     // Outside the organization choice: a quote's create call is tied to the organization
     // the quote ran in.
-    .map(withPriceCheck)
+    .map((tool) => withPriceCheck(tool, httpClient))
     .map(withGenerationStatusCard)
     .map(withGenerationOutputAliases)
     .map(spend);

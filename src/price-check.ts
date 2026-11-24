@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { ClientProfile } from './client-profile.js';
+import { ApiRequestError, type HttpClient } from './http-client.js';
+import { ORGANIZATION_HEADER } from './organization-selection.js';
 import type { McpToolDefinition } from './tools/generator.js';
 import { REASONING_MODELS } from './tools/model-options.js';
 import { projectIntentError, projectUseAllowed } from './tools/project-intent.js';
@@ -87,12 +89,78 @@ export function presentPriceCheck(
   return { ...tool, inputSchema };
 }
 
+const usedOf = z.object({ used: z.number().nonnegative(), max: z.number().nonnegative() });
+const freeAllowance = z.object({
+  plan: z.string().nullable(),
+  freeGenerationsExhausted: z.boolean().optional(),
+  freeDubbingExhausted: z.boolean().optional(),
+  freeMonthlyLimits: z
+    .object({
+      generations: usedOf.optional(),
+      dubbing: usedOf.optional(),
+      monthlyResetDate: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+
+// Where the API's own free-allowance refusal sends people to upgrade.
+const BILLING_URL = 'https://sync.so/billing/subscription';
+
+/**
+ * The 402 the API would return for this job when the free plan has used this month's
+ * allowance: a price alone let agents quote a job, get it approved and then meet that
+ * refusal (agent report, 2026-11-20). GET /v2/billing applies the API's own rule (allowance
+ * used and no aescripts balance). Returned as the API's refusal, with its next action, so
+ * each client handles it as it handles the create call's, and the price card shows the
+ * refusal instead of a price. Undefined when it would run, cannot tell, or the read fails.
+ */
+async function freePlanRefusal(
+  http: HttpClient,
+  priced: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<ApiRequestError | undefined> {
+  try {
+    const organizationId =
+      typeof priced.organizationId === 'string' ? priced.organizationId : undefined;
+    const billing = freeAllowance.parse(
+      await http.request('get', '/v2/billing', {
+        signal,
+        ...(organizationId ? { headers: { [ORGANIZATION_HEADER]: organizationId } } : {}),
+      }),
+    );
+    if (billing.plan !== null) return undefined;
+    const dub = priced.workflow === 'translate-and-dub';
+    if ((dub ? billing.freeDubbingExhausted : billing.freeGenerationsExhausted) !== true)
+      return undefined;
+    const counts = dub
+      ? billing.freeMonthlyLimits?.dubbing
+      : billing.freeMonthlyLimits?.generations;
+    const used = counts
+      ? `all ${counts.max} free ${dub ? 'dubs' : 'generations'}`
+      : `this month's free ${dub ? 'dubbing' : 'generations'}`;
+    const resets = billing.freeMonthlyLimits?.monthlyResetDate;
+    return new ApiRequestError(
+      `This job would be refused: you have used ${used} this month${resets ? ` (they reset ${resets})` : ''}, and the free plan cannot pay with credits. Please upgrade to a paid plan at ${BILLING_URL}.`,
+      402,
+      'free_tier_generations_exhausted',
+      undefined,
+      undefined,
+      undefined,
+      { nextAction: { type: 'upgrade_plan', url: BILLING_URL }, billingUrl: BILLING_URL },
+    );
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return undefined;
+  }
+}
+
 /**
  * Makes a quote self-describing for the price check card: the result repeats what was
  * priced, and carries the create call the card's button runs when the model supplied one,
  * with the idempotency key that call must use.
  */
-export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
+export function withPriceCheck(tool: McpToolDefinition, http?: HttpClient): McpToolDefinition {
   if (tool.name !== 'generations_estimate-cost' || tool.resultFormat === 'mcp') return tool;
   const { handler } = tool;
   return {
@@ -104,7 +172,11 @@ export function withPriceCheck(tool: McpToolDefinition): McpToolDefinition {
         create === undefined || !cardRunsCreate(context?.clientProfile)
           ? undefined
           : quotedCall(createCall.parse(create), priced);
-      const result = await handler(priced, context);
+      const [result, refusal] = await Promise.all([
+        handler(priced, context),
+        http ? freePlanRefusal(http, priced, context?.signal) : undefined,
+      ]);
+      if (refusal) throw refusal;
       if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
       // The organization the quote ran in, so the card's call runs there too: neither a
       // one-call organizationId on the quote nor a later switch of the session moves it.
