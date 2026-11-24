@@ -4,6 +4,7 @@ import type { HttpClient } from '../http-client.js';
 import { schemaProperty } from '../openapi/parser.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import type { McpToolDefinition } from './generator.js';
+import { HARD_SHOT_CHECK } from './lipsync-shots.js';
 import { modelOptionsSchema, parseModelOptions } from './model-options.js';
 import { generationOutputSchema } from './output-schemas.js';
 import {
@@ -346,6 +347,7 @@ export function createTimelineLipsyncTool(
           ]
         : []),
       'Before anything is created, the tool validates the input (options included), spans, audio ranges and overlaps, and per-clip errors name the clip index. Overlaps are compared only within one unit, so use one unit for every clip. Problems only the API detects, such as an unknown audio asset or a speaker point off the face, surface after a new project may already exist.',
+      HARD_SHOT_CHECK,
       'Paid generation, sync-3 unless model is set. Estimate and confirm before creating; this starts an asynchronous generation and returns its id and status. Poll that id with generations_get and wait: true.',
       'Without projectId it first creates a NEW project, named projectName or a default; default new work to that. Pass projectId with projectIntent=explicit only when the user explicitly asks to work in that project, selects it in the interface, or it was just created for this request; a matching workflow or name or an open editor is never permission to modify it. Send a fresh idempotencyKey, plus a fresh projectCreationKey when there is no projectId, and after a lost or uncertain response retry only with identical arguments and the same keys. Never resend a request that had no idempotencyKey: it can start a second paid generation.',
     ].join('\n\n'),

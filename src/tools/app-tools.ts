@@ -4,7 +4,7 @@ import type { HttpClient } from '../http-client.js';
 import { type UploadRuntime, uploadRuntime } from '../upload-runtime.js';
 import { generationContextHeaders, generationContextSchema } from './generation-context.js';
 import type { McpToolDefinition } from './generator.js';
-import { lipsyncShotsInput, parseLipsyncOptions } from './lipsync-shots.js';
+import { HARD_SHOT_CHECK, lipsyncShotsInput, parseLipsyncOptions } from './lipsync-shots.js';
 import {
   allowOverlappingFacesInput,
   lipsyncSpeakersInput,
@@ -155,7 +155,8 @@ export function createAppTools(
         'Inputs can be public URLs, Sync asset IDs, or supported host file objects. A script requires a voiceId. ' +
         'The model defaults to sync-3. New requests create a new project, even when its name matches another project. projectName names the new project; it never selects existing work. Supply projectId only for an explicit user selection or a project just created for this request. Keyed new-project requests require a fresh projectCreationKey, preserved on retries. ' +
         'Check account_get-usage first. When free allowances cover the whole request, including speech for script input without a connected provider key, proceed without price mention or spending confirmation. Otherwise quote and confirm paid or external work; unknown coverage is not free. Estimate using the replacement script or measured audio duration, not the source video length. Script-based quotes are approximate and exclude speech synthesis. ' +
-        'This starts an asynchronous generation and returns its id and status.',
+        HARD_SHOT_CHECK +
+        ' This starts an asynchronous generation and returns its id and status.',
       inputSchema: {
         continuation: generationContextSchema.optional(),
         videoUrl: z

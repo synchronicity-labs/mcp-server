@@ -37,6 +37,8 @@ codex mcp add sync --url https://mcp.sync.so/mcp
 codex mcp login sync
 ```
 
+See [Codex notes](docs/codex.md) for approval refusals and local files.
+
 ### Cursor
 
 Add to `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for all projects:
@@ -208,10 +210,9 @@ The hosted server exposes a curated set of tools to every client:
 ¹ Not offered to the ChatGPT app, whose embedded Studio has no timeline.
 
 ² Not in the ChatGPT app listing yet. `jobs_create-many` starts up to 50 independent jobs
-at once, such as one video in several languages, by running one create tool
-(`lipsync_create`, `dubbing_create`, `dialogue-videos_create` and others) once per item,
-with the same API, limits and billing as single calls on any plan; `jobs_get-many` follows
-the set. See [Jobs](docs/jobs.md#many-jobs-at-once). A batch is the API's separate queued
+at once, such as one video in several languages, by running one create tool once per
+item, with the same API, limits and billing as single calls on any plan; `jobs_get-many`
+follows the set. See [Jobs](docs/jobs.md#many-jobs-at-once). A batch is the API's separate queued
 pipeline for large runs (20 to 500 generations) on Scale plans and above that can wait
 hours. Without batch on the plan, the API answers 402 with `requiredPlan` and
 `billingUrl`, which the tools pass on.

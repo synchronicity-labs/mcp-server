@@ -86,5 +86,8 @@ export function resolveClientProfile(name?: string, rendersCards = false): Clien
   }
 }
 
-export const UNSUPPORTED_UPLOAD_MESSAGE =
-  'This client does not support the ChatGPT file bridge or upload widget. For a local file, call assets_create-upload-url, PUT the file bytes to the returned uploadUrl with the same Content-Type, register the returned url with assets_create, and pass the asset id as imageAssetId, videoAssetId or audioAssetId. Public or Sync-hosted URLs and existing Sync asset IDs also work in lipsync_create.';
+/** For an agent that cannot read a local file or send the upload PUT itself (CRAFT-8549). */
+export const UPLOAD_FALLBACK =
+  'If you cannot read the file or send that PUT yourself (no shell, or a sandbox without network access), do not retry: ask the person to upload it in sync. Studio at sync.so, then find it with assets_list.';
+
+export const UNSUPPORTED_UPLOAD_MESSAGE = `This client does not support the ChatGPT file bridge or upload widget. For a local file, call assets_create-upload-url, PUT the file bytes to the returned uploadUrl with the same Content-Type, register the returned url with assets_create, and pass the asset id as imageAssetId, videoAssetId or audioAssetId. ${UPLOAD_FALLBACK} Public or Sync-hosted URLs and existing Sync asset IDs also work in lipsync_create.`;

@@ -35,7 +35,7 @@ export function createStudioViewTools(
       name: 'studio-views_open-project',
       title: 'Open a project in Studio',
       description:
-        'Open an existing project in the mounted Studio, optionally selecting its workflow. Can replace the active editor state, archiving the prior draft. Does not create a project or generate media.',
+        'Open an existing project in the mounted Studio, optionally selecting its workflow. Can replace the active editor state, archiving the prior draft. Does not create a project or generate media. To show a video made earlier, pass the projectId generations_list or projects_list-generations returned for that generation (or use studio-views_show-generation); never create a new, empty project for it.',
     },
     'refresh-project': {
       name: 'studio-views_refresh-project',
