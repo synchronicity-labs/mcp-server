@@ -66,8 +66,64 @@ describe('generations_get wait', () => {
       tool.handler({ id: 'generation', wait: true, include: 'progress' }),
     ).resolves.toMatchObject({ status: 'COMPLETED' });
     expect(request.mock.calls[0]?.[2]?.query).toEqual({ wait: 'true' });
-    await tool.handler({ id: 'generation', include: 'progress' });
-    expect(request.mock.calls[1]?.[2]?.query).toEqual({ include: 'progress' });
+  });
+
+  it('waits when the agent asks for progress and leaves wait out', async () => {
+    const statuses = ['PROCESSING', 'COMPLETED'];
+    const request = vi.fn<HttpClient['request']>(async () => ({
+      id: 'generation',
+      status: statuses.shift(),
+    }));
+    vi.useFakeTimers();
+    const result = generationsGet(request).handler({ id: 'generation', include: 'progress' });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(result).resolves.toMatchObject({ status: 'COMPLETED' });
+    expect(request).toHaveBeenCalledTimes(2);
+    for (const [, , options] of request.mock.calls)
+      expect(options?.query).toEqual({ wait: 'true' });
+  });
+
+  it('reads progress once more when the wait ends unfinished', async () => {
+    const request = vi.fn<HttpClient['request']>(async (_method, _path, options) => ({
+      id: 'generation',
+      status: 'PROCESSING',
+      ...(options?.query?.include === 'progress' ? { progress: { percent: 40 } } : {}),
+    }));
+    vi.useFakeTimers();
+    const result = generationsGet(request).handler({ id: 'generation', include: 'progress' });
+    await vi.advanceTimersByTimeAsync(WAIT_BUDGET_MS + 15_000);
+    await expect(result).resolves.toMatchObject({
+      status: 'PROCESSING',
+      progress: { percent: 40 },
+    });
+    expect(request.mock.calls.at(-1)?.[2]?.query).toEqual({ include: 'progress' });
+  });
+
+  it('reads progress without wait after an explicit wait ends unfinished', async () => {
+    const request = vi.fn<HttpClient['request']>(async () => ({
+      id: 'generation',
+      status: 'PROCESSING',
+    }));
+    vi.useFakeTimers();
+    const result = generationsGet(request).handler({
+      id: 'generation',
+      wait: true,
+      include: 'progress',
+    });
+    await vi.advanceTimersByTimeAsync(WAIT_BUDGET_MS + 15_000);
+    await expect(result).resolves.toMatchObject({ status: 'PROCESSING' });
+    expect(request.mock.calls.at(-1)?.[2]?.query).toEqual({ include: 'progress' });
+  });
+
+  it('keeps the wait’s last read when the progress read fails', async () => {
+    const request = vi.fn<HttpClient['request']>(async (_method, _path, options) => {
+      if (options?.query?.include === 'progress') throw new Error('slow API');
+      return { id: 'generation', status: 'PROCESSING' };
+    });
+    vi.useFakeTimers();
+    const result = generationsGet(request).handler({ id: 'generation', include: 'progress' });
+    await vi.advanceTimersByTimeAsync(WAIT_BUDGET_MS + 15_000);
+    await expect(result).resolves.toMatchObject({ status: 'PROCESSING' });
   });
 
   it('reads once with wait: false', async () => {

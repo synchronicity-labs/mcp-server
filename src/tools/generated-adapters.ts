@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { combineSignals } from '../abort-signals.js';
 import type { ApiRequestError, HttpClient } from '../http-client.js';
 import type { ParsedOperation } from '../openapi/types.js';
 import { getToolAnalytics } from '../tool-analytics-context.js';
@@ -122,10 +123,16 @@ function withJobWait(tool: JsonTool, label: string): JsonTool {
  *
  * Agents left wait out on about 70% of reads (week of 2026-11-10), each returning in
  * about 40 ms and mostly unfinished, so an agent's read now waits unless it passes
- * wait: false. Reads that want an immediate answer keep it: include=progress (jobs_get),
- * the old name the status card and Studio check with, and widget calls ChatGPT tags.
+ * wait: false. Reads that want an immediate answer keep it: the old name the status card
+ * and Studio check with, and widget calls ChatGPT tags. jobs_get passes wait: false.
+ * include=progress alone does not skip the wait: ChatGPT's model sent it on 37% of its
+ * reads (week to 2026-11-23), each returned in about 400 ms unfinished, and the model
+ * gave up before the video was ready. A wait that ends unsettled reads once more with
+ * progress, so that caller still gets the percent and expected finish.
  * The generated input is unchanged, so every earlier call still works.
  */
+const PROGRESS_READ_MS = 5_000;
+
 function withGenerationWait(tool: JsonTool): JsonTool {
   const handler = tool.handler;
   // Without the API's wait input (an older spec), only an explicit wait: true can wait.
@@ -151,6 +158,25 @@ function withGenerationWait(tool: JsonTool): JsonTool {
           describe: (job) => `generation ${String(rawStatus(job) ?? 'pending').toLowerCase()}`,
         },
       );
+      if (include === 'progress' && !jobSettled(last)) {
+        // One quick read for the percent and expected finish, without wait (the API
+        // refuses it beside include) and within a few seconds; the wait's own last read
+        // stands if it cannot finish.
+        const { wait: _wait, ...once } = rest;
+        const deadline = combineSignals([
+          ...(context?.signal ? [context.signal] : []),
+          AbortSignal.timeout(PROGRESS_READ_MS),
+        ]);
+        try {
+          return markStalled(
+            await handler({ ...once, include }, { ...context, signal: deadline.signal }),
+          );
+        } catch (error) {
+          if (context?.signal?.aborted) throw error;
+        } finally {
+          deadline.dispose();
+        }
+      }
       return markStalled(last);
     },
   };
@@ -162,7 +188,7 @@ function waits(
   byDefault: boolean,
 ): boolean {
   if (args.wait !== undefined) return args.wait === true;
-  if (!byDefault || args.include === 'progress' || context?.calledAs) return false;
+  if (!byDefault || context?.calledAs) return false;
   const source = getToolAnalytics()?.invocation_source;
   return source !== 'ui' && source !== 'background';
 }
