@@ -78,7 +78,7 @@ it('gives the Gemini app the JSON and the content notice in one text block', asy
     transport: 'http',
     port: 0,
   });
-  const call = async (clientName: string) => {
+  const call = async (clientName: string, name = 'account_get-context') => {
     const server = factory.createServer(clientName);
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await server.connect(st);
@@ -86,7 +86,7 @@ it('gives the Gemini app the JSON and the content notice in one text block', asy
     await client.connect(ct);
     try {
       return await runWithAuth('oauth-user', clientName, () =>
-        client.callTool({ name: 'account_get-context', arguments: {} }),
+        client.callTool({ name, arguments: {} }),
       );
     } finally {
       await client.close();
@@ -103,6 +103,14 @@ it('gives the Gemini app the JSON and the content notice in one text block', asy
     expect(gemini.structuredContent).toMatchObject({
       organization: { id: '00000000-0000-4000-8000-000000000002' },
     });
+
+    // A previous tool name adds its rename notice to the same block.
+    const legacy = await call('gemini', 'get-account-context');
+    expect(legacy.content).toHaveLength(1);
+    const [legacyBlock] = legacy.content as Array<{ type: string; text: string }>;
+    expect(legacyBlock?.text).toContain('"organization"');
+    expect(legacyBlock?.text).toContain('is now named account_get-context');
+    expect(legacyBlock?.text).toContain(UNTRUSTED_CONTENT_NOTICE);
 
     const chatgpt = await call('openai-mcp');
     expect(chatgpt.content).toHaveLength(2);

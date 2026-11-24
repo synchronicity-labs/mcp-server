@@ -659,6 +659,20 @@ export function registerTools(
       ctx: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
       calledAs?: string,
     ): Promise<CallToolResult> => {
+      // A call by a previous name says what the tool is called now, before the result is
+      // decorated, so a client that keeps one text block still gets all of it.
+      const done = (result: CallToolResult) =>
+        finish(
+          calledAs
+            ? {
+                ...result,
+                content: [
+                  ...(result.content ?? []),
+                  { type: 'text', text: renamedToolNotice(calledAs, tool.name) },
+                ],
+              }
+            : result,
+        );
       // Tools take the request's signal and _meta, not the SDK handler context.
       const context = {
         signal: ctx.mcpReq.signal,
@@ -679,36 +693,27 @@ export function registerTools(
             }),
           ctx.mcpReq.signal,
         );
-        if (decision && 'refusal' in decision) return finish(decision.refusal);
+        if (decision && 'refusal' in decision) return done(decision.refusal);
         const within = decision?.within ?? (<T>(call: () => T) => call());
         if (tool.resultFormat === 'mcp') {
-          return finish(
+          return done(
             await within(() => tool.handler((args ?? {}) as Record<string, unknown>, context)),
           );
         }
         const result = await within(() =>
           tool.handler((args ?? {}) as Record<string, unknown>, context),
         );
-        return finish(createJsonToolResult(result, tool.outputSchema));
+        return done(createJsonToolResult(result, tool.outputSchema));
       } catch (error) {
         onToolError?.(tool.name, error);
-        return finish(createToolErrorResult(error, authMetadataUrl, isChatgptApp()));
+        return done(createToolErrorResult(error, authMetadataUrl, isChatgptApp()));
       }
     };
     server.registerTool(tool.name, config, run);
     // The previous name stays callable, unlisted, and says what the tool is called now.
     // An old name that is now another tool's name (generations_estimate-cost) is that tool.
     for (const legacy of oldNameAliases(tool.name).filter((name) => !names.has(name)))
-      server.registerTool(legacy, config, async (args, ctx) => {
-        const result = await run(args, ctx, legacy);
-        return {
-          ...result,
-          content: [
-            ...(result.content ?? []),
-            { type: 'text', text: renamedToolNotice(legacy, tool.name) },
-          ],
-        };
-      });
+      server.registerTool(legacy, config, (args, ctx) => run(args, ctx, legacy));
   }
 }
 
