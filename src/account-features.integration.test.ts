@@ -323,3 +323,27 @@ describe('feature-gated tools on the hosted server', () => {
     expect(names.filter((name) => GATED.includes(name))).toEqual([]);
   });
 });
+
+// OpenAI's tool-schema converter drops prefixItems, so a tuple with items: false
+// leaves an agent only the empty array (Codex sent invalid coordinates 67 times in
+// a week, CRAFT-8195). Fixed-length lists are plain arrays with minItems and maxItems.
+it('lists no tuple schema an agent cannot fill', async () => {
+  const { client } = await stdio(() => withFeatures(ALL_FEATURES), descriptorSpec);
+  const tools = (await client.listTools()).tools;
+  const tuples = tools.filter((tool) => {
+    const schema = JSON.stringify(tool.inputSchema);
+    return schema.includes('"prefixItems"') || schema.includes('"items":false');
+  });
+  expect(tuples.map((tool) => tool.name)).toEqual([]);
+  const options = tools.find((tool) => tool.name === 'lipsync_create')?.inputSchema.properties
+    ?.options as { properties: Record<string, { anyOf: Array<Record<string, unknown>> }> };
+  const pick = options.properties.active_speaker_detection?.anyOf.find(
+    (choice) => choice.type === 'object',
+  ) as { properties: Record<string, unknown> };
+  expect(pick.properties.coordinates).toMatchObject({
+    type: 'array',
+    items: { type: 'number' },
+    minItems: 2,
+    maxItems: 2,
+  });
+});

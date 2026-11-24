@@ -22,7 +22,7 @@ const storedOptions = modelOptionsSchema.extend({
         use_v2: z.boolean().optional(),
         v3: z.boolean().optional(),
         frame_number: z.number().optional(),
-        coordinates: z.tuple([z.number(), z.number()]).optional(),
+        coordinates: z.array(z.number()).length(2).optional(),
         bounding_boxes: z.array(z.array(z.number()).nullable()).optional(),
         bounding_boxes_url: z.string().optional(),
         face_image: z.string().optional(),
