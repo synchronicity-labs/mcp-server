@@ -30,7 +30,7 @@ const plan = z.object({
         .boolean()
         .optional()
         .describe(
-          'Whether outputs carry the sync. watermark on this plan. A plan with false also clears it from earlier outputs.',
+          'Whether outputs carry the sync. watermark on this plan. A plan with false also clears it from earlier outputs made since October 2025; older outputs keep it.',
         ),
     })
     .describe(
