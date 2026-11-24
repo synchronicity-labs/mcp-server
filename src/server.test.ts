@@ -450,4 +450,17 @@ describe('selectHostedHttpTools', () => {
       expect(selectedTool.meta?.ui).toEqual({ visibility: ['model', 'app'] });
     }
   });
+
+  it('tells Codex alone how to move local files when the file bridge cannot', () => {
+    const tools = [tool('assets_upload'), tool('generations_get'), tool('voices_list')];
+    const descriptions = (client: string) =>
+      selectHostedHttpTools(tools, resolveClientProfile(client)).map((t) => t.description);
+
+    const [upload, generation, voices] = descriptions('openai-mcp (Codex)');
+    expect(upload).toContain('no primary turn environment');
+    expect(upload).toContain('assets_create-upload-url');
+    expect(generation).toContain('download outputMediaUrl with a shell command');
+    expect(voices).toBe(tool('voices_list').description);
+    expect(descriptions('chatgpt')).toEqual(tools.map((t) => t.description));
+  });
 });

@@ -38,6 +38,7 @@ import {
   declaresCards,
   resolveClientProfile,
   UNSUPPORTED_UPLOAD_MESSAGE,
+  UPLOAD_FALLBACK,
 } from './client-profile.js';
 import type { SyncMcpConfig } from './config.js';
 import { GENERATION_STATUS_HTML } from './generation-status-html.js';
@@ -134,6 +135,7 @@ import { progressSender } from './tools/job-wait.js';
 import { createJobsCreateManyTool } from './tools/jobs-create-many.js';
 import { createJobsGetManyTool } from './tools/jobs-get-many.js';
 import { createJobTools } from './tools/jobs.js';
+import { HARD_SHOT_CHECK } from './tools/lipsync-shots.js';
 import { withOrganizationChoice } from './tools/organization-choice.js';
 import {
   type CredentialKind,
@@ -1034,9 +1036,22 @@ function asRecord(value: unknown): Record<string, unknown> {
 const profileKey = (profile: ClientProfile) =>
   profile.name === 'generic' && profile.supportsStatusCard ? 'generic+cards' : profile.name;
 
+// Codex lists ChatGPT's upload tool through the same connector, but cannot pass it a local
+// file, and its sandbox can block the network a PUT or download needs (CRAFT-8549).
+const CODEX_NOTES: Record<string, string> = {
+  assets_upload: ` In Codex, this takes only a file object the host passes; a local path cannot be sent, and an error such as "no primary turn environment" means the file cannot reach Sync this way. Then call assets_create-upload-url and PUT the bytes with a shell command instead. ${UPLOAD_FALLBACK}`,
+  generations_get:
+    '\nIn Codex, to save the finished video to disk, download outputMediaUrl with a shell command; if the sandbox blocks the network, give the person the link instead.',
+};
+
+function presentForCodex(tool: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
+  const note = profile.name === 'codex' ? CODEX_NOTES[tool.name] : undefined;
+  return note ? { ...tool, description: `${tool.description ?? ''}${note}` } : tool;
+}
+
 /** Profile-specific descriptors and presentation. Authentication remains request-scoped. */
 function presentTool(listed: McpToolDefinition, profile: ClientProfile): McpToolDefinition {
-  const tool = presentPriceCheck(listed, profile);
+  const tool = presentForCodex(presentPriceCheck(listed, profile), profile);
   if (profile.supportsUploads)
     return WIDGET_CALLABLE_HOSTED_TOOLS.has(tool.name) ? exposeToolToWidget(tool) : tool;
   const inputSchema = { ...tool.inputSchema };
@@ -1045,7 +1060,9 @@ function presentTool(listed: McpToolDefinition, profile: ClientProfile): McpTool
     for (const key of ['video', 'image', 'audio']) delete inputSchema[key];
     description =
       'Create one lipsync video from exactly one visual (videoUrl, videoAssetId, imageUrl or imageAssetId) and one driver (audioUrl, audioAssetId, or script plus voiceId), to make a photo or video say a script or match its lips to supplied audio. When available, use lipsync_create-timeline instead for several audio clips or to lipsync only some ranges of one video, batches_create for 20 or more independent generations, dubbing_create to translate speech, and the Edit Dialogue tools (starting with dialogue_get-options) to change words in existing speech.\n\n' +
-      'For a local file, when the assets tools are available, call assets_create-upload-url, PUT the bytes to its uploadUrl with the same Content-Type, register the url it returned (not the uploadUrl) with assets_create, and pass that asset id. provider, stability and similarityBoost apply only to script.\n\n' +
+      'For a local file, when the assets tools are available, call assets_create-upload-url, PUT the bytes to its uploadUrl with the same Content-Type, register the url it returned (not the uploadUrl) with assets_create, and pass that asset id. ' +
+      `${UPLOAD_FALLBACK} provider, stability and similarityBoost apply only to script.\n\n` +
+      `${HARD_SHOT_CHECK}\n\n` +
       "This uses the session's organization unless organizationId names another. Check account_get-usage for free coverage; a script also needs free speech allowance and no connected provider key. Fully covered work needs no price mention or spending confirmation; otherwise follow the paid-work instructions. It returns the generation id and status at once; poll generations_get with wait: true until it finishes, then copy outputMediaUrl verbatim (unless it ends NO_OP: nothing was lip-synced).\n\n" +
       "Without projectId it first creates a NEW project, named projectName or a default, even if that name matches existing work. The input combination is checked before that; rejections from the API itself come after the project exists. Pass projectId, with projectIntent=explicit and without projectName or projectCreationKey, only for a project the user explicitly chose or one just created for this request. continuation, from generations_get-continuation, requires the parent generation's projectId.\n\n" +
       'Before calling, persist an idempotencyKey and, without projectId, a fresh projectCreationKey. After a lost or uncertain response, never create again with new keys: if the error names a generationId, poll it with generations_get; otherwise resend the identical request with the same keys.';

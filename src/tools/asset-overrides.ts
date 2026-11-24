@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { UPLOAD_FALLBACK } from '../client-profile.js';
 
 export type ToolOverride = {
   title?: string;
@@ -29,7 +30,8 @@ export const ASSET_PROJECT_OVERRIDES: Record<string, ToolOverride> = {
   'assets_create-upload-url': {
     title: 'Get a media upload URL',
     description:
-      "Get a presigned upload URL for a local audio, video or image file: step 1 of 2 for media that is not already at a public URL. PUT the raw bytes to the returned uploadUrl with exactly the declared Content-Type and byte size, then pass the returned url (not uploadUrl) to assets_create to register the asset; until then no asset exists. Not for a public https:// file or a social video link (pass those straight to assets_create), or for re-hosting an already saved video as an Edit Dialogue source (dialogue_upload-source, when available). Returns {uploadUrl, url, expiresIn}: expiresIn is the upload URL's lifetime in seconds; if it expires, request a new one. Spends no credits. Each call issues a new storage path behind a random prefix, so it never collides with an existing file; request a separate upload URL for each file. For example, it returns 422 when size exceeds your plan's upload limit, and assets_create returns 422 if nothing was uploaded.",
+      "Get a presigned upload URL for a local audio, video or image file: step 1 of 2 for media that is not already at a public URL. PUT the raw bytes to the returned uploadUrl with exactly the declared Content-Type and byte size, then pass the returned url (not uploadUrl) to assets_create to register the asset; until then no asset exists. Not for a public https:// file or a social video link (pass those straight to assets_create), or for re-hosting an already saved video as an Edit Dialogue source (dialogue_upload-source, when available). Returns {uploadUrl, url, expiresIn}: expiresIn is the upload URL's lifetime in seconds; if it expires, request a new one. Spends no credits. Each call issues a new storage path behind a random prefix, so it never collides with an existing file; request a separate upload URL for each file. For example, it returns 422 when size exceeds your plan's upload limit, and assets_create returns 422 if nothing was uploaded. " +
+      UPLOAD_FALLBACK,
     params: {
       fileName:
         'Name of the local file with its extension, up to 255 characters. It only names the stored file: the extension is kept (lowercased), spaces become underscores and other special characters may be dropped.',

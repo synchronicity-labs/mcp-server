@@ -60,3 +60,14 @@ export function parseLipsyncOptions(
     shots: shots.map((shot) => ({ start_frame: shot.startFrame, end_frame: shot.endFrame })),
   };
 }
+
+/**
+ * Shots that agent feedback reports as COMPLETED with lips that barely moved (CRAFT-8549).
+ * Shared by lipsync_create, in every profile's wording, and lipsync_create-timeline.
+ */
+export const HARD_SHOT_CHECK =
+  'Hard shots can finish COMPLETED with lips that barely move: a face turned toward profile, a small face the model has to enlarge, several faces or a crowd, a microphone or hand over the mouth, a face hidden for part of the shot, or singing over music. ' +
+  'Before paying for a video like that, when the faces tools are available run faces_detect, then faces_get-people or faces_get-timeline, and pick the face yourself with options.active_speaker_detection { frame_number, coordinates: [x, y] } (on lipsync_create-timeline, a clip speaker). ' +
+  'A still image has no face choice: the faces tools read videos only and an image ignores active_speaker_detection, so for a small face or a group photo suggest a tighter crop of the one face instead. ' +
+  'For a song, drive the lipsync with the vocals stem from stems_separate when available; the output then plays only that stem, so say so. ' +
+  'Tell the person, before spending, that the shot is hard and why, what you will do about it, and that the lips may still barely move.';
