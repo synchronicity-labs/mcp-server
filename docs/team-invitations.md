@@ -23,12 +23,13 @@ earlier invitation is resent when its role is the one wanted, or cancelled and c
 again to change the role: a resend keeps the stored role, and the public API cannot
 change it. `team_seat_limit_reached`
 means the plan has no seat for another member. On a plan that buys seats, accepting an
-invitation when every seat is taken adds a paid seat. A partial send fails with a message
+invitation when every seat is taken adds a paid seat, and that includes an expired one
+brought back by a resend. A partial send fails with a message
 naming the addresses that were not emailed. The API deletes those invitations and keeps
 the ones it sent, so the agent invites only the failed addresses again.
 
 The tool descriptions tell the agent to confirm addresses, roles and the organization
-before sending. The tools are listed on the hosted server to every client, ChatGPT and
+before an invite or a resend, and to warn about the paid seat when the team is full. The tools are listed on the hosted server to every client, ChatGPT and
 Codex included, and locally in the `admin` toolset. After the deploy, rescan the
 publisher so ChatGPT picks them up (see [the plugin notes](chatgpt-plugin.md#after-a-deploy-that-changes-tools));
 until OpenAI reviews them they may show as not live there.

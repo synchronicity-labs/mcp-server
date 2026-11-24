@@ -275,12 +275,22 @@ describe('team invitation tools', () => {
     expect(requests.filter((request) => request.method === 'POST')).toHaveLength(1);
   });
 
-  it('tells the agent a resend keeps the stored role', async () => {
+  it('has a resend confirmed like an invite, with its role and the seat charge', async () => {
     const { client } = await hosted('claude-ai');
     const tools = await invitationTools(client);
     const descriptionOf = (name: string) => tools.find((tool) => tool.name === name)!.description;
-    expect(descriptionOf('invitations_resend')).toContain(
-      "It keeps the invitation's role: read the role with invitations_list and name it when confirming with the user. To change the role, cancel with invitations_delete and invite again with invitations_create.",
+    const resend = descriptionOf('invitations_resend');
+    expect(resend).toContain(
+      "It keeps the invitation's role; to change the role, cancel with invitations_delete and invite again with invitations_create.",
+    );
+    expect(resend).toContain(
+      'first read the invitation with invitations_list and confirm its email address, its role and the organization with the user.',
+    );
+    expect(resend).toContain(
+      'accepting an invitation when every seat is taken adds a paid seat to the subscription; say so before resending to a full team.',
+    );
+    expect(descriptionOf('invitations_create')).toContain(
+      'adds a paid seat to the subscription; say so before inviting to a full team.',
     );
     expect(descriptionOf('invitations_create')).toContain(
       'resend with invitations_resend when it is the role the user asked for, otherwise cancel with invitations_delete and invite again.',
