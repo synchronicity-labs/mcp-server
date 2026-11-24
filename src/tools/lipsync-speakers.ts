@@ -6,9 +6,7 @@ import { z } from 'zod';
  * one audio input per speaker. Listed only to accounts with the multispeaker feature
  * (PARAMETER_FEATURES in account-features.ts); the API refuses it for others.
  */
-const box = z
-  .tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()])
-  .nullable();
+const box = z.array(z.number().int()).length(4).nullable();
 
 const speakerFace = z
   .object({
@@ -21,7 +19,8 @@ const speakerFace = z
         'Frame showing this person’s face, counted from 0 at the video’s first frame. With coordinates.',
       ),
     coordinates: z
-      .tuple([z.number().int().nonnegative(), z.number().int().nonnegative()])
+      .array(z.number().int().nonnegative())
+      .length(2)
       .optional()
       .describe('[x, y] pixel on the face centre in frameNumber, in the upright video frame.'),
     boxes: z

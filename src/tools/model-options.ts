@@ -35,7 +35,8 @@ export const modelOptionsSchema = z
               .optional()
               .describe('Zero-based video frame that coordinates refer to.'),
             coordinates: z
-              .tuple([z.number(), z.number()])
+              .array(z.number())
+              .length(2)
               .optional()
               .describe("[x, y] pixel position of the speaker's face on frame_number."),
           })
