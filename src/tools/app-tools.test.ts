@@ -96,6 +96,7 @@ describe('createAppTools — lipsync_create', () => {
     async (speaker) => {
       const { tool, request } = setup();
       const options = {
+        preserve_background_audio: typeof speaker === 'boolean' ? speaker : true,
         sync_mode: 'silence',
         temperature: 0.7,
         active_speaker_detection: speaker,
@@ -137,6 +138,7 @@ describe('createAppTools — lipsync_create', () => {
     { temperature: 1.1 },
     { sync_mode: 'unknown-mode' },
     { reasoning_enabled: 'true' },
+    { preserve_background_audio: 'true' },
     { output_bucket_name: 'untrusted' },
     { active_speaker_detection: { coordinates: [1] } },
   ])('rejects invalid model options before any upstream requests: %j', async (options) => {

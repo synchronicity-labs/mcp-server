@@ -261,6 +261,10 @@ export function createDialogueTools(
           .optional()
           .describe(DIALOGUE_TEXT['dialogue-previews_create'].params.previousPreviewId),
         edits: dialogueEdits.describe(DIALOGUE_TEXT['dialogue-previews_create'].params.edits),
+        preserveBackgroundAudio: z
+          .boolean()
+          .optional()
+          .describe("Keep the source video's music and background sounds in the edited preview."),
         transcriptionId: z
           .uuid()
           .optional()
@@ -294,6 +298,7 @@ export function createDialogueTools(
           projectId: input.projectId,
           transcript: previous ? previous.sourceTranscript : transcriptJob.transcript,
           edits: args.edits,
+          preserveBackgroundAudio: z.boolean().optional().parse(args.preserveBackgroundAudio),
           ...(previous?.voiceId ? { voiceId: previous.voiceId } : {}),
           ...(previous ? {} : { transcriptionJobId: transcriptionId }),
           ...(previous && JSON.stringify(previous.edits) === JSON.stringify(args.edits)
