@@ -11,8 +11,9 @@ import { mountCard } from './test-fixtures/card-host-page.js';
 afterEach(() => vi.unstubAllGlobals());
 
 // A NO_OP generation finished but lip-synced no frame, and its output is the unchanged
-// input. The packaged card has to read it as final and unsuccessful, not as a result.
-it('shows a generation that lip-synced no frame as unsuccessful, with the reason and no video', async () => {
+// input (with dubbed audio for a dub). The packaged card has to read it as final and
+// unsuccessful: "No lip sync" and the reason, beside the output it still has.
+it('shows a generation that lip-synced no frame as unsuccessful, with the reason beside its output', async () => {
   const generationId = '00000000-0000-4000-8000-000000000003';
   const projectId = '00000000-0000-4000-8000-000000000001';
   const reason = 'No face was found in the video, so nothing was lip-synced.';
@@ -116,8 +117,10 @@ it('shows a generation that lip-synced no frame as unsuccessful, with the reason
     const frame = page.frameLocator('iframe');
     await browserExpect(frame.locator('output[aria-live="polite"]')).toHaveText('No lip sync');
     await browserExpect(frame.getByRole('alert')).toContainText(reason);
-    await browserExpect(frame.locator('video')).toHaveCount(0);
-    await browserExpect(frame.getByRole('link', { name: 'View video' })).toHaveCount(0);
+    // Since sync-api-v2 #8917 the card plays a NO_OP's output and links to it; the
+    // badge and the reason keep it from reading as a lipsync result.
+    await browserExpect(frame.locator('video')).toHaveCount(1);
+    await browserExpect(frame.getByRole('link', { name: 'View video' })).toBeVisible();
     // Final: the card stops checking instead of waiting for a status it knows.
     const settled = reads.length;
     await page.clock.fastForward(60000);
