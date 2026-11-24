@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { ClientProfile } from './client-profile.js';
-import type { HttpClient } from './http-client.js';
+import { ApiRequestError, type HttpClient } from './http-client.js';
 import { ORGANIZATION_HEADER } from './organization-selection.js';
 import type { McpToolDefinition } from './tools/generator.js';
 import { REASONING_MODELS } from './tools/model-options.js';
@@ -104,20 +104,22 @@ const freeAllowance = z.object({
     .optional(),
 });
 
-export const FREE_PLAN_REFUSAL_NEXT_STEP =
-  "The free plan cannot run this job now: this month's free allowance is used, and a free plan cannot pay with credits. Do not ask the person to approve this price and do not call the create tool, which would be refused. Tell them, and offer a paid plan (billing-plans_list, then billing-approval-links_create) or waiting until resetsAt.";
+// Where the API's own free-allowance refusal sends people to upgrade.
+const BILLING_URL = 'https://sync.so/billing/subscription';
 
 /**
- * Whether the API will refuse this job for the free plan's monthly allowance: a price
- * alone let agents quote a job, get it approved and then meet a 402 (agent report,
- * 2026-11-20). GET /v2/billing applies the API's own rule (allowance used and no
- * aescripts balance). Undefined when it would run, cannot tell, or the read fails.
+ * The 402 the API would return for this job when the free plan has used this month's
+ * allowance: a price alone let agents quote a job, get it approved and then meet that
+ * refusal (agent report, 2026-11-20). GET /v2/billing applies the API's own rule (allowance
+ * used and no aescripts balance). Returned as the API's refusal, with its next action, so
+ * each client handles it as it handles the create call's, and the price card shows the
+ * refusal instead of a price. Undefined when it would run, cannot tell, or the read fails.
  */
 async function freePlanRefusal(
   http: HttpClient,
   priced: Record<string, unknown>,
   signal?: AbortSignal,
-): Promise<Record<string, unknown> | undefined> {
+): Promise<ApiRequestError | undefined> {
   try {
     const organizationId =
       typeof priced.organizationId === 'string' ? priced.organizationId : undefined;
@@ -134,14 +136,19 @@ async function freePlanRefusal(
     const counts = dub
       ? billing.freeMonthlyLimits?.dubbing
       : billing.freeMonthlyLimits?.generations;
-    const resetsAt = billing.freeMonthlyLimits?.monthlyResetDate;
-    return {
-      allowed: false,
-      reason: dub ? 'free_dubbing_used' : 'free_generations_used',
-      ...(counts ? { used: counts.used, limit: counts.max } : {}),
-      ...(resetsAt ? { resetsAt } : {}),
-      nextStep: FREE_PLAN_REFUSAL_NEXT_STEP,
-    };
+    const used = counts
+      ? `all ${counts.max} free ${dub ? 'dubs' : 'generations'}`
+      : `this month's free ${dub ? 'dubbing' : 'generations'}`;
+    const resets = billing.freeMonthlyLimits?.monthlyResetDate;
+    return new ApiRequestError(
+      `This job would be refused: you have used ${used} this month${resets ? ` (they reset ${resets})` : ''}, and the free plan cannot pay with credits. Please upgrade to a paid plan at ${BILLING_URL}.`,
+      402,
+      'free_tier_generations_exhausted',
+      undefined,
+      undefined,
+      undefined,
+      { nextAction: { type: 'upgrade_plan', url: BILLING_URL }, billingUrl: BILLING_URL },
+    );
   } catch (error) {
     if (signal?.aborted) throw error;
     return undefined;
@@ -169,6 +176,7 @@ export function withPriceCheck(tool: McpToolDefinition, http?: HttpClient): McpT
         handler(priced, context),
         http ? freePlanRefusal(http, priced, context?.signal) : undefined,
       ]);
+      if (refusal) throw refusal;
       if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
       // The organization the quote ran in, so the card's call runs there too: neither a
       // one-call organizationId on the quote nor a later switch of the session moves it.
@@ -178,11 +186,9 @@ export function withPriceCheck(tool: McpToolDefinition, http?: HttpClient): McpT
       return {
         ...result,
         request: { model: priced.model, duration: priced.duration, workflow: priced.workflow },
-        ...(refusal ? { admission: refusal } : {}),
         // A quote whose organization could not be named carries no call: the card asks the
         // chat instead of spending wherever the session happens to be when it is pressed.
-        // Nor does one the API would refuse.
-        ...(call && !refusal && typeof ranIn === 'string'
+        ...(call && typeof ranIn === 'string'
           ? { create: { ...call, arguments: { ...call.arguments, organizationId: ranIn } } }
           : {}),
       };
