@@ -183,7 +183,10 @@ it('imports a YouTube link to a saved asset before submitting Spanish translatio
   });
   expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toEqual({ id: generationId, status: 'PENDING' });
-  expect(calls.map((request) => request.path)).toEqual([
+  // The quote also reads the free allowance, beside the estimate.
+  const paths = calls.map((request) => request.path);
+  expect(paths.filter((path) => path === '/v2/billing')).toHaveLength(1);
+  expect(paths.filter((path) => path !== '/v2/billing')).toEqual([
     ...Array.from({ length: 4 }, () => '/v2/assets'),
     '/v2/generate/estimate-cost',
     `/v2/projects/${projectId}`,

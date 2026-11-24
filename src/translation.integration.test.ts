@@ -171,7 +171,11 @@ it('carries the combined estimate through the authenticated MCP boundary without
     ...externalEstimate,
     request: { model: 'sync-3', duration: 12, workflow: 'translate-and-dub' },
   });
-  expect(calls).toEqual([
+  // The quote also reads the free allowance, beside the estimate, as the same caller.
+  expect(calls.filter((call) => call.path === '/v2/billing')).toMatchObject([
+    { token: 'Bearer estimate-reader', source: 'mcp:openai-mcp' },
+  ]);
+  expect(calls.filter((call) => call.path !== '/v2/billing')).toEqual([
     {
       path: '/v2/generate/estimate-cost',
       token: 'Bearer estimate-reader',
