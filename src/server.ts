@@ -67,6 +67,7 @@ import {
 } from './organization-selection.js';
 import { presentPriceCheck, withPriceCheck } from './price-check.js';
 import { generationContextKey, rememberGeneration } from './recent-generations.js';
+import { joinTextBlocks, keepsOneTextBlock } from './single-text-block.js';
 import {
   applyEdits,
   DESCRIPTION_EDITS,
@@ -1367,7 +1368,10 @@ function createProfiledServer(
     config.transport === 'http' ? resourceMetadataUrl(config.port) : undefined,
     // stdout is the protocol channel over stdio.
     config.transport === 'http' ? logToolError(() => getProfile().name) : undefined,
-    config.transport === 'stdio' && updateCheck ? withUpdateNotice(updateCheck) : undefined,
+    decorateForClient(
+      config.transport === 'stdio' && updateCheck ? withUpdateNotice(updateCheck) : undefined,
+      () => clientName,
+    ),
     () => getProfile().name === 'chatgpt',
     spendGate,
   );
@@ -1561,6 +1565,20 @@ function withUpdateNotice(updateCheck: UpdateCheck): (result: CallToolResult) =>
       ...result,
       content: [...(result.content ?? []), { type: 'text', text: updateToolNotice(update) }],
     };
+  };
+}
+
+/**
+ * The last step for each tool result: the stdio update notice, then, for a client that
+ * passes the model only one text block, all text blocks joined into one.
+ */
+function decorateForClient(
+  updateNotice: ((result: CallToolResult) => CallToolResult) | undefined,
+  clientName: () => string | undefined,
+): (result: CallToolResult) => CallToolResult {
+  return (result) => {
+    const decorated = updateNotice ? updateNotice(result) : result;
+    return keepsOneTextBlock(clientName()) ? joinTextBlocks(decorated) : decorated;
   };
 }
 
