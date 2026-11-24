@@ -1,5 +1,25 @@
 # ChatGPT frontend release
 
+## Hidden status card release (CRAFT-8547)
+
+Source commit `e6c3acf6b5c274ddcb7b72291be00f2ebfa9481d` ([sync-api-v2 #9091](https://github.com/synchronicity-labs/sync-api-v2/pull/9091)), tree `60968c679f72e996310365efcfb1d96461011d29`.
+UI SHA256: `592f6109758d8e1270df4f4b17a92404ac5e2ec8a6dc7ea52f6d6bae43d23ca5` (3424901 uncompressed bytes).
+Card SHA256: `646cbf3ac7de7ced6d5005b3ed99461f66bd1e4e57d60e8f5cda7424e97549ba` (949189 uncompressed bytes).
+Two builds from separate clean checkouts, the second with Turbo's cache bypassed,
+produced identical HTML and manifest bytes for both. The status card now keeps
+checking every 45 seconds while hidden (10 seconds while visible) and stops once
+the generation is final or past `generationEstimate.supportAt`; the previous card
+stopped checking whenever it was hidden. The card's download is named
+`sync-<id>.mp4` (or the output's extension) with a matching video mimeType. Both
+bundles also carry every `apps/chatgpt` and shared package change merged since
+the previous release (`4980ed36…`).
+
+The previous release `727f187d…` is retained as the first previous resource.
+The oldest retained resource `a2c7ca49…` moves intact to `deploy/chatgpt-retired/`.
+
+Refresh publisher tool metadata and open a fresh widget after release;
+production deployment and ChatGPT host acceptance are separate checks.
+
 ## NO_OP status release
 
 Source commit `4980ed36f4a2b664aa11d94803872fca3b30fe97`, tree `df60befa0e48a659e3cc4412754e78c336e77b36`.
