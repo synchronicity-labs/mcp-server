@@ -38,7 +38,9 @@ export const modelOptionsSchema = z
               .array(z.number())
               .length(2)
               .optional()
-              .describe("[x, y] pixel position of the speaker's face on frame_number."),
+              .describe(
+                "[x, y] pixel on the middle of the speaker's face (between the eyes and the mouth, not hair, a hat or the body) on frame_number, in the upright video frame. A point just off one face is moved onto it; the result's warnings say so.",
+              ),
           })
           .strict(),
       ])

@@ -30,6 +30,12 @@ export const generationOutputSchema = {
   outputDuration: z.number().nullable().describe('Output duration in seconds.').optional(),
   error: z.unknown().optional(),
   errorCode: z.unknown().optional(),
+  warnings: z
+    .array(z.record(z.string(), z.unknown()))
+    .optional()
+    .describe(
+      'Only on a create: what the API did with a face point before starting. face_point_snapped: the point was just off one face (on hair, a hat or an ear) and was moved to its centre (from, to); tell the user which face is being lipsynced. face_point_unverified: no face was found at the point, which was sent unchanged and may fail; nearestFaces lists the faces found on that frame, so a retry can use a box center.',
+    ),
 };
 
 /**
